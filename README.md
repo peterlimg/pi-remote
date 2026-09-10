@@ -7,7 +7,7 @@ This is an initial implementation. The code lives on the `feat/mobile-sessions` 
 ## What it does
 
 - Lists live sessions across Pi terminals and saved sessions across project directories.
-- Streams conversation and tool updates, with incremental updates over the mobile connection.
+- Streams Markdown conversation and inline tool updates. Tool details stay collapsed until opened; raw HTML and remote images are disabled.
 - Sends prompts, steering messages and follow-ups to the selected live session.
 - Keeps independent message drafts while navigating between sessions.
 - Browses saved session history and optionally resumes a session in a Pi RPC worker.
@@ -116,11 +116,15 @@ PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com node bin/pi-remote.mjs pa
 
 Install the extension and reload your Pi terminals as described in Quick start. Open the private link on your phone, check that sessions appear, and send a test prompt. `/health` confirms only the relay is running, not that your computer is connected.
 
+To update, use **Manual Deploy > Deploy latest commit** in Render, run `npm ci --ignore-scripts` locally, restart the local host, run `/reload` in your Pi terminals, and refresh the phone page.
+
 Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings; the bind address is `0.0.0.0`. Keep exactly one service instance because host/client routing lives in memory. Deploys disconnect sockets; clients reconnect without replaying uncertain commands. If adding a custom domain, update the start command's public URL and your computer's public/relay URLs to match it.
 
 ## Navigating sessions
 
 Selecting a session changes only the browser subscription. It never sends `/resume` to another terminal or stops another session's work.
+
+On desktop, Enter sends, Shift+Enter inserts a newline, and Alt+Enter queues a follow-up. On touch devices, Enter inserts a newline; use Send to submit. Expand a tool row to inspect its input and output. Project paths are under Details, and scan warnings are under the connection status in the session list.
 
 | Status | Meaning |
 |---|---|
@@ -209,7 +213,7 @@ A real model/tool smoke test on your Mac is still needed. CI does not validate y
 - macOS/Linux host use is the primary target; no automatic launch-at-login installer.
 - One computer per relay; no accounts or multi-user permissions.
 - Shared revocable tokens; no one-time pairing codes or per-device revocation.
-- No push notifications, image uploads, diff viewer or Markdown rendering.
+- No push notifications, image uploads, syntax highlighting or dedicated diff viewer.
 - No remote creation of brand-new sessions; start one in Pi, then control it from mobile.
 - Session browsing uses Pi's JSONL format; the full Pi session tree remains available in the terminal.
 - Sessions larger than 32 MiB are excluded from saved browsing; scans cap at 5,000 files.

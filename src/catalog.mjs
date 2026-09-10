@@ -26,9 +26,18 @@ export function textContent(content) {
   }).filter(Boolean).join('\n');
 }
 export function cleanMessage(message, key) {
-  const raw = textContent(message.content);
-  return { id: key, role: message.role, text: raw.slice(0, 24000),
-    truncated: raw.length > 24000, toolName: message.toolName,
+  const content = Array.isArray(message.content) ? message.content : undefined;
+  const raw = textContent(content ? content.filter(part => part.type !== 'toolCall') : message.content);
+  const calls = content?.filter(part => part.type === 'toolCall') || [];
+  let budget = Math.max(0, 24000 - raw.length), truncated = raw.length > 24000 || calls.length > 20;
+  const toolCalls = calls.slice(0, 20).map(call => {
+    const args = JSON.stringify(call.arguments, null, 2) || '';
+    const text = args.slice(0, budget); budget -= text.length;
+    truncated ||= text.length < args.length;
+    return { id: call.id, name: call.name, text };
+  });
+  return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
+    truncated, toolName: message.toolName, toolCallId: message.toolCallId,
     isError: !!message.isError, timestamp: message.timestamp };
 }
 export function readSession(file) {
@@ -40,6 +49,10 @@ export function readSession(file) {
     if (!lines[i].trim()) continue;
     try { entries.push(JSON.parse(lines[i])); }
     catch { if (i !== lines.length - 1) throw new Error('Invalid session JSONL'); }
+    // Session roots can also contain subagent transcripts and other JSONL formats.
+    if (entries.length === 1 && entries[0]?.type !== 'session') {
+      throw Object.assign(new Error('Not a Pi session'), { code: 'NOT_PI_SESSION' });
+    }
   }
   const header = entries[0];
   if (header?.type !== 'session' || !header.cwd || !header.id) throw new Error('Not a Pi session');
@@ -73,7 +86,7 @@ export function discover(roots) {
       else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
         count++;
         try { if (isInside(file, roots)) { const session = readSession(file); sessions.set(session.id, session); } }
-        catch (e) { warnings.push(entry.name + ': ' + e.message); }
+        catch (e) { if (e.code !== 'NOT_PI_SESSION') warnings.push(entry.name + ': ' + e.message); }
       }
     }
   }

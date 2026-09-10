@@ -1,4 +1,6 @@
 import { patchState } from './protocol.js';
+import MarkdownIt from './markdown-it.mjs';
+const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
@@ -39,14 +41,17 @@ function connect() {
     let packet;
     try { packet = JSON.parse(event.data); } catch { return; }
     if (packet.type === 'ready') {
-      connected = true; retry = 0; connection('● Computer connected'); $('login-error').hidden = true;
+      connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
       if (selected) request('watch', { sessionId: selected }).catch(e => notice(e.message));
     } else if (packet.type === 'sessions') {
       const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
       sessions = packet.sessions;
       for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
       renderList();
-      if (packet.warnings?.length) notice(packet.warnings.join(' · '));
+      const warnings = packet.warnings || [];
+      $('diagnostics').hidden = !warnings.length;
+      $('warnings-summary').textContent = `${warnings.length} scan ${warnings.length === 1 ? 'warning' : 'warnings'}`;
+      $('warnings').replaceChildren(...warnings.map(text => el('li', text)));
     } else if (packet.type === 'snapshot') {
       versions.set(packet.sessionId, packet.version);
       cache.set(packet.sessionId, packet.state);
@@ -67,7 +72,7 @@ function connect() {
     } else if (packet.type === 'notice') notice(packet.error);
   });
   socket.addEventListener('close', event => {
-    connected = false; connection('○ Disconnected — work stays on your computer');
+    connected = false; connection('Computer disconnected');
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.')); }
     pending.clear();
     if (event.code === 1008) {
@@ -94,9 +99,13 @@ function renderList() {
     const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
     button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
     const top = el('div', undefined, 'session-top');
-    const dot = el('span', '', 'dot'); dot.dataset.status = item.status; top.append(dot, el('strong', item.title));
+    top.append(el('strong', item.title));
     if (unread.has(item.id)) top.append(el('span', 'New', 'badge'));
-    button.append(top, el('span', item.cwd, 'session-project'), el('span', item.status, 'session-state'));
+    const meta = el('div', undefined, 'session-meta');
+    const project = el('span', item.cwd.split(/[\\/]/).filter(Boolean).at(-1) || item.cwd, 'session-project');
+    project.title = item.cwd;
+    meta.append(project, el('span', item.status, 'session-state'));
+    button.append(top, meta);
     button.addEventListener('click', () => selectSession(item.id)); fragment.append(button);
   }
   $('sessions').replaceChildren(fragment);
@@ -105,13 +114,16 @@ async function selectSession(id) {
   if (selected) drafts.set(selected, $('prompt').value);
   selected = id; unread.delete(id); $('prompt').value = drafts.get(id) || '';
   lastDialog = undefined; $('dialog').hidden = true;
+  $('transcript').replaceChildren();
+  document.querySelector('.session-info').open = false;
+  $('project').textContent = sessions.find(x => x.id === id)?.cwd || '';
   $('app').classList.add('viewing'); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
     $('title').textContent = sessions.find(x => x.id === id)?.title || 'Loading…';
     $('transcript').replaceChildren(); $('transcript').hidden = false; $('empty').hidden = true;
-    $('tools').replaceChildren(); $('composer').hidden = false; updateControls();
+    $('composer').hidden = false; updateControls();
   }
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
@@ -122,24 +134,52 @@ function renderConversation(state) {
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   const box = $('transcript'), bottom = box.scrollHeight - box.scrollTop - box.clientHeight < 100, oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
-  if (state.historyTruncated) fragment.append(el('p', 'Showing the latest 100 messages on the current branch.', 'hint'));
-  for (const message of state.messages || []) {
-    if (!message.text && message.role !== 'user') continue;
-    const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
-    article.append(el('div', message.role === 'user' ? 'You' : message.toolName || (message.role === 'assistant' ? 'Pi' : message.role), 'message-label'));
-    article.append(el('pre', message.text || '(empty message)', 'message-text'));
-    if (message.truncated) article.append(el('p', 'Output shortened for mobile.', 'hint'));
-    fragment.append(article);
+  const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
+  const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
+  const messages = state.messages || [];
+  const results = new Map(messages.filter(m => m.role === 'toolResult' && m.toolCallId).map(m => [m.toolCallId, m]));
+  const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
+  const rendered = new Set();
+  const appendTool = (id, name, input, result) => {
+    if (rendered.has(id)) return;
+    rendered.add(id);
+    const live = tools.get(id), status = result ? (result.isError ? 'error' : 'done') : live?.status || 'pending';
+    const detail = el('details', undefined, 'tool');
+    detail.dataset.toolId = id; detail.dataset.status = status;
+    detail.open = expanded.get(id) ?? status === 'error';
+    const summary = el('summary');
+    summary.append(el('strong', name || live?.name || 'Tool'), el('span', status, 'tool-status'));
+    detail.append(summary);
+    if (input) detail.append(el('pre', input, 'tool-input'));
+    detail.append(el('pre', result?.text || live?.text || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
+    if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
+    fragment.append(detail);
+  };
+  if (state.historyTruncated) fragment.append(el('p', 'Latest 100 messages.', 'hint'));
+  for (const message of messages) {
+    if (message.role === 'toolResult') {
+      appendTool(message.toolCallId || message.id, message.toolName, '', message);
+      continue;
+    }
+    if (message.text || message.role === 'user') {
+      const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
+      article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
+      const body = el(message.role === 'user' ? 'pre' : 'div', undefined, 'message-text');
+      if (message.role === 'user') body.textContent = message.text || '(empty message)';
+      else {
+        // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
+        body.innerHTML = markdown.render(message.text);
+        for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+      }
+      article.append(body); fragment.append(article);
+    }
+    for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
+    if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
   }
+  for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
   box.replaceChildren(fragment);
+  if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.toolId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
-  const tools = document.createDocumentFragment();
-  for (const tool of (state.tools || []).slice(-4)) {
-    const detail = el('details');
-    detail.append(el('summary', tool.name + ' · ' + tool.status), el('pre', tool.text || 'Running…'));
-    tools.append(detail);
-  }
-  $('tools').replaceChildren(tools);
   if (state.error) notice(state.error);
   renderDialog(state);
   updateControls();
@@ -149,14 +189,17 @@ function updateControls() {
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   $('send').disabled = !live || sending.has(selected);
   $('abort').disabled = !live;
+  $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
   $('prompt').disabled = !selected;
+  $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
+  $('mode').options[0].textContent = state?.status === 'working' ? 'Steer' : 'Message';
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
   $('resume').disabled = !connected || !meta?.resumable;
   $('composer-hint').textContent = !connected ? 'Reconnect to send instructions.' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
-    state && ['saved', 'disconnected'].includes(state.status) ? (meta?.resumable ? 'Resume to continue. An existing owner lock prevents duplicate workers.' : 'Resume is disabled on the computer. Start the service with --allow-resume after loading the extension in every Pi terminal.') :
-    'Switching sessions keeps other work running. Abort turn may leave queued messages in terminal sessions.';
+    state && ['saved', 'disconnected'].includes(state.status) ? (meta?.resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
+  $('composer-hint').hidden = !$('composer-hint').textContent;
 }
 function renderDialog(state) {
   const dialog = state.dialog;
@@ -193,6 +236,17 @@ $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', renderList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));
 $('prompt').addEventListener('input', () => { if (selected) drafts.set(selected, $('prompt').value); });
+$('prompt').addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer: fine)').matches) {
+    event.preventDefault();
+    if (!$('send').disabled) {
+      const mode = $('mode').value;
+      if (event.altKey) $('mode').value = 'followUp';
+      $('composer').requestSubmit();
+      $('mode').value = mode;
+    }
+  }
+});
 $('composer').addEventListener('submit', async event => {
   event.preventDefault();
   const id = selected, text = $('prompt').value;

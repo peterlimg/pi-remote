@@ -13,10 +13,8 @@
 </head>
 <body>
   <section id="login" class="login">
-    <div class="mark">π</div>
-    <p class="eyebrow">YOUR WORK, WITH YOU</p>
     <h1>Pi Remote</h1>
-    <p>Pick up a conversation. Check progress.<br>Keep your sessions moving.</p>
+    <p>Connect to Pi on your computer.</p>
     <form id="login-form">
       <label for="token">Device access token</label>
       <input id="token" type="password" autocomplete="off" required placeholder="Paste the token from your computer">
@@ -26,38 +24,40 @@
   </section>
   <div id="app" class="shell" hidden>
     <aside id="sidebar">
-      <header class="brand"><span class="small-mark">π</span><strong>Pi Remote</strong><button id="logout" class="quiet">Sign out</button></header>
+      <header class="brand"><strong>Pi Remote</strong><button id="logout" class="quiet">Sign out</button></header>
       <div class="list-heading"><h2>Sessions</h2><span id="count" class="badge">0</span></div>
       <label class="sr-only" for="search">Search sessions</label>
       <input id="search" type="search" placeholder="Search title or project">
       <nav id="sessions" aria-label="Pi sessions"></nav>
       <p id="list-empty" class="hint">No sessions yet. Start Pi with the remote extension loaded.</p>
-      <footer><span id="connection" role="status">Connecting…</span></footer>
+      <footer>
+        <span id="connection" role="status">Connecting…</span>
+        <details id="diagnostics" hidden><summary id="warnings-summary"></summary><ul id="warnings"></ul></details>
+      </footer>
     </aside>
     <main>
       <header class="conversation-header">
-        <button id="back" class="quiet mobile-only" aria-label="Show sessions">‹ Sessions</button>
-        <div><h1 id="title">Your sessions, wherever you are.</h1><p id="project">Select a conversation to continue.</p></div>
-        <span id="status" class="status"></span>
+        <button id="back" class="quiet mobile-only" aria-label="Show sessions">Sessions</button>
+        <h1 id="title">Pi Remote</h1>
+        <details class="session-info"><summary>Details</summary><p id="project">Select a session to see its project directory.</p></details>
       </header>
       <div id="notice" class="notice" role="status" hidden></div>
-      <section id="empty" class="empty"><span class="large-mark">π</span><h2>A little closer to your work.</h2><p>Open a session from the list.<br>Other sessions keep running as you browse.</p></section>
+      <section id="empty" class="empty"><p>Select a session.</p></section>
       <section id="transcript" aria-label="Conversation" tabindex="0" hidden></section>
-      <section id="tools" class="tool-area" aria-label="Recent tools"></section>
       <section id="dialog" class="dialog" hidden></section>
       <form id="composer" class="composer" hidden>
         <label class="sr-only" for="prompt">Message</label>
-        <textarea id="prompt" rows="3" placeholder="Continue this conversation…"></textarea>
+        <textarea id="prompt" rows="2" placeholder="Message Pi…"></textarea>
         <div class="composer-actions">
           <select id="mode" aria-label="Message delivery">
-            <option value="prompt">Send / steer</option>
+            <option value="prompt">Message</option>
             <option value="followUp">Queue follow-up</option>
           </select>
           <button id="resume" type="button" class="secondary" hidden>Resume session</button>
-          <button id="abort" type="button" class="quiet">Abort turn</button>
-          <button id="send" type="submit">Send ↑</button>
+          <button id="abort" type="button" class="quiet" title="Abort this turn. Queued messages may still run.">Abort turn</button>
+          <button id="send" type="submit">Send</button>
         </div>
-        <p id="composer-hint" class="hint"></p>
+        <div class="composer-meta"><span id="status" role="status"></span><p id="composer-hint" class="hint" hidden></p></div>
       </form>
     </main>
   </div>
