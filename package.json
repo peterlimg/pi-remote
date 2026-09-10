@@ -1,0 +1,32 @@
+{
+  "name": "pi-remote",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Control multiple Pi coding-agent sessions from a mobile browser",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "pi-remote": "bin/pi-remote.mjs"
+  },
+  "scripts": {
+    "start": "node bin/pi-remote.mjs serve",
+    "relay": "node bin/pi-remote.mjs relay",
+    "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "check": "tsc --noEmit && node scripts/check.mjs"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/ws": "8.18.1",
+    "typescript": "5.8.3"
+  },
+  "pi": {
+    "extensions": [
+      "./extension/index.ts"
+    ]
+  }
+}
