@@ -91,6 +91,33 @@ pi-remote serve
 
 The computer makes an outbound WSS connection; no inbound port is needed on the computer. The relay can read transmitted content. This version does **not** implement end-to-end encryption or one-time QR pairing.
 
+### Deploy the relay on Render
+
+The included `render.yaml` runs only the relay and mobile web app. Pi, model credentials, session files and RPC workers stay on your computer. No database or persistent disk is needed on Render.
+
+1. On your computer, run `node bin/pi-remote.mjs relay-env`. Keep both printed values private; they must match the computer's config, not newly generated Render secrets.
+2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect `peterlimg/pi-remote`, and select branch `feat/mobile-sessions`.
+3. Use `render.yaml`, enter the two token values when prompted, and deploy. The Blueprint uses the Free plan and disables automatic deploys. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Use a paid instance if you need to avoid idle spin-down.
+4. Copy the service's actual `https://…onrender.com` URL. Verify the relay is up:
+```sh
+curl --fail https://YOUR-SERVICE.onrender.com/health
+# Expected: ok
+```
+5. On your computer, start the host with the matching Render URL:
+```sh
+export PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com
+export PI_REMOTE_RELAY_URL=wss://YOUR-SERVICE.onrender.com
+node bin/pi-remote.mjs serve
+```
+6. In another terminal, create the phone link:
+```sh
+PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com node bin/pi-remote.mjs pair
+```
+
+Install the extension and reload your Pi terminals as described in Quick start. Open the private link on your phone, check that sessions appear, and send a test prompt. `/health` confirms only the relay is running, not that your computer is connected.
+
+Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings; the bind address is `0.0.0.0`. Keep exactly one service instance because host/client routing lives in memory. Deploys disconnect sockets; clients reconnect without replaying uncertain commands. If adding a custom domain, update the start command's public URL and your computer's public/relay URLs to match it.
+
 ## Navigating sessions
 
 Selecting a session changes only the browser subscription. It never sends `/resume` to another terminal or stops another session's work.

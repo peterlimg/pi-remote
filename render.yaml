@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: pi-remote-relay
+    runtime: node
+    branch: feat/mobile-sessions
+    plan: free
+    buildCommand: npm ci --omit=dev --ignore-scripts
+    startCommand: PI_REMOTE_RELAY_PORT=$PORT PI_REMOTE_PUBLIC_URL=$RENDER_EXTERNAL_URL node bin/pi-remote.mjs relay
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PI_REMOTE_RELAY_BIND
+        value: 0.0.0.0
+      - key: PI_REMOTE_RELAY_HOST_TOKEN
+        sync: false
+      - key: PI_REMOTE_RELAY_CLIENT_TOKEN
+        sync: false
