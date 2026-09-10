@@ -1,8 +1,11 @@
+import { patchState } from './protocol.js';
 const $ = id => document.getElementById(id);
+const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, retry = 0;
 let token = sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog;
+const sending = new Set();
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
 if (hashToken) {
   token = hashToken;
@@ -45,8 +48,16 @@ function connect() {
       renderList();
       if (packet.warnings?.length) notice(packet.warnings.join(' · '));
     } else if (packet.type === 'snapshot') {
+      versions.set(packet.sessionId, packet.version);
       cache.set(packet.sessionId, packet.state);
       if (packet.sessionId === selected) renderConversation(packet.state);
+    } else if (packet.type === 'patch') {
+      if (packet.sessionId !== selected) return;
+      try {
+        if (versions.get(selected) + 1 !== packet.version || !cache.has(selected)) throw new Error('Resync');
+        const state = patchState(cache.get(selected), packet.patch);
+        versions.set(selected, packet.version); cache.set(selected, state); renderConversation(state);
+      } catch { request('watch', { sessionId: selected }).catch(e => notice(e.message)); }
     } else if (packet.type === 'response') {
       const item = pending.get(packet.id);
       if (!item) return;
@@ -136,7 +147,7 @@ function renderConversation(state) {
 function updateControls() {
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
-  $('send').disabled = !live;
+  $('send').disabled = !live || sending.has(selected);
   $('abort').disabled = !live;
   $('prompt').disabled = !selected;
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
@@ -185,14 +196,15 @@ $('prompt').addEventListener('input', () => { if (selected) drafts.set(selected,
 $('composer').addEventListener('submit', async event => {
   event.preventDefault();
   const id = selected, text = $('prompt').value;
-  if (!text.trim() || !id) return;
+  if (!text.trim() || !id || sending.has(id)) return;
+  sending.add(id);
   $('send').disabled = true; notice('');
   try {
     await request('command', { sessionId: id, command: { type: $('mode').value, text } });
     if (drafts.get(id) === text) drafts.set(id, '');
     if (selected === id && $('prompt').value === text) $('prompt').value = '';
   } catch (e) { notice(e.message); }
-  finally { updateControls(); }
+  finally { sending.delete(id); updateControls(); }
 });
 $('abort').addEventListener('click', async () => {
   try { await request('command', { sessionId: selected, command: { type: 'abort' } }); }

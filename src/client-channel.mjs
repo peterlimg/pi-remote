@@ -1,7 +1,9 @@
+import { diffState } from '../web/protocol.js';
 import { parseObject, send, protectSocket } from './config.mjs';
 
 export function attachClient(socket, service) {
-  let selected;
+  let selected, previous;
+  let version = 0;
   let busy = 0, closed = false, listTimer, stateTimer;
   const onList = () => {
     if (!listTimer) listTimer = setTimeout(() => { listTimer = undefined; if (!closed) send(socket, { type: 'sessions', ...service.list() }); }, 150);
@@ -10,7 +12,12 @@ export function attachClient(socket, service) {
     if (selected === id && !stateTimer) stateTimer = setTimeout(() => {
       stateTimer = undefined;
       if (closed || !selected) return;
-      try { send(socket, { type: 'snapshot', sessionId: selected, state: service.read(selected) }); }
+      try {
+        const state = service.read(selected);
+        if (previous) send(socket, { type: 'patch', sessionId: selected, version: ++version, patch: diffState(previous, state) });
+        else send(socket, { type: 'snapshot', sessionId: selected, version: ++version, state });
+        previous = structuredClone(state);
+      }
       catch (e) { send(socket, { type: 'notice', error: e.message }); }
     }, 100);
   };
@@ -28,8 +35,8 @@ export function attachClient(socket, service) {
         if (message.op === 'list') value = service.list();
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);
-          selected = message.sessionId;
-          send(socket, { type: 'snapshot', sessionId: selected, state }); value = { watching: selected };
+          selected = message.sessionId; version = 0; previous = structuredClone(state);
+          send(socket, { type: 'snapshot', sessionId: selected, version, state }); value = { watching: selected };
         } else if (message.op === 'command') {
           value = await service.command(message.sessionId, message.id, message.command);
         } else if (message.op === 'resume') {

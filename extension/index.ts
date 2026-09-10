@@ -24,8 +24,8 @@ export default function remoteExtension(pi: any) {
   };
   const publish = () => {
     if (!state || !enabled || stopped) return;
-    clearTimeout(flush);
-    flush = setTimeout(() => send(socket || {}, { type: 'snapshot', state }), 80);
+    if (flush) return;
+    flush = setTimeout(() => { flush = undefined; if (state && enabled && !stopped) send(socket || {}, { type: 'snapshot', state }); }, 80);
   };
   const connect = (epoch: number) => {
     if (stopped || !enabled || generation !== epoch) return;
@@ -63,7 +63,7 @@ export default function remoteExtension(pi: any) {
   };
   const cleanup = () => {
     stopped = true; enabled = false; generation++;
-    clearTimeout(retry); clearTimeout(flush);
+    clearTimeout(retry); clearTimeout(flush); flush = undefined;
     if (socket) { socket.removeAllListeners('close'); socket.close(); socket = undefined; }
     if (lock) { lock.release(); lock = undefined; }
     state = undefined;
@@ -95,7 +95,7 @@ export default function remoteExtension(pi: any) {
     }
   });
   for (const name of ['agent_start', 'agent_end', 'message_start', 'message_update', 'message_end',
-    'tool_execution_start', 'tool_execution_update', 'tool_execution_end']) {
+    'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'ui_prompt_start', 'ui_prompt_end', 'agent_settled']) {
     pi.on(name, (event: any) => { if (state) { applyEvent(state, event); publish(); } });
   }
   for (const name of ['session_compact', 'session_tree']) {

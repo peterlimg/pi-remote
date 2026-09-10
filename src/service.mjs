@@ -15,6 +15,7 @@ export class SessionService extends EventEmitter {
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.scan();
+    this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
   }
   scan() {
@@ -95,6 +96,7 @@ export class SessionService extends EventEmitter {
       let worker;
       try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
       catch (e) { lock.release(); throw e; }
+      if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
       const item = { worker, lock, state: initialState(actual, actual.messages) };
       item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
       worker.on('event', event => {

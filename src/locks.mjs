@@ -1,4 +1,4 @@
-import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'node:fs';
+import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { ensureDir } from './config.mjs';
@@ -30,7 +30,13 @@ export function acquireLock(dir, key, details = {}) {
   }
   try { writeFileSync(fd, JSON.stringify(owner)); } finally { closeSync(fd); }
   let released = false;
-  return { owner, release() {
+  return { owner, setWorkerPid(pid) {
+    if (!Number.isInteger(pid) || pid < 1) throw new Error('Worker did not start');
+    owner.workerPid = pid;
+    const temp = file + '.' + owner.nonce + '.tmp';
+    writeFileSync(temp, JSON.stringify(owner), { mode: 0o600 });
+    renameSync(temp, file);
+  }, release() {
     if (released) return;
     released = true;
     try {
@@ -43,6 +49,7 @@ export function unlockDead(dir, key) {
   const file = join(dir, key + '.json');
   const owner = JSON.parse(readFileSync(file, 'utf8'));
   if (processExists(owner.pid)) throw new Error('Owner process still exists; refusing unlock');
+  if (owner.kind === 'rpc' && (!owner.workerPid || processExists(owner.workerPid))) throw new Error('RPC worker may still exist; refusing unlock');
   // No code automatically replaces locks. This local recovery command is the only stale-lock remover.
   unlinkSync(file);
 }

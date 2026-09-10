@@ -14,7 +14,8 @@
     "start": "node bin/pi-remote.mjs serve",
     "relay": "node bin/pi-remote.mjs relay",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
-    "check": "tsc --noEmit && node scripts/check.mjs"
+    "check": "tsc --noEmit && node scripts/check.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "ws": "8.18.3"
@@ -22,7 +23,8 @@
   "devDependencies": {
     "@types/node": "22.15.30",
     "@types/ws": "8.18.1",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "@playwright/test": "1.52.0"
   },
   "pi": {
     "extensions": [
