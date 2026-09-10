@@ -34,3 +34,13 @@ jobs:
         with:
           name: mobile-browser-results
           path: test-results/
+  pi-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --ignore-scripts
+      - run: npm install --no-save @earendil-works/pi-coding-agent@0.85.1
+      - run: node test/pi-smoke.mjs
