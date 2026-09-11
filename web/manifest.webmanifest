@@ -1,0 +1,16 @@
+{
+  "name": "Pi Remote",
+  "short_name": "Pi Remote",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f1",
+  "theme_color": "#153e35",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
