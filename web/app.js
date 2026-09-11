@@ -2,6 +2,17 @@ import { patchState } from './protocol.js';
 import MarkdownIt from './markdown-it.mjs';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
+// iOS keyboards resize/pan the visual viewport, not the CSS layout viewport.
+function fitViewport() {
+  const viewport = window.visualViewport;
+  if (viewport && Math.abs(viewport.scale - 1) > 0.01) return; // Leave pinch zoom to the browser.
+  document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
+  document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
+}
+window.visualViewport?.addEventListener('resize', fitViewport);
+window.visualViewport?.addEventListener('scroll', fitViewport);
+window.addEventListener('resize', fitViewport);
+fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, retry = 0;
