@@ -147,11 +147,43 @@ function renderConversation(state) {
     const detail = el('details', undefined, 'tool');
     detail.dataset.toolId = id; detail.dataset.status = status;
     detail.open = expanded.get(id) ?? status === 'error';
-    const summary = el('summary');
-    summary.append(el('strong', name || live?.name || 'Tool'), el('span', status, 'tool-status'));
+    const toolName = name || live?.name || 'Tool';
+    let args;
+    try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
+    let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
+    if (typeof args?.path === 'string') {
+      const prefix = state.cwd?.replace(/[\\/]$/, '') + (state.cwd?.includes('\\') ? '\\' : '/');
+      if (context.startsWith(prefix)) context = context.slice(prefix.length);
+      const start = args.offset ?? 1;
+      if (toolName === 'read' && (args.offset !== undefined || args.limit !== undefined) && Number.isInteger(start) && start > 0) {
+        context += ':' + start;
+        if (Number.isInteger(args.limit) && args.limit > 0) context += '-' + (start + args.limit - 1);
+      }
+    }
+    const summary = el('summary'), heading = el('span', undefined, 'tool-heading');
+    heading.append(el('strong', toolName === 'bash' ? '$' : toolName));
+    if (toolName === 'bash') heading.append(el('span', 'bash', 'sr-only'));
+    if (context) {
+      const label = el('span', undefined, 'tool-context'); label.title = context;
+      const slash = typeof args?.path === 'string' ? Math.max(context.lastIndexOf('/'), context.lastIndexOf('\\')) : -1;
+      if (slash >= 0) label.append(el('span', context.slice(0, slash + 1), 'tool-directory'));
+      label.append(el('span', context.slice(slash + 1), 'tool-target'));
+      heading.append(label);
+    }
+    const statusLabel = el('span', status, 'tool-status');
+    statusLabel.hidden = status === 'done';
+    heading.append(statusLabel); summary.append(heading);
+    const output = result?.text || live?.text || '';
+    if (toolName === 'bash' && output) {
+      const lines = output.trimEnd().split(/\r?\n/), preview = el('span', undefined, 'tool-preview');
+      if (lines.length > 5) preview.append(el('span', `${lines.length - 5} earlier lines · expand`, 'tool-preview-hint'));
+      if (result?.truncated) preview.append(el('span', 'Output shortened for mobile.', 'tool-preview-hint'));
+      preview.append(el('span', lines.slice(-5).join('\n'), 'tool-preview-text'));
+      summary.append(preview);
+    }
     detail.append(summary);
     if (input) detail.append(el('pre', input, 'tool-input'));
-    detail.append(el('pre', result?.text || live?.text || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
+    detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     fragment.append(detail);
   };
@@ -192,7 +224,6 @@ function updateControls() {
   $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
-  $('mode').options[0].textContent = state?.status === 'working' ? 'Steer' : 'Message';
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
   $('resume').disabled = !connected || !meta?.resumable;
@@ -239,27 +270,25 @@ $('prompt').addEventListener('input', () => { if (selected) drafts.set(selected,
 $('prompt').addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer: fine)').matches) {
     event.preventDefault();
-    if (!$('send').disabled) {
-      const mode = $('mode').value;
-      if (event.altKey) $('mode').value = 'followUp';
-      $('composer').requestSubmit();
-      $('mode').value = mode;
-    }
+    sendMessage(event.altKey ? 'followUp' : 'prompt');
   }
 });
-$('composer').addEventListener('submit', async event => {
+$('composer').addEventListener('submit', event => {
   event.preventDefault();
+  sendMessage();
+});
+async function sendMessage(type = 'prompt') {
   const id = selected, text = $('prompt').value;
-  if (!text.trim() || !id || sending.has(id)) return;
+  if (!text.trim() || !id || $('send').disabled || sending.has(id)) return;
   sending.add(id);
   $('send').disabled = true; notice('');
   try {
-    await request('command', { sessionId: id, command: { type: $('mode').value, text } });
+    await request('command', { sessionId: id, command: { type, text } });
     if (drafts.get(id) === text) drafts.set(id, '');
     if (selected === id && $('prompt').value === text) $('prompt').value = '';
   } catch (e) { notice(e.message); }
   finally { sending.delete(id); updateControls(); }
-});
+}
 $('abort').addEventListener('click', async () => {
   try { await request('command', { sessionId: selected, command: { type: 'abort' } }); }
   catch (e) { notice(e.message); }

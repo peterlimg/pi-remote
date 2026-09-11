@@ -7,7 +7,7 @@ This is an initial implementation. The code lives on the `feat/mobile-sessions` 
 ## What it does
 
 - Lists live sessions across Pi terminals and saved sessions across project directories.
-- Streams Markdown conversation and inline tool updates. Tool details stay collapsed until opened; raw HTML and remote images are disabled.
+- Streams Markdown conversation and compact tool updates. Tool rows show file paths with line ranges or shell commands; shell output previews the last five available lines. Expand a row for full inputs and available output. Raw HTML and remote images are disabled.
 - Sends prompts, steering messages and follow-ups to the selected live session.
 - Keeps independent message drafts while navigating between sessions.
 - Browses saved session history and optionally resumes a session in a Pi RPC worker.
@@ -124,7 +124,7 @@ Render terminates TLS and forwards WebSockets. The start command maps Render's `
 
 Selecting a session changes only the browser subscription. It never sends `/resume` to another terminal or stops another session's work.
 
-On desktop, Enter sends, Shift+Enter inserts a newline, and Alt+Enter queues a follow-up. On touch devices, Enter inserts a newline; use Send to submit. Expand a tool row to inspect its input and output. Project paths are under Details, and scan warnings are under the connection status in the session list.
+Send uses Pi's default behavior: start a message when idle or steer while working, without a mode selector. On desktop, Enter sends, Shift+Enter inserts a newline, and Alt+Enter queues a follow-up. On touch devices, Enter inserts a newline; use Send to submit. Expand a tool row to inspect its input and output. Project paths are under Details, and scan warnings are under the connection status in the session list.
 
 | Status | Meaning |
 |---|---|
