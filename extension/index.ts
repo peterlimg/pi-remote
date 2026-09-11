@@ -1,11 +1,13 @@
 import WebSocket from 'ws';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, dataDir, send, parseObject } from '../src/config.mjs';
+import { loadConfig, dataDir, send, parseObject, saveConnection, publicOrigin } from '../src/config.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
 import { CommandJournal, validateCommand } from '../src/commands.mjs';
+import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
+import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -40,6 +42,7 @@ export default function remoteExtension(pi: any) {
     ws.on('message', async (raw: any) => {
       try {
         const message = parseObject(raw);
+        if (message.type === 'ready' && !stopped && enabled && generation === epoch) ctx.ui.setStatus('pi-remote', 'remote connected');
         if (message.type !== 'command') return;
         if (stopped || generation !== epoch || message.sessionId !== state.id) throw new Error('Session changed');
         const command = validateCommand(message.command);
@@ -58,8 +61,19 @@ export default function remoteExtension(pi: any) {
     });
     ws.on('error', () => {});
     ws.on('close', () => {
-      if (!stopped && enabled && generation === epoch) retry = setTimeout(() => connect(epoch), 2000);
+      if (!stopped && enabled && generation === epoch) {
+        ctx.ui.setStatus('pi-remote', 'remote disconnected');
+        retry = setTimeout(() => connect(epoch), 2000);
+      }
     });
+  };
+  const setChannel = (value: boolean, context: any) => {
+    if (value && (!state || !lock)) throw new Error('Resolve session ownership and /reload first');
+    generation++; enabled = value;
+    clearTimeout(retry); clearTimeout(flush); flush = undefined;
+    socket?.close(); socket = undefined;
+    if (value) connect(generation);
+    context.ui.setStatus('pi-remote', value ? 'remote connecting' : 'remote off');
   };
   const cleanup = () => {
     stopped = true; enabled = false; generation++;
@@ -82,7 +96,7 @@ export default function remoteExtension(pi: any) {
       state = initialState({ id, file, piSessionId: ctx.sessionManager.getSessionId(),
         cwd: ctx.cwd, title: pi.getSessionName?.() || 'Pi · ' + ctx.cwd.split('/').pop(), instanceId });
       resetHistory(); enabled = true; connect(generation);
-      ctx.ui.setStatus('pi-remote', 'remote enabled');
+      ctx.ui.setStatus('pi-remote', 'remote connecting');
     } catch (error: any) {
       ctx.ui.notify('Pi Remote: ' + error.message, 'error');
     }
@@ -101,19 +115,76 @@ export default function remoteExtension(pi: any) {
   for (const name of ['session_compact', 'session_tree']) {
     pi.on(name, () => { resetHistory(); publish(); });
   }
+  let controlling = false;
+  const control = async (args: string, context: any) => {
+    if (controlling) { context.ui.notify('Pi Remote is already opening. Close its screen first.', 'info'); return; }
+    controlling = true;
+    try {
+      const action = args.trim();
+      if (!['', 'start', 'stop', 'status', 'setup'].includes(action)) throw new Error('Usage: /pi-remote [start|stop|status|setup]');
+      let config = loadConfig();
+      let running = await hostStatus(config);
+      if (action === 'status') {
+        context.ui.notify(!running ? 'Pi Remote is stopped. /pi-remote starts it.' :
+          'Pi Remote is ' + (running.closing ? 'stopping' : 'running') + ' at ' + running.publicUrl +
+          (running.relayUrl ? (running.relayConnected ? '. Relay connected.' : '. Relay reconnecting; phone access is not ready.') : ''), 'info');
+        return;
+      }
+      if (action === 'stop') {
+        await stopHost(config);
+        context.ui.notify('Pi Remote stopped for all sessions. Terminal agents keep running; saved-session workers stop.', 'info');
+        return;
+      }
+      if (context.mode !== 'tui') throw new Error('Open /pi-remote in an interactive Pi terminal to set up and display the private QR.');
+      if (!state || !lock) throw new Error('Resolve session ownership and /reload first');
+      if (action === 'setup' || !mobileUrl(running?.publicUrl || config.publicUrl)) {
+        if (running) throw new Error('Stop Pi Remote with /pi-remote stop before changing its phone address.');
+        if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
+          throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
+        }
+        const transport = await context.ui.select('How will your phone connect?', ['Existing relay (Render or self-hosted)', 'Existing HTTPS tunnel']);
+        if (!transport) return;
+        const value = await context.ui.input('Public HTTPS address', 'https://your-service.onrender.com');
+        if (value === undefined) return;
+        const origin = publicOrigin(value.trim());
+        if (!mobileUrl(origin)) throw new Error('Your phone needs a non-local HTTPS address. Set up a relay or HTTPS tunnel first; see README.');
+        if (transport.startsWith('Existing relay') && !await context.ui.confirm('Relay credentials',
+          'The relay must already use this computer\'s tokens from pi-remote relay-env. Is it configured?')) return;
+        saveConnection(origin, transport.startsWith('Existing relay'));
+        config = loadConfig();
+      }
+      context.ui.notify(running ? 'Pi Remote is running. Opening login QR...' : 'Starting Pi Remote...', 'info');
+      running = await ensureHost(config);
+      if (!enabled) setChannel(true, context);
+      if (running.relayUrl && !running.relayConnected) context.ui.notify('Relay connecting. A sleeping Render service may take about a minute. /pi-remote status checks it.', 'warning');
+      const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);
+      // UI-only: never persist the bearer link in session entries or model context.
+      await context.ui.custom((tui: any, _theme: any, keys: any, done: any) => ({
+        render: (width: number) => pairingLines(url, code, width, tui.terminal.rows),
+        invalidate() {},
+        handleInput(data: string) {
+          if (keys.matches(data, 'tui.select.confirm') || keys.matches(data, 'tui.select.cancel') || data === '\u0003') done();
+        }
+      }), { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
+    } catch (error: any) { context.ui.notify('Pi Remote: ' + error.message, 'error'); }
+    finally { controlling = false; }
+  };
+  pi.registerCommand('pi-remote', {
+    description: 'Start mobile control and show login QR: /pi-remote [stop|status|setup]',
+    getArgumentCompletions: (prefix: string) => ['start', 'stop', 'status', 'setup']
+      .filter(value => value.startsWith(prefix)).map(value => ({ value, label: value })),
+    handler: control
+  });
   pi.registerCommand('remote', {
     description: 'Show or disable mobile control: /remote [off|on]',
     handler: async (args: string, context: any) => {
       if (args.trim() === 'off') {
-        enabled = false; clearTimeout(retry); clearTimeout(flush); socket?.close();
-        context.ui.setStatus('pi-remote', 'remote off');
+        setChannel(false, context);
         context.ui.notify('Remote control disabled; local session ownership retained.', 'info');
       } else if (args.trim() === 'on') {
-        if (!state || !lock) throw new Error('Resolve session ownership and /reload first');
-        if (!enabled) { enabled = true; connect(generation); }
-        context.ui.setStatus('pi-remote', 'remote enabled');
+        if (!enabled) setChannel(true, context);
       } else {
-        context.ui.notify('Run pi-remote pair in another terminal for the phone login URL. /remote off disables this session.', 'info');
+        await control(args, context);
       }
     }
   });

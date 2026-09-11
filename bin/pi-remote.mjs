@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, dataDir } from '../src/config.mjs';
 import { startHost } from '../src/host.mjs';
 import { startRelay } from '../src/relay.mjs';
 import { unlockDead, sessionKey } from '../src/locks.mjs';
+import { pairingUrl, pairingQr, mobileUrl } from '../src/pairing.mjs';
+import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 
 const [command = 'serve', ...args] = process.argv.slice(2);
 try {
@@ -12,16 +13,24 @@ try {
     const config = loadConfig();
     const host = await startHost({ config, allowResume: args.includes('--allow-resume') });
     console.log('Pi Remote: http://127.0.0.1:' + config.port);
-    console.log('Run "node bin/pi-remote.mjs pair" for your phone login link.');
+    console.log('Use /pi-remote in Pi for your phone login QR.');
     let closing = false;
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
       if (closing) return; closing = true; await host.close(); process.exit(0);
     });
+    process.send?.({ type: 'ready', status: host.status() });
+  } else if (command === 'start') {
+    await ensureHost(); console.log('Pi Remote running. Use /pi-remote in Pi to log in.');
+  } else if (command === 'stop') {
+    console.log(await stopHost() ? 'Pi Remote stopped' : 'Pi Remote already stopped');
   } else if (command === 'pair') {
     const config = loadConfig();
-    const url = new URL(process.env.PI_REMOTE_PUBLIC_URL || 'http://127.0.0.1:' + config.port);
-    url.hash = 'token=' + config.clientToken;
-    console.log(url.href);
+    const running = await hostStatus(config);
+    const publicUrl = running?.publicUrl || config.publicUrl;
+    const url = pairingUrl(config, publicUrl);
+    if (mobileUrl(publicUrl)) console.log(pairingQr(url).join('\n'));
+    else console.log('Local-only link. Use /pi-remote setup in Pi to configure phone access.');
+    console.log(url);
     console.log('This link grants access to all exposed sessions. Keep it private. Revoke by rotating clientToken and restarting the host/relay.');
   } else if (command === 'relay-env') {
     const config = loadConfig();
@@ -45,10 +54,15 @@ try {
     const key = args[0] === 'service' ? 'service' : sessionKey(args[0]);
     unlockDead(join(dataDir(), 'locks'), key); console.log('Removed dead owner lock');
   } else if (command === 'status') {
-    const config = loadConfig();
-    const response = await fetch('http://127.0.0.1:' + config.port + '/health');
-    console.log(response.ok ? 'Service reachable' : 'Service returned ' + response.status);
+    const status = await hostStatus();
+    console.log(!status ? 'Pi Remote stopped' : status.closing ? 'Pi Remote stopping' :
+      'Pi Remote running' + (status.relayUrl ? (status.relayConnected ? '; relay connected' : '; relay reconnecting') : ''));
   } else {
-    throw new Error('Commands: serve [--allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
+    throw new Error('Commands: start, stop, serve [--allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
   }
-} catch (error) { console.error(error.message); process.exitCode = 1; }
+} catch (error) {
+  console.error(error.message);
+  process.send?.({ type: 'error', error: error.message, code: error.code });
+  if (process.connected) process.disconnect();
+  process.exitCode = 1;
+}

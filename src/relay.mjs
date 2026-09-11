@@ -78,7 +78,7 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
   const target = new URL(url);
   if (target.protocol !== 'wss:' && !(allowInsecure && target.protocol === 'ws:' && ['127.0.0.1', 'localhost'].includes(target.hostname))) throw new Error('Relay URL must use wss:// (loopback ws:// only in tests)');
   target.pathname = '/host'; target.search = ''; target.hash = '';
-  let stopped = false, socket, timer;
+  let stopped = false, connected = false, socket, timer;
   const connect = () => {
     if (stopped) return;
     const ws = new WebSocket(target, { maxPayload: 4 * 1024 * 1024 }); socket = ws;
@@ -86,9 +86,11 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
     protectSocket(ws);
     ws.on('open', () => send(ws, { type: 'auth', token }));
     ws.on('message', raw => {
+      if (stopped) return;
       try {
         const packet = parseObject(raw);
-        if (packet.type === 'open' && typeof packet.id === 'string') {
+        if (packet.type === 'ready') connected = true;
+        else if (packet.type === 'open' && typeof packet.id === 'string') {
           if (virtual.has(packet.id) || virtual.size >= 16) throw new Error('Too many channels');
           const client = new VirtualSocket(ws, packet.id); virtual.set(packet.id, client);
           client.once('close', () => virtual.delete(packet.id)); attachClient(client, service);
@@ -98,10 +100,13 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
     });
     ws.on('error', () => {});
     ws.on('close', () => {
+      connected = false;
       for (const client of virtual.values()) client.close();
       if (!stopped) timer = setTimeout(connect, 2000);
     });
   };
   connect();
-  return () => { stopped = true; clearTimeout(timer); socket?.close(); };
+  const disconnect = () => { stopped = true; connected = false; clearTimeout(timer); socket?.close(); };
+  disconnect.connected = () => connected;
+  return disconnect;
 }

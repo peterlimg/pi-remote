@@ -17,7 +17,7 @@ const file = join(dir, 'real.jsonl');
 writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n');
 const trust = join(dir, 'trust-test.ts');
 writeFileSync(trust, 'export default function(pi) { pi.on("project_trust", () => ({ trusted: "yes" })); }\n');
-const entry = resolve('node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js');
+const entry = process.env.PI_REMOTE_SMOKE_PI_ENTRY || resolve('node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js');
 const child = spawn(process.execPath, [entry, '--mode', 'rpc', '--session', file, '-e', resolve('extension/index.ts'), '-e', trust],
   { cwd: dir, env: { ...process.env, PI_REMOTE_WORKER: '', PI_REMOTE_HOME: dir,
     PI_CODING_AGENT_DIR: join(dir, 'agent'), ANTHROPIC_API_KEY: 'test-key-no-model-calls' }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -32,11 +32,16 @@ try {
   child.stdin.write(JSON.stringify({ id: 'state', type: 'get_state' }) + '\n');
   const state = await until(() => messages.find(x => x.id === 'state' && x.type === 'response'));
   assert.equal(state.success, true);
+  child.stdin.write(JSON.stringify({ id: 'commands', type: 'get_commands' }) + '\n');
+  const commands = await until(() => messages.find(x => x.id === 'commands' && x.type === 'response'));
+  assert.ok(commands.data.commands.some(x => x.name === 'pi-remote'));
+  child.stdin.write(JSON.stringify({ id: 'status', type: 'prompt', message: '/pi-remote status' }) + '\n');
+  await until(() => messages.find(x => x.type === 'extension_ui_request' && x.method === 'notify' && /Pi Remote is running/.test(x.message)));
   child.stdin.write(JSON.stringify({ id: 'off', type: 'prompt', message: '/remote off' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.socket);
-  console.log('Real Pi smoke passed: extension load, registration, state query, remote off/on. No model calls.');
+  console.log('Real Pi smoke passed: extension load, registration, /pi-remote discovery/status, remote off/on. No model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

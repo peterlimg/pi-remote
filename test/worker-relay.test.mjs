@@ -42,6 +42,7 @@ test('relay carries browser requests and closes channels when the computer disco
   const relay = await startRelay({ hostToken, clientToken, publicUrl: 'http://localhost:9000', port: 0 });
   const port = relay.http.address().port;
   const disconnect = connectRelay(service, 'ws://127.0.0.1:' + port, hostToken, { allowInsecure: true });
+  assert.equal(disconnect.connected(), false);
   let client;
   t.after(async () => { client?.ws.terminate(); disconnect(); await relay.close(); await service.close(); rmSync(dir, { recursive: true, force: true }); });
   // Wait for host authentication using the public client path; offline connections are closed.
@@ -51,7 +52,9 @@ test('relay carries browser requests and closes channels when the computer disco
     catch { client.ws.terminate(); if (attempt === 9) throw new Error('Relay host never connected'); }
   }
   assert.equal((await client.request('list')).ok, true);
+  assert.equal(disconnect.connected(), true);
   disconnect(); await until(() => client.ws.readyState === 3);
+  assert.equal(disconnect.connected(), false);
 });
 test('mobile patches preserve order, branch resets and metadata removal', () => {
   const before = { id: 'a', messages: [{ id: '1', text: 'hello' }, { id: '2', text: 'old branch' }], dialog: { id: 'd' }, status: 'working' };

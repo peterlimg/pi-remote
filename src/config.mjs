@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, chmodSync, openSync, closeSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, chmodSync, openSync, closeSync, renameSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -26,7 +26,34 @@ export function loadConfig(dir = dataDir()) {
   }
   config.port = Number(process.env.PI_REMOTE_PORT || config.port);
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid port');
+  config.publicUrl = publicOrigin(process.env.PI_REMOTE_PUBLIC_URL || config.publicUrl || 'http://127.0.0.1:' + config.port);
+  config.relayUrl = process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
+  if (config.relayUrl) {
+    const url = new URL(config.relayUrl);
+    if (url.protocol !== 'wss:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Relay URL must be a wss:// origin');
+    config.relayUrl = url.origin;
+  }
   return config;
+}
+export function publicOrigin(value) {
+  const url = new URL(value);
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if ((url.protocol !== 'https:' && !(local && url.protocol === 'http:')) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('Use an HTTPS origin, with no path, credentials, query or fragment');
+  }
+  return url.origin;
+}
+export function saveConnection(publicUrl, relay, dir = dataDir()) {
+  publicUrl = publicOrigin(publicUrl);
+  const file = join(dir, 'config.json');
+  loadConfig(dir);
+  const config = JSON.parse(readFileSync(file, 'utf8'));
+  config.publicUrl = publicUrl;
+  config.relayUrl = relay ? publicUrl.replace(/^https:/, 'wss:') : '';
+  if (relay && !config.relayUrl.startsWith('wss:')) throw new Error('Relay requires HTTPS');
+  const temp = file + '.' + secret() + '.tmp';
+  writeFileSync(temp, JSON.stringify(config, null, 2), { mode: 0o600 });
+  renameSync(temp, file);
 }
 export function originAllowed(origin, allowed) {
   return typeof origin === 'string' && allowed.includes(origin);

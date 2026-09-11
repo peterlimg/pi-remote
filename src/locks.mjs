@@ -25,7 +25,7 @@ export function acquireLock(dir, key, details = {}) {
   let fd;
   try { fd = openSync(file, 'wx', 0o600); }
   catch (e) {
-    if (e.code === 'EEXIST') throw new Error('Session is owned or has a stale lock. Close its owner or run pi-remote unlock locally.');
+    if (e.code === 'EEXIST') throw Object.assign(new Error('Session is owned or has a stale lock. Close its owner or run pi-remote unlock locally.'), { code: 'ELOCKED' });
     throw e;
   }
   try { writeFileSync(fd, JSON.stringify(owner)); } finally { closeSync(fd); }

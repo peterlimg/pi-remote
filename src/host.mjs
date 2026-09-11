@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { join } from 'node:path';
-import { loadConfig, dataDir, parseObject, equalSecret, send, originAllowed, protectSocket } from './config.mjs';
+import { loadConfig, dataDir, parseObject, equalSecret, send, originAllowed, protectSocket, publicOrigin } from './config.mjs';
 import { acquireLock } from './locks.mjs';
 import { SessionService } from './service.mjs';
 import { rootsFromEnv } from './catalog.mjs';
@@ -12,15 +12,31 @@ import { connectRelay } from './relay.mjs';
 export async function startHost(options = {}) {
   const dir = options.dir || dataDir(), config = options.config || loadConfig(dir);
   const port = options.port ?? config.port;
+  const publicUrl = publicOrigin(options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL || config.publicUrl || 'http://127.0.0.1:' + port);
+  const relayUrl = options.relayUrl ?? process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
   const lock = acquireLock(join(dir, 'locks'), 'service', { kind: 'service' });
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: !!options.allowResume, workerOptions: options.workerOptions });
-  const http = createServer(serveStatic);
+  let closing;
+  const status = () => ({ protocol: 1, pid: process.pid, publicUrl, relayUrl,
+    relayConnected: disconnectRelay?.connected() ?? false, closing: !!closing });
+  const http = createServer((req, res) => {
+    if (req.url !== '/_pi/remote') { serveStatic(req, res); return; }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Connection', 'close');
+    if (req.headers.origin || !equalSecret(req.headers.authorization, 'Bearer ' + config.bridgeToken)) {
+      res.writeHead(403); res.end('Forbidden'); return;
+    }
+    if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(status()));
+    if (req.method === 'DELETE') void close().catch(error => console.error('Pi Remote shutdown:', error.message));
+  });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   const origins = new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port]);
-  if (options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL) origins.add(new URL(options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL).origin);
+  origins.add(publicUrl);
   http.on('upgrade', (req, socket, head) => {
     const bridge = req.url === '/bridge';
-    if ((!bridge && req.url !== '/ws') || (!bridge && !originAllowed(req.headers.origin, [...origins])) || (bridge && req.headers.origin)) {
+    if (closing || (!bridge && req.url !== '/ws') || (!bridge && !originAllowed(req.headers.origin, [...origins])) || (bridge && req.headers.origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
     }
     wss.handleUpgrade(req, socket, head, ws => {
@@ -54,13 +70,17 @@ export async function startHost(options = {}) {
     await new Promise((resolve, reject) => { http.once('error', reject); http.listen(port, '127.0.0.1', resolve); });
     const actualPort = http.address().port;
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
-    if (options.relayUrl || process.env.PI_REMOTE_RELAY_URL) disconnectRelay = connectRelay(service, options.relayUrl || process.env.PI_REMOTE_RELAY_URL, config.relayToken);
+    if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken);
   } catch (e) {
     await service.close(); lock.release(); http.close(); throw e;
   }
-  return { http, service, async close() {
-    disconnectRelay?.(); await service.close();
-    for (const ws of wss.clients) ws.terminate();
-    wss.close(); await new Promise(resolve => http.close(resolve)); lock.release();
-  }};
+  function close() {
+    return closing ??= (async () => {
+      disconnectRelay?.();
+      for (const ws of wss.clients) ws.terminate();
+      wss.close(); await service.close();
+      await new Promise(resolve => http.close(resolve)); lock.release();
+    })();
+  }
+  return { http, service, status, close };
 }

@@ -24,38 +24,35 @@ git clone --branch main https://github.com/peterlimg/pi-remote.git
 cd pi-remote
 npm install
 pi install .
-npm link
-pi-remote serve
 ```
 
-Keep the service running. In each existing Pi terminal run `/reload` once to load the installed extension. New Pi terminals load it automatically.
+In an existing Pi terminal, run `/reload` once. Then:
 
-In another terminal:
-
-```sh
-pi-remote pair
+```text
+/pi-remote
 ```
 
-Open the printed private link in a browser on the computer to check the session list. The default localhost URL only works on that computer; use one of the remote-access setups below for your phone.
+On first use, choose your existing relay or HTTPS tunnel and enter its public HTTPS address. Pi remembers it in `~/.pi/remote/config.json`. If you haven't set up remote access yet, follow one of the options below first.
+
+Pi starts the shared host in the background and shows a private login QR. Scan it with your phone camera. Press Escape to hide the QR and keep working. Run `/pi-remote` again to show it, or `/pi-remote stop` to stop remote access across all terminals.
+
+The host survives `/reload`, session changes and closing the terminal that started it. Terminal agents keep running when you stop remote access; saved-session RPC workers stop. The relay/tunnel must stay running and the computer must stay awake.
+
+`/pi-remote status` checks the host and relay connection. `/pi-remote setup` changes the saved address after stopping the host. A sleeping Render relay may need about a minute to connect. A localhost-only link is never shown as a phone QR.
+
+The QR is generated locally and shown only in a temporary terminal screen, not saved in the conversation or sent to the model. Enlarge a small terminal if the QR doesn't fit; the private link remains available. This is a reusable shared login link, not a one-time pairing code.
+
+**Upgrading from the manual host:** stop the old `serve` process with Ctrl+C once, install dependencies with `npm install`, then exit and restart Pi and resume your session. Old hosts don't have the new authenticated start/stop control endpoint. `/reload` alone does not refresh shared `.mjs` modules already cached by Node.
+
+For optional shell commands, run `npm link`, or use `node bin/pi-remote.mjs` instead of `pi-remote`.
 
 The extension registers on session start, including sessions whose file has not been flushed to disk yet. Completely ephemeral `--no-session` sessions are not exposed.
 
 ### Use your phone through an HTTPS tunnel
 
-Point your preferred HTTPS tunnel/reverse proxy at `http://127.0.0.1:8787` with WebSocket forwarding enabled. Set its exact public origin when starting the service:
+Point your preferred HTTPS tunnel/reverse proxy at `http://127.0.0.1:8787` with WebSocket forwarding enabled.
 
-```sh
-export PI_REMOTE_PUBLIC_URL=https://your-remote-domain.example
-pi-remote serve
-```
-
-Then, in another terminal with the same variable:
-
-```sh
-PI_REMOTE_PUBLIC_URL=https://your-remote-domain.example pi-remote pair
-```
-
-Open that link on the phone. You can add it to the home screen. The tunnel must remain active and the computer must stay awake.
+In Pi, run `/pi-remote`, choose **Existing HTTPS tunnel**, and enter its exact public HTTPS origin. Scan the QR on your phone. You can add the web app to the home screen.
 
 ### Or run the included relay
 
@@ -80,16 +77,10 @@ your-remote-domain.example {
 }
 ```
 
-4. On your computer:
-```sh
-export PI_REMOTE_RELAY_URL=wss://your-remote-domain.example
-export PI_REMOTE_PUBLIC_URL=https://your-remote-domain.example
-pi-remote serve
-```
+4. In Pi on your computer, run `/pi-remote`, choose **Existing relay**, and enter `https://your-remote-domain.example`. The WSS address is saved automatically.
+5. Scan the QR on your phone.
 
-5. Run `pi-remote pair` with that public URL and open the link on your phone.
-
-The computer makes an outbound WSS connection; no inbound port is needed on the computer. The relay can read transmitted content. This version does **not** implement end-to-end encryption or one-time QR pairing.
+The computer makes an outbound WSS connection; no inbound port is needed on the computer. The relay can read transmitted content. This version does **not** implement end-to-end encryption. QR login uses the shared client token, not a one-time code.
 
 ### Deploy the relay on Render
 
@@ -103,20 +94,10 @@ The included `render.yaml` runs only the relay and mobile web app. Pi, model cre
 curl --fail https://YOUR-SERVICE.onrender.com/health
 # Expected: ok
 ```
-5. On your computer, start the host with the matching Render URL:
-```sh
-export PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com
-export PI_REMOTE_RELAY_URL=wss://YOUR-SERVICE.onrender.com
-node bin/pi-remote.mjs serve
-```
-6. In another terminal, create the phone link:
-```sh
-PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com node bin/pi-remote.mjs pair
-```
+5. Install the extension and reload Pi as described in Quick start. Run `/pi-remote`, choose **Existing relay**, and paste `https://YOUR-SERVICE.onrender.com`.
+6. Scan the QR on your phone, check that sessions appear, and send a test prompt. `/pi-remote status` reports whether the computer has authenticated with the relay. `/health` confirms only that the relay is running.
 
-Install the extension and reload your Pi terminals as described in Quick start. Open the private link on your phone, check that sessions appear, and send a test prompt. `/health` confirms only the relay is running, not that your computer is connected.
-
-To update, push to the linked branch and wait for CI and the Render deploy to pass. Then run `npm ci --ignore-scripts` locally, restart the local host, run `/reload` in your Pi terminals, and refresh the phone page.
+To update, push to the linked branch and wait for CI and the Render deploy to pass. Then run `npm ci --ignore-scripts` locally, `/pi-remote stop`, exit and restart Pi, resume your session, and run `/pi-remote`. Refresh the phone page. Restart other Pi terminals too; `/reload` does not refresh cached shared modules.
 
 Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings; the bind address is `0.0.0.0`. Keep exactly one service instance because host/client routing lives in memory. Deploys disconnect sockets; clients reconnect without replaying uncertain commands. If adding a custom domain, update the start command's public URL and your computer's public/relay URLs to match it.
 
@@ -163,10 +144,14 @@ Recovery refuses while the recorded owner or RPC worker PID still exists. If an 
 
 ### Terminal controls
 
-- `/remote`: show pairing instructions.
+- `/pi-remote` or `/pi-remote start`: start or reuse the shared background host and show the login QR.
+- `/pi-remote stop`: stop the shared host and its RPC workers, not terminal agents.
+- `/pi-remote status`: show host and relay connection status without revealing credentials.
+- `/pi-remote setup`: save a relay/tunnel address. Stop the host first.
+- `/remote`: alias for `/pi-remote`.
 - `/remote off`: disable this terminal's remote channel while retaining its ownership lock.
 - `/remote on`: reconnect.
-- `/reload`: reload the extension after an update.
+- `/reload`: discover the extension after first installation. After code updates, exit and restart Pi to refresh its shared modules.
 
 **Abort turn differs by runtime:** RPC workers clear queued messages and abort. The terminal extension can only invoke Pi's exposed `ctx.abort()`; queued messages may still run. It does not pretend to provide “stop everything.”
 
@@ -180,10 +165,12 @@ Arbitrary terminal dialogs from other extensions cannot be answered from the pho
 | `PI_REMOTE_PORT` | Local service port, default 8787; same value in the service and extensions |
 | `PI_REMOTE_SESSION_DIRS` | Session roots, separated by `:` on macOS/Linux (`;` on Windows); default `~/.pi/agent/sessions` |
 | `PI_REMOTE_PI_BIN` | Pi executable for RPC workers, default `pi` |
-| `PI_REMOTE_PUBLIC_URL` | Exact public HTTPS origin for browser origin checks and pairing links |
-| `PI_REMOTE_RELAY_URL` | Optional outbound WSS relay URL |
+| `PI_REMOTE_PUBLIC_URL` | Overrides saved `publicUrl`; exact public HTTPS origin for browser origin checks and pairing links |
+| `PI_REMOTE_RELAY_URL` | Overrides saved `relayUrl`; optional outbound WSS relay URL. Set empty to disable it |
 | `PI_REMOTE_RELAY_PORT` | Relay port, default 8788 |
 | `PI_REMOTE_RELAY_BIND` | Relay bind address, default 127.0.0.1 |
+
+`/pi-remote setup` saves `publicUrl` and `relayUrl` without changing credentials. Environment variables take precedence; unset them and restart Pi to use interactive setup. Background host diagnostics go to `~/.pi/remote/host.log` with owner-only permissions. Logs are not automatically rotated. Shell equivalents are `pi-remote start`, `pi-remote stop`, `pi-remote status`, and `pi-remote pair`. `serve` still runs in the foreground and supports `--allow-resume`.
 
 Keep API/model credentials in your existing Pi configuration. They are not sent to the relay. Conversation/tool text can of course contain secrets, so treat the relay and paired browsers as trusted.
 
@@ -204,7 +191,9 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-CI checks Node 22 and 24, session ownership, restart deduplication, Unicode-safe RPC framing, the actual extension with a mocked Pi API, real WebSocket routing, saved RPC workers with a fake Pi process, relay connections, and mobile browser navigation. A separate smoke job loads the extension in Pi 0.85.1 and exercises registration and remote on/off without a model call.
+CI checks Node 22 and 24, concurrent background starts and stop/restart, authenticated host controls, saved setup, QR decoding and narrow-terminal fallback, session ownership, restart deduplication, Unicode-safe RPC framing, the actual extension with a mocked Pi API, real WebSocket routing, saved RPC workers with a fake Pi process, relay connections, and mobile browser navigation. A separate smoke job loads the extension in Pi 0.85.1 and exercises registration and remote on/off without a model call.
+
+For an upgrade check, load the old extension in Pi, update the files, and run `/reload` followed by `/pi-remote`. An error such as `publicOrigin is not a function` means Node still holds the old `.mjs` exports. Exit Pi, restart and resume the session, then run `/pi-remote` again. Fresh-process tests do not cover this mixed-version state.
 
 A real model/tool smoke test on your Mac is still needed. CI does not validate your provider credentials, your other extensions, Safari-specific behaviour, your tunnel or a deployed relay.
 
