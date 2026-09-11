@@ -97,7 +97,7 @@ The included `render.yaml` runs only the relay and mobile web app. Pi, model cre
 
 1. On your computer, run `node bin/pi-remote.mjs relay-env`. Keep both printed values private; they must match the computer's config, not newly generated Render secrets.
 2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect `peterlimg/pi-remote`, and select branch `feat/mobile-sessions`.
-3. Use `render.yaml`, enter the two token values when prompted, and deploy. The Blueprint uses the Free plan and disables automatic deploys. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Use a paid instance if you need to avoid idle spin-down.
+3. Use `render.yaml`, enter the two token values when prompted, and deploy. The Blueprint uses the Free plan and automatically deploys pushes after CI passes. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Use a paid instance if you need to avoid idle spin-down.
 4. Copy the service's actual `https://…onrender.com` URL. Verify the relay is up:
 ```sh
 curl --fail https://YOUR-SERVICE.onrender.com/health
@@ -116,7 +116,7 @@ PI_REMOTE_PUBLIC_URL=https://YOUR-SERVICE.onrender.com node bin/pi-remote.mjs pa
 
 Install the extension and reload your Pi terminals as described in Quick start. Open the private link on your phone, check that sessions appear, and send a test prompt. `/health` confirms only the relay is running, not that your computer is connected.
 
-To update, use **Manual Deploy > Deploy latest commit** in Render, run `npm ci --ignore-scripts` locally, restart the local host, run `/reload` in your Pi terminals, and refresh the phone page.
+To update, push to the linked branch and wait for CI and the Render deploy to pass. Then run `npm ci --ignore-scripts` locally, restart the local host, run `/reload` in your Pi terminals, and refresh the phone page.
 
 Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings; the bind address is `0.0.0.0`. Keep exactly one service instance because host/client routing lives in memory. Deploys disconnect sockets; clients reconnect without replaying uncertain commands. If adding a custom domain, update the start command's public URL and your computer's public/relay URLs to match it.
 

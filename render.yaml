@@ -7,7 +7,7 @@ services:
     buildCommand: npm ci --omit=dev --ignore-scripts
     startCommand: PI_REMOTE_RELAY_PORT=$PORT PI_REMOTE_PUBLIC_URL=$RENDER_EXTERNAL_URL node bin/pi-remote.mjs relay
     healthCheckPath: /health
-    autoDeployTrigger: "off"
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION
         value: "24"
