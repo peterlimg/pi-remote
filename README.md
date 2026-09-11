@@ -2,7 +2,7 @@
 
 Control Pi coding-agent sessions from a mobile browser. Open one session while the others keep working.
 
-This is an initial implementation. The code lives on the `feat/mobile-sessions` branch until PR #1 is merged.
+This is an initial implementation. Development and Render deployments use the `main` branch.
 
 ## What it does
 
@@ -20,7 +20,7 @@ This is an initial implementation. The code lives on the `feat/mobile-sessions` 
 Requires Node.js 22.19+ and a working Pi installation with your existing model credentials.
 
 ```sh
-git clone --branch feat/mobile-sessions https://github.com/peterlimg/pi-remote.git
+git clone --branch main https://github.com/peterlimg/pi-remote.git
 cd pi-remote
 npm install
 pi install .
@@ -96,7 +96,7 @@ The computer makes an outbound WSS connection; no inbound port is needed on the 
 The included `render.yaml` runs only the relay and mobile web app. Pi, model credentials, session files and RPC workers stay on your computer. No database or persistent disk is needed on Render.
 
 1. On your computer, run `node bin/pi-remote.mjs relay-env`. Keep both printed values private; they must match the computer's config, not newly generated Render secrets.
-2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect `peterlimg/pi-remote`, and select branch `feat/mobile-sessions`.
+2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect `peterlimg/pi-remote`, and select branch `main`.
 3. Use `render.yaml`, enter the two token values when prompted, and deploy. The Blueprint uses the Free plan and automatically deploys pushes after CI passes. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Use a paid instance if you need to avoid idle spin-down.
 4. Copy the service's actual `https://…onrender.com` URL. Verify the relay is up:
 ```sh

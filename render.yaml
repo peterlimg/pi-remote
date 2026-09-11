@@ -2,7 +2,7 @@ services:
   - type: web
     name: pi-remote-relay
     runtime: node
-    branch: feat/mobile-sessions
+    branch: main
     plan: free
     buildCommand: npm ci --omit=dev --ignore-scripts
     startCommand: PI_REMOTE_RELAY_PORT=$PORT PI_REMOTE_PUBLIC_URL=$RENDER_EXTERNAL_URL node bin/pi-remote.mjs relay
