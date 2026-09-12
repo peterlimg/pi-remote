@@ -15,7 +15,7 @@ window.addEventListener('resize', fitViewport);
 fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
-let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, retry = 0;
+let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog;
 const sending = new Set(), commandCatalog = new Map();
@@ -34,7 +34,7 @@ const el = (tag, text, className) => {
 };
 function notice(text) { $('notice').textContent = text || ''; $('notice').hidden = !text; }
 function request(op, extra = {}) {
-  if (!connected) return Promise.reject(new Error('Computer is disconnected'));
+  if (!connected || socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Computer is disconnected'));
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
@@ -43,17 +43,43 @@ function request(op, extra = {}) {
   });
 }
 function connection(text) { $('connection').textContent = text; updateControls(); }
+function disconnect() {
+  const old = socket; socket = undefined; connected = false;
+  clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
+  connectionTimer = undefined;
+  old?.close();
+  for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.')); }
+  pending.clear();
+}
+function reconnect() {
+  disconnect();
+  if (manualClose || !token) return;
+  connection('Computer disconnected. Retrying…');
+  reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
+}
 function connect() {
-  manualClose = false; clearTimeout(reconnectTimer);
+  disconnect(); manualClose = false;
   $('login').hidden = true; $('app').hidden = false;
   connection('Connecting…');
-  socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'auth', token })));
-  socket.addEventListener('message', event => {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  socket = ws;
+  // Bound the whole attempt, including an open transport that never receives ready.
+  connectionTimer = setTimeout(reconnect, 20000);
+  ws.addEventListener('open', () => { if (socket === ws) ws.send(JSON.stringify({ type: 'auth', token })); });
+  ws.addEventListener('message', event => {
+    if (socket !== ws) return;
     let packet;
     try { packet = JSON.parse(event.data); } catch { return; }
+    if (!packet || typeof packet !== 'object') return;
+    if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        if (socket !== ws || connectionTimer) return;
+        connectionTimer = setTimeout(reconnect, 10000);
+        ws.send(JSON.stringify({ op: 'ping', id: crypto.randomUUID() }));
+      }, 20000);
       if (selected) {
         request('watch', { sessionId: selected }).catch(e => notice(e.message));
         loadCommands(selected);
@@ -86,20 +112,22 @@ function connect() {
       else item.resolve(packet.value?.value ?? packet.value);
     } else if (packet.type === 'notice') notice(packet.error);
   });
-  socket.addEventListener('close', event => {
-    connected = false; connection('Computer disconnected');
-    for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.')); }
-    pending.clear();
+  ws.addEventListener('close', event => {
+    if (socket !== ws) return;
     if (event.code === 1008) {
       $('login-error').textContent = event.reason || 'Access denied. Check your token.';
       $('login-error').hidden = false; logout(); return;
     }
-    if (!manualClose) reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
+    reconnect();
   });
-  socket.addEventListener('error', () => {});
+  ws.addEventListener('error', () => { if (socket === ws) reconnect(); });
 }
+// Mobile browsers suspend sockets and timers in the background. Start fresh on return.
+function reconnectNow() { if (token && !manualClose) { retry = 0; connect(); } }
+window.addEventListener('online', reconnectNow);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reconnectNow(); });
 function logout() {
-  manualClose = true; clearTimeout(reconnectTimer); socket?.close();
+  manualClose = true; disconnect();
   token = ''; sessionStorage.removeItem('pi-remote-token');
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; sessions = [];
   $('prompt').value = ''; $('transcript').replaceChildren();

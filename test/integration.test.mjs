@@ -18,6 +18,7 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   t.after(async () => { sockets.forEach(ws => ws.terminate()); locks.forEach(lock => lock.release()); await host.close(); rmSync(dir, { recursive: true, force: true }); });
   const client = await socket(base + '/ws', config.clientToken, 'http://127.0.0.1:' + port);
   sockets.push(client.ws); await until(() => client.messages.find(x => x.type === 'ready'));
+  assert.deepEqual((await client.request('ping')).value, { pong: true });
   const agents = [];
   for (const title of ['Session A', 'Session B']) {
     const file = join(dir, title + '.jsonl'); writeFileSync(file, '');

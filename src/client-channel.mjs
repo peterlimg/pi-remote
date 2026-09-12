@@ -32,7 +32,8 @@ export function attachClient(socket, service) {
       busy++;
       try {
         let value;
-        if (message.op === 'list') value = service.list();
+        if (message.op === 'ping') value = { pong: true };
+        else if (message.op === 'list') value = service.list();
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);
           selected = message.sessionId; version = 0; previous = structuredClone(state);

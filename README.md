@@ -13,7 +13,7 @@ This is an initial implementation. Development and Render deployments use the `m
 - Keeps independent message drafts while navigating between sessions.
 - Browses saved session history and optionally resumes a session in a Pi RPC worker.
 - Handles standard confirmation/input/selection dialogs from RPC workers.
-- Reconnects automatically and fetches a fresh snapshot. Uncertain commands are never automatically replayed.
+- Reconnects automatically and fetches a fresh snapshot. Connection attempts time out after 20 seconds. Browser heartbeats detect silent connections, and returning to the app or coming back online starts a fresh connection. Uncertain commands are never automatically replayed.
 - Supports a local HTTPS tunnel or a self-hosted relay with an outbound computer connection.
 
 ## Quick start on your computer
@@ -201,6 +201,8 @@ CI checks Node 22 and 24, concurrent background starts and stop/restart, authent
 For an upgrade check, load the old extension in Pi, update the files, and run `/reload` followed by `/pi-remote`. An error such as `publicOrigin is not a function` means Node still holds the old `.mjs` exports. Exit Pi, restart and resume the session, then run `/pi-remote` again. Fresh-process tests do not cover this mixed-version state.
 
 Browser tests check that composer drags do not move the page, conversation and multiline-input scrolling still work, and visual viewport resize/scroll events keep the composer visible. Desktop automation does not open a real iOS keyboard. On an iPhone, send a message, dismiss the keyboard, then swipe up and down starting from the composer buttons. The page must stay fixed while swipes inside the conversation still scroll its history. Repeat with the keyboard open and after rotating the phone.
+
+Reconnect tests simulate stalled WebSocket handshakes, missing authentication acknowledgements, silent connections, network/foreground recovery, and late events from replaced sockets. They check that drafts survive, the selected session is watched again, and uncertain commands are not replayed. On a real phone, disconnect Wi-Fi or lock the screen, restore connectivity, and return to the app. The session and draft should recover without another Send action.
 
 Slash-command tests cover live discovery, session isolation, filtering, touch and keyboard selection, failed discovery, IME input, and command expansion options. The real Pi smoke test discovers and runs `/pi-remote status` through the remote bridge without a model call.
 

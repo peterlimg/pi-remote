@@ -57,6 +57,7 @@ test('relay carries browser requests and closes channels when the computer disco
     catch { client.ws.terminate(); if (attempt === 9) throw new Error('Relay host never connected'); }
   }
   assert.equal((await client.request('list')).ok, true);
+  assert.deepEqual((await client.request('ping')).value, { pong: true });
   assert.equal(disconnect.connected(), true);
   disconnect(); await until(() => client.ws.readyState === 3);
   assert.equal(disconnect.connected(), false);

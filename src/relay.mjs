@@ -83,13 +83,14 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
     if (stopped) return;
     const ws = new WebSocket(target, { maxPayload: 4 * 1024 * 1024 }); socket = ws;
     const virtual = new Map();
+    const readyTimer = setTimeout(() => ws.terminate(), 20000);
     protectSocket(ws);
     ws.on('open', () => send(ws, { type: 'auth', token }));
     ws.on('message', raw => {
-      if (stopped) return;
+      if (stopped || socket !== ws) return;
       try {
         const packet = parseObject(raw);
-        if (packet.type === 'ready') connected = true;
+        if (packet.type === 'ready') { clearTimeout(readyTimer); connected = true; }
         else if (packet.type === 'open' && typeof packet.id === 'string') {
           if (virtual.has(packet.id) || virtual.size >= 16) throw new Error('Too many channels');
           const client = new VirtualSocket(ws, packet.id); virtual.set(packet.id, client);
@@ -100,13 +101,14 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
     });
     ws.on('error', () => {});
     ws.on('close', () => {
+      clearTimeout(readyTimer);
       connected = false;
       for (const client of virtual.values()) client.close();
       if (!stopped) timer = setTimeout(connect, 2000);
     });
   };
   connect();
-  const disconnect = () => { stopped = true; connected = false; clearTimeout(timer); socket?.close(); };
+  const disconnect = () => { stopped = true; connected = false; clearTimeout(timer); socket?.terminate(); };
   disconnect.connected = () => connected;
   return disconnect;
 }
