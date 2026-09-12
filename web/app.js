@@ -2,6 +2,20 @@ import { patchState } from './protocol.js';
 import MarkdownIt from './markdown-it.mjs';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
+function resizePrompt() {
+  const input = $('prompt');
+  if (!input.clientWidth) return;
+  const scrollTop = input.scrollTop;
+  input.style.height = 'auto';
+  input.style.height = `${input.value ? input.scrollHeight : 0}px`;
+  input.scrollTop = scrollTop;
+}
+let promptWidth = 0;
+new ResizeObserver(([entry]) => {
+  if (entry.contentRect.width === promptWidth) return;
+  promptWidth = entry.contentRect.width;
+  resizePrompt();
+}).observe($('prompt'));
 // iOS keyboards resize/pan the visual viewport, not the CSS layout viewport.
 function fitViewport() {
   const viewport = window.visualViewport;
@@ -169,6 +183,7 @@ async function selectSession(id) {
     $('transcript').replaceChildren(); $('transcript').hidden = false; $('empty').hidden = true;
     $('composer').hidden = false; updateControls();
   }
+  resizePrompt();
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
 function renderConversation(state) {
@@ -329,6 +344,7 @@ function completeCommand(index = commandIndex) {
   $('prompt').value = '/' + command.name + ' ';
   drafts.set(selected, $('prompt').value);
   commandDismissed = true;
+  resizePrompt();
   $('prompt').focus(); renderCommands();
   return true;
 }
@@ -367,6 +383,7 @@ $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', renderList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));
 $('prompt').addEventListener('input', () => {
+  resizePrompt();
   if (selected) drafts.set(selected, $('prompt').value);
   commandDismissed = false; commandIndex = 0;
   if ($('prompt').value === '/' && selected) loadCommands(selected);
@@ -411,7 +428,7 @@ async function sendMessage(type = 'prompt') {
   try {
     await request('command', { sessionId: id, command: { type, text } });
     if (drafts.get(id) === text) drafts.set(id, '');
-    if (selected === id && $('prompt').value === text) $('prompt').value = '';
+    if (selected === id && $('prompt').value === text) { $('prompt').value = ''; resizePrompt(); }
   } catch (e) { notice(e.message); }
   finally { sending.delete(id); updateControls(); }
 }

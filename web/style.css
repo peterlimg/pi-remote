@@ -134,12 +134,12 @@ pre.message-text { white-space: pre-wrap; }
 .command-option strong { font: 14px/1.5 var(--mono); }
 .command-option span { display: block; font-size: 12px; color: var(--muted); }
 #command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
-.composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: vertical; font: 16px/1.5 var(--mono); max-height: min(96px, calc(var(--viewport-height, 100dvh) * .2)); min-height: 44px; padding: 6px 0; overflow-y: auto; overscroll-behavior: contain; }
+.composer textarea { grid-column: 1 / -1; display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 6px 0; overflow-y: auto; overscroll-behavior: contain; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-top-color: var(--text); }
-.composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.composer-actions { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .composer-actions button { font-size: 12px; }
-.composer-meta { grid-column: 1 / -1; display: flex; gap: 12px; align-items: baseline; padding-top: 4px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.composer-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; color: var(--muted); font-size: 12px; }
 .composer-meta #status { flex-shrink: 0; }
 .composer-meta .hint { margin: 0; }
 .dialog { padding: 16px 24px; background: var(--panel); max-height: 35dvh; overflow: auto; }

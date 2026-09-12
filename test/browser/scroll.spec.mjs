@@ -52,6 +52,49 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
   await page.screenshot({ path: 'test-results/scroll-desktop.png' });
 });
 
+test('the composer grows with text, caps overflow, and shrinks with edits and restored drafts', async ({ page }) => {
+  await page.goto(login);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const prompt = page.locator('#prompt');
+  const height = () => prompt.evaluate(node => node.getBoundingClientRect().height);
+  const compact = await height();
+  expect(compact).toBe(44);
+  expect((await prompt.boundingBox()).width).toBe((await page.locator('#composer').boundingBox()).width);
+  await prompt.fill('One line');
+  expect(await height()).toBe(compact);
+  await prompt.press('Enter');
+  await prompt.pressSequentially('Second line');
+  expect(await height()).toBeGreaterThan(compact);
+  await prompt.fill('One\nTwo\nThree');
+  const threeLines = await height();
+  expect(threeLines).toBeGreaterThan(compact);
+  await page.screenshot({ path: 'test-results/composer-growing.png' });
+  await prompt.fill('Long draft\n'.repeat(30));
+  const capped = await height();
+  expect(capped).toBeGreaterThan(threeLines);
+  expect(capped).toBeLessThanOrEqual(216);
+  await prompt.pressSequentially('More text');
+  expect(await height()).toBe(capped);
+  expect(await prompt.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.locator('#back').click();
+  await page.getByRole('button', { name: /Project Beta/ }).click();
+  await expect.poll(height).toBe(compact);
+  await page.locator('#back').click();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect.poll(height).toBe(capped);
+  await prompt.fill('Short again');
+  expect(await height()).toBe(compact);
+  // Wrapped text must resize after rotation / a change in available width as well.
+  await prompt.fill('This sentence wraps across several lines on a phone. '.repeat(3));
+  const narrow = await height();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect.poll(height).toBeLessThan(narrow);
+  await page.screenshot({ path: 'test-results/composer-growing-desktop.png' });
+  await page.locator('#send').click();
+  await expect(prompt).toHaveValue('');
+  await expect.poll(height).toBe(compact);
+});
+
 test('the app follows keyboard viewport changes without resizing the document', async ({ page }) => {
   // Desktop automation has no iOS keyboard. Exercise its visual viewport events separately.
   await page.addInitScript(() => {
@@ -75,9 +118,9 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect(composer.height).toBeLessThanOrEqual(90);
   expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(190);
   await page.locator('#prompt').fill('Scrollable draft\n'.repeat(20));
-  // Even a manually enlarged draft must use the keyboard-reduced viewport, not dvh.
-  await page.locator('#prompt').evaluate(node => { node.style.height = '300px'; });
-  expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(100);
+  // Growth must use the keyboard-reduced viewport, not dvh.
+  expect((await page.locator('#composer').boundingBox()).height).toBeGreaterThan(composer.height);
+  expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(150);
   expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: 'test-results/composer-keyboard.png' });
