@@ -8,12 +8,21 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
   await page.locator('#prompt').fill('Long conversation\n'.repeat(80));
   await page.locator('#send').click();
   await expect(page.locator('#prompt')).toHaveValue('');
+  await expect(page.locator('#transcript')).toContainText('Long conversation');
   const cdp = await page.context().newCDPSession(page);
   const drag = async (selector, distance) => {
     const box = await page.locator(selector).boundingBox();
-    await cdp.send('Input.synthesizeScrollGesture', { x: box.x + box.width / 2,
-      y: Math.min(box.y + box.height / 2, page.viewportSize().height - 10),
-      yDistance: distance, gestureSourceType: 'touch' });
+    const x = box.x + box.width / 2;
+    const y = Math.min(box.y + box.height / 2, page.viewportSize().height - 10);
+    // Synthetic scroll gestures differ on Linux. Send the same touch path on every OS.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let step = 1; step <= 12; step++) {
+      // Slow down before release so momentum cannot leak into the next assertion.
+      const offset = distance * (1 - (1 - step / 12) ** 3);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + offset }] });
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   };
   for (const height of [220, 844, 220, 844]) {
     await page.setViewportSize({ width: 390, height });
