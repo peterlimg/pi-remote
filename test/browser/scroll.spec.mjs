@@ -72,6 +72,15 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect((await page.locator('#app').boundingBox()).y).toBe(40);
   const composer = await page.locator('#composer').boundingBox();
   expect(composer.y + composer.height).toBeLessThanOrEqual(390);
+  expect(composer.height).toBeLessThanOrEqual(90);
+  expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(190);
+  await page.locator('#prompt').fill('Scrollable draft\n'.repeat(20));
+  // Even a manually enlarged draft must use the keyboard-reduced viewport, not dvh.
+  await page.locator('#prompt').evaluate(node => { node.style.height = '300px'; });
+  expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(100);
+  expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: 'test-results/composer-keyboard.png' });
   await page.locator('#send').click();
   await expect(page.locator('#prompt')).toHaveValue('');
   await page.evaluate(() => window.changeViewport({ height: 175, offsetTop: 90, scale: 2 }));
