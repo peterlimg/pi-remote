@@ -24,6 +24,11 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   const result = await service.resume(id, randomUUID());
   assert.equal(result.ok, true);
   assert.equal(service.read(id).messages[0].text, 'saved prompt');
+  assert.deepEqual(await service.getCommands(id), [{ name: 'review', description: 'Review changes', source: 'extension' }]);
+  for (const type of ['prompt', 'steer', 'followUp']) {
+    assert.equal((await service.command(id, randomUUID(), { type, text: '/review ' + type })).ok, true);
+    await until(() => service.read(id).messages.some(x => x.text === 'reply: /review ' + type));
+  }
   const pid = service.live.get(id).worker.process.pid;
   assert.equal((await service.resume(id, randomUUID())).ok, true);
   assert.equal(service.live.get(id).worker.process.pid, pid);

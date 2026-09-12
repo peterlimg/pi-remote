@@ -35,13 +35,16 @@ try {
   child.stdin.write(JSON.stringify({ id: 'commands', type: 'get_commands' }) + '\n');
   const commands = await until(() => messages.find(x => x.id === 'commands' && x.type === 'response'));
   assert.ok(commands.data.commands.some(x => x.name === 'pi-remote'));
-  child.stdin.write(JSON.stringify({ id: 'status', type: 'prompt', message: '/pi-remote status' }) + '\n');
+  const id = [...host.service.live.keys()][0];
+  assert.ok((await host.service.getCommands(id)).some(x => x.name === 'pi-remote'));
+  const result = await host.service.command(id, randomUUID(), { type: 'prompt', text: '/pi-remote status' });
+  assert.equal(result.ok, true);
   await until(() => messages.find(x => x.type === 'extension_ui_request' && x.method === 'notify' && /Pi Remote is running/.test(x.message)));
   child.stdin.write(JSON.stringify({ id: 'off', type: 'prompt', message: '/remote off' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.socket);
-  console.log('Real Pi smoke passed: extension load, registration, /pi-remote discovery/status, remote off/on. No model calls.');
+  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, remote off/on. No model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

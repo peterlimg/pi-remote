@@ -54,11 +54,13 @@ export class RpcWorker extends EventEmitter {
     });
   }
   async command(command) {
+    if (command.type === 'getCommands') return this.request('get_commands');
     if (command.type === 'abort') {
       await this.request('clear_queue');
       await this.request('abort');
-    } else if (command.type === 'prompt') {
-      await this.request('prompt', { message: command.text, streamingBehavior: 'steer' });
+    } else if (command.type === 'prompt' || command.text.startsWith('/')) {
+      // Extension commands must use prompt, even when submitted with Alt+Enter.
+      await this.request('prompt', { message: command.text, streamingBehavior: command.type === 'followUp' ? 'followUp' : 'steer' });
     } else {
       await this.request(command.type === 'followUp' ? 'follow_up' : 'steer', { message: command.text });
     }

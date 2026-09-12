@@ -8,7 +8,11 @@ const parser = new JsonLines(command => {
   let data;
   if (command.type === 'get_state') data = { isStreaming: false };
   if (command.type === 'get_messages') data = { messages: [{ role: 'user', timestamp: 1, content: 'saved prompt' }] };
-  if (!['get_state', 'get_messages', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
+  if (command.type === 'get_commands') data = { commands: [{ name: 'review', description: 'Review changes', source: 'extension', path: '/private/review.ts' }] };
+  if (command.message?.startsWith('/review') && command.type !== 'prompt') {
+    out({ id: command.id, type: 'response', success: false, error: 'Extension commands require prompt' }); return;
+  }
+  if (!['get_state', 'get_messages', 'get_commands', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
     out({ id: command.id, type: 'response', success: false, error: 'Unknown fake command' }); return;
   }
   out({ id: command.id, type: 'response', success: true, data });

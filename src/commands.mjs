@@ -3,9 +3,23 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, openSync, closeSync } from 'node:fs';
 import { ensureDir } from './config.mjs';
 
+// Pi handles these in its interactive editor, not in sendUserMessage/RPC prompt.
+const terminalCommands = new Set('login logout llama model thinking scoped-models settings resume new name session tree trust fork clone compact copy export import share reload hotkeys changelog quit'.split(' '));
+export function commandList(commands) {
+  if (!Array.isArray(commands)) throw new Error('Command discovery is unavailable. Update Pi and restart the terminal.');
+  return commands.filter(command => typeof command.name === 'string' && !terminalCommands.has(command.name))
+    .map(({ name, description, source }) => ({ name, description, source }));
+}
 export function validateCommand(command) {
   if (!command || !['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) throw new Error('Unsupported command');
   if (command.type !== 'abort' && (typeof command.text !== 'string' || !command.text.trim() || command.text.length > 50000)) throw new Error('Prompt must contain 1–50000 characters');
+  if (command.type !== 'abort') {
+    const text = command.text.trim();
+    if (text === '/') throw new Error('Choose a command from the menu.');
+    if (text.startsWith('/') && terminalCommands.has(text.slice(1).split(/\s/, 1)[0])) {
+      throw new Error(`${text.split(/\s/, 1)[0]} is only available in the Pi terminal, not through the remote prompt API.`);
+    }
+  }
   return command.type === 'abort' ? { type: 'abort' } : { type: command.type, text: command.text };
 }
 export function requestKey(id) {

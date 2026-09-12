@@ -18,7 +18,8 @@ const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new M
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, retry = 0;
 let token = sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog;
-const sending = new Set();
+const sending = new Set(), commandCatalog = new Map();
+let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
 if (hashToken) {
   token = hashToken;
@@ -53,7 +54,10 @@ function connect() {
     try { packet = JSON.parse(event.data); } catch { return; }
     if (packet.type === 'ready') {
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
-      if (selected) request('watch', { sessionId: selected }).catch(e => notice(e.message));
+      if (selected) {
+        request('watch', { sessionId: selected }).catch(e => notice(e.message));
+        loadCommands(selected);
+      }
     } else if (packet.type === 'sessions') {
       const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
       sessions = packet.sessions;
@@ -97,7 +101,7 @@ function connect() {
 function logout() {
   manualClose = true; clearTimeout(reconnectTimer); socket?.close();
   token = ''; sessionStorage.removeItem('pi-remote-token');
-  drafts.clear(); cache.clear(); unread.clear(); selected = undefined; sessions = [];
+  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; sessions = [];
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('app').hidden = true; $('login').hidden = false;
 }
@@ -124,6 +128,7 @@ function renderList() {
 async function selectSession(id) {
   if (selected) drafts.set(selected, $('prompt').value);
   selected = id; unread.delete(id); $('prompt').value = drafts.get(id) || '';
+  commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
   $('transcript').replaceChildren();
   document.querySelector('.session-info').open = false;
@@ -242,6 +247,62 @@ function updateControls() {
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (meta?.resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
   $('composer-hint').hidden = !$('composer-hint').textContent;
+  renderCommands();
+}
+async function loadCommands(id) {
+  const entry = {};
+  commandCatalog.set(id, entry);
+  renderCommands();
+  try { entry.commands = await request('commands', { sessionId: id }); }
+  catch (e) { entry.error = e.message; }
+  if (selected === id && commandCatalog.get(id) === entry) renderCommands();
+}
+function renderCommands() {
+  const input = $('prompt'), query = input.value.slice(1).toLowerCase();
+  const state = cache.get(selected);
+  const open = connected && state && ['idle', 'working', 'waiting'].includes(state.status) &&
+    !commandDismissed && /^\/[^\s]*$/.test(input.value) && input.selectionStart === input.value.length;
+  $('command-menu').hidden = !open;
+  input.setAttribute('aria-expanded', String(!!open));
+  if (!open) {
+    input.removeAttribute('aria-activedescendant');
+    commandOptions = []; commandRender = undefined;
+    return;
+  }
+  const entry = commandCatalog.get(selected);
+  // Streaming transcript updates must not replace an option during a tap.
+  const rendering = [selected, query, commandIndex, entry?.commands, entry?.error];
+  if (commandRender?.every((value, index) => value === rendering[index])) return;
+  commandRender = rendering;
+  input.removeAttribute('aria-activedescendant');
+  commandOptions = (entry?.commands || []).filter(command => {
+    let index = 0;
+    for (const char of command.name.toLowerCase()) if (char === query[index]) index++;
+    return index === query.length;
+  }).sort((a, b) => Number(b.name.toLowerCase().startsWith(query)) - Number(a.name.toLowerCase().startsWith(query)));
+  commandIndex = Math.min(commandIndex, Math.max(0, commandOptions.length - 1));
+  $('command-options').replaceChildren(...commandOptions.map((command, index) => {
+    const option = el('button', undefined, 'command-option');
+    option.type = 'button'; option.tabIndex = -1; option.id = `command-option-${index}`;
+    option.setAttribute('role', 'option'); option.setAttribute('aria-selected', String(index === commandIndex));
+    option.append(el('strong', '/' + command.name));
+    if (command.description) option.append(el('span', command.description));
+    option.addEventListener('pointerdown', event => { if (event.pointerType === 'mouse') event.preventDefault(); });
+    option.addEventListener('click', () => completeCommand(index));
+    return option;
+  }));
+  if (commandOptions.length) input.setAttribute('aria-activedescendant', `command-option-${commandIndex}`);
+  $('command-help').textContent = entry?.error || (!entry?.commands ? 'Loading commands…' : !commandOptions.length ? 'No matching commands. Built-in menus are available in the Pi terminal.' :
+    'Tap or Tab to complete. Enter to run. Esc to close.');
+}
+function completeCommand(index = commandIndex) {
+  const command = commandOptions[index];
+  if (!command) return false;
+  $('prompt').value = '/' + command.name + ' ';
+  drafts.set(selected, $('prompt').value);
+  commandDismissed = true;
+  $('prompt').focus(); renderCommands();
+  return true;
 }
 function renderDialog(state) {
   const dialog = state.dialog;
@@ -277,9 +338,35 @@ $('login-form').addEventListener('submit', event => {
 $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', renderList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));
-$('prompt').addEventListener('input', () => { if (selected) drafts.set(selected, $('prompt').value); });
+$('prompt').addEventListener('input', () => {
+  if (selected) drafts.set(selected, $('prompt').value);
+  commandDismissed = false; commandIndex = 0;
+  if ($('prompt').value === '/' && selected) loadCommands(selected);
+  else renderCommands();
+});
+$('prompt').addEventListener('click', renderCommands);
+$('composer').addEventListener('focusout', event => {
+  if (!$('composer').contains(event.relatedTarget)) { commandDismissed = true; renderCommands(); }
+});
 $('prompt').addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer: fine)').matches) {
+  if (event.isComposing || event.keyCode === 229) return;
+  if (!$('command-menu').hidden && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+    if (event.key === 'Escape') {
+      event.preventDefault(); commandDismissed = true; renderCommands(); return;
+    }
+    if (commandOptions.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault();
+      commandIndex = (commandIndex + (event.key === 'ArrowDown' ? 1 : -1) + commandOptions.length) % commandOptions.length;
+      renderCommands(); $(`command-option-${commandIndex}`).scrollIntoView({ block: 'nearest' }); return;
+    }
+    if (event.key === 'Tab' && completeCommand()) { event.preventDefault(); return; }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (completeCommand()) sendMessage(event.altKey ? 'followUp' : 'prompt');
+      return;
+    }
+  }
+  if (event.key === 'Enter' && !event.shiftKey && matchMedia('(pointer: fine)').matches) {
     event.preventDefault();
     sendMessage(event.altKey ? 'followUp' : 'prompt');
   }

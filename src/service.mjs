@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { acquireLock, sessionKey } from './locks.mjs';
-import { CommandJournal, requestKey, validateCommand } from './commands.mjs';
+import { CommandJournal, requestKey, validateCommand, commandList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
 
@@ -68,18 +68,23 @@ export class SessionService extends EventEmitter {
   changed(id) { this.emit('state', id); this.emit('list'); }
   async command(id, requestId, input) {
     const command = validateCommand(input);
-    return this.journal.execute(id, requestId, command, async () => {
-      const item = this.live.get(id);
-      if (item?.worker) return item.worker.command(command);
-      if (!item?.socket || item.socket.readyState !== 1) throw new Error('Session is not connected. Resume a saved session first.');
-      const responseId = randomUUID();
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          this.pending.delete(responseId); reject(new Error('Pi acknowledgement timed out; delivery may have occurred'));
-        }, 30000);
-        this.pending.set(responseId, { socket: item.socket, resolve, reject, timer });
-        send(item.socket, { type: 'command', id: responseId, sessionId: id, requestId, command });
-      });
+    return this.journal.execute(id, requestId, command, () => this.dispatch(id, requestId, command));
+  }
+  async getCommands(id) {
+    const result = await this.dispatch(id, randomUUID(), { type: 'getCommands' });
+    return commandList(result.commands);
+  }
+  async dispatch(id, requestId, command) {
+    const item = this.live.get(id);
+    if (item?.worker) return item.worker.command(command);
+    if (!item?.socket || item.socket.readyState !== 1) throw new Error('Session is not connected. Resume a saved session first.');
+    const responseId = randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(responseId); reject(new Error('Pi acknowledgement timed out; delivery may have occurred'));
+      }, 30000);
+      this.pending.set(responseId, { socket: item.socket, resolve, reject, timer });
+      send(item.socket, { type: 'command', id: responseId, sessionId: id, requestId, command });
     });
   }
   async resume(id, requestId) {

@@ -66,6 +66,11 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   const pi = {
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand() {}, getSessionName() { return 'Extension test'; },
+    getCommands() { return [
+      { name: 'review', description: 'Review changes', source: 'extension', sourceInfo: { path: '/private/extension.ts' } },
+      { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
+      { name: 'summarize', description: 'Summarize changes', source: 'prompt' }
+    ]; },
     sendUserMessage(text, options) { prompts.push({ text, options }); }
   };
   const ctx = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'pi-id', getBranch: () => [] },
@@ -83,7 +88,21 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   const id = sessionKey(file);
   const result = await host.service.command(id, randomUUID(), { type: 'followUp', text: 'do this next' });
   assert.equal(result.ok, true);
-  assert.deepEqual(prompts, [{ text: 'do this next', options: { deliverAs: 'followUp' } }]);
+  assert.deepEqual(prompts, [{ text: 'do this next', options: { deliverAs: 'followUp', expandPromptTemplates: true } }]);
+  assert.deepEqual(await host.service.getCommands(id), [
+    { name: 'review', description: 'Review changes', source: 'extension' },
+    { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
+    { name: 'summarize', description: 'Summarize changes', source: 'prompt' }
+  ]);
+  for (const text of ['/review src', '/skill:debug failure', '/summarize']) {
+    assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text })).ok, true);
+    assert.deepEqual(prompts.at(-1), { text, options: { deliverAs: 'steer', expandPromptTemplates: true } });
+  }
+  const sent = prompts.length;
+  for (const text of ['/settings', '/model test', '/']) {
+    await assert.rejects(() => host.service.command(id, randomUUID(), { type: 'prompt', text }), /terminal|Choose a command/);
+  }
+  assert.equal(prompts.length, sent);
   await emit('message_start', { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: [{ type: 'text', text: 'streamed' }] } });
   await until(() => host.service.read(id).messages.some(x => x.text === 'streamed'));
   await emit('session_shutdown');

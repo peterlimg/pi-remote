@@ -47,6 +47,14 @@ for (const title of ['Project Alpha', 'Project Beta']) {
   agent.ws.on('message', raw => {
     const packet = JSON.parse(raw.toString());
     if (packet.type !== 'command') return;
+    if (packet.command.type === 'getCommands') {
+      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { commands: [
+        { name: title === 'Project Alpha' ? 'review' : 'deploy', description: 'Run a project command', source: 'extension' },
+        { name: 'summarize', description: 'Summarize changes', source: 'prompt' },
+        { name: 'skill:debug', description: 'Debug a failure', source: 'skill' }
+      ] } }));
+      return;
+    }
     state.messages.push({ id: randomUUID(), role: 'user', text: packet.command.text || 'aborted' });
     state.revision++; state.updatedAt = Date.now(); state.status = 'idle';
     rmSync(scanRoot, { recursive: true, force: true }); host.service.scan();

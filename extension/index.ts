@@ -5,7 +5,7 @@ import { loadConfig, dataDir, send, parseObject, saveConnection, publicOrigin } 
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
-import { CommandJournal, validateCommand } from '../src/commands.mjs';
+import { CommandJournal, validateCommand, commandList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
 
@@ -45,13 +45,17 @@ export default function remoteExtension(pi: any) {
         if (message.type === 'ready' && !stopped && enabled && generation === epoch) ctx.ui.setStatus('pi-remote', 'remote connected');
         if (message.type !== 'command') return;
         if (stopped || generation !== epoch || message.sessionId !== state.id) throw new Error('Session changed');
+        if (message.command?.type === 'getCommands') {
+          send(ws, { type: 'result', id: message.id, ok: true, value: { commands: commandList(pi.getCommands?.()) } });
+          return;
+        }
         const command = validateCommand(message.command);
         const result = await journal.execute(state.id, message.requestId, command, async () => {
           if (stopped || generation !== epoch) throw new Error('Session changed');
           if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();
-          } else pi.sendUserMessage(command.text, { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer' });
+          } else pi.sendUserMessage(command.text, { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer', expandPromptTemplates: true });
           return { accepted: true };
         });
         send(ws, { type: 'result', id: message.id, ...result });

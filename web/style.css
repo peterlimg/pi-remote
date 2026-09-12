@@ -125,7 +125,15 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.composer { width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--accent); flex-shrink: 0; }
+.composer { position: relative; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--accent); flex-shrink: 0; }
+.command-menu { position: absolute; z-index: 2; bottom: 100%; width: 100%; background: var(--panel); border: 1px solid var(--line); }
+#command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
+.command-option { display: block; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; border-radius: 0; background: transparent; color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
+.command-option[aria-selected=true] { background: var(--selection); }
+.command-option[aria-selected=true] span { color: var(--text); }
+.command-option strong { font: 14px/1.5 var(--mono); }
+.command-option span { display: block; font-size: 12px; color: var(--muted); }
+#command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
 .composer textarea { width: 100%; border: 0; border-radius: 0; background: transparent; resize: vertical; font: 16px/1.5 var(--mono); max-height: 25dvh; min-height: 60px; padding: 12px 0 0; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-top-color: var(--text); }

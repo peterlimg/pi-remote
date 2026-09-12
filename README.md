@@ -9,6 +9,7 @@ This is an initial implementation. Development and Render deployments use the `m
 - Lists live sessions across Pi terminals and saved sessions across project directories.
 - Streams Markdown conversation and compact tool updates. Tool rows show file paths with line ranges or shell commands; shell output previews the last five available lines. Expand a row for full inputs and available output. Raw HTML and remote images are disabled.
 - Sends prompts, steering messages and follow-ups to the selected live session.
+- Shows the selected session's extension commands, prompt templates and skills when you type `/`.
 - Keeps independent message drafts while navigating between sessions.
 - Browses saved session history and optionally resumes a session in a Pi RPC worker.
 - Handles standard confirmation/input/selection dialogs from RPC workers.
@@ -107,6 +108,10 @@ Selecting a session changes only the browser subscription. It never sends `/resu
 
 Send uses Pi's default behavior: start a message when idle or steer while working, without a mode selector. On desktop, Enter sends, Shift+Enter inserts a newline, and Alt+Enter queues a follow-up. On touch devices, Enter inserts a newline; use Send to submit. Expand a tool row to inspect its input and output. Project paths are under Details, and scan warnings are under the connection status in the session list.
 
+Type `/` at the start of the composer to see commands from the selected Pi session. Keep typing to filter, use Up/Down to select, Tab to complete, Enter to run, or Escape to dismiss. On touch devices, tap a command to insert it, add any arguments, then tap Send. Pi handles extension commands and expands templates and `/skill:name` prompts, including while working.
+
+This is not full terminal-command parity. Pi's remote prompt APIs do not execute built-in interactive commands such as `/model`, `/settings`, `/compact` or `/new`. They are excluded from the menu and rejected on submission instead of being sent to the model. Argument autocomplete and custom terminal dialogs still require the terminal. Commands that open terminal dialogs may need input on your computer; standard RPC worker dialogs can be answered here. Command discovery requires Pi's `getCommands` API. After updating, restart the host and Pi terminals and refresh the browser.
+
 | Status | Meaning |
 |---|---|
 | working | Pi is running |
@@ -196,6 +201,8 @@ CI checks Node 22 and 24, concurrent background starts and stop/restart, authent
 For an upgrade check, load the old extension in Pi, update the files, and run `/reload` followed by `/pi-remote`. An error such as `publicOrigin is not a function` means Node still holds the old `.mjs` exports. Exit Pi, restart and resume the session, then run `/pi-remote` again. Fresh-process tests do not cover this mixed-version state.
 
 Browser tests check that composer drags do not move the page, conversation and multiline-input scrolling still work, and visual viewport resize/scroll events keep the composer visible. Desktop automation does not open a real iOS keyboard. On an iPhone, send a message, dismiss the keyboard, then swipe up and down starting from the composer buttons. The page must stay fixed while swipes inside the conversation still scroll its history. Repeat with the keyboard open and after rotating the phone.
+
+Slash-command tests cover live discovery, session isolation, filtering, touch and keyboard selection, failed discovery, IME input, and command expansion options. The real Pi smoke test discovers and runs `/pi-remote status` through the remote bridge without a model call.
 
 A real model/tool smoke test on your Mac is still needed. CI does not validate your provider credentials, your other extensions, Safari-specific behaviour, your tunnel or a deployed relay.
 
