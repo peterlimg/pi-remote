@@ -181,7 +181,7 @@ Keep API/model credentials in your existing Pi configuration. They are not sent 
 
 ## Access and persistence
 
-The private pairing link grants access to all exposed sessions. Its token is taken from the URL fragment, removed from browser history, and stored in sessionStorage. This version has a shared client token, not individual device identities. Sign out clears the token and drafts from that tab.
+The private pairing link grants access to all exposed sessions. Its token is taken from the URL fragment, removed from browser history, and stored in localStorage so login survives closing and reopening the app. Existing sessionStorage logins migrate on the next page load. Only sign in on a trusted device. This version has a shared client token, not individual device identities. Sign out clears the saved token and signs out other open tabs for the same origin, clearing their in-memory drafts. Clearing browser data, using private browsing or switching browsers/origins can require scanning the QR again. Authentication delivery timeouts retry without clearing the token; rejected credentials still sign you out.
 
 To revoke all phone access, stop the host/relay, replace `clientToken` in `~/.pi/remote/config.json` with a fresh 32-byte random value, update the relay client token if used, and restart. Rotate `relayToken` separately if the relay host credential was exposed.
 
@@ -202,7 +202,7 @@ For an upgrade check, load the old extension in Pi, update the files, and run `/
 
 Browser tests check that composer drags do not move the page, conversation and multiline-input scrolling still work, and visual viewport resize/scroll events keep the composer visible. Desktop automation does not open a real iOS keyboard. On an iPhone, send a message, dismiss the keyboard, then swipe up and down starting from the composer buttons. The page must stay fixed while swipes inside the conversation still scroll its history. Repeat with the keyboard open and after rotating the phone.
 
-Reconnect tests simulate stalled WebSocket handshakes, missing authentication acknowledgements, silent connections, network/foreground recovery, and late events from replaced sockets. They check that drafts survive, the selected session is watched again, and uncertain commands are not replayed. On a real phone, disconnect Wi-Fi or lock the screen, restore connectivity, and return to the app. The session and draft should recover without another Send action.
+Authentication tests cover QR/manual login persistence after reopening a tab, migration of existing logins, cross-tab sign out, rejected credentials, and recovery from the real server's authentication deadline. Reconnect tests simulate stalled WebSocket handshakes, missing authentication acknowledgements, silent connections, network/foreground recovery, and late events from replaced sockets. They check that drafts survive, the selected session is watched again, and uncertain commands are not replayed. On a real phone, disconnect Wi-Fi or lock the screen, restore connectivity, and return to the app. The session and draft should recover without another Send action.
 
 Slash-command tests cover live discovery, session isolation, filtering, touch and keyboard selection, failed discovery, IME input, and command expansion options. The real Pi smoke test discovers and runs `/pi-remote status` through the remote bridge without a model call.
 

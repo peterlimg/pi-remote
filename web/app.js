@@ -30,16 +30,18 @@ fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
-let token = sessionStorage.getItem('pi-remote-token') || '';
+let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog;
 const sending = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
 if (hashToken) {
   token = hashToken;
-  sessionStorage.setItem('pi-remote-token', token);
   history.replaceState(null, '', location.pathname);
 }
+// Preserve existing tab logins when upgrading to persistent browser storage.
+if (token) localStorage.setItem('pi-remote-token', token);
+sessionStorage.removeItem('pi-remote-token');
 const el = (tag, text, className) => {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -128,7 +130,8 @@ function connect() {
   });
   ws.addEventListener('close', event => {
     if (socket !== ws) return;
-    if (event.code === 1008) {
+    // Host and relay also use 1008 when auth delivery exceeds five seconds.
+    if (event.code === 1008 && event.reason !== 'Authentication required') {
       $('login-error').textContent = event.reason || 'Access denied. Check your token.';
       $('login-error').hidden = false; logout(); return;
     }
@@ -140,9 +143,12 @@ function connect() {
 function reconnectNow() { if (token && !manualClose) { retry = 0; connect(); } }
 window.addEventListener('online', reconnectNow);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reconnectNow(); });
+window.addEventListener('storage', event => {
+  if (event.storageArea === localStorage && (event.key === 'pi-remote-token' || event.key === null) && !event.newValue) logout();
+});
 function logout() {
   manualClose = true; disconnect();
-  token = ''; sessionStorage.removeItem('pi-remote-token');
+  token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; sessions = [];
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('app').hidden = true; $('login').hidden = false;
@@ -377,7 +383,7 @@ function renderDialog(state) {
   form.append(submit, cancel); $('dialog').replaceChildren(form);
 }
 $('login-form').addEventListener('submit', event => {
-  event.preventDefault(); token = $('token').value.trim(); sessionStorage.setItem('pi-remote-token', token); $('token').value = ''; connect();
+  event.preventDefault(); token = $('token').value.trim(); localStorage.setItem('pi-remote-token', token); $('token').value = ''; connect();
 });
 $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', renderList);
