@@ -2,7 +2,20 @@
 
 Control Pi coding-agent sessions from a mobile browser. Open one session while the others keep working.
 
-This is an initial implementation. Development and Render deployments use the `main` branch.
+Pi Remote is self-hosted. Deploy your own relay, enter its HTTPS address once, then scan the QR from `/pi-remote`. No shared hosted relay is provided. Development and Render deployments use the `main` branch.
+
+## How it connects
+
+```mermaid
+flowchart LR
+    subgraph Computer["Your computer"]
+        Pi["Pi sessions"] <--> Host["Background host"]
+    end
+    Host <-->|"WSS"| Relay["Your relay + web app<br/>Render or another server"]
+    Phone["Phone browser"] <-->|"HTTPS / WSS"| Relay
+```
+
+Your computer initiates the relay connection; no inbound port is needed. Pi and model credentials stay on your computer. Prompts, conversation text and tool output pass through your relay, which can read them.
 
 ## What it does
 
@@ -14,7 +27,7 @@ This is an initial implementation. Development and Render deployments use the `m
 - Browses saved session history and optionally resumes a session in a Pi RPC worker.
 - Handles standard confirmation/input/selection dialogs from RPC workers.
 - Reconnects automatically and fetches a fresh snapshot. Connection attempts time out after 20 seconds. Browser heartbeats detect silent connections, and returning to the app or coming back online starts a fresh connection. Uncertain commands are never automatically replayed.
-- Supports a local HTTPS tunnel or a self-hosted relay with an outbound computer connection.
+- Connects to your own relay through an outbound computer connection. No inbound port is needed on your computer.
 
 ## Quick start on your computer
 
@@ -27,17 +40,19 @@ npm install
 pi install .
 ```
 
+Deploy your relay using the [Render instructions](#deploy-your-relay-on-render) below, or [another server](#deploy-your-relay-on-another-server). Generate the relay credentials on the computer where you installed Pi Remote, not on the relay server.
+
 In an existing Pi terminal, run `/reload` once. Then:
 
 ```text
 /pi-remote
 ```
 
-On first use, choose your existing relay or HTTPS tunnel and enter its public HTTPS address. Pi remembers it in `~/.pi/remote/config.json`. If you haven't set up remote access yet, follow one of the options below first.
+On first use, enter your relay's public HTTPS address and confirm that you configured its credentials. Pi remembers the address in `~/.pi/remote/config.json`. There is no transport chooser or default hosted server. Subsequent runs go straight to the QR.
 
 Pi starts the shared host in the background and shows a private login QR. Scan it with your phone camera. Press Escape to hide the QR and keep working. Run `/pi-remote` again to show it, or `/pi-remote stop` to stop remote access across all terminals.
 
-The host survives `/reload`, session changes and closing the terminal that started it. Terminal agents keep running when you stop remote access; saved-session RPC workers stop. The relay/tunnel must stay running and the computer must stay awake.
+The host survives `/reload`, session changes and closing the terminal that started it. Terminal agents keep running when you stop remote access; saved-session RPC workers stop. The relay must stay running and the computer must stay awake.
 
 `/pi-remote status` checks the host and relay connection. `/pi-remote setup` changes the saved address after stopping the host. A sleeping Render relay may need about a minute to connect. A localhost-only link is never shown as a phone QR.
 
@@ -49,58 +64,100 @@ For optional shell commands, run `npm link`, or use `node bin/pi-remote.mjs` ins
 
 The extension registers on session start, including sessions whose file has not been flushed to disk yet. Completely ephemeral `--no-session` sessions are not exposed.
 
-### Use your phone through an HTTPS tunnel
+## Deploy your relay on Render
 
-Point your preferred HTTPS tunnel/reverse proxy at `http://127.0.0.1:8787` with WebSocket forwarding enabled.
+The included `render.yaml` runs only the relay and mobile web app in your Render account. Pi, model credentials, session files and RPC workers stay on your computer. No database or persistent disk is needed. One relay supports **one computer and up to 16 simultaneous browser connections**, with any number of Pi sessions on that computer.
 
-In Pi, run `/pi-remote`, choose **Existing HTTPS tunnel**, and enter its exact public HTTPS origin. Scan the QR on your phone. You can add the web app to the home screen.
+### 1. Generate credentials on your computer
 
-### Or run the included relay
+From the Pi Remote repository on the computer running Pi:
 
-The relay is a separate Node service on a server you control. A TLS reverse proxy provides HTTPS/WSS. The relay supports **one computer and up to 16 simultaneous browser connections**, with any number of Pi sessions on that computer.
-
-1. On your computer, run `pi-remote relay-env`. This intentionally prints the relay's two credentials. Transfer them privately to the relay server's environment.
-2. Install this repository and its dependencies on the relay server.
-3. Run the relay behind HTTPS:
 ```sh
-# On the relay server, set the two values printed by relay-env:
-export PI_REMOTE_RELAY_HOST_TOKEN='...'
-export PI_REMOTE_RELAY_CLIENT_TOKEN='...'
-export PI_REMOTE_PUBLIC_URL=https://your-remote-domain.example
-pi-remote relay
+node bin/pi-remote.mjs relay-env
 ```
 
-The relay listens on `127.0.0.1:8788`. Forward HTTPS requests and WebSocket upgrades to it. For example, with Caddy:
+This prints `PI_REMOTE_RELAY_HOST_TOKEN` and `PI_REMOTE_RELAY_CLIENT_TOKEN` from your local configuration. Keep both values private. Do not generate different secrets on Render, commit them, or paste them into a conversation.
 
-```caddyfile
-your-remote-domain.example {
-    reverse_proxy 127.0.0.1:8788
-}
-```
+### 2. Create your Render service
 
-4. In Pi on your computer, run `/pi-remote`, choose **Existing relay**, and enter `https://your-remote-domain.example`. The WSS address is saved automatically.
-5. Scan the QR on your phone.
+1. Fork `peterlimg/pi-remote` into your GitHub account if you want to control when updates deploy. Enable GitHub Actions on your fork so the deployment checks can run.
+2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect your repository, and choose branch `main`.
+3. Use the included `render.yaml`. When prompted, enter the matching values from step 1:
 
-The computer makes an outbound WSS connection; no inbound port is needed on the computer. The relay can read transmitted content. This version does **not** implement end-to-end encryption. QR login uses the shared client token, not a one-time code.
+   | Render environment variable | Value |
+   |---|---|
+   | `PI_REMOTE_RELAY_HOST_TOKEN` | The printed host token |
+   | `PI_REMOTE_RELAY_CLIENT_TOKEN` | The printed client token |
 
-### Deploy the relay on Render
+4. Deploy. The blueprint installs dependencies, runs the relay, and configures its port, bind address and public HTTPS URL automatically. You do not need to enter those settings.
+5. Keep exactly one service instance because host/client routing lives in memory.
 
-The included `render.yaml` runs only the relay and mobile web app. Pi, model credentials, session files and RPC workers stay on your computer. No database or persistent disk is needed on Render.
+The blueprint uses the Free plan. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Choose a paid instance to avoid idle spin-down.
 
-1. On your computer, run `node bin/pi-remote.mjs relay-env`. Keep both printed values private; they must match the computer's config, not newly generated Render secrets.
-2. In the [Render dashboard](https://dashboard.render.com/), select **New > Blueprint**, connect `peterlimg/pi-remote`, and select branch `main`.
-3. Use `render.yaml`, enter the two token values when prompted, and deploy. The Blueprint uses the Free plan and automatically deploys pushes after CI passes. Free services can sleep after 15 minutes without inbound traffic and take about a minute to wake. Use a paid instance if you need to avoid idle spin-down.
-4. Copy the service's actual `https://…onrender.com` URL. Verify the relay is up:
+### 3. Connect your phone
+
+Copy your service's actual `https://…onrender.com` address from Render and check it:
+
 ```sh
 curl --fail https://YOUR-SERVICE.onrender.com/health
 # Expected: ok
 ```
-5. Install the extension and reload Pi as described in Quick start. Run `/pi-remote`, choose **Existing relay**, and paste `https://YOUR-SERVICE.onrender.com`.
-6. Scan the QR on your phone, check that sessions appear, and send a test prompt. `/pi-remote status` reports whether the computer has authenticated with the relay. `/health` confirms only that the relay is running.
 
-To update, push to the linked branch and wait for CI and the Render deploy to pass. Then run `npm ci --ignore-scripts` locally, `/pi-remote stop`, exit and restart Pi, resume your session, and run `/pi-remote`. Refresh the phone page. Restart other Pi terminals too; `/reload` does not refresh cached shared modules.
+In Pi, run `/pi-remote`, enter that HTTPS address, and confirm you configured the credentials. The WSS address is saved automatically. Scan the QR, check that sessions appear, and send a test prompt. You can add the web app to your phone's home screen.
 
-Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings; the bind address is `0.0.0.0`. Keep exactly one service instance because host/client routing lives in memory. Deploys disconnect sockets; clients reconnect without replaying uncertain commands. If adding a custom domain, update the start command's public URL and your computer's public/relay URLs to match it.
+If changing an existing address, run `/pi-remote stop` followed by `/pi-remote setup`. `/pi-remote status` reports whether the computer has authenticated with the relay; `/health` confirms only that the relay is running. If the computer cannot authenticate, check that Render's two token values match `relay-env` on this computer.
+
+The relay can read transmitted content. This version does **not** implement end-to-end encryption. QR login uses the computer's shared client token, not a one-time code.
+
+### Updates and custom domains
+
+Push or sync updates to the linked `main` branch. Render deploys automatically after CI passes. Then update the local checkout and run `npm ci --ignore-scripts`, `/pi-remote stop`, exit and restart Pi, resume your session, and run `/pi-remote`. Refresh the phone page. Restart other Pi terminals too; `/reload` does not refresh cached shared modules. Deploys disconnect sockets; clients reconnect without replaying uncertain commands.
+
+Render terminates TLS and forwards WebSockets. The start command maps Render's `PORT` and `RENDER_EXTERNAL_URL` to the relay settings. To use a custom domain, configure it in Render, change the start command's `PI_REMOTE_PUBLIC_URL` to that exact HTTPS origin, and update the address with `/pi-remote setup`. Changing origins requires scanning the QR again.
+
+## Deploy your relay on another server
+
+Render is optional. Use a server with Node.js 22.19+, a domain pointing to it, and an HTTPS reverse proxy with WebSocket support.
+
+1. Generate the two credentials **on your Pi computer** using `node bin/pi-remote.mjs relay-env` as above.
+2. On the server, clone your repository and install production dependencies:
+
+   ```sh
+   git clone --branch main https://github.com/YOUR-ACCOUNT/pi-remote.git
+   cd pi-remote
+   npm ci --omit=dev --ignore-scripts
+   ```
+
+3. Configure these environment variables privately in your process manager, such as systemd. Start `node bin/pi-remote.mjs relay` from the repository directory and configure it to restart after failures and server reboots.
+
+   ```text
+   PI_REMOTE_RELAY_HOST_TOKEN=<host token from your computer>
+   PI_REMOTE_RELAY_CLIENT_TOKEN=<client token from your computer>
+   PI_REMOTE_PUBLIC_URL=https://remote.example.com
+   ```
+
+4. The relay listens on `127.0.0.1:8788`. For a Caddy proxy on the same server, use:
+
+   ```caddyfile
+   remote.example.com {
+       reverse_proxy 127.0.0.1:8788
+   }
+   ```
+
+   Allow inbound ports 80 and 443 for Caddy's HTTPS setup. Keep port 8788 private. Caddy forwards WebSockets automatically.
+
+5. Check `https://remote.example.com/health`, then run `/pi-remote` on your computer, enter `https://remote.example.com`, confirm the credentials, and scan the QR. Keep one relay instance.
+
+### Advanced: existing HTTPS tunnels
+
+Existing tunnel configurations still work, but tunnels are not an onboarding option. If you already operate an HTTPS tunnel to `127.0.0.1:8787`, stop Pi Remote and set these variables before starting Pi:
+
+```sh
+export PI_REMOTE_PUBLIC_URL=https://your-tunnel.example
+export PI_REMOTE_RELAY_URL=''
+```
+
+Run `/pi-remote` to show the QR. Environment overrides take precedence over saved configuration; unset them and restart Pi before using `/pi-remote setup` for a relay.
 
 ## Navigating sessions
 

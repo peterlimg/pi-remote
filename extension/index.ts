@@ -146,15 +146,13 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
-        const transport = await context.ui.select('How will your phone connect?', ['Existing relay (Render or self-hosted)', 'Existing HTTPS tunnel']);
-        if (!transport) return;
-        const value = await context.ui.input('Public HTTPS address', 'https://your-service.onrender.com');
+        const value = await context.ui.input('Your relay HTTPS address (deploy your own relay first; see README)', 'https://remote.example.com');
         if (value === undefined) return;
         const origin = publicOrigin(value.trim());
-        if (!mobileUrl(origin)) throw new Error('Your phone needs a non-local HTTPS address. Set up a relay or HTTPS tunnel first; see README.');
-        if (transport.startsWith('Existing relay') && !await context.ui.confirm('Relay credentials',
-          'The relay must already use this computer\'s tokens from pi-remote relay-env. Is it configured?')) return;
-        saveConnection(origin, transport.startsWith('Existing relay'));
+        if (!mobileUrl(origin)) throw new Error('Your relay needs a non-local HTTPS address. Deploy your own relay first; see README.');
+        if (!await context.ui.confirm('Relay credentials',
+          'Your relay must use this computer\'s tokens from node bin/pi-remote.mjs relay-env. Is it configured?')) return;
+        saveConnection(origin, true);
         config = loadConfig();
       }
       context.ui.notify(running ? 'Pi Remote is running. Opening login QR...' : 'Starting Pi Remote...', 'info');

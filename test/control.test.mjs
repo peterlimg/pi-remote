@@ -114,13 +114,14 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand(name, command) { commands.set(name, command); }, getSessionName: () => 'Control test'
   };
-  let selections = 0, inputs = 0;
+  let inputs = 0, confirmations = 0;
   const ctx = { mode: 'tui', cwd: dir,
     sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
     ui: {
       notify: (text, type) => notices.push({ text, type }), setStatus: (_key, text) => statuses.push(text),
-      select: async () => { selections++; return 'Existing HTTPS tunnel'; },
+      select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
       input: async () => { inputs++; return 'https://phone.example'; },
+      confirm: async () => { confirmations++; return true; },
       custom: async factory => {
         let closed = false;
         const component = factory({ terminal: { rows: 60 } }, {}, { matches: (key, name) => key === 'esc' && name === 'tui.select.cancel' }, () => { closed = true; });
@@ -134,25 +135,32 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   t.after(() => emit('session_shutdown'));
   await emit('session_start');
   const run = args => commands.get('pi-remote').handler(args, ctx);
-  const select = ctx.ui.select;
-  ctx.ui.select = async () => undefined;
+  const input = ctx.ui.input, confirm = ctx.ui.confirm;
+  ctx.ui.input = async () => undefined;
   await run('');
   assert.equal(await hostStatus(config), null);
   assert.equal(screens.length, 0);
-  ctx.ui.select = select;
+  ctx.ui.input = input;
+  ctx.ui.confirm = async () => false;
+  await run('');
+  assert.equal(await hostStatus(config), null);
+  assert.equal(loadConfig(dir).relayUrl, '');
+  assert.equal(screens.length, 0);
+  ctx.ui.confirm = confirm;
   await run('');
   assert.equal(notices.filter(x => x.type === 'error').length, 0, JSON.stringify(notices));
   const first = await hostStatus(loadConfig(dir));
   assert.ok(first);
   assert.equal(first.publicUrl, 'https://phone.example');
-  assert.equal(selections, 1); assert.equal(inputs, 1);
+  assert.equal(first.relayUrl, 'wss://phone.example');
+  assert.equal(inputs, 2); assert.equal(confirmations, 1);
   assert.ok(screens[0].join('').includes(config.clientToken));
   assert.ok(!JSON.stringify(notices).includes(config.clientToken));
   await until(() => statuses.includes('remote connected'));
   await emit('session_shutdown'); await emit('session_start');
   await run('start');
   assert.equal((await hostStatus(loadConfig(dir))).pid, first.pid);
-  assert.equal(selections, 1);
+  assert.equal(inputs, 2); assert.equal(confirmations, 1);
   await commands.get('remote').handler('off', ctx);
   assert.equal(statuses.at(-1), 'remote off');
   await run('');
