@@ -16,7 +16,16 @@ config.port = host.http.address().port; writeFileSync(join(dir, 'config.json'), 
 const file = join(dir, 'real.jsonl');
 writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n');
 const trust = join(dir, 'trust-test.ts');
-writeFileSync(trust, 'export default function(pi) { pi.on("project_trust", () => ({ trusted: "yes" })); }\n');
+const receivedImage = join(dir, 'received-image.json');
+writeFileSync(trust, `import { writeFileSync } from 'node:fs';
+export default function(pi) {
+  pi.on('project_trust', () => ({ trusted: 'yes' }));
+  pi.on('input', event => {
+    if (!event.images?.length) return;
+    writeFileSync(${JSON.stringify(receivedImage)}, JSON.stringify(event));
+    return { action: 'handled' }; // Inspect real Pi delivery without calling a model.
+  });
+}\n`);
 const entry = process.env.PI_REMOTE_SMOKE_PI_ENTRY || resolve('node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js');
 const child = spawn(process.execPath, [entry, '--mode', 'rpc', '--session', file, '-e', resolve('extension/index.ts'), '-e', trust],
   { cwd: dir, env: { ...process.env, PI_REMOTE_WORKER: '', PI_REMOTE_HOME: dir,
@@ -53,11 +62,15 @@ try {
   const result = await host.service.command(id, randomUUID(), { type: 'prompt', text: '/pi-remote status' });
   assert.equal(result.ok, true);
   await until(() => messages.find(x => x.type === 'extension_ui_request' && x.method === 'notify' && /Pi Remote is running/.test(x.message)));
+  const images = [{ type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=' }];
+  assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text: '', images })).ok, true);
+  await until(() => existsSync(receivedImage));
+  assert.deepEqual(JSON.parse(readFileSync(receivedImage, 'utf8')).images, images);
   child.stdin.write(JSON.stringify({ id: 'off', type: 'prompt', message: '/remote off' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.socket);
-  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, remote off/on. No model calls.');
+  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on. No model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

@@ -146,6 +146,17 @@ test('actual extension registers, forwards prompts and releases ownership on shu
     await assert.rejects(() => host.service.command(id, randomUUID(), { type: 'prompt', text }), /terminal|Choose a command/);
   }
   assert.equal(prompts.length, sent);
+  // Above the old 1 MiB bridge limit, below the shared 2 MiB attachment budget.
+  const images = [{ type: 'image', mimeType: 'image/png', data: Buffer.alloc(1200000).toString('base64') }];
+  const imageCommand = { type: 'prompt', text: 'Look here', images };
+  host.service.live.get(id).state.supportsImages = false;
+  assert.match((await host.service.command(id, randomUUID(), imageCommand)).error, /Restart this Pi terminal/);
+  assert.equal(prompts.length, sent);
+  host.service.live.get(id).state.supportsImages = true;
+  assert.equal((await client.request('command', { sessionId: id, command: imageCommand })).value.ok, true);
+  assert.deepEqual(prompts.at(-1), { text: [{ type: 'text', text: 'Look here' }, ...images], options: { deliverAs: 'steer', expandPromptTemplates: true } });
+  assert.equal((await host.service.command(id, randomUUID(), { ...imageCommand, type: 'followUp', text: '' })).ok, true);
+  assert.deepEqual(prompts.at(-1), { text: images, options: { deliverAs: 'followUp', expandPromptTemplates: true } });
   await emit('message_start', { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: [{ type: 'text', text: 'streamed' }] } });
   await until(() => host.service.read(id).messages.some(x => x.text === 'streamed'));
   sessionName = undefined;

@@ -23,7 +23,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready' }); send(socket, { type: 'sessions', ...service.list() });
+  send(socket, { type: 'ready', supportsImages: true }); send(socket, { type: 'sessions', ...service.list() });
   socket.on('message', async raw => {
     let message;
     try {

@@ -1,4 +1,5 @@
 import { patchState } from './protocol.js';
+import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT } from './images.js';
 import MarkdownIt from './markdown-it.mjs';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
@@ -28,10 +29,10 @@ window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
 fitViewport();
 const versions = new Map();
-const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
+const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
-let lastDialog, modelPicker;
+let lastDialog, modelPicker, supportsImages = false;
 const sending = new Set(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
@@ -61,7 +62,7 @@ function request(op, extra = {}) {
 function connection(text) { $('connection').textContent = text; updateControls(); }
 function disconnect() {
   closeModels();
-  const old = socket; socket = undefined; connected = false;
+  const old = socket; socket = undefined; connected = false; supportsImages = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -90,6 +91,7 @@ function connect() {
     if (!packet || typeof packet !== 'object') return;
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
+      supportsImages = packet.supportsImages === true;
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => {
@@ -150,7 +152,9 @@ window.addEventListener('storage', event => {
 function logout() {
   manualClose = true; disconnect();
   token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
+  for (const id of imageDrafts.keys()) clearImages(id);
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; sessions = [];
+  renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('app').hidden = true; $('login').hidden = false;
 }
@@ -209,6 +213,7 @@ async function selectSession(id) {
   closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
   selected = id; unread.delete(id); $('prompt').value = drafts.get(id) || '';
+  renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
   $('transcript').replaceChildren();
@@ -318,6 +323,8 @@ function updateControls() {
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   $('send').disabled = !live || sending.has(selected);
+  $('attach').disabled = !selected || sending.has(selected);
+  for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
   $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
   $('prompt').disabled = !selected;
@@ -582,23 +589,65 @@ $('prompt').addEventListener('keydown', event => {
     sendMessage(event.altKey ? 'followUp' : 'prompt');
   }
 });
+function clearImages(id) {
+  for (const image of imageDrafts.get(id) || []) URL.revokeObjectURL(image.url);
+  imageDrafts.delete(id);
+}
+function renderImages() {
+  const images = imageDrafts.get(selected) || [];
+  $('attachments').hidden = !images.length;
+  $('attachments').replaceChildren(...images.map(image => {
+    const item = el('div', undefined, 'attachment'), preview = el('img');
+    preview.src = image.url; preview.alt = image.file.name;
+    const remove = el('button', 'Remove', 'quiet'); remove.type = 'button';
+    remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
+    remove.addEventListener('click', () => {
+      URL.revokeObjectURL(image.url);
+      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('attach').focus();
+    });
+    item.append(preview, remove); return item;
+  }));
+}
+$('attach').addEventListener('click', () => $('image-files').click());
+$('image-files').addEventListener('change', () => {
+  const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
+  $('image-files').value = '';
+  if (!selected || sending.has(selected) || !files.length) return;
+  if (images.length + files.length > MAX_IMAGES || files.some(file => !IMAGE_TYPES.includes(file.type) || !file.size) ||
+    images.reduce((sum, image) => sum + image.file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
+    notice(IMAGE_LIMIT); return;
+  }
+  imageDrafts.set(selected, [...images, ...files.map(file => ({ file, url: URL.createObjectURL(file) }))]);
+  notice(''); renderImages();
+});
 $('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
 });
 async function sendMessage(type = 'prompt') {
-  const id = selected, text = $('prompt').value;
-  if (!text.trim() || !id || $('send').disabled || sending.has(id)) return;
+  const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
+  if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
+  if (attachments.length && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
+  if (attachments.length && text.trim().startsWith('/')) { notice('Send images with a message, not a slash command.'); return; }
   sending.add(id);
-  $('send').disabled = true; notice('');
+  updateControls(); notice('');
   try {
+    const images = await Promise.all(attachments.map(({ file }) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ type: 'image', mimeType: file.type, data: reader.result.slice(reader.result.indexOf(',') + 1) });
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}. Remove it and attach it again.`));
+      reader.readAsDataURL(file);
+    })));
+    // Signing out while files are being read must not send them through a later login.
+    if (!token || (attachments.length && imageDrafts.get(id) !== attachments)) return;
     let created;
     if (text.trim() === '/new') created = await request('new', { sessionId: id });
     else if (/^\/model(?:\s|$)/.test(text.trim())) {
       const key = text.trim().slice(6).trim();
       if (key) await switchModel(id, key);
       else openModels(id);
-    } else await request('command', { sessionId: id, command: { type, text } });
+    } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}) } });
+    if (imageDrafts.get(id) === attachments) { clearImages(id); if (selected === id) renderImages(); }
     if (drafts.get(id) === text) drafts.set(id, '');
     if (selected === id && $('prompt').value === text) { $('prompt').value = ''; resizePrompt(); }
     if (created && selected === id) await selectSession(created.sessionId);

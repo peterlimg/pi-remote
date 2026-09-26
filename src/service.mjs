@@ -106,6 +106,7 @@ export class SessionService extends EventEmitter {
     const item = this.live.get(id);
     if (item?.worker) return item.worker.command(command);
     if (!item?.socket || item.socket.readyState !== 1) throw new Error('Session is not connected. Resume a saved session first.');
+    if (command.images?.length && !item.state.supportsImages) throw new Error('Restart this Pi terminal to enable image uploads.');
     const responseId = randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

@@ -43,7 +43,7 @@ export default function remoteExtension(pi: any) {
   const connect = (epoch: number) => {
     if (stopped || !enabled || generation !== epoch) return;
     const config = loadConfig();
-    const ws = new WebSocket('ws://127.0.0.1:' + config.port + '/bridge', { maxPayload: 1024 * 1024 });
+    const ws = new WebSocket('ws://127.0.0.1:' + config.port + '/bridge', { maxPayload: 4 * 1024 * 1024 });
     socket = ws;
     ws.on('open', () => {
       if (generation !== epoch || stopped) { ws.close(); return; }
@@ -84,7 +84,8 @@ export default function remoteExtension(pi: any) {
           if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();
-          } else pi.sendUserMessage(command.text, { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer', expandPromptTemplates: true });
+          } else pi.sendUserMessage(command.images?.length ? [...(command.text.trim() ? [{ type: 'text', text: command.text }] : []), ...command.images] : command.text,
+            { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer', expandPromptTemplates: true });
           return { accepted: true };
         });
         send(ws, { type: 'result', id: message.id, ...result });
@@ -128,6 +129,7 @@ export default function remoteExtension(pi: any) {
       journal = new CommandJournal(join(dataDir(), 'extension-commands'));
       state = initialState({ id, file, piSessionId: ctx.sessionManager.getSessionId(),
         cwd: ctx.cwd, title: pi.getSessionName?.() || 'Pi · ' + ctx.cwd.split('/').pop(), instanceId });
+      state.supportsImages = true;
       resetHistory(); enabled = true; connect(generation);
       ctx.ui.setStatus('pi-remote', 'remote connecting');
     } catch (error: any) {
