@@ -323,7 +323,9 @@ function updateControls() {
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('model').textContent = state?.model || '';
-  $('model').title = state?.model ? `Model: ${state.model}` : '';
+  $('model').title = state?.model ? `Switch model: ${state.model}` : '';
+  $('model').setAttribute('aria-label', state?.model ? `Switch model: ${state.model}` : 'Choose a model');
+  $('model').disabled = !live;
   $('model').hidden = !state?.model;
   $('reasoning').textContent = state?.thinkingLevel ? `Reasoning: ${state.thinkingLevel}` : '';
   $('reasoning').hidden = !state?.thinkingLevel;
@@ -394,28 +396,58 @@ function completeCommand(index = commandIndex) {
 }
 function closeModels() {
   modelPicker = undefined;
-  $('model-picker').hidden = true;
+  $('model-picker').close();
+}
+function renderModels() {
+  const picker = modelPicker;
+  if (!picker?.models) return;
+  const query = $('model-search').value.trim().toLowerCase();
+  const matches = picker.models.filter(model => `${model.name || ''} ${model.provider} ${model.id}`.toLowerCase().includes(query))
+    .sort((a, b) => Number(`${b.provider}/${b.id}` === picker.current) - Number(`${a.provider}/${a.id}` === picker.current)
+      || a.provider.localeCompare(b.provider) || (a.name || a.id).localeCompare(b.name || b.id));
+  const groups = new Map();
+  for (const model of matches) {
+    if (!groups.has(model.provider)) groups.set(model.provider, []);
+    groups.get(model.provider).push(model);
+  }
+  const fragment = document.createDocumentFragment();
+  for (const [provider, models] of groups) {
+    const group = el('section', undefined, 'model-group');
+    group.setAttribute('aria-label', provider); group.append(el('h3', provider));
+    for (const model of models) {
+      const key = `${model.provider}/${model.id}`, current = key === picker.current;
+      const button = el('button', undefined, 'model-option'); button.type = 'button';
+      button.setAttribute('aria-pressed', String(current));
+      const label = el('span', undefined, 'model-option-label');
+      label.append(el('strong', model.name || model.id), el('span', model.id));
+      button.append(label);
+      if (current) button.append(el('span', 'Current', 'model-current'));
+      button.disabled = !!picker.busy;
+      button.addEventListener('click', () => chooseModel(picker, key));
+      group.append(button);
+    }
+    fragment.append(group);
+  }
+  $('model-options').replaceChildren(fragment);
+  $('model-help').classList.remove('model-error');
+  $('model-help').textContent = !picker.models.length ? 'No models available. Configure a provider in the Pi terminal.'
+    : !matches.length ? 'No matching models. Try a model name or provider.' : 'Select a model to switch.';
 }
 async function openModels(id) {
   const picker = { id }; modelPicker = picker;
-  $('model-picker').hidden = false;
-  $('model-choice').replaceChildren(); $('model-choice').disabled = true; $('model-apply').disabled = true;
+  $('model-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
+  $('model-retry').hidden = true; $('model-help').classList.remove('model-error');
   $('model-help').textContent = 'Loading available models…';
+  if (!$('model-picker').open) $('model-picker').showModal();
+  if (matchMedia('(pointer: fine)').matches) $('model-search').focus();
   try {
     const result = await request('models', { sessionId: id });
     if (modelPicker !== picker || selected !== id) return;
-    for (const model of result.models) {
-      const key = `${model.provider}/${model.id}`;
-      const option = el('option', model.name ? `${model.name} · ${key}` : key);
-      option.value = key; option.selected = key === result.current;
-      $('model-choice').append(option);
-    }
-    const empty = !result.models.length;
-    $('model-choice').disabled = empty; $('model-apply').disabled = empty;
-    $('model-help').textContent = empty ? 'No models available. Configure a provider in the Pi terminal.' : 'Applies to this session only.';
-    if (!empty) $('model-choice').focus();
+    Object.assign(picker, result); renderModels();
   } catch (e) {
-    if (modelPicker === picker) $('model-help').textContent = e.message === 'Unsupported command'
+    if (modelPicker !== picker) return;
+    $('model-help').classList.add('model-error'); $('model-retry').hidden = false;
+    $('model-help').textContent = e.message === 'Unsupported command'
       ? 'Restart this Pi terminal to load remote model switching, then reopen /model.' : e.message;
   }
 }
@@ -424,25 +456,31 @@ async function switchModel(id, key) {
   if (slash < 1 || slash === key.length - 1) throw new Error('Use /model provider/model-id, or /model to choose.');
   await request('command', { sessionId: id, command: { type: 'setModel', provider: key.slice(0, slash), modelId: key.slice(slash + 1) } });
 }
-$('model-picker').addEventListener('submit', async event => {
-  event.preventDefault();
-  const picker = modelPicker;
-  if (!picker || $('model-apply').disabled) return;
-  $('model-apply').disabled = true; $('model-choice').disabled = true;
+async function chooseModel(picker, key) {
+  if (modelPicker !== picker || picker.busy) return;
+  if (key === picker.current) { closeModels(); return; }
+  picker.busy = true; $('model-search').disabled = true;
+  for (const button of $('model-options').querySelectorAll('button')) button.disabled = true;
+  $('model-help').classList.remove('model-error');
   $('model-help').textContent = 'Switching model…';
   try {
-    await switchModel(picker.id, $('model-choice').value);
-    if (modelPicker === picker) { closeModels(); $('prompt').focus(); }
+    await switchModel(picker.id, key);
+    if (modelPicker === picker) closeModels();
   } catch (e) {
-    if (modelPicker === picker) {
-      $('model-help').textContent = e.message;
-      $('model-apply').disabled = false; $('model-choice').disabled = false;
-    }
+    if (modelPicker !== picker) return;
+    picker.busy = false; $('model-search').disabled = false;
+    for (const button of $('model-options').querySelectorAll('button')) button.disabled = false;
+    $('model-help').classList.add('model-error'); $('model-help').textContent = e.message;
   }
-});
-$('model-cancel').addEventListener('click', () => { closeModels(); $('prompt').focus(); });
-$('model-picker').addEventListener('keydown', event => {
-  if (event.key === 'Escape') { event.preventDefault(); closeModels(); $('prompt').focus(); }
+}
+$('model').addEventListener('click', () => openModels(selected));
+$('model-search').addEventListener('input', renderModels);
+$('model-retry').addEventListener('click', () => { if (modelPicker) openModels(modelPicker.id); });
+$('model-cancel').addEventListener('click', closeModels);
+$('model-picker').addEventListener('cancel', event => { event.preventDefault(); closeModels(); });
+$('model-picker').addEventListener('click', event => {
+  const rect = $('model-picker').getBoundingClientRect();
+  if (event.target === $('model-picker') && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) closeModels();
 });
 function renderDialog(state) {
   const dialog = state.dialog;

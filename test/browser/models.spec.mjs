@@ -18,7 +18,8 @@ test('/model switches only the selected session without sending a prompt', async
         reply({});
       } else if (packet.op === 'commands') reply([{ name: 'model', description: 'Switch model for this session', source: 'remote' }]);
       else if (packet.op === 'models') reply({ current: 'test/first', models: [
-        { provider: 'test', id: 'first', name: 'First model' }, { provider: 'test', id: 'org/second', name: 'Second model' }
+        { provider: 'test', id: 'first', name: 'Claude Sonnet 4.6' }, { provider: 'test', id: 'org/second', name: 'Claude Opus 4.6' },
+        { provider: 'openai', id: 'gpt-5.4', name: 'GPT-5.4' }
       ] });
       else if (packet.op === 'command') {
         commands.push(packet);
@@ -32,14 +33,19 @@ test('/model switches only the selected session without sending a prompt', async
   });
   await page.goto(url);
   await page.getByRole('button', { name: /Alpha/ }).click();
-  const prompt = page.locator('#prompt'), picker = page.getByRole('form', { name: 'Switch model' });
+  const prompt = page.locator('#prompt'), picker = page.getByRole('dialog', { name: 'Choose a model' });
   await prompt.fill('/model');
   await page.getByRole('option', { name: /\/model/ }).tap();
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByLabel('Model for this session')).toHaveValue('test/first');
-  await page.getByLabel('Model for this session').selectOption('test/org/second');
+  await expect(picker.getByRole('button', { pressed: true })).toContainText('Claude Sonnet');
   await page.screenshot({ path: 'test-results/model-picker-mobile.png' });
-  await page.getByRole('button', { name: 'Switch model', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
+  await expect(picker.locator('.model-option')).toHaveCount(1);
+  await expect(picker.locator('.model-option')).toContainText('GPT-5.4');
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('not-a-model');
+  await expect(page.locator('#model-help')).toContainText('No matching models');
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
+  await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toHaveText('test/org/second');
   expect(commands.map(p => ({ sessionId: p.sessionId, command: p.command }))).toEqual([
@@ -50,16 +56,19 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(page.locator('#model')).toHaveText('test/first');
   await expect(prompt).toHaveValue('');
   fail = true;
-  await prompt.fill('/model');
-  await page.locator('#send').click();
-  await page.getByLabel('Model for this session').selectOption('test/org/second');
-  await page.getByRole('button', { name: 'Switch model', exact: true }).click();
+  await prompt.fill('Keep this draft');
+  await page.getByRole('button', { name: 'Switch model: test/first' }).click();
+  await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#model-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
   await expect(page.locator('#model')).toHaveText('test/first');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: 'test-results/model-picker-desktop.png' });
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
+  await expect(page.locator('#model')).toBeFocused();
+  await expect(prompt).toHaveValue('Keep this draft');
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toHaveText('test/first');
@@ -93,15 +102,31 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   };
   await open(1);
   await expect(page.locator('#model-help')).toHaveText('Loading available models…');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   client.send(JSON.stringify({ type: 'response', id: requests[0].id, ok: true, value: { models: [{ provider: 'stale', id: 'ignored' }] } }));
   await expect(page.locator('#model-picker')).toBeHidden();
   await open(2);
   client.send(JSON.stringify({ type: 'response', id: requests[1].id, ok: true, value: { models: [] } }));
   await expect(page.locator('#model-help')).toContainText('No models available');
-  await expect(page.locator('#model-apply')).toBeDisabled();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('.model-option')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   await open(3);
   client.send(JSON.stringify({ type: 'response', id: requests[2].id, ok: false, error: 'Pi disconnected' }));
   await expect(page.locator('#model-help')).toHaveText('Pi disconnected');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect.poll(() => requests.length).toBe(4);
+  client.send(JSON.stringify({ type: 'response', id: requests[3].id, ok: true, value: { current: 'test/current', models: [
+    { provider: 'test', id: 'current', name: 'Current model' },
+    ...Array.from({ length: 40 }, (_, i) => ({ provider: 'test', id: `model-${i}`, name: `Model ${i}` }))
+  ] } }));
+  await expect(page.locator('.model-option')).toHaveCount(41);
+  await page.setViewportSize({ width: 390, height: 350 });
+  await expect.poll(async () => {
+    const bounds = await page.locator('#model-picker').boundingBox();
+    return bounds.y + bounds.height;
+  }).toBeLessThanOrEqual(350);
+  expect((await page.locator('#model-picker').boundingBox()).y).toBeGreaterThanOrEqual(0);
+  expect(await page.locator('#model-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.getByRole('button', { name: /Current model/ }).click();
+  await expect(page.locator('#model-picker')).toBeHidden();
 });
