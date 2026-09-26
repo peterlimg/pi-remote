@@ -1,0 +1,77 @@
+import { test, expect } from '@playwright/test';
+
+test('compact composer keeps controls on one row across draft, working and offline states', async ({ page }) => {
+  const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
+    model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium', messages: [
+      { id: 'reply', role: 'assistant', text: 'The changes are ready to review.' }
+    ] };
+  let client, version = 0;
+  const snapshot = () => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws;
+    ws.onMessage(raw => {
+      const p = JSON.parse(raw);
+      if (p.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+      } else {
+        if (p.op === 'watch') snapshot();
+        ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true, value: [] }));
+      }
+    });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Review changes/ }).click();
+  await expect(page.locator('#reasoning-value')).toHaveText('Medium');
+  await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
+  await expect(page.locator('#abort')).toBeHidden();
+  const rowFits = async () => {
+    const controls = await page.locator('#attach, #model, #reasoning-control, #send:not([hidden]), #abort:not([hidden])')
+      .evaluateAll(nodes => nodes.map(node => {
+        const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
+      }));
+    for (const [i, control] of controls.entries()) {
+      expect(control.height).toBeGreaterThanOrEqual(44);
+      expect(control.width).toBeGreaterThanOrEqual(44);
+      expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
+      if (i) expect(control.x).toBeGreaterThanOrEqual(controls[i - 1].right);
+    }
+    expect(controls.at(-1).right).toBeLessThanOrEqual(page.viewportSize().width - 8);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  };
+  await rowFits();
+  await page.screenshot({ path: 'test-results/clean-composer-mobile.png' });
+  state.status = 'working'; snapshot();
+  await expect(page.locator('#abort')).toBeVisible();
+  await expect(page.locator('#send')).toBeHidden();
+  await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Message Pi while it works…');
+  await page.screenshot({ path: 'test-results/clean-composer-working.png' });
+  await page.locator('#prompt').fill('Keep working on the tests');
+  await expect(page.locator('#send')).toBeVisible();
+  await rowFits();
+  state.model = 'custom/provider/a-very-long-model-name-that-must-not-hide-the-send-button'; snapshot();
+  await page.setViewportSize({ width: 320, height: 568 });
+  await rowFits();
+  await page.locator('#prompt').fill('');
+  await page.locator('#image-files').setInputFiles({ name: 'image.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64') });
+  await expect(page.locator('#send')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove image.png' }).click();
+  await expect(page.locator('#send')).toBeHidden();
+  state.status = 'idle'; state.model = 'anthropic/claude-sonnet-4-6'; snapshot();
+  await expect(page.locator('#send')).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await rowFits();
+  await page.screenshot({ path: 'test-results/clean-composer-desktop.png' });
+  state.status = 'saved'; snapshot();
+  await expect(page.locator('#resume')).toBeVisible();
+  await expect(page.locator('#send')).toBeDisabled();
+  await expect(page.locator('#reasoning')).toBeDisabled();
+  await expect(page.locator('#composer-hint')).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect((await page.locator('#send').boundingBox()).x + 44).toBeLessThanOrEqual(312);
+  await rowFits();
+  const toolbar = await page.locator('.composer-toolbar').boundingBox();
+  expect((await page.locator('#resume').boundingBox()).y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height);
+});

@@ -2,6 +2,7 @@
   color-scheme: light dark;
   --bg: #fafaf8;
   --panel: #f2f3f0;
+  --composer-bg: #fff;
   --text: #272d2b;
   --muted: #626c66;
   --line: #daddd7;
@@ -21,6 +22,7 @@
   :root {
     --bg: #272b33;
     --panel: #22262d;
+    --composer-bg: #272b33;
     --text: #e5e8e6;
     --muted: #a7afa9;
     --line: #444a51;
@@ -132,7 +134,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(12px, env(safe-area-inset-bottom)); padding: 6px 8px 8px; border: 1px solid var(--line); border-radius: 20px; background: var(--bg); flex-shrink: 0; }
+.composer { position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, env(safe-area-inset-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
 .command-option { display: block; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; border-radius: 0; background: transparent; color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
@@ -141,28 +143,30 @@ pre.message-text { white-space: pre-wrap; }
 .command-option strong { font: 14px/1.5 var(--mono); }
 .command-option span { display: block; font-size: 12px; color: var(--muted); }
 #command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
-.attachments { grid-column: 1 / -1; grid-row: 1; display: flex; gap: 8px; overflow-x: auto; padding: 6px 10px; }
+.attachments { display: flex; gap: 8px; overflow-x: auto; padding: 6px 10px; }
 .attachment { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .attachment img { width: 64px; height: 64px; object-fit: contain; border-radius: 8px; background: var(--panel); }
 .attachment button { min-width: 44px; min-height: 44px; padding: 6px; font-size: 12px; }
-.composer textarea { grid-column: 1 / -1; grid-row: 2; display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
+.composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 16px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.model-picker:not([hidden])) textarea { max-height: 44px; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-color: var(--accent); }
-.composer-actions { grid-column: 2; grid-row: 3; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.composer-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 .composer-actions button { font-size: 12px; }
-.composer-actions #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
-.composer-actions #send { padding: 4px; background-clip: content-box; }
-.composer-actions #abort { background: var(--panel); color: var(--text); }
-.composer-meta { grid-column: 1; grid-row: 3; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; padding-left: 10px; color: var(--muted); font-size: 12px; }
-.composer-meta #status { flex-shrink: 0; }
-.composer-meta .setting-control { position: relative; min-width: 0; min-height: 44px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 18px 8px 0; background: transparent; color: var(--accent); font: 12px var(--mono); text-align: left; }
-.composer-meta .setting-control::after { content: ''; position: absolute; right: 4px; top: 18px; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
-#reasoning-control { display: inline-flex; align-items: center; border-radius: 4px; }
+.composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+.composer-toolbar #attach, .composer-actions #abort { background: var(--panel); color: var(--text); }
+.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 24px; }
+.composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
+.composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 24px; }
+.composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
+#reasoning-control { display: inline-flex; align-items: center; flex-shrink: 0; color: var(--muted); text-transform: capitalize; }
+#reasoning-control:not(:first-child) { padding-left: 6px; }
 #reasoning-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 #reasoning-control:has(select:disabled) { opacity: .45; }
 #reasoning { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
-.composer-meta .hint { margin: 0; }
+#resume { align-self: flex-start; padding-inline: 10px; }
+#composer-hint { margin: 0; padding: 4px 10px; }
 .dialog { padding: 16px 24px; background: var(--panel); max-height: 35dvh; overflow: auto; }
 .dialog h3 { font-size: 14px; }
 .dialog input, .dialog textarea, .dialog select { display: block; width: 100%; margin-bottom: 12px; font-size: 16px; }
@@ -201,9 +205,8 @@ pre.message-text { white-space: pre-wrap; }
   #back { padding: 8px 0; font-size: 12px; }
   #transcript { --transcript-gap: 20px; padding-inline: 16px; }
   .message.user { padding: 10px 12px; }
-  .composer { width: calc(100% - 32px); }
+  .composer { width: calc(100% - 16px); }
   .composer-actions { gap: 4px; }
-  .composer-actions #resume { padding-inline: 10px; }
   .dialog, .notice { padding: 12px 16px; }
   .login { margin: 6vh auto; }
 }

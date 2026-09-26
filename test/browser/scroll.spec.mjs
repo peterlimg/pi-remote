@@ -60,12 +60,12 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   const compact = await height();
   expect(compact).toBe(44);
   expect((await page.locator('#composer').boundingBox()).width - (await prompt.boundingBox()).width).toBe(18);
+  await prompt.fill('One line');
   await expect(page.locator('#send')).toHaveAccessibleName('Send message');
   expect(await page.locator('#send').evaluate(node => {
     const style = getComputedStyle(node);
     return { radius: style.borderRadius, clip: style.backgroundClip, visibleSize: node.clientWidth - 2 * parseFloat(style.paddingLeft), target: node.clientWidth };
-  })).toEqual({ radius: '50%', clip: 'content-box', visibleSize: 36, target: 44 });
-  await prompt.fill('One line');
+  })).toEqual({ radius: '50%', clip: 'border-box', visibleSize: 44, target: 44 });
   expect(await height()).toBe(compact);
   await prompt.press('Enter');
   await prompt.pressSequentially('Second line');

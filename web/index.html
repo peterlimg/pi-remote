@@ -62,14 +62,21 @@
         </div>
         <div id="attachments" class="attachments" aria-label="Attached images" hidden></div>
         <input id="image-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
-        <textarea id="prompt" rows="1" placeholder="Message Pi… Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
-        <div class="composer-actions">
-          <button id="attach" type="button" class="quiet" aria-label="Attach images" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m21 15-5-5L5 21"/></svg></button>
-          <button id="resume" type="button" class="secondary" hidden>Resume session</button>
-          <button id="abort" type="button" class="quiet" aria-label="Abort turn" title="Abort this turn. Queued messages may still run."><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-          <button id="send" type="submit" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+        <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
+        <div class="composer-toolbar">
+          <button id="attach" type="button" class="quiet" aria-label="Attach images" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <div class="composer-settings">
+            <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="model-picker" hidden></button>
+            <label id="reasoning-control" class="setting-control" hidden><span id="reasoning-value"></span><select id="reasoning" aria-label="Reasoning effort" title="Change reasoning effort. Pi applies the closest level supported by this model."><option value="off">Off</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select></label>
+          </div>
+          <div class="composer-actions">
+            <button id="abort" type="button" class="quiet" aria-label="Abort turn" title="Abort this turn. Queued messages may still run."><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+            <button id="send" type="submit" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          </div>
         </div>
-        <div class="composer-meta"><span id="status" role="status"></span><button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="model-picker" hidden></button><label id="reasoning-control" class="setting-control" hidden><span id="reasoning-value"></span><select id="reasoning" aria-label="Reasoning effort" title="Change reasoning effort. Pi applies the closest level supported by this model."><option value="off">Off</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select></label><p id="composer-hint" class="hint" hidden></p></div>
+        <button id="resume" type="button" class="secondary" hidden>Resume session</button>
+        <span id="status" class="sr-only" role="status"></span>
+        <p id="composer-hint" class="hint" hidden></p>
       </form>
     </main>
   </div>

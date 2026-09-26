@@ -322,11 +322,15 @@ function renderConversation(state) {
 function updateControls() {
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
+  const working = state && ['working', 'waiting'].includes(state.status);
+  const hasDraft = !!$('prompt').value.trim() || !!imageDrafts.get(selected)?.length;
   $('send').disabled = !live || sending.has(selected);
+  $('send').hidden = !!working && !hasDraft;
+  $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
   $('attach').disabled = !selected || sending.has(selected);
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
-  $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
+  $('abort').hidden = !working;
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
@@ -337,7 +341,7 @@ function updateControls() {
   $('model').hidden = !state?.model;
   $('reasoning').value = state?.thinkingLevel || 'off';
   $('reasoning').disabled = !live || changingReasoning.has(selected);
-  $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Reasoning: changing…' : `Reasoning: ${state?.thinkingLevel || 'off'}`;
+  $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Changing…' : $('reasoning').selectedOptions[0]?.textContent || state?.thinkingLevel || 'Off';
   $('reasoning-control').hidden = !state?.thinkingLevel;
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
@@ -560,7 +564,7 @@ $('prompt').addEventListener('input', () => {
   if (selected) drafts.set(selected, $('prompt').value);
   commandDismissed = false; commandIndex = 0;
   if ($('prompt').value === '/' && selected) loadCommands(selected);
-  else renderCommands();
+  updateControls();
 });
 $('prompt').addEventListener('click', renderCommands);
 $('composer').addEventListener('focusout', event => {
@@ -607,6 +611,7 @@ function renderImages() {
     });
     item.append(preview, remove); return item;
   }));
+  updateControls();
 }
 $('attach').addEventListener('click', () => $('image-files').click());
 $('image-files').addEventListener('change', () => {
