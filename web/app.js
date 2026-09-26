@@ -32,7 +32,7 @@ const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new M
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog, modelPicker;
-const sending = new Set(), commandCatalog = new Map();
+const sending = new Set(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
 if (hashToken) {
@@ -322,13 +322,16 @@ function updateControls() {
   $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
-  $('model').textContent = state?.model || '';
-  $('model').title = state?.model ? `Switch model: ${state.model}` : '';
-  $('model').setAttribute('aria-label', state?.model ? `Switch model: ${state.model}` : 'Choose a model');
+  const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
+  $('model').textContent = modelName;
+  $('model').title = modelName ? `Switch model: ${modelName}` : '';
+  $('model').setAttribute('aria-label', modelName ? `Switch model: ${modelName}` : 'Choose a model');
   $('model').disabled = !live;
   $('model').hidden = !state?.model;
-  $('reasoning').textContent = state?.thinkingLevel ? `Reasoning: ${state.thinkingLevel}` : '';
-  $('reasoning').hidden = !state?.thinkingLevel;
+  $('reasoning').value = state?.thinkingLevel || 'off';
+  $('reasoning').disabled = !live || changingReasoning.has(selected);
+  $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Reasoning: changing…' : `Reasoning: ${state?.thinkingLevel || 'off'}`;
+  $('reasoning-control').hidden = !state?.thinkingLevel;
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
   $('resume').disabled = !connected || !meta?.resumable;
@@ -483,6 +486,19 @@ async function chooseModel(picker, key) {
     $('model-help').classList.add('model-error'); $('model-help').textContent = e.message;
   }
 }
+$('reasoning').addEventListener('change', async () => {
+  const id = selected, level = $('reasoning').value;
+  if (!id || changingReasoning.has(id)) return;
+  changingReasoning.add(id); notice(''); updateControls();
+  try {
+    const result = await request('command', { sessionId: id, command: { type: 'setThinkingLevel', level } });
+    if (cache.has(id)) cache.get(id).thinkingLevel = result.thinkingLevel;
+    if (selected === id && result.thinkingLevel !== level) notice(`This model uses ${result.thinkingLevel} reasoning instead of ${level}.`);
+  } catch (e) {
+    if (selected === id) notice(e.message === 'Unsupported command'
+      ? 'Reload this Pi terminal with /reload to enable reasoning changes.' : e.message);
+  } finally { changingReasoning.delete(id); updateControls(); }
+});
 $('model').addEventListener('click', () => modelPicker ? closeModels() : openModels(selected));
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (modelPicker) openModels(modelPicker.id); });

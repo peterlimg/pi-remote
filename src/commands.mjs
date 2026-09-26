@@ -20,6 +20,10 @@ export function modelList(models) {
   return models.map(({ provider, id, name }) => ({ provider, id, name }));
 }
 export function validateCommand(command) {
+  if (command?.type === 'setThinkingLevel') {
+    if (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(command.level)) throw new Error('Invalid reasoning effort');
+    return { type: 'setThinkingLevel', level: command.level };
+  }
   if (command?.type === 'setModel') {
     if (![command.provider, command.modelId].every(value => typeof value === 'string' && value.trim() && value.length <= 500 && !/\s/.test(value))) throw new Error('Expected a provider and model ID');
     return { type: 'setModel', provider: command.provider, modelId: command.modelId };

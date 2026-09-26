@@ -83,10 +83,11 @@ export class SessionService extends EventEmitter {
     const command = validateCommand(input);
     return this.journal.execute(id, requestId, command, async () => {
       const result = await this.dispatch(id, requestId, command);
-      if (command.type === 'setModel') {
+      if (command.type === 'setModel' || command.type === 'setThinkingLevel') {
         const item = this.live.get(id);
         if (item) {
-          item.state.model = result.model; item.state.thinkingLevel = result.thinkingLevel;
+          if (command.type === 'setModel') item.state.model = result.model;
+          item.state.thinkingLevel = result.thinkingLevel;
           item.state.revision++; this.changed(id);
         }
       }

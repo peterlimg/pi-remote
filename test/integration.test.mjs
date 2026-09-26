@@ -64,7 +64,7 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const file = join(dir, 'session.jsonl'); writeFileSync(file, '');
   const handlers = new Map(), prompts = [], branch = [];
-  let sessionName = 'Extension test', modelChanges = 0, rejectModel = false;
+  let sessionName = 'Extension test', modelChanges = 0, rejectModel = false, thinkingLevel = 'medium', thinkingChanges = 0;
   const models = [
     { provider: 'test', id: 'first', name: 'First', headers: { Authorization: 'private' }, baseUrl: 'https://private.example' },
     { provider: 'test', id: 'org/second', name: 'Second' }
@@ -73,8 +73,9 @@ test('actual extension registers, forwards prompts and releases ownership on shu
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand() {}, getSessionName() { return sessionName; },
     setSessionName(name) { sessionName = name; },
-    async setModel(model) { if (rejectModel) return false; modelChanges++; ctx.model = model; return true; },
-    getThinkingLevel() { return 'medium'; },
+    async setModel(model) { if (rejectModel) return false; modelChanges++; ctx.model = model; await emit('model_select', { type: 'model_select', model }); return true; },
+    getThinkingLevel() { return thinkingLevel; },
+    setThinkingLevel(level) { thinkingChanges++; thinkingLevel = level === 'max' ? 'high' : level; },
     getCommands() { return [
       { name: 'review', description: 'Review changes', source: 'extension', sourceInfo: { path: '/private/extension.ts' } },
       { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
@@ -121,6 +122,18 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   assert.equal(host.service.read(id).model, 'test/org/second');
   assert.equal(host.service.read(id).thinkingLevel, 'medium');
   assert.equal((await host.service.command(id, randomUUID(), { ...modelCommand, modelId: 'unknown' })).ok, false);
+  const thinkingCommand = { type: 'setThinkingLevel', level: 'max' }, thinkingRequest = randomUUID();
+  assert.deepEqual(await host.service.command(id, thinkingRequest, thinkingCommand), { ok: true, value: { thinkingLevel: 'high' } });
+  await host.service.command(id, thinkingRequest, thinkingCommand);
+  assert.equal(thinkingChanges, 1);
+  await emit('agent_start', { type: 'agent_start' });
+  await until(() => host.service.read(id).thinkingLevel === 'high' && host.service.read(id).status === 'working');
+  assert.equal(host.service.read(id).model, 'test/org/second');
+  assert.equal(prompts.length, 1);
+  const priorLevel = thinkingLevel;
+  const thinkingResponse = await client.request('command', { sessionId: id, command: { type: 'setThinkingLevel', level: 'invalid' } });
+  assert.equal(thinkingResponse.ok, false);
+  assert.equal(thinkingLevel, priorLevel);
   rejectModel = true;
   assert.match((await host.service.command(id, randomUUID(), { ...modelCommand, modelId: 'first' })).error, /authentication/);
   assert.equal(host.service.read(id).model, 'test/org/second');

@@ -75,6 +75,12 @@ export default function remoteExtension(pi: any) {
             if (!await pi.setModel(model)) throw new Error('Model authentication is not configured');
             return { model: `${model.provider}/${model.id}`, thinkingLevel: pi.getThinkingLevel?.() };
           }
+          if (command.type === 'setThinkingLevel') {
+            if (!pi.setThinkingLevel || !pi.getThinkingLevel) throw new Error('Update Pi and reload this terminal to change reasoning effort.');
+            pi.setThinkingLevel(command.level);
+            state.thinkingLevel = pi.getThinkingLevel(); state.revision++; publish();
+            return { thinkingLevel: state.thinkingLevel };
+          }
           if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();

@@ -131,6 +131,15 @@ test('model switching accepts only bounded provider and model identifiers', () =
   }
 });
 
+test('reasoning changes accept only Pi levels and discard unrelated fields', () => {
+  for (const level of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.deepEqual(validateCommand({ type: 'setThinkingLevel', level, text: 'not a prompt' }), { type: 'setThinkingLevel', level });
+  }
+  for (const level of [undefined, null, {}, '', 'HIGH', ' high', 'extreme']) {
+    assert.throws(() => validateCommand({ type: 'setThinkingLevel', level }), /Invalid reasoning effort/);
+  }
+});
+
 test('duplicate requests execute once across concurrency and journal restarts', async t => {
   const dir = temp(t), journal = new CommandJournal(dir); let count = 0;
   const action = async () => { count++; await new Promise(resolve => setTimeout(resolve, 20)); return 'accepted'; };

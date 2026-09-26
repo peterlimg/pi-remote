@@ -52,24 +52,24 @@ test('/model switches only the selected session without sending a prompt', async
   await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#model')).toHaveText('test/org/second');
+  await expect(page.locator('#model')).toHaveText('org/second');
   expect(commands.map(p => ({ sessionId: p.sessionId, command: p.command }))).toEqual([
     { sessionId: 'Alpha', command: { type: 'setModel', provider: 'test', modelId: 'org/second' } }
   ]);
   await prompt.fill('/model test/first');
   await page.locator('#send').click();
-  await expect(page.locator('#model')).toHaveText('test/first');
+  await expect(page.locator('#model')).toHaveText('first');
   await expect(prompt).toHaveValue('');
   fail = true;
   await prompt.fill('Keep this draft');
-  await page.getByRole('button', { name: 'Switch model: test/first' }).click();
+  await page.getByRole('button', { name: 'Switch model: first' }).click();
   await page.getByRole('searchbox', { name: 'Search models' }).press('Enter');
   expect(commands).toHaveLength(2);
   await expect(prompt).toHaveValue('Keep this draft');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#model-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
-  await expect(page.locator('#model')).toHaveText('test/first');
+  await expect(page.locator('#model')).toHaveText('first');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: 'test-results/model-picker-desktop.png' });
@@ -77,11 +77,11 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toBeFocused();
   await expect(prompt).toHaveValue('Keep this draft');
-  await page.getByRole('button', { name: 'Switch model: test/first' }).click();
+  await page.getByRole('button', { name: 'Switch model: first' }).click();
   await expect(picker).toBeVisible();
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#model')).toHaveText('test/first');
+  await expect(page.locator('#model')).toHaveText('first');
   expect(commands.every(p => p.command.type === 'setModel' && p.sessionId === 'Alpha')).toBe(true);
 });
 

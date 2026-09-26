@@ -66,6 +66,11 @@ export class RpcWorker extends EventEmitter {
       const state = await this.request('get_state');
       return { model: `${state.model.provider}/${state.model.id}`, thinkingLevel: state.thinkingLevel };
     }
+    if (command.type === 'setThinkingLevel') {
+      await this.request('set_thinking_level', { level: command.level });
+      const state = await this.request('get_state');
+      return { thinkingLevel: state.thinkingLevel };
+    }
     if (command.type === 'abort') {
       await this.request('clear_queue');
       await this.request('abort');

@@ -44,6 +44,9 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   assert.equal(service.read(id).thinkingLevel, 'medium');
   assert.equal((await service.command(id, randomUUID(), { type: 'setModel', provider: 'test', modelId: 'unknown' })).ok, false);
   assert.equal(service.read(id).model, 'test/org/second');
+  assert.deepEqual(await service.command(id, randomUUID(), { type: 'setThinkingLevel', level: 'max' }), { ok: true, value: { thinkingLevel: 'high' } });
+  assert.equal(service.read(id).thinkingLevel, 'high');
+  assert.equal(service.read(id).model, 'test/org/second');
   assert.equal(service.read(id).messages.length, 1);
   for (const type of ['prompt', 'steer', 'followUp']) {
     assert.equal((await service.command(id, randomUUID(), { type, text: '/review ' + type })).ok, true);
@@ -83,6 +86,9 @@ test('remote /new creates an independent session in the same working directory',
   ]);
   assert.equal((await service.newSession(oldId, requestId)).value.sessionId, id);
   assert.equal(service.live.size, 2);
+  await service.command(id, randomUUID(), { type: 'setThinkingLevel', level: 'low' });
+  assert.equal(service.read(id).thinkingLevel, 'low');
+  assert.equal(service.read(oldId).thinkingLevel, undefined);
   await service.command(id, randomUUID(), { type: 'prompt', text: 'hello fresh session' });
   await until(() => service.read(id).messages.some(x => x.text === 'reply: hello fresh session'));
   assert.deepEqual(service.read(oldId).messages, []);

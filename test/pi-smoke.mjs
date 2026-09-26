@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -38,12 +38,18 @@ try {
   const id = [...host.service.live.keys()][0];
   assert.ok((await host.service.getCommands(id)).some(x => x.name === 'pi-remote'));
   const { models } = await host.service.getModels(id);
-  const model = models.find(model => model.provider === 'anthropic');
+  const model = models.find(model => model.provider === 'anthropic' && model.id.includes('sonnet-4'));
   assert.ok(model);
   assert.deepEqual(Object.keys(model).sort(), ['id', 'name', 'provider']);
   const switched = await host.service.command(id, randomUUID(), { type: 'setModel', provider: model.provider, modelId: model.id });
   assert.equal(switched.ok, true, switched.error);
   assert.equal(host.service.read(id).model, `${model.provider}/${model.id}`);
+  const settingsFile = join(dir, 'agent', 'settings.json');
+  const settingsBefore = existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : '';
+  const thinking = await host.service.command(id, randomUUID(), { type: 'setThinkingLevel', level: 'high' });
+  assert.deepEqual(thinking, { ok: true, value: { thinkingLevel: 'high' } });
+  assert.equal(host.service.read(id).thinkingLevel, 'high');
+  assert.equal(existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : '', settingsBefore);
   const result = await host.service.command(id, randomUUID(), { type: 'prompt', text: '/pi-remote status' });
   assert.equal(result.ok, true);
   await until(() => messages.find(x => x.type === 'extension_ui_request' && x.method === 'notify' && /Pi Remote is running/.test(x.message)));
