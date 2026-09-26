@@ -9,6 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
+import { deploymentScreen, checkRelay } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -153,19 +154,22 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
-        const value = await context.ui.input('Your relay HTTPS address (deploy your own relay first; see README)', 'https://remote.example.com');
+        const deployed = await context.ui.custom((tui: any, _theme: any, keys: any, done: any) =>
+          deploymentScreen(config, tui, keys, done),
+        { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
+        if (!deployed || stopped) return;
+        const value = await context.ui.input('Paste your deployed relay HTTPS address', 'https://your-service.onrender.com');
         if (value === undefined) return;
         const origin = publicOrigin(value.trim());
         if (!mobileUrl(origin)) throw new Error('Your relay needs a non-local HTTPS address. Deploy your own relay first; see README.');
-        if (!await context.ui.confirm('Relay credentials',
-          'Your relay must use this computer\'s tokens from node bin/pi-remote.mjs relay-env. Is it configured?')) return;
         saveConnection(origin, true);
         config = loadConfig();
       }
-      context.ui.notify(running ? 'Pi Remote is running. Opening login QR...' : 'Starting Pi Remote...', 'info');
+      context.ui.notify(running ? 'Pi Remote is running. Checking connection...' : 'Starting Pi Remote...', 'info');
       running = await ensureHost(config);
       if (!enabled) setChannel(true, context);
-      if (running.relayUrl && !running.relayConnected) context.ui.notify('Relay connecting. A sleeping Render service may take about a minute. /pi-remote status checks it.', 'warning');
+      if (running.relayUrl && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
+      if (stopped) return;
       const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);
       // UI-only: never persist the bearer link in session entries or model context.
       await context.ui.custom((tui: any, _theme: any, keys: any, done: any) => ({

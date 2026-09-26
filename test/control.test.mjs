@@ -114,19 +114,32 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand(name, command) { commands.set(name, command); }, getSessionName: () => 'Control test'
   };
-  let inputs = 0, confirmations = 0;
+  let inputs = 0, deployed = false, address, verified = false, checks = 0;
+  const guides = [];
   const ctx = { mode: 'tui', cwd: dir,
     sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
     ui: {
       notify: (text, type) => notices.push({ text, type }), setStatus: (_key, text) => statuses.push(text),
       select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
-      input: async () => { inputs++; return 'https://phone.example'; },
-      confirm: async () => { confirmations++; return true; },
-      custom: async factory => {
-        let closed = false;
-        const component = factory({ terminal: { rows: 60 } }, {}, { matches: (key, name) => key === 'esc' && name === 'tui.select.cancel' }, () => { closed = true; });
-        screens.push(component.render(100));
-        component.handleInput('esc'); assert.equal(closed, true);
+      input: async () => { inputs++; return address; },
+      custom: async (factory, options) => {
+        // The network-backed check is tested with real sockets in setup.test.mjs.
+        if (!options.overlayOptions) { checks++; return verified; }
+        let closed = false, result;
+        const component = factory({ terminal: { rows: 60 }, requestRender() {} }, {},
+          { matches: (key, name) => key === name.replace('tui.select.', '') },
+          value => { closed = true; result = value; });
+        const lines = component.render(120);
+        if (lines[0].startsWith('Deploy your relay')) {
+          guides.push(lines);
+          component.handleInput(deployed ? 'confirm' : 'cancel');
+        } else {
+          assert.equal(verified, true, 'Never show a QR before the relay check succeeds');
+          screens.push(lines);
+          component.handleInput('cancel');
+        }
+        assert.equal(closed, true);
+        return result;
       }
     }
   };
@@ -135,32 +148,35 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   t.after(() => emit('session_shutdown'));
   await emit('session_start');
   const run = args => commands.get('pi-remote').handler(args, ctx);
-  const input = ctx.ui.input, confirm = ctx.ui.confirm;
-  ctx.ui.input = async () => undefined;
-  await run('');
+  await run(''); // Cancelling the deployment guide must not ask for an address or start a host.
+  assert.equal(inputs, 0);
   assert.equal(await hostStatus(config), null);
   assert.equal(screens.length, 0);
-  ctx.ui.input = input;
-  ctx.ui.confirm = async () => false;
-  await run('');
+  for (const token of [config.relayToken, config.clientToken]) assert.ok(guides[0].join('').includes(token));
+  deployed = true;
+  await run(''); // Cancelling URL entry must leave configuration untouched.
   assert.equal(await hostStatus(config), null);
   assert.equal(loadConfig(dir).relayUrl, '');
+  address = 'https://phone.example';
+  await run(''); // An unverified relay must not reveal a login QR.
   assert.equal(screens.length, 0);
-  ctx.ui.confirm = confirm;
+  assert.equal(checks, 1);
+  verified = true;
   await run('');
+  assert.equal(guides.length, 3);
   assert.equal(notices.filter(x => x.type === 'error').length, 0, JSON.stringify(notices));
   const first = await hostStatus(loadConfig(dir));
   assert.ok(first);
   assert.equal(first.publicUrl, 'https://phone.example');
   assert.equal(first.relayUrl, 'wss://phone.example');
-  assert.equal(inputs, 2); assert.equal(confirmations, 1);
+  assert.equal(inputs, 2);
   assert.ok(screens[0].join('').includes(config.clientToken));
-  assert.ok(!JSON.stringify(notices).includes(config.clientToken));
+  for (const token of [config.relayToken, config.clientToken]) assert.ok(!JSON.stringify(notices).includes(token));
   await until(() => statuses.includes('remote connected'));
   await emit('session_shutdown'); await emit('session_start');
   await run('start');
   assert.equal((await hostStatus(loadConfig(dir))).pid, first.pid);
-  assert.equal(inputs, 2); assert.equal(confirmations, 1);
+  assert.equal(inputs, 2); assert.equal(guides.length, 3);
   await commands.get('remote').handler('off', ctx);
   assert.equal(statuses.at(-1), 'remote off');
   await run('');
