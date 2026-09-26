@@ -8,6 +8,7 @@ import { readSession, discover, cleanMessage } from '../src/catalog.mjs';
 import { CommandJournal } from '../src/commands.mjs';
 import { JsonLines } from '../src/rpc.mjs';
 import { equalSecret, originAllowed } from '../src/config.mjs';
+import { summary } from '../src/state.mjs';
 
 function temp(t) { const dir = mkdtempSync(join(tmpdir(), 'pi-remote-')); t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; }
 test('ownership is exclusive and living owners cannot be unlocked', t => {
@@ -69,6 +70,31 @@ test('mobile messages keep tool calls separate from prose within the text limit'
   assert.equal(large.text.length + large.toolCalls.reduce((n, call) => n + call.text.length, 0), 24000);
   assert.equal(large.truncated, true);
 });
+test('session summaries distinguish unnamed work without sending full conversations', () => {
+  const state = { id: 'session-a', title: 'Pi · Rill', cwd: '/projects/Rill', file: '/private/session.jsonl',
+    status: 'working', messages: [
+      { role: 'user', text: 'Old task' },
+      { role: 'assistant', text: 'Old reply' },
+      { role: 'user', text: 'Fix the\n login timeout' },
+      { role: 'assistant', text: 'Checking the callback. ' + 'x'.repeat(300) },
+      { role: 'toolResult', text: 'Internal output' }
+    ], tools: [{ name: 'read' }] };
+  const item = summary(state);
+  assert.equal(item.title, 'Fix the login timeout');
+  assert.equal(item.previewRole, 'assistant');
+  assert.match(item.preview, /^Checking the callback\./);
+  assert.equal(item.preview.length, 160);
+  assert.ok(item.preview.endsWith('…'));
+  for (const key of ['messages', 'tools', 'file']) assert.equal(key in item, false);
+  assert.equal(summary({ ...state, title: 'Release checklist' }).title, 'Release checklist');
+  state.messages.push({ role: 'user', text: 'Now check logout' });
+  assert.equal(summary(state).title, 'Now check logout');
+  assert.equal(summary(state).previewRole, 'user');
+  assert.equal(summary(state).preview, 'Now check logout');
+  assert.equal(summary({ ...state, messages: [] }).preview, '');
+  assert.equal(state.title, 'Pi · Rill');
+});
+
 test('duplicate requests execute once across concurrency and journal restarts', async t => {
   const dir = temp(t), journal = new CommandJournal(dir); let count = 0;
   const action = async () => { count++; await new Promise(resolve => setTimeout(resolve, 20)); return 'accepted'; };

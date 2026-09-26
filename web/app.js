@@ -153,25 +153,56 @@ function logout() {
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('app').hidden = true; $('login').hidden = false;
 }
+const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
+const activityTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 function renderList() {
-  const query = $('search').value.toLowerCase();
-  $('count').textContent = String(sessions.length);
-  $('list-empty').hidden = sessions.length > 0;
+  const query = $('search').value.trim().toLowerCase();
+  const matches = sessions.filter(x => [x.title, x.cwd, x.preview].join(' ').toLowerCase().includes(query));
+  $('count').textContent = query ? `${matches.length} / ${sessions.length}` : String(sessions.length);
+  $('list-empty').hidden = matches.length > 0;
+  $('list-empty').textContent = sessions.length ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   const fragment = document.createDocumentFragment();
-  for (const item of sessions.filter(x => (x.title + ' ' + x.cwd).toLowerCase().includes(query))) {
-    const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
-    button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
-    const top = el('div', undefined, 'session-top');
-    top.append(el('strong', item.title));
-    if (unread.has(item.id)) top.append(el('span', 'New', 'badge'));
-    const meta = el('div', undefined, 'session-meta');
-    const project = el('span', item.cwd.split(/[\\/]/).filter(Boolean).at(-1) || item.cwd, 'session-project');
-    project.title = item.cwd;
-    meta.append(project, el('span', item.status, 'session-state'));
-    button.append(top, meta);
-    button.addEventListener('click', () => selectSession(item.id)); fragment.append(button);
+  const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
+  for (const [label, items] of [
+    ['Online', matches.filter(online)],
+    ['Saved & offline', matches.filter(item => !online(item))]
+  ]) {
+    if (!items.length) continue;
+    const group = el('section', undefined, 'session-group');
+    group.setAttribute('aria-label', label);
+    const heading = el('h3', label);
+    heading.append(el('span', String(items.length), 'badge'));
+    group.append(heading);
+    for (const item of items.sort((a, b) => b.updatedAt - a.updatedAt)) {
+      const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
+      button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
+      const top = el('div', undefined, 'session-top');
+      const title = el('strong', item.title); title.title = item.title;
+      top.append(title);
+      if (unread.has(item.id)) top.append(el('span', 'New', 'badge'));
+      button.append(top);
+      if (item.preview && item.preview !== item.title) {
+        button.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + item.preview, 'session-preview'));
+      }
+      const meta = el('div', undefined, 'session-meta');
+      const project = el('span', item.cwd.split(/[\\/]/).filter(Boolean).at(-1) || item.cwd, 'session-project');
+      project.title = item.cwd;
+      const status = el('span', statusLabels[item.status] || item.status, 'session-state');
+      status.dataset.status = item.status;
+      meta.append(project, status);
+      const time = el('time', undefined, 'session-time');
+      const date = new Date(item.updatedAt);
+      if (Number.isFinite(date.getTime())) {
+        time.dateTime = date.toISOString(); time.textContent = activityTime.format(date); time.title = 'Last activity: ' + date.toLocaleString();
+      }
+      button.append(meta, time);
+      button.addEventListener('click', () => selectSession(item.id)); group.append(button);
+    }
+    fragment.append(group);
   }
   $('sessions').replaceChildren(fragment);
+  const current = sessions.find(item => item.id === selected);
+  if (current) $('title').textContent = current.title;
 }
 async function selectSession(id) {
   if (selected) drafts.set(selected, $('prompt').value);
@@ -193,7 +224,7 @@ async function selectSession(id) {
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
 function renderConversation(state) {
-  $('title').textContent = state.title;
+  $('title').textContent = sessions.find(item => item.id === selected)?.title || state.title;
   $('project').textContent = state.cwd;
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;

@@ -55,8 +55,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .login form { display: grid; gap: 12px; margin: 28px 0 20px; }
 .login input { font-size: 16px; }
 .login-error { padding: 16px; color: var(--error); text-align: center; }
-.shell { position: fixed; top: var(--viewport-top, 0px); left: 0; right: 0; display: grid; grid-template-columns: 280px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
-.shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; }
+.shell { position: fixed; top: var(--viewport-top, 0px); left: 0; right: 0; display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
+.shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 16px; padding-left: 8px; }
 .brand strong { font-size: 14px; font-weight: 600; }
 .brand button { margin-left: auto; font-size: 12px; }
@@ -66,14 +66,21 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #search { font-size: 16px; margin-bottom: 8px; width: 100%; }
 #sessions { overflow: auto; flex: 1; min-height: 0; }
 #list-empty { padding: 8px; }
-.session { display: block; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 3px; }
+.session-group h3 { display: flex; gap: 8px; align-items: baseline; margin: 16px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.session-group + .session-group { margin-top: 16px; }
+.session { display: block; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 3px; border-bottom: 1px solid var(--line); }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
-.session strong { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-top .badge { margin-left: auto; }
-.session-meta { margin-top: 4px; font-size: 12px; font-weight: 400; color: var(--muted); }
-.session-project { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-state { margin-left: auto; }
+.session-top { align-items: flex-start; }
+.session strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; font-weight: 600; }
+.session-top .badge { margin-left: auto; flex-shrink: 0; }
+.session-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.session-meta { margin-top: 8px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.session-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-state { margin-left: auto; flex-shrink: 0; }
+.session-state[data-status=working] { color: var(--accent); font-weight: 600; }
+.session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
+.session-time { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
 aside footer { border-top: 1px solid var(--line); padding: 12px 8px 0; margin-top: 8px; font-size: 12px; color: var(--muted); }
 #diagnostics { margin-top: 8px; color: var(--warning); }
 #diagnostics summary { min-height: 44px; padding: 10px 0; }

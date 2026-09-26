@@ -29,6 +29,14 @@ export function applyEvent(state, event) {
   return state;
 }
 export function summary(state) {
-  const { messages, tools, file, ...meta } = state;
-  return meta;
+  const { messages = [], tools, file, ...meta } = state;
+  const excerpt = text => {
+    const line = (text || '').replace(/\s+/g, ' ').trim();
+    return line.length > 160 ? line.slice(0, 159) + '…' : line;
+  };
+  const request = messages.findLast(message => message.role === 'user' && message.text?.trim());
+  const latest = messages.findLast(message => ['user', 'assistant'].includes(message.role) && message.text?.trim());
+  const unnamed = !meta.title || meta.title === 'Untitled session' || meta.title.startsWith('Pi · ');
+  return { ...meta, title: unnamed ? excerpt(request?.text) || meta.title || 'Untitled session' : meta.title,
+    preview: excerpt(latest?.text), previewRole: latest?.role };
 }
