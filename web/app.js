@@ -394,10 +394,19 @@ function completeCommand(index = commandIndex) {
   $('prompt').focus(); renderCommands();
   return true;
 }
-function closeModels() {
+function closeModels(restoreFocus = false) {
+  const opener = modelPicker?.opener;
   modelPicker = undefined;
-  $('model-picker').close();
+  $('model-picker').hidden = true;
+  $('model').setAttribute('aria-expanded', 'false');
+  if (restoreFocus) opener?.focus();
 }
+function fitModelMenu() {
+  if (modelPicker) $('model-picker').style.setProperty('--model-menu-height', Math.max(0,
+    $('composer').getBoundingClientRect().top - document.querySelector('.conversation-header').getBoundingClientRect().bottom - 16) + 'px');
+}
+const modelMenuObserver = new ResizeObserver(fitModelMenu);
+modelMenuObserver.observe($('composer')); modelMenuObserver.observe($('app'));
 function renderModels() {
   const picker = modelPicker;
   if (!picker?.models) return;
@@ -416,7 +425,7 @@ function renderModels() {
     group.setAttribute('aria-label', provider); group.append(el('h3', provider));
     for (const model of models) {
       const key = `${model.provider}/${model.id}`, current = key === picker.current;
-      const button = el('button', undefined, 'model-option'); button.type = 'button';
+      const button = el('button', undefined, 'command-option model-option'); button.type = 'button';
       button.setAttribute('aria-pressed', String(current));
       const label = el('span', undefined, 'model-option-label');
       label.append(el('strong', model.name || model.id), el('span', model.id));
@@ -431,14 +440,15 @@ function renderModels() {
   $('model-options').replaceChildren(fragment);
   $('model-help').classList.remove('model-error');
   $('model-help').textContent = !picker.models.length ? 'No models available. Configure a provider in the Pi terminal.'
-    : !matches.length ? 'No matching models. Try a model name or provider.' : 'Select a model to switch.';
+    : !matches.length ? 'No matching models. Try a model name or provider.' : 'Select to switch this session. Esc to close.';
 }
 async function openModels(id) {
-  const picker = { id }; modelPicker = picker;
+  const picker = { id, opener: modelPicker?.opener || document.activeElement }; modelPicker = picker;
+  commandDismissed = true; renderCommands();
   $('model-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
   $('model-retry').hidden = true; $('model-help').classList.remove('model-error');
   $('model-help').textContent = 'Loading available models…';
-  if (!$('model-picker').open) $('model-picker').showModal();
+  $('model-picker').hidden = false; $('model').setAttribute('aria-expanded', 'true'); fitModelMenu();
   if (matchMedia('(pointer: fine)').matches) $('model-search').focus();
   try {
     const result = await request('models', { sessionId: id });
@@ -458,14 +468,14 @@ async function switchModel(id, key) {
 }
 async function chooseModel(picker, key) {
   if (modelPicker !== picker || picker.busy) return;
-  if (key === picker.current) { closeModels(); return; }
+  if (key === picker.current) { closeModels(true); return; }
   picker.busy = true; $('model-search').disabled = true;
   for (const button of $('model-options').querySelectorAll('button')) button.disabled = true;
   $('model-help').classList.remove('model-error');
   $('model-help').textContent = 'Switching model…';
   try {
     await switchModel(picker.id, key);
-    if (modelPicker === picker) closeModels();
+    if (modelPicker === picker) closeModels(true);
   } catch (e) {
     if (modelPicker !== picker) return;
     picker.busy = false; $('model-search').disabled = false;
@@ -473,14 +483,20 @@ async function chooseModel(picker, key) {
     $('model-help').classList.add('model-error'); $('model-help').textContent = e.message;
   }
 }
-$('model').addEventListener('click', () => openModels(selected));
+$('model').addEventListener('click', () => modelPicker ? closeModels() : openModels(selected));
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (modelPicker) openModels(modelPicker.id); });
-$('model-cancel').addEventListener('click', closeModels);
-$('model-picker').addEventListener('cancel', event => { event.preventDefault(); closeModels(); });
-$('model-picker').addEventListener('click', event => {
-  const rect = $('model-picker').getBoundingClientRect();
-  if (event.target === $('model-picker') && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) closeModels();
+$('model-cancel').addEventListener('click', () => closeModels(true));
+document.addEventListener('keydown', event => {
+  if (!modelPicker || event.isComposing) return;
+  if (event.key === 'Escape') { event.preventDefault(); closeModels(true); }
+  // The picker shares the composer form. Search must never submit its draft.
+  if (event.target === $('model-search') && event.key === 'Enter') {
+    event.preventDefault(); $('model-options').querySelector('button:not(:disabled)')?.focus();
+  }
+});
+document.addEventListener('pointerdown', event => {
+  if (modelPicker && !$('model-picker').contains(event.target) && !$('model').contains(event.target)) closeModels();
 });
 function renderDialog(state) {
   const dialog = state.dialog;
@@ -517,7 +533,7 @@ $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', renderList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));
 $('prompt').addEventListener('input', () => {
-  resizePrompt();
+  closeModels(); resizePrompt();
   if (selected) drafts.set(selected, $('prompt').value);
   commandDismissed = false; commandIndex = 0;
   if ($('prompt').value === '/' && selected) loadCommands(selected);

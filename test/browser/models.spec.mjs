@@ -33,11 +33,16 @@ test('/model switches only the selected session without sending a prompt', async
   });
   await page.goto(url);
   await page.getByRole('button', { name: /Alpha/ }).click();
-  const prompt = page.locator('#prompt'), picker = page.getByRole('dialog', { name: 'Choose a model' });
+  const prompt = page.locator('#prompt'), picker = page.getByRole('region', { name: 'Choose a model' });
   await prompt.fill('/model');
   await page.getByRole('option', { name: /\/model/ }).tap();
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(picker.getByRole('button', { pressed: true })).toContainText('Claude Sonnet');
+  expect(await page.locator('dialog[open]').count()).toBe(0);
+  const menuBounds = await picker.boundingBox(), composerBounds = await page.locator('#composer').boundingBox();
+  expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(menuBounds.width - composerBounds.width)).toBeLessThanOrEqual(2);
+  expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
   await page.screenshot({ path: 'test-results/model-picker-mobile.png' });
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
   await expect(picker.locator('.model-option')).toHaveCount(1);
@@ -58,6 +63,9 @@ test('/model switches only the selected session without sending a prompt', async
   fail = true;
   await prompt.fill('Keep this draft');
   await page.getByRole('button', { name: 'Switch model: test/first' }).click();
+  await page.getByRole('searchbox', { name: 'Search models' }).press('Enter');
+  expect(commands).toHaveLength(2);
+  await expect(prompt).toHaveValue('Keep this draft');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#model-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
@@ -69,6 +77,8 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toBeFocused();
   await expect(prompt).toHaveValue('Keep this draft');
+  await page.getByRole('button', { name: 'Switch model: test/first' }).click();
+  await expect(picker).toBeVisible();
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toHaveText('test/first');
