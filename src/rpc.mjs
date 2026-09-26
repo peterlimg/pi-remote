@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { modelList } from './commands.mjs';
 
 export class JsonLines {
   constructor(onValue, max = 8 * 1024 * 1024) { this.decoder = new StringDecoder('utf8'); this.buffer = ''; this.onValue = onValue; this.max = max; }
@@ -55,6 +56,16 @@ export class RpcWorker extends EventEmitter {
   }
   async command(command) {
     if (command.type === 'getCommands') return this.request('get_commands');
+    if (command.type === 'getModels') {
+      const { models } = await this.request('get_available_models');
+      const state = await this.request('get_state');
+      return { models: modelList(models), current: state.model ? `${state.model.provider}/${state.model.id}` : undefined };
+    }
+    if (command.type === 'setModel') {
+      await this.request('set_model', { provider: command.provider, modelId: command.modelId });
+      const state = await this.request('get_state');
+      return { model: `${state.model.provider}/${state.model.id}`, thinkingLevel: state.thinkingLevel };
+    }
     if (command.type === 'abort') {
       await this.request('clear_queue');
       await this.request('abort');

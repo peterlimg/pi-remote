@@ -33,8 +33,18 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   assert.equal(renamed, true);
   assert.deepEqual(await service.getCommands(id), [
     { name: 'review', description: 'Review changes', source: 'extension' },
-    { name: 'new', description: 'Start a new session in this project', source: 'remote' }
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' },
+    { name: 'model', description: 'Switch model for this session', source: 'remote' }
   ]);
+  assert.deepEqual(await service.getModels(id), { current: 'test/first', models: [
+    { provider: 'test', id: 'first', name: 'First' }, { provider: 'test', id: 'org/second', name: 'Second' }
+  ] });
+  assert.equal((await service.command(id, randomUUID(), { type: 'setModel', provider: 'test', modelId: 'org/second' })).ok, true);
+  assert.equal(service.read(id).model, 'test/org/second');
+  assert.equal(service.read(id).thinkingLevel, 'medium');
+  assert.equal((await service.command(id, randomUUID(), { type: 'setModel', provider: 'test', modelId: 'unknown' })).ok, false);
+  assert.equal(service.read(id).model, 'test/org/second');
+  assert.equal(service.read(id).messages.length, 1);
   for (const type of ['prompt', 'steer', 'followUp']) {
     assert.equal((await service.command(id, randomUUID(), { type, text: '/review ' + type })).ok, true);
     await until(() => service.read(id).messages.some(x => x.text === 'reply: /review ' + type));
@@ -68,7 +78,8 @@ test('remote /new creates an independent session in the same working directory',
   assert.deepEqual(service.read(id).messages, []);
   assert.deepEqual(await service.getCommands(id), [
     { name: 'review', description: 'Review changes', source: 'extension' },
-    { name: 'new', description: 'Start a new session in this project', source: 'remote' }
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' },
+    { name: 'model', description: 'Switch model for this session', source: 'remote' }
   ]);
   assert.equal((await service.newSession(oldId, requestId)).value.sessionId, id);
   assert.equal(service.live.size, 2);

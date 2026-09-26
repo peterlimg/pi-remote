@@ -37,6 +37,13 @@ try {
   assert.ok(commands.data.commands.some(x => x.name === 'pi-remote'));
   const id = [...host.service.live.keys()][0];
   assert.ok((await host.service.getCommands(id)).some(x => x.name === 'pi-remote'));
+  const { models } = await host.service.getModels(id);
+  const model = models.find(model => model.provider === 'anthropic');
+  assert.ok(model);
+  assert.deepEqual(Object.keys(model).sort(), ['id', 'name', 'provider']);
+  const switched = await host.service.command(id, randomUUID(), { type: 'setModel', provider: model.provider, modelId: model.id });
+  assert.equal(switched.ok, true, switched.error);
+  assert.equal(host.service.read(id).model, `${model.provider}/${model.id}`);
   const result = await host.service.command(id, randomUUID(), { type: 'prompt', text: '/pi-remote status' });
   assert.equal(result.ok, true);
   await until(() => messages.find(x => x.type === 'extension_ui_request' && x.method === 'notify' && /Pi Remote is running/.test(x.message)));

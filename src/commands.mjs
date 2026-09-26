@@ -5,14 +5,25 @@ import { ensureDir } from './config.mjs';
 
 // Pi handles these in its interactive editor, not in sendUserMessage/RPC prompt.
 const terminalCommands = new Set('login logout llama model thinking scoped-models settings resume new name session tree trust fork clone compact copy export import share reload hotkeys changelog quit'.split(' '));
-export function commandList(commands, canCreate = false) {
+export function commandList(commands, includeRemote = false) {
   if (!Array.isArray(commands)) throw new Error('Command discovery is unavailable. Update Pi and restart the terminal.');
   const list = commands.filter(command => typeof command.name === 'string' && !terminalCommands.has(command.name))
     .map(({ name, description, source }) => ({ name, description, source }));
-  if (canCreate) list.push({ name: 'new', description: 'Start a new session in this project', source: 'remote' });
+  if (includeRemote) list.push(
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' },
+    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+  );
   return list;
 }
+export function modelList(models) {
+  if (!Array.isArray(models)) throw new Error('Model discovery is unavailable. Update Pi and restart the terminal.');
+  return models.map(({ provider, id, name }) => ({ provider, id, name }));
+}
 export function validateCommand(command) {
+  if (command?.type === 'setModel') {
+    if (![command.provider, command.modelId].every(value => typeof value === 'string' && value.trim() && value.length <= 500 && !/\s/.test(value))) throw new Error('Expected a provider and model ID');
+    return { type: 'setModel', provider: command.provider, modelId: command.modelId };
+  }
   if (!command || !['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) throw new Error('Unsupported command');
   if (command.type !== 'abort' && (typeof command.text !== 'string' || !command.text.trim() || command.text.length > 50000)) throw new Error('Prompt must contain 1–50000 characters');
   if (command.type !== 'abort') {

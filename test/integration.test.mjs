@@ -64,11 +64,17 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const file = join(dir, 'session.jsonl'); writeFileSync(file, '');
   const handlers = new Map(), prompts = [], branch = [];
-  let sessionName = 'Extension test';
+  let sessionName = 'Extension test', modelChanges = 0, rejectModel = false;
+  const models = [
+    { provider: 'test', id: 'first', name: 'First', headers: { Authorization: 'private' }, baseUrl: 'https://private.example' },
+    { provider: 'test', id: 'org/second', name: 'Second' }
+  ];
   const pi = {
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand() {}, getSessionName() { return sessionName; },
     setSessionName(name) { sessionName = name; },
+    async setModel(model) { if (rejectModel) return false; modelChanges++; ctx.model = model; return true; },
+    getThinkingLevel() { return 'medium'; },
     getCommands() { return [
       { name: 'review', description: 'Review changes', source: 'extension', sourceInfo: { path: '/private/extension.ts' } },
       { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
@@ -77,6 +83,7 @@ test('actual extension registers, forwards prompts and releases ownership on shu
     sendUserMessage(text, options) { prompts.push({ text, options }); }
   };
   const ctx = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'pi-id', getBranch: () => branch },
+    model: models[0], modelRegistry: { getAvailable: () => models },
     ui: { notify() {}, setStatus() {} }, abort() {} };
   const emit = async (name, event = {}) => { for (const handler of handlers.get(name) || []) await handler(event, ctx); };
   const extension = (await import('../extension/index.ts')).default;
@@ -99,8 +106,24 @@ test('actual extension registers, forwards prompts and releases ownership on shu
     { name: 'review', description: 'Review changes', source: 'extension' },
     { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
     { name: 'summarize', description: 'Summarize changes', source: 'prompt' },
-    { name: 'new', description: 'Start a new session in this project', source: 'remote' }
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' },
+    { name: 'model', description: 'Switch model for this session', source: 'remote' }
   ]);
+  const client = await socket('ws://127.0.0.1:' + config.port + '/ws', config.clientToken, 'http://127.0.0.1:' + config.port);
+  t.after(() => client.ws.terminate());
+  assert.deepEqual((await client.request('models', { sessionId: id })).value, { current: 'test/first', models: [
+    { provider: 'test', id: 'first', name: 'First' }, { provider: 'test', id: 'org/second', name: 'Second' }
+  ] });
+  const modelRequest = randomUUID(), modelCommand = { type: 'setModel', provider: 'test', modelId: 'org/second' };
+  assert.equal((await host.service.command(id, modelRequest, modelCommand)).ok, true);
+  assert.equal((await host.service.command(id, modelRequest, modelCommand)).ok, true);
+  assert.equal(modelChanges, 1);
+  assert.equal(host.service.read(id).model, 'test/org/second');
+  assert.equal(host.service.read(id).thinkingLevel, 'medium');
+  assert.equal((await host.service.command(id, randomUUID(), { ...modelCommand, modelId: 'unknown' })).ok, false);
+  rejectModel = true;
+  assert.match((await host.service.command(id, randomUUID(), { ...modelCommand, modelId: 'first' })).error, /authentication/);
+  assert.equal(host.service.read(id).model, 'test/org/second');
   for (const text of ['/review src', '/skill:debug failure', '/summarize']) {
     assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text })).ok, true);
     assert.deepEqual(prompts.at(-1), { text, options: { deliverAs: 'steer', expandPromptTemplates: true } });

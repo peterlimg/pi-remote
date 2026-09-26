@@ -12,7 +12,7 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
   await prompt.fill('/');
-  await expect(menu.getByRole('option')).toHaveCount(4);
+  await expect(menu.getByRole('option')).toHaveCount(5);
   await expect(prompt).toHaveAttribute('aria-expanded', 'true');
   await page.screenshot({ path: 'test-results/commands-mobile.png' });
   await prompt.fill('/rvw');
@@ -53,7 +53,7 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     const prompt = page.locator('#prompt'), menu = page.getByRole('listbox');
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(4);
+    await expect(menu.getByRole('option')).toHaveCount(5);
     await prompt.press('ArrowDown');
     await expect(menu.getByRole('option', { selected: true })).toContainText('/summarize');
     await prompt.press('Tab');
@@ -61,7 +61,8 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await expect(prompt).toBeFocused();
     await expect(menu).toBeHidden();
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(4);
+    await expect(menu.getByRole('option')).toHaveCount(5);
+    await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');
     await expect(menu.getByRole('option', { selected: true })).toContainText('/skill:debug');

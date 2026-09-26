@@ -6,7 +6,7 @@ import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
-import { CommandJournal, validateCommand, commandList } from '../src/commands.mjs';
+import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
 import { deploymentScreen, checkRelay } from '../src/setup.mjs';
@@ -60,9 +60,21 @@ export default function remoteExtension(pi: any) {
           send(ws, { type: 'result', id: message.id, ok: true, value: { commands: commandList(pi.getCommands?.()) } });
           return;
         }
+        if (message.command?.type === 'getModels') {
+          send(ws, { type: 'result', id: message.id, ok: true, value: {
+            models: modelList(ctx.modelRegistry.getAvailable()), current: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined
+          } });
+          return;
+        }
         const command = validateCommand(message.command);
         const result = await journal.execute(state.id, message.requestId, command, async () => {
           if (stopped || generation !== epoch) throw new Error('Session changed');
+          if (command.type === 'setModel') {
+            const model = ctx.modelRegistry.getAvailable().find((item: any) => item.provider === command.provider && item.id === command.modelId);
+            if (!model) throw new Error('Model is not available in this session');
+            if (!await pi.setModel(model)) throw new Error('Model authentication is not configured');
+            return { model: `${model.provider}/${model.id}`, thinkingLevel: pi.getThinkingLevel?.() };
+          }
           if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();

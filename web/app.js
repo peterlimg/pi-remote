@@ -31,7 +31,7 @@ const versions = new Map();
 const cache = new Map(), drafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
-let lastDialog;
+let lastDialog, modelPicker;
 const sending = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
@@ -60,6 +60,7 @@ function request(op, extra = {}) {
 }
 function connection(text) { $('connection').textContent = text; updateControls(); }
 function disconnect() {
+  closeModels();
   const old = socket; socket = undefined; connected = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
@@ -205,6 +206,7 @@ function renderList() {
   if (current) $('title').textContent = current.title;
 }
 async function selectSession(id) {
+  closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
   selected = id; unread.delete(id); $('prompt').value = drafts.get(id) || '';
   commandDismissed = false; commandIndex = 0; loadCommands(id);
@@ -390,6 +392,58 @@ function completeCommand(index = commandIndex) {
   $('prompt').focus(); renderCommands();
   return true;
 }
+function closeModels() {
+  modelPicker = undefined;
+  $('model-picker').hidden = true;
+}
+async function openModels(id) {
+  const picker = { id }; modelPicker = picker;
+  $('model-picker').hidden = false;
+  $('model-choice').replaceChildren(); $('model-choice').disabled = true; $('model-apply').disabled = true;
+  $('model-help').textContent = 'Loading available models…';
+  try {
+    const result = await request('models', { sessionId: id });
+    if (modelPicker !== picker || selected !== id) return;
+    for (const model of result.models) {
+      const key = `${model.provider}/${model.id}`;
+      const option = el('option', model.name ? `${model.name} · ${key}` : key);
+      option.value = key; option.selected = key === result.current;
+      $('model-choice').append(option);
+    }
+    const empty = !result.models.length;
+    $('model-choice').disabled = empty; $('model-apply').disabled = empty;
+    $('model-help').textContent = empty ? 'No models available. Configure a provider in the Pi terminal.' : 'Applies to this session only.';
+    if (!empty) $('model-choice').focus();
+  } catch (e) {
+    if (modelPicker === picker) $('model-help').textContent = e.message === 'Unsupported command'
+      ? 'Restart this Pi terminal to load remote model switching, then reopen /model.' : e.message;
+  }
+}
+async function switchModel(id, key) {
+  const slash = key.indexOf('/');
+  if (slash < 1 || slash === key.length - 1) throw new Error('Use /model provider/model-id, or /model to choose.');
+  await request('command', { sessionId: id, command: { type: 'setModel', provider: key.slice(0, slash), modelId: key.slice(slash + 1) } });
+}
+$('model-picker').addEventListener('submit', async event => {
+  event.preventDefault();
+  const picker = modelPicker;
+  if (!picker || $('model-apply').disabled) return;
+  $('model-apply').disabled = true; $('model-choice').disabled = true;
+  $('model-help').textContent = 'Switching model…';
+  try {
+    await switchModel(picker.id, $('model-choice').value);
+    if (modelPicker === picker) { closeModels(); $('prompt').focus(); }
+  } catch (e) {
+    if (modelPicker === picker) {
+      $('model-help').textContent = e.message;
+      $('model-apply').disabled = false; $('model-choice').disabled = false;
+    }
+  }
+});
+$('model-cancel').addEventListener('click', () => { closeModels(); $('prompt').focus(); });
+$('model-picker').addEventListener('keydown', event => {
+  if (event.key === 'Escape') { event.preventDefault(); closeModels(); $('prompt').focus(); }
+});
 function renderDialog(state) {
   const dialog = state.dialog;
   if (!dialog) { $('dialog').hidden = true; lastDialog = undefined; return; }
@@ -470,7 +524,11 @@ async function sendMessage(type = 'prompt') {
   try {
     let created;
     if (text.trim() === '/new') created = await request('new', { sessionId: id });
-    else await request('command', { sessionId: id, command: { type, text } });
+    else if (/^\/model(?:\s|$)/.test(text.trim())) {
+      const key = text.trim().slice(6).trim();
+      if (key) await switchModel(id, key);
+      else openModels(id);
+    } else await request('command', { sessionId: id, command: { type, text } });
     if (drafts.get(id) === text) drafts.set(id, '');
     if (selected === id && $('prompt').value === text) { $('prompt').value = ''; resizePrompt(); }
     if (created && selected === id) await selectSession(created.sessionId);

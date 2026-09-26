@@ -114,9 +114,21 @@ test('session summaries distinguish unnamed work without sending full conversati
 });
 
 test('new session is discoverable but cannot be sent as a prompt', () => {
-  assert.deepEqual(commandList([], true), [{ name: 'new', description: 'Start a new session in this project', source: 'remote' }]);
+  assert.deepEqual(commandList([], true), [
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' },
+    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+  ]);
   assert.deepEqual(commandList([], false), []);
   assert.throws(() => validateCommand({ type: 'prompt', text: '/new' }), /terminal/);
+});
+
+test('model switching accepts only bounded provider and model identifiers', () => {
+  assert.deepEqual(validateCommand({ type: 'setModel', provider: 'test', modelId: 'org/model', headers: { secret: 'discard' } }),
+    { type: 'setModel', provider: 'test', modelId: 'org/model' });
+  for (const value of ['', ' ', null, {}, 'a b', 'x'.repeat(501)]) {
+    assert.throws(() => validateCommand({ type: 'setModel', provider: value, modelId: 'id' }), /provider and model/);
+    assert.throws(() => validateCommand({ type: 'setModel', provider: 'test', modelId: value }), /provider and model/);
+  }
 });
 
 test('duplicate requests execute once across concurrency and journal restarts', async t => {

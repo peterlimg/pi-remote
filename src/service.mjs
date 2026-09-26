@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { acquireLock, sessionKey, canonical } from './locks.mjs';
-import { CommandJournal, requestKey, validateCommand, commandList } from './commands.mjs';
+import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
 
@@ -81,7 +81,21 @@ export class SessionService extends EventEmitter {
   changed(id) { this.emit('state', id); this.emit('list'); }
   async command(id, requestId, input) {
     const command = validateCommand(input);
-    return this.journal.execute(id, requestId, command, () => this.dispatch(id, requestId, command));
+    return this.journal.execute(id, requestId, command, async () => {
+      const result = await this.dispatch(id, requestId, command);
+      if (command.type === 'setModel') {
+        const item = this.live.get(id);
+        if (item) {
+          item.state.model = result.model; item.state.thinkingLevel = result.thinkingLevel;
+          item.state.revision++; this.changed(id);
+        }
+      }
+      return result;
+    });
+  }
+  async getModels(id) {
+    const result = await this.dispatch(id, randomUUID(), { type: 'getModels' });
+    return { models: modelList(result.models), current: result.current };
   }
   async getCommands(id) {
     const result = await this.dispatch(id, randomUUID(), { type: 'getCommands' });

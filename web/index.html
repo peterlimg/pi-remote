@@ -45,6 +45,13 @@
       <section id="empty" class="empty"><p>Select a session.</p></section>
       <section id="transcript" aria-label="Conversation" tabindex="0" hidden></section>
       <section id="dialog" class="dialog" hidden></section>
+      <form id="model-picker" class="dialog" aria-label="Switch model" hidden>
+        <label for="model-choice">Model for this session</label>
+        <select id="model-choice" disabled></select>
+        <p id="model-help" class="hint" role="status"></p>
+        <button id="model-apply" type="submit" disabled>Switch model</button>
+        <button id="model-cancel" type="button" class="secondary">Cancel</button>
+      </form>
       <form id="composer" class="composer" hidden>
         <label class="sr-only" for="prompt">Message</label>
         <div id="command-menu" class="command-menu" hidden>
