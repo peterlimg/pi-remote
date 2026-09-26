@@ -12,7 +12,7 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
   await prompt.fill('/');
-  await expect(menu.getByRole('option')).toHaveCount(3);
+  await expect(menu.getByRole('option')).toHaveCount(4);
   await expect(prompt).toHaveAttribute('aria-expanded', 'true');
   await page.screenshot({ path: 'test-results/commands-mobile.png' });
   await prompt.fill('/rvw');
@@ -53,7 +53,7 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     const prompt = page.locator('#prompt'), menu = page.getByRole('listbox');
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(3);
+    await expect(menu.getByRole('option')).toHaveCount(4);
     await prompt.press('ArrowDown');
     await expect(menu.getByRole('option', { selected: true })).toContainText('/summarize');
     await prompt.press('Tab');
@@ -61,7 +61,8 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await expect(prompt).toBeFocused();
     await expect(menu).toBeHidden();
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(3);
+    await expect(menu.getByRole('option')).toHaveCount(4);
+    await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');
     await expect(menu.getByRole('option', { selected: true })).toContainText('/skill:debug');
     await prompt.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
@@ -72,6 +73,40 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await expect(prompt).toHaveValue('');
     await expect(page.locator('#transcript')).toContainText('/skill:debug');
   } finally { await context.close(); }
+});
+
+test('/new creates and opens a fresh session from the same project', async ({ page }) => {
+  const states = [{ id: 'old', title: 'Old task', cwd: '/project', status: 'idle', messages: [{ role: 'user', text: 'old context' }] }];
+  const operations = [];
+  await page.routeWebSocket('**/ws', ws => {
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready' }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+      } else if (packet.op === 'watch') {
+        ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0, state: states.find(x => x.id === packet.sessionId) }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { watching: packet.sessionId } }));
+      } else if (packet.op === 'commands') {
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [{ name: 'new', description: 'Start a new session in this project', source: 'remote' }] }));
+      } else if (packet.op === 'new') {
+        operations.push(packet);
+        states.push({ id: 'fresh', title: 'Untitled session', cwd: '/project', status: 'idle', messages: [] });
+        ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { ok: true, value: { sessionId: 'fresh' } } }));
+      }
+    });
+  });
+  await page.goto(url);
+  await page.getByRole('button', { name: /Old task/ }).click();
+  await page.locator('#prompt').fill('/');
+  await page.getByRole('option', { name: /\/new/ }).click();
+  await page.locator('#send').click();
+  await expect(page.locator('#title')).toHaveText('Untitled session');
+  await expect(page.locator('#prompt')).toHaveValue('');
+  await expect(page.locator('#project')).toHaveText('/project');
+  expect(operations).toHaveLength(1);
+  expect(operations[0].sessionId).toBe('old');
 });
 
 test('late discovery cannot replace another session menu; loading and failure stay explicit', async ({ page }) => {

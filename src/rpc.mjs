@@ -20,7 +20,7 @@ export class JsonLines {
 export class RpcWorker extends EventEmitter {
   constructor(file, cwd, options = {}) {
     super(); this.pending = new Map(); this.stderr = '';
-    this.process = spawn(options.bin || process.env.PI_REMOTE_PI_BIN || 'pi', [...(options.prefix || []), '--mode', 'rpc', '--session', file],
+    this.process = spawn(options.bin || process.env.PI_REMOTE_PI_BIN || 'pi', [...(options.prefix || []), '--mode', 'rpc', ...(file ? ['--session', file] : ['--session-dir', options.sessionDir])],
       { cwd, env: { ...process.env, PI_REMOTE_WORKER: '1' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
     this.exited = new Promise(resolve => this.process.once('close', resolve));
     this.process.stdin.on('error', () => {});

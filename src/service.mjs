@@ -1,13 +1,18 @@
 import { EventEmitter } from 'node:events';
 import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
-import { acquireLock, sessionKey } from './locks.mjs';
+import { acquireLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
+
+function inside(file, dir) {
+  const rel = relative(canonical(dir), canonical(file));
+  return !!rel && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
+}
 
 export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = false }) {
@@ -80,7 +85,7 @@ export class SessionService extends EventEmitter {
   }
   async getCommands(id) {
     const result = await this.dispatch(id, randomUUID(), { type: 'getCommands' });
-    return commandList(result.commands);
+    return commandList(result.commands, true);
   }
   async dispatch(id, requestId, command) {
     const item = this.live.get(id);
@@ -93,6 +98,49 @@ export class SessionService extends EventEmitter {
       }, 30000);
       this.pending.set(responseId, { socket: item.socket, resolve, reject, timer });
       send(item.socket, { type: 'command', id: responseId, sessionId: id, requestId, command });
+    });
+  }
+  trackWorker(id, item, discardEmpty = false) {
+    const { worker, lock } = item;
+    worker.on('event', event => {
+      if (event.type === 'extension_ui_request') {
+        if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
+          item.state.dialog = event; item.state.status = 'waiting';
+        }
+      } else applyEvent(item.state, event);
+      this.changed(id);
+    });
+    worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
+    worker.once('exit', () => {
+      lock.release(); item.worker = undefined; item.state.dialog = undefined;
+      this.scan();
+      if (discardEmpty && !this.catalog.has(id)) this.live.delete(id);
+      else item.state.status = 'saved';
+      this.changed(id);
+    });
+  }
+  async newSession(id, requestId) {
+    requestKey(requestId);
+    return this.journal.execute(id, requestId, { type: 'new' }, async () => {
+      if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) throw new Error('Session is not connected. Resume a saved session first.');
+      const source = this.read(id);
+      if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
+      const sessionDir = dirname(source.file);
+      const worker = new RpcWorker(undefined, source.cwd, { ...this.workerOptions, sessionDir });
+      let lock;
+      try {
+        const info = await worker.request('get_state');
+        if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
+        const path = canonical(info.sessionFile);
+        if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
+        const nextId = sessionKey(path);
+        lock = acquireLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
+        if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
+        const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd: source.cwd, piSessionId: info.sessionId }) };
+        item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
+        this.trackWorker(nextId, item, true);
+        return { sessionId: nextId };
+      } catch (e) { await worker.close(); lock?.release(); throw e; }
     });
   }
   async resume(id, requestId) {
@@ -112,20 +160,7 @@ export class SessionService extends EventEmitter {
       if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
       const item = { worker, lock, state: initialState(actual, actual.messages) };
       item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
-      worker.on('event', event => {
-        if (event.type === 'extension_ui_request') {
-          // Forward supported RPC dialogs to mobile with their original request IDs.
-          if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
-            item.state.dialog = event; item.state.status = 'waiting';
-          }
-        } else applyEvent(item.state, event);
-        this.changed(id);
-      });
-      worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
-      worker.once('exit', () => {
-        lock.release(); item.worker = undefined; item.state.status = 'saved'; item.state.dialog = undefined;
-        this.scan(); this.changed(id);
-      });
+      this.trackWorker(id, item);
       try {
         const rpcState = await worker.request('get_state');
         const history = await worker.request('get_messages');

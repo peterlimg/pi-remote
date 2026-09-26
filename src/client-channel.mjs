@@ -42,6 +42,8 @@ export function attachClient(socket, service) {
           value = await service.getCommands(message.sessionId);
         } else if (message.op === 'command') {
           value = await service.command(message.sessionId, message.id, message.command);
+        } else if (message.op === 'new') {
+          value = await service.newSession(message.sessionId, message.id);
         } else if (message.op === 'resume') {
           value = await service.resume(message.sessionId, message.id);
         } else if (message.op === 'answer') {

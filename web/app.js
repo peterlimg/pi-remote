@@ -463,9 +463,12 @@ async function sendMessage(type = 'prompt') {
   sending.add(id);
   $('send').disabled = true; notice('');
   try {
-    await request('command', { sessionId: id, command: { type, text } });
+    let created;
+    if (text.trim() === '/new') created = await request('new', { sessionId: id });
+    else await request('command', { sessionId: id, command: { type, text } });
     if (drafts.get(id) === text) drafts.set(id, '');
     if (selected === id && $('prompt').value === text) { $('prompt').value = ''; resizePrompt(); }
+    if (created && selected === id) await selectSession(created.sessionId);
   } catch (e) { notice(e.message); }
   finally { sending.delete(id); updateControls(); }
 }

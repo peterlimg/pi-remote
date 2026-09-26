@@ -95,7 +95,8 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   assert.deepEqual(await host.service.getCommands(id), [
     { name: 'review', description: 'Review changes', source: 'extension' },
     { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
-    { name: 'summarize', description: 'Summarize changes', source: 'prompt' }
+    { name: 'summarize', description: 'Summarize changes', source: 'prompt' },
+    { name: 'new', description: 'Start a new session in this project', source: 'remote' }
   ]);
   for (const text of ['/review src', '/skill:debug failure', '/summarize']) {
     assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text })).ok, true);

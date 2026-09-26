@@ -5,10 +5,12 @@ import { ensureDir } from './config.mjs';
 
 // Pi handles these in its interactive editor, not in sendUserMessage/RPC prompt.
 const terminalCommands = new Set('login logout llama model thinking scoped-models settings resume new name session tree trust fork clone compact copy export import share reload hotkeys changelog quit'.split(' '));
-export function commandList(commands) {
+export function commandList(commands, canCreate = false) {
   if (!Array.isArray(commands)) throw new Error('Command discovery is unavailable. Update Pi and restart the terminal.');
-  return commands.filter(command => typeof command.name === 'string' && !terminalCommands.has(command.name))
+  const list = commands.filter(command => typeof command.name === 'string' && !terminalCommands.has(command.name))
     .map(({ name, description, source }) => ({ name, description, source }));
+  if (canCreate) list.push({ name: 'new', description: 'Start a new session in this project', source: 'remote' });
+  return list;
 }
 export function validateCommand(command) {
   if (!command || !['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) throw new Error('Unsupported command');

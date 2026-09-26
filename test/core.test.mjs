@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireLock, sessionKey, unlockDead } from '../src/locks.mjs';
 import { readSession, discover, cleanMessage } from '../src/catalog.mjs';
-import { CommandJournal } from '../src/commands.mjs';
+import { CommandJournal, commandList, validateCommand } from '../src/commands.mjs';
 import { JsonLines } from '../src/rpc.mjs';
 import { equalSecret, originAllowed } from '../src/config.mjs';
 import { summary } from '../src/state.mjs';
@@ -93,6 +93,12 @@ test('session summaries distinguish unnamed work without sending full conversati
   assert.equal(summary(state).preview, 'Now check logout');
   assert.equal(summary({ ...state, messages: [] }).preview, '');
   assert.equal(state.title, 'Pi · Rill');
+});
+
+test('new session is discoverable but cannot be sent as a prompt', () => {
+  assert.deepEqual(commandList([], true), [{ name: 'new', description: 'Start a new session in this project', source: 'remote' }]);
+  assert.deepEqual(commandList([], false), []);
+  assert.throws(() => validateCommand({ type: 'prompt', text: '/new' }), /terminal/);
 });
 
 test('duplicate requests execute once across concurrency and journal restarts', async t => {

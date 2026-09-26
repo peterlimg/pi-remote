@@ -83,7 +83,7 @@ Keep your computer awake and the relay running. The background host survives clo
 | `/pi-remote stop` | Stop remote access, not terminal agents |
 | `/pi-remote setup` | Change the relay address after stopping the host |
 
-Select a session to send prompts; switching sessions does not stop their work. Type `/` for that session's extension commands, templates, and skills. Built-in terminal menus such as `/model` and `/settings` still require the computer. If a send loses its acknowledgement, inspect the conversation before retrying; uncertain commands are not replayed automatically.
+Select a session to send prompts; switching sessions does not stop their work. Type `/` for that session's extension commands, templates, and skills. `/new` starts a separate session in the same project and opens it on your phone; the original session keeps running. Built-in terminal menus such as `/model` and `/settings` still require the computer. If a send loses its acknowledgement, inspect the conversation before retrying; uncertain commands are not replayed automatically.
 
 ## Security and troubleshooting
 
