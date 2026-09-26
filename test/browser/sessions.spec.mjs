@@ -62,8 +62,9 @@ test('same-project sessions show their tasks, previews, status and activity with
   states[0].messages.push({ role: 'user', text: 'Now check logout' });
   states[0].status = 'idle'; states[0].updatedAt = now + 60000;
   publish();
-  await expect(page.locator('#title')).toHaveText('Now check logout');
+  await expect(page.locator('#title')).toHaveText('Fix login timing out after the browser reconnects');
   await page.locator('#back').click();
   await expect(online.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(online.locator('.session').first().locator('.session-state')).toHaveText('Ready');
+  await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });

@@ -63,10 +63,12 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   config.port = host.http.address().port;
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const file = join(dir, 'session.jsonl'); writeFileSync(file, '');
-  const handlers = new Map(), prompts = [];
+  const handlers = new Map(), prompts = [], branch = [];
+  let sessionName = 'Extension test';
   const pi = {
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
-    registerCommand() {}, getSessionName() { return 'Extension test'; },
+    registerCommand() {}, getSessionName() { return sessionName; },
+    setSessionName(name) { sessionName = name; },
     getCommands() { return [
       { name: 'review', description: 'Review changes', source: 'extension', sourceInfo: { path: '/private/extension.ts' } },
       { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
@@ -74,7 +76,7 @@ test('actual extension registers, forwards prompts and releases ownership on shu
     ]; },
     sendUserMessage(text, options) { prompts.push({ text, options }); }
   };
-  const ctx = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'pi-id', getBranch: () => [] },
+  const ctx = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'pi-id', getBranch: () => branch },
     ui: { notify() {}, setStatus() {} }, abort() {} };
   const emit = async (name, event = {}) => { for (const handler of handlers.get(name) || []) await handler(event, ctx); };
   const extension = (await import('../extension/index.ts')).default;
@@ -106,6 +108,15 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   assert.equal(prompts.length, sent);
   await emit('message_start', { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: [{ type: 'text', text: 'streamed' }] } });
   await until(() => host.service.read(id).messages.some(x => x.text === 'streamed'));
+  sessionName = undefined;
+  branch.push({ type: 'message', message: { role: 'user', content: 'Please review bonus claim reconciliation' } });
+  ctx.model = { id: 'test-model' };
+  ctx.modelRegistry = { streamSimple: () => ({ result: async () => ({ stopReason: 'stop', content: [{ type: 'text', text: 'Review bonus claim reconciliation' }] }) }) };
+  await emit('agent_end', { type: 'agent_end' });
+  await until(() => host.service.list().sessions[0].title === 'Review bonus claim reconciliation');
+  sessionName = 'My manual task title';
+  await emit('agent_start', { type: 'agent_start' });
+  await until(() => host.service.list().sessions[0].title === 'My manual task title');
   await emit('session_shutdown');
   assert.throws(() => readFileSync(join(dir, 'locks', id + '.json')), /ENOENT/);
 });

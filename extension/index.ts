@@ -5,6 +5,7 @@ import { loadConfig, dataDir, send, parseObject, saveConnection, publicOrigin } 
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
+import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
@@ -12,7 +13,6 @@ import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.m
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
 export default function remoteExtension(pi: any) {
-  if (process.env.PI_REMOTE_WORKER === '1') return;
   let ctx: any, socket: any, state: any, lock: any;
   let retry: any, flush: any, generation = 0, stopped = true, enabled = false;
   let journal: any;
@@ -20,15 +20,22 @@ export default function remoteExtension(pi: any) {
   const resetHistory = () => {
     if (!state || !ctx) return;
     const entries = ctx.sessionManager.getBranch().filter((x: any) => x.type === 'message');
+    const firstRequest = entries.find((x: any) => x.message.role === 'user');
+    state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [cleanMessage(firstRequest.message, firstRequest.id)] : []);
     state.messages = entries.slice(-100).map((x: any) => cleanMessage(x.message,
       x.message.role + ':' + (x.message.timestamp ?? x.id) + ':' + (x.message.toolCallId || '')));
     state.historyTruncated = entries.length > 100; state.revision++;
   };
   const publish = () => {
     if (!state || !enabled || stopped) return;
+    state.title = pi.getSessionName?.() || state.title;
     if (flush) return;
     flush = setTimeout(() => { flush = undefined; if (state && enabled && !stopped) send(socket || {}, { type: 'snapshot', state }); }, 80);
   };
+  registerSessionTitles(pi, (title: string) => {
+    if (state) { state.title = title; state.revision++; publish(); }
+  });
+  if (process.env.PI_REMOTE_WORKER === '1') return;
   const connect = (epoch: number) => {
     if (stopped || !enabled || generation !== epoch) return;
     const config = loadConfig();

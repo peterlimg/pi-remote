@@ -80,7 +80,7 @@ test('session summaries distinguish unnamed work without sending full conversati
       { role: 'toolResult', text: 'Internal output' }
     ], tools: [{ name: 'read' }] };
   const item = summary(state);
-  assert.equal(item.title, 'Fix the login timeout');
+  assert.equal(item.title, 'Old task');
   assert.equal(item.previewRole, 'assistant');
   assert.match(item.preview, /^Checking the callback\./);
   assert.equal(item.preview.length, 160);
@@ -88,7 +88,7 @@ test('session summaries distinguish unnamed work without sending full conversati
   for (const key of ['messages', 'tools', 'file']) assert.equal(key in item, false);
   assert.equal(summary({ ...state, title: 'Release checklist' }).title, 'Release checklist');
   state.messages.push({ role: 'user', text: 'Now check logout' });
-  assert.equal(summary(state).title, 'Now check logout');
+  assert.equal(summary(state).title, 'Old task');
   assert.equal(summary(state).previewRole, 'user');
   assert.equal(summary(state).preview, 'Now check logout');
   assert.equal(summary({ ...state, messages: [] }).preview, '');

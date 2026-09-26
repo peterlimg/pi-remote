@@ -1,7 +1,8 @@
 import { cleanMessage, textContent } from './catalog.mjs';
+import { sessionTitle } from './session-title.mjs';
 
 export function initialState(meta, messages = []) {
-  return { ...meta, status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: Date.now() };
+  return { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: Date.now() };
 }
 export function applyEvent(state, event) {
   state.updatedAt = Date.now(); state.revision++;
@@ -18,6 +19,7 @@ export function applyEvent(state, event) {
       state.messages.push(item);
       if (state.messages.length > 100) { state.messages.shift(); state.historyTruncated = true; }
     } else state.messages[index] = item;
+    state.title = sessionTitle(state.title, state.messages);
   }
   if (event.type.startsWith('tool_execution_')) {
     const tool = { id: event.toolCallId, name: event.toolName, status: event.type === 'tool_execution_end' ? (event.isError ? 'error' : 'done') : 'working',
@@ -34,9 +36,7 @@ export function summary(state) {
     const line = (text || '').replace(/\s+/g, ' ').trim();
     return line.length > 160 ? line.slice(0, 159) + '…' : line;
   };
-  const request = messages.findLast(message => message.role === 'user' && message.text?.trim());
   const latest = messages.findLast(message => ['user', 'assistant'].includes(message.role) && message.text?.trim());
-  const unnamed = !meta.title || meta.title === 'Untitled session' || meta.title.startsWith('Pi · ');
-  return { ...meta, title: unnamed ? excerpt(request?.text) || meta.title || 'Untitled session' : meta.title,
+  return { ...meta, title: sessionTitle(meta.title, messages),
     preview: excerpt(latest?.text), previewRole: latest?.role };
 }

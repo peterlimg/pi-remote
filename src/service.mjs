@@ -20,7 +20,15 @@ export class SessionService extends EventEmitter {
   }
   scan() {
     const { sessions, warnings } = discover(this.roots);
-    this.catalog = sessions; this.warnings = warnings.slice(0, 20); this.emit('list');
+    this.catalog = sessions; this.warnings = warnings.slice(0, 20);
+    for (const [id, item] of this.live) {
+      const saved = sessions.get(id);
+      if (!item.socket && saved && saved.title !== item.state.title) {
+        item.state.title = saved.title; item.state.revision++;
+        this.emit('state', id);
+      }
+    }
+    this.emit('list');
   }
   list() {
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));

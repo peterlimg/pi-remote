@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,13 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   const result = await service.resume(id, randomUUID());
   assert.equal(result.ok, true);
   assert.equal(service.read(id).messages[0].text, 'saved prompt');
+  appendFileSync(file, JSON.stringify({ type: 'session_info', id: 'name', parentId: null, name: 'Review bonus claim reconciliation' }) + '\n');
+  let renamed = false;
+  service.once('state', changed => { renamed = changed === id; });
+  service.scan();
+  assert.equal(service.list().sessions[0].title, 'Review bonus claim reconciliation');
+  assert.equal(service.read(id).title, 'Review bonus claim reconciliation');
+  assert.equal(renamed, true);
   assert.deepEqual(await service.getCommands(id), [{ name: 'review', description: 'Review changes', source: 'extension' }]);
   for (const type of ['prompt', 'steer', 'followUp']) {
     assert.equal((await service.command(id, randomUUID(), { type, text: '/review ' + type })).ok, true);

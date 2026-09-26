@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { sessionKey } from './locks.mjs';
+import { sessionTitle } from './session-title.mjs';
 
 export function rootsFromEnv() {
   return (process.env.PI_REMOTE_SESSION_DIRS || join(homedir(), '.pi', 'agent', 'sessions'))
@@ -67,7 +68,7 @@ export function readSession(file) {
   const allMessages = branch.filter(x => x.type === 'message').map(x => cleanMessage(x.message, x.id));
   const name = entries.filter(x => x.type === 'session_info' && x.name).at(-1)?.name;
   return { id: sessionKey(file), piSessionId: header.id, file: realpathSync(file), cwd: header.cwd,
-    title: name || allMessages.find(x => x.role === 'user')?.text.slice(0, 80) || 'Untitled session',
+    title: sessionTitle(name, allMessages),
     updatedAt: info.mtimeMs, status: 'saved', messages: allMessages.slice(-100),
     historyTruncated: allMessages.length > 100 };
 }
