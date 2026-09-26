@@ -59,7 +59,9 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   const height = () => prompt.evaluate(node => node.getBoundingClientRect().height);
   const compact = await height();
   expect(compact).toBe(44);
-  expect((await prompt.boundingBox()).width).toBe((await page.locator('#composer').boundingBox()).width);
+  expect((await page.locator('#composer').boundingBox()).width - (await prompt.boundingBox()).width).toBe(18);
+  await expect(page.locator('#send')).toHaveAccessibleName('Send message');
+  expect(await page.locator('#send').evaluate(node => getComputedStyle(node).borderRadius)).toBe('50%');
   await prompt.fill('One line');
   expect(await height()).toBe(compact);
   await prompt.press('Enter');
@@ -115,12 +117,12 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect((await page.locator('#app').boundingBox()).y).toBe(40);
   const composer = await page.locator('#composer').boundingBox();
   expect(composer.y + composer.height).toBeLessThanOrEqual(390);
-  expect(composer.height).toBeLessThanOrEqual(90);
-  expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(190);
+  expect(composer.height).toBeLessThanOrEqual(110);
+  expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(170);
   await page.locator('#prompt').fill('Scrollable draft\n'.repeat(20));
   // Growth must use the keyboard-reduced viewport, not dvh.
   expect((await page.locator('#composer').boundingBox()).height).toBeGreaterThan(composer.height);
-  expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(150);
+  expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(175);
   expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: 'test-results/composer-keyboard.png' });

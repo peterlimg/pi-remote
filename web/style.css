@@ -132,8 +132,8 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--accent); flex-shrink: 0; }
-.command-menu { position: absolute; z-index: 2; bottom: 100%; width: 100%; background: var(--panel); border: 1px solid var(--line); }
+.composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(12px, env(safe-area-inset-bottom)); padding: 6px 8px 8px; border: 1px solid var(--line); border-radius: 20px; background: var(--bg); flex-shrink: 0; }
+.command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
 .command-option { display: block; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; border-radius: 0; background: transparent; color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
 .command-option[aria-selected=true] { background: var(--selection); }
@@ -141,12 +141,14 @@ pre.message-text { white-space: pre-wrap; }
 .command-option strong { font: 14px/1.5 var(--mono); }
 .command-option span { display: block; font-size: 12px; color: var(--muted); }
 #command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
-.composer textarea { grid-column: 1 / -1; display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 6px 0; overflow-y: auto; overscroll-behavior: contain; }
+.composer textarea { grid-column: 1 / -1; display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font: 16px/1.5 var(--mono); max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer textarea:focus { outline: 0; }
-.composer:focus-within { border-top-color: var(--text); }
+.composer:focus-within { border-color: var(--accent); }
 .composer-actions { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .composer-actions button { font-size: 12px; }
-.composer-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; color: var(--muted); font-size: 12px; }
+.composer-actions #send, .composer-actions #abort { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+.composer-actions #abort { background: var(--panel); color: var(--text); }
+.composer-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; padding-left: 10px; color: var(--muted); font-size: 12px; }
 .composer-meta #status { flex-shrink: 0; }
 .composer-meta .hint { margin: 0; }
 .dialog { padding: 16px 24px; background: var(--panel); max-height: 35dvh; overflow: auto; }
@@ -172,7 +174,7 @@ pre.message-text { white-space: pre-wrap; }
   .message.user { padding: 10px 12px; }
   .composer { width: calc(100% - 32px); }
   .composer-actions { gap: 4px; }
-  .composer-actions button { padding-inline: 10px; }
+  .composer-actions #resume { padding-inline: 10px; }
   .dialog, .notice { padding: 12px 16px; }
   .login { margin: 6vh auto; }
 }
