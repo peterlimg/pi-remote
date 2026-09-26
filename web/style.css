@@ -147,6 +147,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer-actions { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .composer-actions button { font-size: 12px; }
 .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+.composer-actions #send { padding: 4px; background-clip: content-box; }
 .composer-actions #abort { background: var(--panel); color: var(--text); }
 .composer-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; padding-left: 10px; color: var(--muted); font-size: 12px; }
 .composer-meta #status { flex-shrink: 0; }
