@@ -66,9 +66,13 @@ export function readSession(file) {
   }
   branch.reverse();
   const allMessages = branch.filter(x => x.type === 'message').map(x => cleanMessage(x.message, x.id));
+  const modelEntry = branch.findLast(x => x.type === 'model_change' || (x.type === 'message' && x.message?.role === 'assistant' && x.message.provider && x.message.model));
+  const model = modelEntry?.type === 'model_change' ? `${modelEntry.provider}/${modelEntry.modelId}` :
+    modelEntry ? `${modelEntry.message.provider}/${modelEntry.message.model}` : undefined;
+  const thinkingLevel = branch.findLast(x => x.type === 'thinking_level_change')?.thinkingLevel;
   const name = entries.filter(x => x.type === 'session_info' && x.name).at(-1)?.name;
   return { id: sessionKey(file), piSessionId: header.id, file: realpathSync(file), cwd: header.cwd,
-    title: sessionTitle(name, allMessages),
+    title: sessionTitle(name, allMessages), model, thinkingLevel,
     updatedAt: info.mtimeMs, status: 'saved', messages: allMessages.slice(-100),
     historyTruncated: allMessages.length > 100 };
 }

@@ -136,7 +136,8 @@ export class SessionService extends EventEmitter {
         const nextId = sessionKey(path);
         lock = acquireLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
         if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-        const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd: source.cwd, piSessionId: info.sessionId }) };
+        const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd: source.cwd, piSessionId: info.sessionId,
+          model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, thinkingLevel: info.thinkingLevel }) };
         item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
         this.trackWorker(nextId, item, true);
         return { sessionId: nextId };
@@ -165,6 +166,8 @@ export class SessionService extends EventEmitter {
         const rpcState = await worker.request('get_state');
         const history = await worker.request('get_messages');
         item.state.messages = (history?.messages || []).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
+        item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
+        item.state.thinkingLevel = rpcState?.thinkingLevel;
         item.state.status = rpcState?.isStreaming ? 'working' : 'idle';
         this.changed(id); return { resumed: true };
       } catch (e) { await worker.close(); throw e; }

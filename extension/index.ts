@@ -25,7 +25,10 @@ export default function remoteExtension(pi: any) {
     state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [cleanMessage(firstRequest.message, firstRequest.id)] : []);
     state.messages = entries.slice(-100).map((x: any) => cleanMessage(x.message,
       x.message.role + ':' + (x.message.timestamp ?? x.id) + ':' + (x.message.toolCallId || '')));
-    state.historyTruncated = entries.length > 100; state.revision++;
+    state.historyTruncated = entries.length > 100;
+    state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+    state.thinkingLevel = pi.getThinkingLevel?.() ?? ctx.thinkingLevel;
+    state.revision++;
   };
   const publish = () => {
     if (!state || !enabled || stopped) return;
@@ -121,7 +124,8 @@ export default function remoteExtension(pi: any) {
     }
   });
   for (const name of ['agent_start', 'agent_end', 'message_start', 'message_update', 'message_end',
-    'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'ui_prompt_start', 'ui_prompt_end', 'agent_settled']) {
+    'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'ui_prompt_start', 'ui_prompt_end', 'agent_settled',
+    'model_select', 'thinking_level_select']) {
     pi.on(name, (event: any) => { if (state) { applyEvent(state, event); publish(); } });
   }
   for (const name of ['session_compact', 'session_tree']) {

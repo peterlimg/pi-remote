@@ -151,6 +151,8 @@ pre.message-text { white-space: pre-wrap; }
 .composer-actions #abort { background: var(--panel); color: var(--text); }
 .composer-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; column-gap: 12px; align-items: center; padding-left: 10px; color: var(--muted); font-size: 12px; }
 .composer-meta #status { flex-shrink: 0; }
+.composer-meta #model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-meta #reasoning { flex-shrink: 0; }
 .composer-meta .hint { margin: 0; }
 .dialog { padding: 16px 24px; background: var(--panel); max-height: 35dvh; overflow: auto; }
 .dialog h3 { font-size: 14px; }

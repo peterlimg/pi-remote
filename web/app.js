@@ -320,6 +320,11 @@ function updateControls() {
   $('abort').hidden = !state || !['working', 'waiting'].includes(state.status);
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
+  $('model').textContent = state?.model || '';
+  $('model').title = state?.model ? `Model: ${state.model}` : '';
+  $('model').hidden = !state?.model;
+  $('reasoning').textContent = state?.thinkingLevel ? `Reasoning: ${state.thinkingLevel}` : '';
+  $('reasoning').hidden = !state?.thinkingLevel;
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
   $('resume').disabled = !connected || !meta?.resumable;

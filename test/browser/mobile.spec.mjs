@@ -105,7 +105,7 @@ test('tool summaries show context and a short shell tail without losing full det
 
 test('streaming tool input, errors and shortened output stay readable and safe', async ({ page }) => {
   let client;
-  const state = { id: 'stream', title: 'Streaming tools', cwd: '/project', status: 'working', messages: [
+  const state = { id: 'stream', title: 'Streaming tools', cwd: '/project', status: 'working', model: 'openai/o3', thinkingLevel: 'high', messages: [
     { id: 'calls', role: 'assistant', toolCalls: [
       { id: 'partial', name: 'read', text: '{"path":' },
       { id: 'null', name: 'custom', text: 'null' },
@@ -129,14 +129,20 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Streaming tools/ }).click();
   await expect(page.locator('.tool')).toHaveCount(4);
+  await expect(page.locator('#model')).toHaveText('openai/o3');
+  await expect(page.locator('#reasoning')).toHaveText('Reasoning: high');
   await expect(page.locator('[data-tool-id="safe"] .tool-context')).toHaveText('<img onerror=window.injected=true>:1-3');
   await expect(page.locator('#transcript img')).toHaveCount(0);
   const shell = page.locator('[data-tool-id="shell"]');
   await expect(shell.locator('.tool-status')).toHaveText('working');
   await expect(shell.locator('.tool-preview')).toHaveText('Checking…');
   state.messages.push({ id: 'failed', role: 'toolResult', toolCallId: 'shell', text: 'Tests failed', isError: true, truncated: true });
+  state.model = 'anthropic/claude-sonnet-4-5'; state.thinkingLevel = 'off';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
   await expect(shell.locator('.tool-status')).toHaveText('error');
+  await expect(page.locator('#model')).toHaveText('anthropic/claude-sonnet-4-5');
+  await expect(page.locator('#reasoning')).toHaveText('Reasoning: off');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(shell.locator('.tool-preview')).toContainText('Output shortened for mobile.');
   await shell.locator('summary').click();
   await expect(shell.locator('.tool-output')).toHaveText('Tests failed');

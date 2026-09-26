@@ -6,6 +6,8 @@ export function initialState(meta, messages = []) {
 }
 export function applyEvent(state, event) {
   state.updatedAt = Date.now(); state.revision++;
+  if (event.type === 'model_select') state.model = `${event.model.provider}/${event.model.id}`;
+  if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
   if (event.type === 'agent_start') state.status = 'working';
   if (event.type === 'agent_end' || event.type === 'agent_settled') state.status = 'idle';
   if (event.type === 'ui_prompt_start') state.status = 'waiting';

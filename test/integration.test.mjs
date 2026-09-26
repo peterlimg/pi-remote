@@ -89,6 +89,9 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   await emit('session_start');
   await until(() => host.service.live.size === 1);
   const id = sessionKey(file);
+  await emit('model_select', { type: 'model_select', model: { provider: 'openai', id: 'o3' } });
+  await emit('thinking_level_select', { type: 'thinking_level_select', level: 'high' });
+  await until(() => host.service.read(id).model === 'openai/o3' && host.service.read(id).thinkingLevel === 'high');
   const result = await host.service.command(id, randomUUID(), { type: 'followUp', text: 'do this next' });
   assert.equal(result.ok, true);
   assert.deepEqual(prompts, [{ text: 'do this next', options: { deliverAs: 'followUp', expandPromptTemplates: true } }]);

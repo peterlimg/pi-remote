@@ -8,7 +8,7 @@ import { readSession, discover, cleanMessage } from '../src/catalog.mjs';
 import { CommandJournal, commandList, validateCommand } from '../src/commands.mjs';
 import { JsonLines } from '../src/rpc.mjs';
 import { equalSecret, originAllowed } from '../src/config.mjs';
-import { summary } from '../src/state.mjs';
+import { summary, initialState, applyEvent } from '../src/state.mjs';
 
 function temp(t) { const dir = mkdtempSync(join(tmpdir(), 'pi-remote-')); t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; }
 test('ownership is exclusive and living owners cannot be unlocked', t => {
@@ -36,6 +36,24 @@ test('saved history follows parent links and excludes abandoned branches', t => 
   writeFileSync(file, entries.map(x => JSON.stringify(x)).join('\n') + '\n');
   assert.deepEqual(readSession(file).messages.map(x => x.text), ['first', 'current']);
   assert.equal(discover([dir]).sessions.size, 1);
+});
+test('composer metadata follows live model and reasoning changes and saved branch', t => {
+  const state = initialState({ title: 'Pi · project', model: 'anthropic/opus', thinkingLevel: 'medium' });
+  applyEvent(state, { type: 'model_select', model: { provider: 'openai', id: 'o3' } });
+  applyEvent(state, { type: 'thinking_level_select', level: 'high' });
+  assert.equal(state.model, 'openai/o3');
+  assert.equal(state.thinkingLevel, 'high');
+  const dir = temp(t), file = join(dir, 's.jsonl');
+  writeFileSync(file, [
+    { type: 'session', id: 's', cwd: dir },
+    { type: 'model_change', id: 'old', parentId: null, provider: 'anthropic', modelId: 'old' },
+    { type: 'model_change', id: 'new', parentId: 'old', provider: 'openai', modelId: 'o3' },
+    { type: 'thinking_level_change', id: 'level', parentId: 'new', thinkingLevel: 'high' },
+    { type: 'model_change', id: 'abandoned', parentId: 'old', provider: 'other', modelId: 'wrong' },
+    { type: 'message', id: 'leaf', parentId: 'level', message: { role: 'user', content: 'continue' } }
+  ].map(x => JSON.stringify(x)).join('\n') + '\n');
+  assert.equal(readSession(file).model, 'openai/o3');
+  assert.equal(readSession(file).thinkingLevel, 'high');
 });
 test('discovery skips unrelated JSONL but still warns about damaged Pi sessions', t => {
   const dir = temp(t);
