@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { appendFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { join } from 'node:path';
 import { loadConfig, dataDir, parseObject, equalSecret, send, originAllowed, protectSocket, publicOrigin } from './config.mjs';
@@ -17,6 +18,11 @@ export async function startHost(options = {}) {
   const lock = acquireLock(join(dir, 'locks'), 'service', { kind: 'service' });
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: !!options.allowResume, workerOptions: options.workerOptions });
   let closing;
+  const logStop = message => {
+    const line = `${new Date().toISOString()} Pi Remote host ${process.pid}: ${message.replace(/[\r\n]+/g, ' ')}\n`;
+    try { appendFileSync(join(dir, 'host.log'), line, { mode: 0o600 }); }
+    catch (error) { console.error(line.trimEnd(), 'Could not write host.log:', error.message); }
+  };
   const status = () => ({ protocol: 1, pid: process.pid, publicUrl, relayUrl,
     relayConnected: disconnectRelay?.connected() ?? false, closing: !!closing });
   const http = createServer((req, res) => {
@@ -29,7 +35,7 @@ export async function startHost(options = {}) {
     if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status()));
-    if (req.method === 'DELETE') void close().catch(error => console.error('Pi Remote shutdown:', error.message));
+    if (req.method === 'DELETE') void close('DELETE /_pi/remote').catch(() => {}); // close logs shutdown failures.
   });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   const origins = new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port]);
@@ -72,14 +78,24 @@ export async function startHost(options = {}) {
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
     if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken);
   } catch (e) {
-    await service.close(); lock.release(); http.close(); throw e;
+    logStop('stopping: error: ' + e.message);
+    await service.close(); lock.release(); http.close();
+    logStop('stopped: error: ' + e.message);
+    throw e;
   }
-  function close() {
+  function close(reason = 'API close') {
     return closing ??= (async () => {
-      disconnectRelay?.();
-      for (const ws of wss.clients) ws.terminate();
-      wss.close(); await service.close();
-      await new Promise(resolve => http.close(resolve)); lock.release();
+      logStop('stopping: ' + reason);
+      try {
+        disconnectRelay?.();
+        for (const ws of wss.clients) ws.terminate();
+        wss.close(); await service.close();
+        await new Promise(resolve => http.close(resolve)); lock.release();
+        logStop('stopped: ' + reason);
+      } catch (error) {
+        logStop('stop failed: ' + reason + ': ' + error.message);
+        throw error;
+      }
     })();
   }
   return { http, service, status, close };

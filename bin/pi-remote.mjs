@@ -5,7 +5,7 @@ import { startHost } from '../src/host.mjs';
 import { startRelay } from '../src/relay.mjs';
 import { unlockDead, sessionKey } from '../src/locks.mjs';
 import { pairingUrl, pairingQr, mobileUrl } from '../src/pairing.mjs';
-import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
+import { ensureHost, stopHost, restartHost, hostStatus } from '../src/control.mjs';
 
 const [command = 'serve', ...args] = process.argv.slice(2);
 try {
@@ -16,13 +16,17 @@ try {
     console.log('Use /pi-remote in Pi for your phone login QR.');
     let closing = false;
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
-      if (closing) return; closing = true; await host.close(); process.exit(0);
+      if (closing) return; closing = true;
+      try { await host.close(signal); process.exit(0); }
+      catch { process.exitCode = 1; } // close records the failure in host.log.
     });
     process.send?.({ type: 'ready', status: host.status() });
   } else if (command === 'start') {
     await ensureHost(); console.log('Pi Remote running. Use /pi-remote in Pi to log in.');
   } else if (command === 'stop') {
     console.log(await stopHost() ? 'Pi Remote stopped' : 'Pi Remote already stopped');
+  } else if (command === 'restart') {
+    await restartHost(); console.log('Pi Remote running. Use /pi-remote in Pi to log in.');
   } else if (command === 'pair') {
     const config = loadConfig();
     const running = await hostStatus(config);
@@ -58,7 +62,7 @@ try {
     console.log(!status ? 'Pi Remote stopped' : status.closing ? 'Pi Remote stopping' :
       'Pi Remote running' + (status.relayUrl ? (status.relayConnected ? '; relay connected' : '; relay reconnecting') : ''));
   } else {
-    throw new Error('Commands: start, stop, serve [--allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
+    throw new Error('Commands: start, stop, restart, serve [--allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
   }
 } catch (error) {
   console.error(error.message);

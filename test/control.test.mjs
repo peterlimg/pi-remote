@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync, readFileSync, statSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import jsQR from 'jsqr';
 import { loadConfig, saveConnection, publicOrigin } from '../src/config.mjs';
 import { startHost } from '../src/host.mjs';
-import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
+import { ensureHost, stopHost, restartHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
 import { until } from './helpers.mjs';
 
@@ -34,6 +36,85 @@ async function environment(t) {
   return { dir, config };
 }
 
+test('stop keeps waiting after a status timeout once DELETE was accepted', async t => {
+  const methods = [];
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    methods.push(options.method);
+    if (methods.length === 1) return Response.json({ protocol: 1, pid: process.pid, closing: false });
+    if (methods.length === 2) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    throw new TypeError('fetch failed', { cause: { code: 'ECONNREFUSED' } });
+  });
+  assert.equal(await stopHost({ port: 1, bridgeToken: 'test-only' }), true);
+  assert.deepEqual(methods, ['DELETE', 'GET', 'GET']);
+});
+
+test('stop finishes when the known host exits even if status keeps timing out', async t => {
+  let exited = false;
+  t.mock.method(process, 'kill', (pid, signal) => {
+    assert.equal(pid, 12345); assert.equal(signal, 0);
+    if (exited) throw Object.assign(new Error('No such process'), { code: 'ESRCH' });
+  });
+  t.mock.method(globalThis, 'fetch', async (_url, { method }) => {
+    if (method === 'DELETE') return Response.json({ protocol: 1, pid: 12345 });
+    exited = true;
+    throw new DOMException('Timeout', 'TimeoutError');
+  });
+  assert.equal(await stopHost({ port: 1, bridgeToken: 'test-only' }), true);
+});
+
+test('stop timeouts have an overall deadline and other status errors still fail', async t => {
+  let now = 0, failure = 'timeout';
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'fetch', async (_url, { method }) => {
+    if (method === 'DELETE') return Response.json({ protocol: 1, pid: process.pid });
+    if (failure === 'auth') return new Response('', { status: 403 });
+    now += 30001;
+    throw new DOMException('Timeout', 'TimeoutError');
+  });
+  const config = { port: 1, bridgeToken: 'test-only' };
+  await assert.rejects(stopHost(config), /still stopping after 30 seconds/);
+  failure = 'auth';
+  await assert.rejects(stopHost(config), /Cannot control the service/);
+});
+
+test('restart retries startup after a failed stop wait and a transient startup status timeout', async t => {
+  const { dir, config } = await environment(t);
+  const first = await ensureHost(config, dir);
+  const fetch = globalThis.fetch;
+  let stopping = false, failures = 0;
+  const mock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (options.method === 'DELETE') stopping = true;
+    else if (stopping && failures++ < 2) {
+      if (failures === 1) throw new Error('Unexpected stop poll failure');
+      throw new DOMException('Startup status timed out', 'TimeoutError');
+    }
+    return fetch(url, options);
+  });
+  try {
+    const restarted = await restartHost(config, dir);
+    assert.notEqual(restarted.pid, first.pid);
+    assert.ok(failures >= 3);
+    assert.equal((await hostStatus(config)).pid, restarted.pid);
+  } finally { mock.mock.restore(); }
+});
+
+test('restart makes a startup attempt after DELETE fails and reports bounded recovery failure', async t => {
+  let now = 0;
+  const methods = [];
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'fetch', async (_url, { method }) => {
+    methods.push(method); now += 30001;
+    throw new DOMException('Timeout', 'TimeoutError');
+  });
+  await assert.rejects(restartHost({ port: 1, bridgeToken: 'test-only' }, '.'), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.equal(error.errors.length, 2);
+    assert.match(error.message, /restart failed/);
+    return true;
+  });
+  assert.deepEqual(methods, ['DELETE', 'GET']);
+});
+
 test('background host starts once, survives callers, and stops without signalling Pi', async t => {
   const { dir, config } = await environment(t);
   assert.equal(await hostStatus(config), null);
@@ -49,8 +130,15 @@ test('background host starts once, survives callers, and stops without signallin
   assert.equal(await stopHost(config), true);
   assert.equal(await stopHost(config), false);
   assert.equal(existsSync(join(dir, 'locks', 'service.json')), false);
+  const stoppedLog = readFileSync(join(dir, 'host.log'), 'utf8');
+  assert.match(stoppedLog, /\d{4}-\d\d-\d\dT[^\n]+ Pi Remote host \d+: stopped: DELETE \/_pi\/remote/);
   const restarted = await ensureHost(config, dir);
   assert.notEqual(restarted.pid, first.pid);
+  execFileSync(process.execPath, [fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), 'restart'], { timeout: 15000 });
+  const cliRestarted = await hostStatus(config);
+  assert.notEqual(cliRestarted.pid, restarted.pid);
+  process.kill(cliRestarted.pid, 'SIGTERM'); // Only this test's temporary host, never a Pi worker.
+  await until(() => readFileSync(join(dir, 'host.log'), 'utf8').includes('stopped: SIGTERM'));
 });
 
 test('host control requires the local bridge credential and rejects browser origins', async t => {
@@ -67,6 +155,18 @@ test('host control requires the local bridge credential and rejects browser orig
   assert.ok(!JSON.stringify(status).includes(config.clientToken));
   await stopHost(config);
   await Promise.all([host.close(), host.close()]);
+  const lines = readFileSync(join(dir, 'host.log'), 'utf8').trim().split('\n');
+  assert.equal(lines.filter(line => line.includes('stopping: DELETE')).length, 1);
+  assert.equal(lines.filter(line => line.includes('stopped: DELETE')).length, 1);
+});
+
+test('host logs a timestamp and reason for startup errors', async t => {
+  const { dir, config } = await environment(t);
+  const server = createServer();
+  await new Promise(resolve => server.listen(config.port, '127.0.0.1', resolve));
+  try { await assert.rejects(startHost({ dir, config, roots: [] }), { code: 'EADDRINUSE' }); }
+  finally { await new Promise(resolve => server.close(resolve)); }
+  assert.match(readFileSync(join(dir, 'host.log'), 'utf8'), /\d{4}-\d\d-\d\dT[^\n]+stopped: error:.*EADDRINUSE/);
 });
 
 test('setup persists only validated origins and QR decodes to the private fragment link', async t => {
