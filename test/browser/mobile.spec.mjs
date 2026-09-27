@@ -12,12 +12,23 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await expect(page.locator('#notice')).toBeHidden();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#title')).toHaveText('Project Alpha');
+  await expect(page.locator('#project-name')).toHaveText('Project Alpha');
+  await expect(page.getByRole('button', { name: 'Show sessions' }).locator('svg')).toBeVisible();
+  const details = page.locator('.session-info summary');
+  await expect(details).toHaveAccessibleName('Session details');
+  await expect(details.locator('svg')).toBeVisible();
+  await details.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#project')).toBeVisible();
+  await expect(page.locator('#project')).toHaveText('/projects/Project Alpha');
   await expect(page.locator('#composer select:not(#reasoning)')).toHaveCount(0);
   await expect(page.locator('#transcript')).toContainText('Working on Project Alpha');
   await page.locator('#prompt').fill('draft for alpha');
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
   await expect(page.locator('#title')).toHaveText('Project Beta');
+  await expect(page.locator('#project-name')).toHaveText('Project Beta');
+  await expect(page.locator('#project')).toBeHidden();
   await expect(page.locator('#prompt')).toHaveValue('');
   await page.locator('#prompt').fill('instruction for beta');
   await page.locator('#send').click();
@@ -31,6 +42,49 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   expect(new URL(page.url()).hash).toBe('');
   await page.screenshot({ path: 'test-results/mobile-session.png', fullPage: true });
   expect(errors).toEqual([]);
+});
+
+test('conversation header centers and truncates long titles without crowding its controls', async ({ page }) => {
+  const state = { id: 'header', title: 'Rill conversation scoring data review with a very long session title',
+    cwd: '/projects/rill-conversation-scoring-with-a-long-project-name/', status: 'idle', messages: [] };
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+    } else if (packet.op === 'watch') {
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
+    }
+    if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+  }));
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.locator('.session').click();
+  await expect(page.locator('#project-name')).toHaveText('rill-conversation-scoring-with-a-long-project-name');
+  for (const [width, colorScheme] of [[390, 'light'], [320, 'dark'], [1280, 'dark']]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ colorScheme });
+    const header = await page.locator('.conversation-header').boundingBox();
+    const title = await page.locator('#title').boundingBox();
+    const details = page.locator('.session-info summary');
+    const control = await details.boundingBox();
+    expect(Math.abs(title.x + title.width / 2 - header.x - header.width / 2)).toBeLessThan(1);
+    expect(title.x + title.width).toBeLessThan(control.x);
+    expect(control.width).toBeGreaterThanOrEqual(44);
+    expect(control.height).toBeGreaterThanOrEqual(44);
+    expect(header.height).toBeLessThan(80);
+    if (width < 700) {
+      const back = await page.locator('#back').boundingBox();
+      expect(back.width).toBeGreaterThanOrEqual(44);
+      expect(back.x + back.width).toBeLessThan(title.x);
+      expect(await page.locator('#title').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+    } else await expect(page.locator('#back')).toBeHidden();
+    await details.click();
+    await expect(page.locator('#project')).toHaveText(state.cwd);
+    await expect(page.locator('#project')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/header-${width}.png`, fullPage: true });
+    await details.click();
+  }
 });
 
 test('conversation renders safe Markdown and keeps tool output collapsed across updates', async ({ page }) => {

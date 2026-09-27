@@ -287,6 +287,11 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
+function renderProject(cwd = '') {
+  $('project').textContent = cwd;
+  $('project-name').textContent = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
+  $('project-name').hidden = !cwd;
+}
 async function selectSession(id) {
   closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
@@ -297,7 +302,7 @@ async function selectSession(id) {
   $('transcript').replaceChildren();
   updateScrollButton();
   document.querySelector('.session-info').open = false;
-  $('project').textContent = sessions.find(x => x.id === id)?.cwd || '';
+  renderProject(selectedSummary?.cwd);
   $('app').classList.add('viewing'); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
@@ -311,7 +316,7 @@ async function selectSession(id) {
 }
 function renderConversation(state) {
   $('title').textContent = sessions.find(item => item.id === selected)?.title || state.title;
-  $('project').textContent = state.cwd;
+  renderProject(state.cwd);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   const box = $('transcript'), bottom = atThreadBottom(), oldScroll = box.scrollTop;

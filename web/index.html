@@ -43,9 +43,9 @@
     </aside>
     <main>
       <header class="conversation-header">
-        <button id="back" class="quiet mobile-only" aria-label="Show sessions">Sessions</button>
-        <h1 id="title">Pi Remote</h1>
-        <details class="session-info"><summary>Details</summary><p id="project">Select a session to see its project directory.</p></details>
+        <button id="back" class="quiet mobile-only" aria-label="Show sessions" title="Show sessions"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+        <div class="conversation-heading"><h1 id="title">Pi Remote</h1><p id="project-name" hidden></p></div>
+        <details class="session-info"><summary aria-label="Session details" title="Session details"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><g fill="currentColor" stroke="none"><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></g></svg></summary><p id="project">Select a session to see its project directory.</p></details>
       </header>
       <div id="notice" class="notice" role="status" hidden></div>
       <section id="empty" class="empty"><p>Select a session.</p></section>
