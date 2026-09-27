@@ -62,7 +62,11 @@ const el = (tag, text, className) => {
   if (className) node.className = className;
   return node;
 };
-function notice(text) { $('notice').textContent = text || ''; $('notice').hidden = !text; }
+function notice(text) {
+  // Connection state belongs in the composer, not in persistent error notices.
+  if (text === 'Computer is disconnected' || text === 'Computer is offline') return;
+  $('notice').textContent = text || ''; $('notice').hidden = !text;
+}
 function request(op, extra = {}) {
   if (!connected || socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Computer is disconnected'));
   const id = crypto.randomUUID();
@@ -348,6 +352,7 @@ function updateControls() {
   $('abort').hidden = !working;
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
+  $('composer-connection').hidden = connected || !selected || manualClose;
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
   $('model').textContent = modelName;
   $('model').title = modelName ? `Switch model: ${modelName}` : '';
@@ -361,7 +366,7 @@ function updateControls() {
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const meta = sessions.find(x => x.id === selected);
   $('resume').disabled = !connected || !meta?.resumable;
-  $('composer-hint').textContent = !connected ? 'Reconnect to send instructions.' :
+  $('composer-hint').textContent = !connected ? '' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (meta?.resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
   $('composer-hint').hidden = !$('composer-hint').textContent;
