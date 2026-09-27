@@ -396,7 +396,13 @@ function updateControls() {
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
-  $('agent-activity').hidden = !connected || state?.status !== 'working';
+  const activity = $('agent-activity'), active = connected && state?.status === 'working';
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
+    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
+    activity.querySelector('span').textContent = labels[Math.floor(Math.random() * labels.length)];
+    activity.dataset.sessionId = selected;
+  }
+  activity.hidden = !active;
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
   $('model').textContent = modelName;
   $('model').title = modelName ? `Switch model: ${modelName}` : '';

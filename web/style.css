@@ -10,7 +10,6 @@
   --user: #edf0eb;
   --error: #a33030;
   --warning: #77591a;
-  --activity: #ad4f2d;
   --selection: #d3e4de;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --content-width: 48rem;
@@ -31,7 +30,6 @@
     --user: #343840;
     --error: #ffa4a4;
     --warning: #e4c078;
-    --activity: #eea17d;
     --selection: #3d5955;
   }
 }
@@ -141,7 +139,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
 .composer { position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, env(safe-area-inset-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
-#agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--activity); }
+#agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 #composer-connection { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--panel); color: var(--text); }
 .connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid var(--muted); border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }

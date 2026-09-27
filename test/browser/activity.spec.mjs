@@ -25,16 +25,21 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.getByRole('button', { name: /Review changes/ }).click();
   const activity = page.locator('#agent-activity');
   await expect(activity).toBeHidden();
+  await page.evaluate(() => { Math.random = () => 0; });
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  await expect(activity).toHaveText('Pondering…');
+  await expect(activity).toHaveText('Thinking…');
+  await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
+  await page.evaluate(() => { Math.random = () => 0.999; });
   await expect(activity).toHaveAttribute('role', 'status');
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'connection-spin');
   state.messages[1].text += ' The first run took longer.'; snapshot();
   await expect(activity).toBeVisible();
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
   await expect(page.locator('.tool')).toBeVisible();
-  await expect(activity).toBeVisible();
+  await expect(activity).toHaveText('Thinking…'); // Streaming updates must not shuffle the label.
+  await page.locator('#prompt').fill('Keep checking');
+  await expect(activity).toHaveText('Thinking…');
   const checkPosition = async () => expect(async () => {
     const row = await activity.boundingBox(), composer = await page.locator('#composer').boundingBox();
     expect(row.y + row.height).toBeLessThanOrEqual(composer.y);
@@ -55,6 +60,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
+  await expect(activity).toHaveCSS('color', 'rgb(156, 200, 189)');
   await checkPosition();
   await page.screenshot({ path: 'test-results/activity-desktop.png' });
   for (const status of ['waiting', 'idle', 'saved', 'disconnected']) {
@@ -63,6 +69,14 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   }
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
+  await expect(activity).toHaveText('Piecing it together…');
+  for (const [random, label] of [[0.2, 'Pondering…'], [0.4, 'Working…'], [0.6, 'Mulling it over…']]) {
+    state.status = 'idle'; snapshot();
+    await expect(activity).toBeHidden();
+    await page.evaluate(value => { Math.random = () => value; }, random);
+    state.status = 'working'; snapshot();
+    await expect(activity).toHaveText(label);
+  }
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();
