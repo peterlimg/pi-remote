@@ -268,8 +268,9 @@ function renderList() {
         button.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + item.preview, 'session-preview'));
       }
       const meta = el('div', undefined, 'session-meta');
-      const project = el('span', item.cwd.split(/[\\/]/).filter(Boolean).at(-1) || item.cwd, 'session-project');
-      project.title = item.cwd;
+      const cwd = displayPaths(item.cwd);
+      const project = el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'session-project');
+      project.title = cwd;
       const status = el('span', statusLabels[item.status] || item.status, 'session-state');
       status.dataset.status = item.status;
       meta.append(project, status);
@@ -287,7 +288,11 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
+function displayPaths(text) {
+  return text.replace(/(^|[\s"'`=:(])\/(?:Users|home)\/[^/\s"'`:]+/g, '$1~');
+}
 function renderProject(cwd = '') {
+  cwd = displayPaths(cwd);
   $('project').textContent = cwd;
   $('project-name').textContent = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
   $('project-name').hidden = !cwd;
@@ -347,6 +352,7 @@ function renderConversation(state) {
         if (Number.isInteger(args.limit) && args.limit > 0) context += '-' + (start + args.limit - 1);
       }
     }
+    context = displayPaths(context);
     const summary = el('summary'), heading = el('span', undefined, 'tool-heading');
     heading.append(el('strong', toolName === 'bash' ? '$' : toolName));
     if (toolName === 'bash') heading.append(el('span', 'bash', 'sr-only'));
@@ -360,7 +366,7 @@ function renderConversation(state) {
     const statusLabel = el('span', status, 'tool-status');
     statusLabel.hidden = status === 'done';
     heading.append(statusLabel); summary.append(heading);
-    const output = result?.text || live?.text || '';
+    const output = displayPaths(result?.text || live?.text || '');
     if (toolName === 'bash' && output) {
       const lines = output.trimEnd().split(/\r?\n/), preview = el('span', undefined, 'tool-preview');
       if (lines.length > 5) preview.append(el('span', `${lines.length - 5} earlier lines · expand`, 'tool-preview-hint'));
@@ -369,7 +375,7 @@ function renderConversation(state) {
       summary.append(preview);
     }
     detail.append(summary);
-    if (input) detail.append(el('pre', input, 'tool-input'));
+    if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
     detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     fragment.append(detail);
