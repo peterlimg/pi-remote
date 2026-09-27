@@ -95,8 +95,8 @@ aside footer { border-top: 1px solid var(--line); padding: 12px 8px 0; margin-to
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .conversation-heading { grid-column: 2; min-width: 0; text-align: center; }
-.conversation-header h1 { font-size: 16px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#project-name { margin: 0; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-header h1 { font-size: 14px; font-weight: 500; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#project-name { margin: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #back, .session-info summary { width: 44px; height: 44px; padding: 0; color: var(--text); }
 #back svg { display: block; margin: auto; }
 .session-info { position: relative; grid-column: 3; font-size: 12px; }

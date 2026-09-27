@@ -63,6 +63,9 @@ test('conversation header centers and truncates long titles without crowding its
   for (const [width, colorScheme] of [[390, 'light'], [320, 'dark'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme });
+    await expect(page.locator('#title')).toHaveCSS('font-size', '14px');
+    await expect(page.locator('#title')).toHaveCSS('font-weight', '500');
+    await expect(page.locator('#project-name')).toHaveCSS('font-size', '12px');
     const header = await page.locator('.conversation-header').boundingBox();
     const title = await page.locator('#title').boundingBox();
     const details = page.locator('.session-info summary');
@@ -74,6 +77,7 @@ test('conversation header centers and truncates long titles without crowding its
     expect(header.height).toBeLessThan(80);
     if (width < 700) {
       const back = await page.locator('#back').boundingBox();
+      await expect(page.locator('#back svg')).toHaveCSS('width', '22px');
       expect(back.width).toBeGreaterThanOrEqual(44);
       expect(back.x + back.width).toBeLessThan(title.x);
       expect(await page.locator('#title').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
