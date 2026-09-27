@@ -62,7 +62,7 @@ for (const outcome of ['confirmed', 'unknown', 'timeout', 'edited', 'unsupported
     await expect(page.locator('#attachments')).toBeHidden();
     await expect(page.locator('#notice')).toBeHidden();
   }
-  await expect(page.locator('#attach')).toBeEnabled();
+  await expect(page.getByLabel('Attach images', { exact: true })).toBeEnabled();
   expect(commands).toHaveLength(1);
   expect(lookups).toHaveLength(outcome === 'unsupported' ? 0 : 1);
   if (lookups.length) {

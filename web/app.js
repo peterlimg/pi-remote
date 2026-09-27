@@ -493,7 +493,7 @@ function updateControls() {
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
-  $('attach').disabled = !selected || sending.has(selected);
+  $('image-files').disabled = !selected || sending.has(selected);
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
   $('abort').hidden = !working;
@@ -789,13 +789,12 @@ function renderImages() {
     remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
     remove.addEventListener('click', () => {
       URL.revokeObjectURL(image.url);
-      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('attach').focus();
+      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus();
     });
     item.append(preview, remove); return item;
   }));
   updateControls();
 }
-$('attach').addEventListener('click', () => $('image-files').click());
 $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';

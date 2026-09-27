@@ -71,10 +71,9 @@
         </div>
         <p id="composer-send-status" class="hint" role="status" hidden></p>
         <div id="attachments" class="attachments" aria-label="Attached images" hidden></div>
-        <input id="image-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
-          <button id="attach" type="button" class="quiet" aria-label="Attach images" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <label id="attach" class="quiet" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images" accept="image/jpeg,image/png,image/gif,image/webp" multiple></label>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="model-picker" hidden></button>
             <label id="reasoning-control" class="setting-control" hidden><span id="reasoning-value"></span><select id="reasoning" aria-label="Reasoning effort" title="Change reasoning effort. Pi applies the closest level supported by this model."><option value="off">Off</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select></label>

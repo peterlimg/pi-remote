@@ -64,6 +64,29 @@ test('thread images load lazily, survive updates, open full size and retry failu
   expect(errors).toEqual([]);
 });
 
+test('native image picker has an anchor on the plus control before and after keyboard dismissal', async ({ page }) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.locator('#prompt').fill('Keep this draft');
+  // Browser automation cannot show the iOS source menu or software keyboard.
+  // Check its real input anchor through the corresponding viewport sizes.
+  for (const height of [460, 844]) {
+    await page.setViewportSize({ width: 390, height });
+    await expect(page.locator('#app')).toHaveCSS('height', `${height}px`);
+    const anchor = page.locator('#image-files');
+    const control = await page.locator('#attach').boundingBox();
+    expect(await anchor.boundingBox()).toEqual(control);
+    await expect(anchor).toHaveAccessibleName('Attach images');
+    expect(control.width).toBeGreaterThanOrEqual(44);
+    expect(control.height).toBeGreaterThanOrEqual(44);
+    const picker = page.waitForEvent('filechooser');
+    await anchor.tap();
+    expect((await picker).isMultiple()).toBe(true);
+    await anchor.dispatchEvent('cancel');
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+  }
+});
+
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {
   const states = ['Alpha', 'Beta'].map(id => ({ id, title: id, cwd: '/project', status: 'idle', messages: [] }));
   const commands = [], errors = [];
@@ -84,11 +107,12 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Alpha/ }).click();
   const picker = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Attach images' }).click();
+  await page.getByLabel('Attach images', { exact: true }).click();
   await (await picker).setFiles(file);
   await expect(page.getByRole('img', { name: file.name })).toBeVisible();
   await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
   await page.getByRole('button', { name: `Remove ${file.name}` }).click();
+  await expect(page.getByLabel('Attach images', { exact: true })).toBeFocused();
   await expect(page.locator('#attachments')).toBeHidden();
   await page.locator('#image-files').setInputFiles(file);
   await page.locator('#prompt').fill('What is in this image?');
@@ -107,7 +131,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#attachments img')).toHaveCount(1);
   await page.locator('#send').click();
   await expect.poll(() => commands.length).toBe(1);
-  await expect(page.getByRole('button', { name: 'Attach images' })).toBeDisabled();
+  await expect(page.getByLabel('Attach images', { exact: true })).toBeDisabled();
   finish(false, 'Upload rejected');
   await expect(page.locator('#notice')).toHaveText('Upload rejected');
   await expect(page.locator('#attachments img')).toHaveCount(1);
