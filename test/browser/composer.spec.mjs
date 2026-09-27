@@ -1,5 +1,24 @@
 import { test, expect } from '@playwright/test';
 
+test('focusing the message field has no tap overlay and keeps the composer focus border', async ({ page }) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const prompt = page.locator('#prompt'), composer = page.locator('#composer');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.locator('#transcript').focus();
+    const background = await composer.evaluate(node => getComputedStyle(node).backgroundColor);
+    const border = await composer.evaluate(node => getComputedStyle(node).borderColor);
+    // Native tap feedback is transient and is not reliably captured by screenshots.
+    await expect(prompt).toHaveCSS('-webkit-tap-highlight-color', 'rgba(0, 0, 0, 0)');
+    await prompt.tap();
+    await expect(prompt).toBeFocused();
+    await expect(composer).toHaveCSS('background-color', background);
+    await expect(composer).not.toHaveCSS('border-color', border);
+    await expect(prompt).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  }
+});
+
 test('compact composer keeps controls on one row across draft, working and offline states', async ({ page }) => {
   const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
     model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium', messages: [
