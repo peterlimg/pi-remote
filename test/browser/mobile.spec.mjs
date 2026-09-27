@@ -170,13 +170,17 @@ test('desktop Enter sends, Shift+Enter adds a line and Alt+Enter queues a follow
     await expect.poll(() => commands.length).toBe(1);
     await expect(prompt).toHaveValue('');
     await prompt.fill('next turn');
+    // Clearing now means the draft was captured, not that delivery was acknowledged.
+    await expect(page.locator('#send')).toBeEnabled();
     await prompt.press('Alt+Enter');
     await expect(prompt).toHaveValue('');
+    await expect.poll(() => commands.length).toBe(2);
     expect(commands).toEqual([{ type: 'prompt', text: 'first line\n' }, { type: 'followUp', text: 'next turn' }]);
     await expect(page.locator('#composer select:not(#reasoning)')).toHaveCount(0);
     await prompt.fill('normal message');
     await page.locator('#send').click();
     await expect(prompt).toHaveValue('');
+    await expect.poll(() => commands.length).toBe(3);
     expect(commands.at(-1)).toEqual({ type: 'prompt', text: 'normal message' });
   } finally { await context.close(); }
 });

@@ -47,7 +47,7 @@ let socket, selected, sessions = [], connected = false, manualClose = false, rec
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-const sending = new Set(), changingReasoning = new Set(), commandCatalog = new Map();
+const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
 if (hashToken) {
@@ -181,7 +181,9 @@ window.addEventListener('storage', event => {
 function logout() {
   manualClose = true; disconnect();
   token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
-  for (const id of imageDrafts.keys()) clearImages(id);
+  for (const images of imageDrafts.values()) releaseImages(images);
+  for (const draft of sending.values()) releaseImages(draft.attachments);
+  imageDrafts.clear(); sending.clear();
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
@@ -402,6 +404,9 @@ function updateControls() {
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const working = state && ['working', 'waiting'].includes(state.status);
   const hasDraft = !!$('prompt').value.trim() || !!imageDrafts.get(selected)?.length;
+  const outgoing = sending.get(selected), imageCount = outgoing?.attachments.length || 0;
+  $('composer-send-status').hidden = !outgoing;
+  $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${imageCount === 1 ? 'image' : 'images'}…` : 'Sending…';
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
@@ -688,9 +693,8 @@ $('prompt').addEventListener('keydown', event => {
     sendMessage(event.altKey ? 'followUp' : 'prompt');
   }
 });
-function clearImages(id) {
-  for (const image of imageDrafts.get(id) || []) URL.revokeObjectURL(image.url);
-  imageDrafts.delete(id);
+function releaseImages(images) {
+  for (const image of images) URL.revokeObjectURL(image.url);
 }
 function renderImages() {
   const images = imageDrafts.get(selected) || [];
@@ -729,8 +733,12 @@ async function sendMessage(type = 'prompt') {
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
   if (attachments.length && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.length && text.trim().startsWith('/')) { notice('Send images with a message, not a slash command.'); return; }
-  sending.add(id);
-  updateControls(); notice('');
+  const outgoing = { text, attachments };
+  sending.set(id, outgoing);
+  // The editor owns the next draft; retain this submission until delivery is confirmed.
+  drafts.set(id, ''); imageDrafts.delete(id);
+  $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
+  let restored = false;
   try {
     const images = await Promise.all(attachments.map(({ file }) => new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -739,7 +747,7 @@ async function sendMessage(type = 'prompt') {
       reader.readAsDataURL(file);
     })));
     // Signing out while files are being read must not send them through a later login.
-    if (!token || (attachments.length && imageDrafts.get(id) !== attachments)) return;
+    if (sending.get(id) !== outgoing) return;
     let created;
     if (text.trim() === '/new') created = await request('new', { sessionId: id });
     else if (/^\/model(?:\s|$)/.test(text.trim())) {
@@ -747,12 +755,21 @@ async function sendMessage(type = 'prompt') {
       if (key) await switchModel(id, key);
       else openModels(id);
     } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}) } });
-    if (imageDrafts.get(id) === attachments) { clearImages(id); if (selected === id) renderImages(); }
-    if (drafts.get(id) === text) drafts.set(id, '');
-    if (selected === id && $('prompt').value === text) { $('prompt').value = ''; resizePrompt(); }
+    if (sending.get(id) !== outgoing) return;
     if (created && selected === id) await selectSession(created.sessionId);
-  } catch (e) { notice(e.message); }
-  finally { sending.delete(id); updateControls(); }
+  } catch (e) {
+    if (sending.get(id) !== outgoing) return;
+    const nextText = selected === id ? $('prompt').value : drafts.get(id) || '';
+    drafts.set(id, [text, nextText].filter(Boolean).join('\n\n'));
+    imageDrafts.set(id, attachments); restored = true;
+    if (selected === id) { $('prompt').value = drafts.get(id); resizePrompt(); renderImages(); }
+    notice(e.message);
+  } finally {
+    if (sending.get(id) === outgoing) {
+      if (!restored) releaseImages(attachments);
+      sending.delete(id); updateControls();
+    }
+  }
 }
 $('abort').addEventListener('click', async () => {
   try { await request('command', { sessionId: selected, command: { type: 'abort' } }); }

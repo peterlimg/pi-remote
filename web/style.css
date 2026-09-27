@@ -177,7 +177,7 @@ pre.message-text { white-space: pre-wrap; }
 #reasoning-control:has(select:disabled) { opacity: .45; }
 #reasoning { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
 #resume { align-self: flex-start; padding-inline: 10px; }
-#composer-hint { margin: 0; padding: 4px 10px; }
+#composer-hint, #composer-send-status { margin: 0; padding: 4px 10px; }
 .dialog { padding: 16px 24px; background: var(--panel); max-height: 35dvh; overflow: auto; }
 .dialog h3 { font-size: 14px; }
 .dialog input, .dialog textarea, .dialog select { display: block; width: 100%; margin-bottom: 12px; font-size: 16px; }
