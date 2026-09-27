@@ -57,7 +57,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .login form { display: grid; gap: 12px; margin: 28px 0 20px; }
 .login input { font-size: 16px; }
 .login-error { padding: 16px; color: var(--error); text-align: center; }
-.shell { position: fixed; top: var(--viewport-top, 0px); left: 0; right: 0; display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
+.shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
 .shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 16px; padding-left: 8px; }
 .brand strong { font-size: 14px; font-weight: 600; }
@@ -102,7 +102,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .session-info { position: relative; grid-column: 3; font-size: 12px; }
 .session-info summary { display: grid; place-items: center; list-style: none; }
 .session-info summary::-webkit-details-marker { display: none; }
-.session-info p { position: absolute; z-index: 1; right: 0; top: 100%; width: min(300px, 85vw); margin: 0; padding: 16px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; font-family: var(--mono); }
+.session-info p { position: absolute; z-index: 1; right: 0; top: 100%; width: min(300px, calc(85vw / var(--viewport-scale, 1))); margin: 0; padding: 16px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; font-family: var(--mono); }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
 #transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; overscroll-behavior: contain; }
@@ -143,7 +143,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.composer { position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, env(safe-area-inset-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
+.composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, env(safe-area-inset-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
 #agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 #composer-connection { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--panel); color: var(--text); }
@@ -171,6 +171,11 @@ pre.message-text { white-space: pre-wrap; }
 .composer:focus-within { border-color: var(--accent); }
 .composer-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+/* Pinch zoom can leave less space than the smallest layout-viewport breakpoint. */
+@container (max-width: 260px) {
+  .composer-toolbar { flex-wrap: wrap; }
+  .composer-settings { order: -1; width: 100%; }
+}
 .composer-actions button { font-size: 12px; }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }

@@ -30,11 +30,13 @@ new ResizeObserver(([entry]) => {
   promptWidth = entry.contentRect.width;
   resizePrompt();
 }).observe($('prompt'));
-// iOS keyboards resize/pan the visual viewport, not the CSS layout viewport.
+// Keyboards and pinch zoom change the visible area without resizing the layout viewport.
+// Reflow inside it, keeping the browser's magnification and all controls reachable.
 function fitViewport() {
   const viewport = window.visualViewport;
-  if (viewport && Math.abs(viewport.scale - 1) > 0.01) return; // Leave pinch zoom to the browser.
+  document.documentElement.style.setProperty('--viewport-scale', `${viewport?.scale ?? 1}`);
   document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
+  document.documentElement.style.setProperty('--viewport-left', `${viewport?.offsetLeft ?? 0}px`);
   document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
 }
 window.visualViewport?.addEventListener('resize', fitViewport);

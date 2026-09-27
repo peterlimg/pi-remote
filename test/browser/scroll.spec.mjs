@@ -164,17 +164,62 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   await expect.poll(height).toBe(compact);
 });
 
+test('zoom keeps session navigation and composer controls inside the visible viewport', async ({ page }) => {
+  const state = { id: 'zoom', title: 'A long conversation title that must leave room for navigation',
+    cwd: '/projects/pi-remote', status: 'working', model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium',
+    messages: [{ id: 'reply', role: 'assistant', text: 'A reply that should wrap instead of being cut off. '.repeat(40) }] };
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: Array.from({ length: 21 }, (_, i) => ({ ...state, id: String(i) })) }));
+    } else {
+      if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 1, state }));
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+    }
+  }));
+  await page.goto(login);
+  await expect(page.locator('.session')).toHaveCount(20);
+  const cdp = await page.context().newCDPSession(page);
+  const fits = async selectors => {
+    await expect.poll(() => page.evaluate(selectors => {
+      const v = visualViewport;
+      return selectors.filter(selector => {
+        const r = document.querySelector(selector).getBoundingClientRect();
+        return r.left < v.offsetLeft - 1 || r.right > v.offsetLeft + v.width + 1
+          || r.top < v.offsetTop - 1 || r.bottom > v.offsetTop + v.height + 1;
+      });
+    }, selectors)).toEqual([]);
+  };
+  for (const scale of [1.07, 2, 1]) {
+    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: scale });
+    await fits(['#app', '#search', '#logout', '#list-next', '#connection']);
+    await page.locator('.session').first().click();
+    await page.locator('#prompt').fill('A draft keeps both Send and Abort available');
+    await expect(page.locator('#send')).toBeVisible();
+    await fits(['#app', '#back', '.session-info summary', '#transcript', '#composer', '#attach', '#model', '#reasoning-control', '#send', '#abort']);
+    await page.locator('.session-info summary').click();
+    await fits(['#project']);
+    await page.locator('.session-info summary').click();
+    expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    // Preserve browser magnification rather than silently resetting or disabling zoom.
+    expect(await page.evaluate(() => visualViewport.scale)).toBeCloseTo(scale, 2);
+    await page.screenshot({ path: `test-results/viewport-zoom-${scale}.png` });
+    await page.locator('#back').click();
+  }
+});
+
 test('the app follows keyboard viewport changes without resizing the document', async ({ page }) => {
   // Desktop automation has no iOS keyboard. Exercise its visual viewport events separately.
-  await page.addInitScript(() => {
+  await page.addInitScript(({ width, height }) => {
     const viewport = new EventTarget();
-    Object.assign(viewport, { height: innerHeight, offsetTop: 0, scale: 1 });
+    Object.assign(viewport, { width, height, offsetLeft: 0, offsetTop: 0, scale: 1 });
     Object.defineProperty(window, 'visualViewport', { value: viewport });
     window.changeViewport = (values, event = 'resize') => {
       Object.assign(viewport, values);
       viewport.dispatchEvent(new Event(event));
     };
-  });
+  }, page.viewportSize());
   await page.goto(login);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await page.locator('#prompt').fill('Send with the keyboard open');
@@ -185,7 +230,8 @@ test('the app follows keyboard viewport changes without resizing the document', 
   const composer = await page.locator('#composer').boundingBox();
   expect(composer.y + composer.height).toBeLessThanOrEqual(390);
   expect(composer.height).toBeLessThanOrEqual(110);
-  expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(170);
+  // Working sessions also reserve space for the activity indicator.
+  expect((await page.locator('#transcript').boundingBox()).height).toBeGreaterThan(100);
   await page.locator('#prompt').fill('Scrollable draft\n'.repeat(20));
   // Growth must use the keyboard-reduced viewport, not dvh.
   expect((await page.locator('#composer').boundingBox()).height).toBeGreaterThan(composer.height);
@@ -195,10 +241,9 @@ test('the app follows keyboard viewport changes without resizing the document', 
   await page.screenshot({ path: 'test-results/composer-keyboard.png' });
   await page.locator('#send').click();
   await expect(page.locator('#prompt')).toHaveValue('');
-  await page.evaluate(() => window.changeViewport({ height: 175, offsetTop: 90, scale: 2 }));
-  expect((await page.locator('#app').boundingBox()).height).toBe(350);
-  expect((await page.locator('#app').boundingBox()).y).toBe(40);
-  await page.evaluate(() => window.changeViewport({ height: innerHeight, offsetTop: 0, scale: 1 }));
+  await page.evaluate(() => window.changeViewport({ width: 195, height: 175, offsetLeft: 25, offsetTop: 90, scale: 2 }));
+  expect(await page.locator('#app').boundingBox()).toEqual({ x: 25, y: 90, width: 195, height: 175 });
+  await page.evaluate(() => window.changeViewport({ width: innerWidth, height: innerHeight, offsetLeft: 0, offsetTop: 0, scale: 1 }));
   await expect.poll(() => page.locator('#app').evaluate(node => node.getBoundingClientRect().top)).toBe(0);
   expect((await page.locator('#app').boundingBox()).height).toBe(page.viewportSize().height);
   expect(await page.evaluate(() => scrollY)).toBe(0);
