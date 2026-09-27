@@ -188,7 +188,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
 .composer-toolbar #attach, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
-/* Give Safari a real file-input anchor, not a hidden input's stale tap location. */
+/* Keep the native file input aligned with its visible attachment control. */
 #attach { position: relative; }
 #image-files { position: absolute; inset: -6px; width: 44px; height: 44px; padding: 0; border: 0; opacity: 0; font-size: 16px; cursor: pointer; }
 #attach:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }

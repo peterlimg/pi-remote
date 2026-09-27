@@ -795,6 +795,38 @@ function renderImages() {
   }));
   updateControls();
 }
+let openingImages = false;
+// Keep the editor focused until click so we can dismiss its keyboard first.
+$('image-files').addEventListener('mousedown', event => event.preventDefault());
+$('image-files').addEventListener('click', event => {
+  if (openingImages) { event.preventDefault(); return; }
+  const active = document.activeElement;
+  if (!active?.matches('textarea, input:not([type=file])')) return;
+  event.preventDefault();
+  openingImages = true;
+  const input = event.currentTarget, id = selected, viewport = window.visualViewport;
+  const started = performance.now();
+  let changed = started;
+  const resized = () => { changed = performance.now(); };
+  const open = () => {
+    // Bound the wait to Safari's short-lived file-picker gesture permission.
+    if (performance.now() - changed < 100 && performance.now() - started < 900) {
+      setTimeout(open, 50); return;
+    }
+    viewport?.removeEventListener('resize', resized);
+    viewport?.removeEventListener('scroll', resized);
+    openingImages = false;
+    if (selected !== id || input.disabled || !input.getClientRects().length ||
+      document.activeElement?.matches('textarea, input:not([type=file])')) return;
+    input.click();
+  };
+  viewport?.addEventListener('resize', resized);
+  viewport?.addEventListener('scroll', resized);
+  active.blur();
+  // Safari anchors once, before closing the keyboard. Keep the timer chain rooted
+  // in this tap; opening from a resize callback loses its file-picker permission.
+  setTimeout(open, 350);
+});
 $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';

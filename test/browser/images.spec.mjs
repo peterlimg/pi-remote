@@ -64,27 +64,56 @@ test('thread images load lazily, survive updates, open full size and retry failu
   expect(errors).toEqual([]);
 });
 
-test('native image picker has an anchor on the plus control before and after keyboard dismissal', async ({ page }) => {
+test('image picker waits for keyboard dismissal before Safari captures its anchor', async ({ page }) => {
+  // Native repro: in iOS Safari, focus Message, type a draft, then tap +.
+  // The source menu must stay beside + after the keyboard closes, including on reopening.
+  await page.addInitScript(() => {
+    const viewport = new EventTarget();
+    Object.assign(viewport, { height: innerHeight, offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { value: viewport });
+    window.keyboardHeight = height => {
+      viewport.height = height; viewport.dispatchEvent(new Event('resize'));
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  await page.locator('#prompt').fill('Keep this draft');
-  // Browser automation cannot show the iOS source menu or software keyboard.
-  // Check its real input anchor through the corresponding viewport sizes.
-  for (const height of [460, 844]) {
-    await page.setViewportSize({ width: 390, height });
-    await expect(page.locator('#app')).toHaveCSS('height', `${height}px`);
-    const anchor = page.locator('#image-files');
-    const control = await page.locator('#attach').boundingBox();
-    expect(await anchor.boundingBox()).toEqual(control);
-    await expect(anchor).toHaveAccessibleName('Attach images');
-    expect(control.width).toBeGreaterThanOrEqual(44);
-    expect(control.height).toBeGreaterThanOrEqual(44);
-    const picker = page.waitForEvent('filechooser');
-    await anchor.tap();
-    expect((await picker).isMultiple()).toBe(true);
-    await anchor.dispatchEvent('cancel');
-    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
-  }
+  const prompt = page.locator('#prompt'), input = page.getByLabel('Attach images', { exact: true });
+  const pickers = [];
+  page.on('filechooser', picker => pickers.push(picker));
+  await prompt.fill('Keep this draft');
+  await page.evaluate(() => window.keyboardHeight(460));
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await input.tap();
+  await expect(prompt).not.toBeFocused();
+  expect(pickers).toHaveLength(0);
+  await page.clock.runFor(300);
+  await page.evaluate(() => window.keyboardHeight(700));
+  await input.tap(); // Repeated taps must not bypass the keyboard wait.
+  await page.clock.runFor(50);
+  expect(pickers).toHaveLength(0);
+  await page.evaluate(() => window.keyboardHeight(844));
+  await page.clock.runFor(100);
+  await expect.poll(() => pickers.length).toBe(1);
+  expect(pickers[0].isMultiple()).toBe(true);
+  expect(await input.boundingBox()).toEqual(await page.locator('#attach').boundingBox());
+  await input.dispatchEvent('cancel');
+  await expect(prompt).toHaveValue('Keep this draft');
+  await input.tap(); // No keyboard: reopen immediately, with no duplicate source sheet.
+  await expect.poll(() => pickers.length).toBe(2);
+  await input.dispatchEvent('cancel');
+  await prompt.focus();
+  await input.tap(); // A hardware keyboard emits no resize; the fallback still opens.
+  await page.clock.runFor(350);
+  await expect.poll(() => pickers.length).toBe(3);
+  await input.dispatchEvent('cancel');
+  await prompt.focus();
+  await input.tap();
+  await page.locator('#back').click();
+  await page.getByRole('button', { name: /Project Beta/ }).click();
+  await page.clock.runFor(1000);
+  expect(pickers).toHaveLength(3); // Never open a delayed picker for a different session.
 });
 
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {
