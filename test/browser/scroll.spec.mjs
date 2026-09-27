@@ -122,10 +122,14 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   expect((await page.locator('#composer').boundingBox()).width - (await prompt.boundingBox()).width).toBe(18);
   await prompt.fill('One line');
   await expect(page.locator('#send')).toHaveAccessibleName('Send message');
-  expect(await page.locator('#send').evaluate(node => {
-    const style = getComputedStyle(node);
-    return { radius: style.borderRadius, clip: style.backgroundClip, visibleSize: node.clientWidth - 2 * parseFloat(style.paddingLeft), target: node.clientWidth };
-  })).toEqual({ radius: '50%', clip: 'border-box', visibleSize: 44, target: 44 });
+  for (const id of ['attach', 'send', 'abort']) {
+    expect(await page.locator(`#${id}`).evaluate(node => {
+      const style = getComputedStyle(node);
+      return { radius: style.borderRadius, clip: style.backgroundClip,
+        visibleSize: parseFloat(style.width) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth),
+        target: parseFloat(style.width), icon: getComputedStyle(node.querySelector('svg')).width };
+    })).toEqual({ radius: '50%', clip: 'padding-box', visibleSize: 32, target: 44, icon: '18px' });
+  }
   expect(await height()).toBe(compact);
   await prompt.press('Enter');
   await prompt.pressSequentially('Second line');

@@ -170,8 +170,10 @@ pre.message-text { white-space: pre-wrap; }
 .composer-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 .composer-actions button { font-size: 12px; }
-.composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
-.composer-toolbar #attach, .composer-actions #abort { background: var(--panel); color: var(--text); }
+/* Keep 44px tap targets around the smaller 32px circles. */
+.composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
+.composer-toolbar #attach, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
+.composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
 .composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 24px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 24px; }
