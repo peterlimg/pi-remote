@@ -179,6 +179,7 @@ window.addEventListener('storage', event => {
   if (event.storageArea === localStorage && (event.key === 'pi-remote-token' || event.key === null) && !event.newValue) logout();
 });
 function logout() {
+  $('attachment-picker').close();
   manualClose = true; disconnect();
   token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
@@ -298,6 +299,7 @@ function renderProject(cwd = '') {
   $('project-name').hidden = !cwd;
 }
 async function selectSession(id) {
+  $('attachment-picker').close();
   closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
   selected = id; selectedSummary = sessions.find(item => item.id === id); unread.delete(id); $('prompt').value = drafts.get(id) || '';
@@ -723,10 +725,26 @@ function renderImages() {
   }));
   updateControls();
 }
-$('attach').addEventListener('click', () => $('image-files').click());
-$('image-files').addEventListener('change', () => {
-  const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
-  $('image-files').value = '';
+$('attach').addEventListener('click', () => {
+  closeModels();
+  commandDismissed = true; renderCommands();
+  $('attachment-picker').showModal();
+  $('attach').setAttribute('aria-expanded', 'true');
+});
+$('attachment-cancel').addEventListener('click', () => $('attachment-picker').close());
+$('attachment-picker').addEventListener('close', () => $('attach').setAttribute('aria-expanded', 'false'));
+$('attachment-picker').addEventListener('click', event => {
+  const sheet = $('attachment-picker'), rect = sheet.getBoundingClientRect();
+  if (event.target === sheet && (event.clientX < rect.left || event.clientX > rect.right ||
+    event.clientY < rect.top || event.clientY > rect.bottom)) sheet.close();
+});
+for (const button of document.querySelectorAll('[data-file-input]')) button.addEventListener('click', () => {
+  $('attachment-picker').close();
+  $(button.dataset.fileInput).click();
+});
+for (const input of [$('image-files'), $('photo-files'), $('camera-file')]) input.addEventListener('change', () => {
+  const files = [...input.files], images = imageDrafts.get(selected) || [];
+  input.value = '';
   if (!selected || sending.has(selected) || !files.length) return;
   if (images.length + files.length > MAX_IMAGES || files.some(file => !IMAGE_TYPES.includes(file.type) || !file.size) ||
     images.reduce((sum, image) => sum + image.file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {

@@ -71,10 +71,12 @@
         </div>
         <p id="composer-send-status" class="hint" role="status" hidden></p>
         <div id="attachments" class="attachments" aria-label="Attached images" hidden></div>
-        <input id="image-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+        <input id="image-files" type="file" multiple hidden>
+        <input id="photo-files" type="file" accept="image/*" multiple hidden>
+        <input id="camera-file" type="file" accept="image/*" capture="environment" hidden>
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
-          <button id="attach" type="button" class="quiet" aria-label="Attach images" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button id="attach" type="button" class="quiet" aria-label="Attach images" aria-haspopup="dialog" aria-controls="attachment-picker" aria-expanded="false" title="Add context"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="model-picker" hidden></button>
             <label id="reasoning-control" class="setting-control" hidden><span id="reasoning-value"></span><select id="reasoning" aria-label="Reasoning effort" title="Change reasoning effort. Pi applies the closest level supported by this model."><option value="off">Off</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select></label>
@@ -90,6 +92,18 @@
       </form>
     </main>
   </div>
+  <dialog id="attachment-picker" aria-labelledby="attachment-picker-title" aria-describedby="attachment-picker-help">
+    <header class="attachment-picker-header">
+      <button id="attachment-cancel" type="button" class="quiet" aria-label="Close attachment picker" autofocus><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      <h2 id="attachment-picker-title">Add context</h2>
+    </header>
+    <div class="attachment-sources">
+      <button type="button" data-file-input="camera-file"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5 9.5 3h5L16 5h4a1 1 0 0 1 1 1v14H3V6a1 1 0 0 1 1-1Z"/><circle cx="12" cy="12" r="4"/></svg><span>Camera</span></button>
+      <button type="button" data-file-input="photo-files"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 5"/></svg><span>Photos</span></button>
+      <button type="button" data-file-input="image-files"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H5v20h14V7Zm0 0v5h5M12 18V10m-3 3 3-3 3 3"/></svg><span>Files</span></button>
+    </div>
+    <p id="attachment-picker-help" class="hint">Up to 4 images, 2 MB total. JPEG, PNG, GIF or WebP only.</p>
+  </dialog>
   <p id="login-error" class="login-error" role="alert" hidden></p>
 </body>
 </html>
