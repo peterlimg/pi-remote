@@ -68,6 +68,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #search { font-size: 16px; margin-bottom: 8px; width: 100%; }
 #sessions { overflow: auto; flex: 1; min-height: 0; }
 #list-empty { padding: 8px; }
+.list-pagination { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; margin-top: 8px; }
+.list-pagination button { padding-inline: 8px; font-size: 12px; }
+#list-page { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+#list-retry { width: 100%; }
 .session-group h3 { display: flex; gap: 8px; align-items: baseline; margin: 16px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .session-group + .session-group { margin-top: 16px; }
 .session { display: block; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 3px; border-bottom: 1px solid var(--line); }

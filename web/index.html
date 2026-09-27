@@ -27,9 +27,15 @@
       <header class="brand"><strong>Pi Remote</strong><button id="logout" class="quiet">Sign out</button></header>
       <div class="list-heading"><h2>Sessions</h2><span id="count" class="badge">0</span></div>
       <label class="sr-only" for="search">Search sessions</label>
-      <input id="search" type="search" placeholder="Search task or project">
+      <input id="search" type="search" placeholder="Search task or project" maxlength="500">
       <nav id="sessions" aria-label="Pi sessions"></nav>
-      <p id="list-empty" class="hint">No sessions yet. Start Pi with the remote extension loaded.</p>
+      <p id="list-empty" class="hint" hidden>No sessions yet. Start Pi with the remote extension loaded.</p>
+      <nav class="list-pagination" aria-label="Session pages">
+        <button id="list-previous" type="button" class="quiet" aria-label="Previous session page" disabled>Previous</button>
+        <span id="list-page" class="hint" role="status">Loading sessions…</span>
+        <button id="list-next" type="button" class="quiet" aria-label="Next session page" disabled>Next</button>
+        <button id="list-retry" type="button" class="quiet" hidden>Try again</button>
+      </nav>
       <footer>
         <span id="connection" role="status">Connecting…</span>
         <details id="diagnostics" hidden><summary id="warnings-summary"></summary><ul id="warnings"></ul></details>

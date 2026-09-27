@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { summary } from '../../src/state.mjs';
+import { SessionService } from '../../src/service.mjs';
 
 test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }) => {
   let client;
@@ -14,13 +14,22 @@ test('same-project sessions show their tasks, previews, status and activity with
     ...Array.from({ length: 672 }, (_, i) => ({ id: 'saved-' + i, title: 'Pi · Rill', cwd: '/projects/Rill', status: 'saved', updatedAt: now - i * 3600000,
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
-  const publish = () => client.send(JSON.stringify({ type: 'sessions', sessions: states.map(summary) }));
+  const service = { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true };
+  let options = {}, failList = false;
+  const requests = [];
+  const list = () => SessionService.prototype.list.call(service, options);
+  const publish = () => client.send(JSON.stringify({ type: 'sessions', ...list() }));
   await page.routeWebSocket('**/ws', ws => {
     client = ws;
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
-      if (packet.type === 'auth') { ws.send(JSON.stringify({ type: 'ready' })); publish(); }
-      else if (packet.op === 'watch') {
+      if (packet.type === 'auth') { options = {}; ws.send(JSON.stringify({ type: 'ready' })); publish(); }
+      else if (packet.op === 'list') {
+        requests.push(packet);
+        if (failList) { ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: false, error: 'List unavailable' })); return; }
+        options = packet;
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: list() }));
+      } else if (packet.op === 'watch') {
         ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 1, state: states.find(s => s.id === packet.sessionId) }));
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
       } else ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
@@ -30,7 +39,11 @@ test('same-project sessions show their tasks, previews, status and activity with
   const online = page.getByRole('region', { name: 'Online', exact: true });
   const saved = page.getByRole('region', { name: 'Saved & offline', exact: true });
   await expect(online.locator('.session')).toHaveCount(3);
-  await expect(saved.locator('.session')).toHaveCount(672);
+  await expect(saved.locator('.session')).toHaveCount(17);
+  await expect(page.locator('.session')).toHaveCount(20);
+  await expect(page.locator('#list-page')).toHaveText('1–20 of 675');
+  await expect(page.getByRole('button', { name: 'Previous session page' })).toBeDisabled();
+  expect(requests).toHaveLength(0); // No eager fetch of the remaining pages.
   await expect(page.locator('#count')).toHaveText('675');
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
   const login = online.getByRole('button', { name: /Fix login timing out/ });
@@ -51,12 +64,28 @@ test('same-project sessions show their tasks, previews, status and activity with
   await page.screenshot({ path: 'test-results/sessions-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
+  await page.getByRole('button', { name: 'Next session page' }).click();
+  await expect(page.locator('#list-page')).toHaveText('21–40 of 675');
+  await expect(page.locator('.session')).toHaveCount(20);
+  await expect(online).toHaveCount(0);
+  publish();
+  await expect(page.locator('#list-page')).toHaveText('21–40 of 675');
+  await page.locator('#search').fill('session 672');
+  await expect(page.locator('.session')).toHaveCount(1);
+  await expect(page.locator('.session')).toContainText('session 672');
+  await expect(page.locator('#list-page')).toHaveText('1–1 of 1');
+  await expect(page.getByRole('button', { name: 'Next session page' })).toBeDisabled();
   await page.locator('#search').fill('authentication');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('#count')).toHaveText('1 / 675');
   await page.locator('#search').fill('no such task');
   await expect(page.locator('#list-empty')).toHaveText('No matching sessions. Try another task or project.');
+  failList = true;
   await page.locator('#search').fill('');
+  await expect(page.locator('#list-page')).toHaveText('Could not load sessions. Try again.');
+  failList = false;
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.locator('.session')).toHaveCount(20);
   await login.click();
   await expect(page.locator('#title')).toHaveText(states[0].messages[0].text);
   states[0].messages.push({ role: 'user', text: 'Now check logout' });

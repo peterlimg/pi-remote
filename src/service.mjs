@@ -35,10 +35,18 @@ export class SessionService extends EventEmitter {
     }
     this.emit('list');
   }
-  list() {
+  list({ offset = 0, query = '' } = {}) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
+    const requestOffset = offset;
+    query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker });
-    return { sessions: [...all.values()].sort((a, b) => b.updatedAt - a.updatedAt), warnings: this.warnings, allowResume: this.allowResume };
+    const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
+    const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
+      .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
+    return { sessions: matches.slice(offset, offset + 20), total: all.size, matched: matches.length, offset, requestOffset, query,
+      warnings: this.warnings, allowResume: this.allowResume };
   }
   read(id) {
     if (this.live.has(id)) return this.live.get(id).state;

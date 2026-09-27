@@ -45,7 +45,8 @@ const versions = new Map();
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
-let lastDialog, modelPicker, supportsImages = false;
+let lastDialog, modelPicker, supportsImages = false, allowResume = false, selectedSummary, legacyList;
+let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const sending = new Set(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
@@ -76,10 +77,11 @@ function request(op, extra = {}) {
     socket.send(JSON.stringify({ op, id, ...extra }));
   });
 }
-function connection(text) { $('connection').textContent = text; updateControls(); }
+function connection(text) { $('connection').textContent = text; updateControls(); renderPagination(); }
 function disconnect() {
   closeModels();
-  const old = socket; socket = undefined; connected = false; supportsImages = false;
+  listRequest++; legacyList = undefined;
+  const old = socket; socket = undefined; connected = false; supportsImages = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -116,19 +118,13 @@ function connect() {
         connectionTimer = setTimeout(reconnect, 10000);
         ws.send(JSON.stringify({ op: 'ping', id: crypto.randomUUID() }));
       }, 20000);
+      if (pageOffset || searchQuery || listError) loadList();
       if (selected) {
         request('watch', { sessionId: selected }).catch(e => notice(e.message));
         loadCommands(selected);
       }
     } else if (packet.type === 'sessions') {
-      const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
-      sessions = packet.sessions;
-      for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
-      renderList();
-      const warnings = packet.warnings || [];
-      $('diagnostics').hidden = !warnings.length;
-      $('warnings-summary').textContent = `${warnings.length} scan ${warnings.length === 1 ? 'warning' : 'warnings'}`;
-      $('warnings').replaceChildren(...warnings.map(text => el('li', text)));
+      receiveList(packet);
     } else if (packet.type === 'snapshot') {
       versions.set(packet.sessionId, packet.version);
       cache.set(packet.sessionId, packet.state);
@@ -170,19 +166,66 @@ function logout() {
   manualClose = true; disconnect();
   token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
   for (const id of imageDrafts.keys()) clearImages(id);
-  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; sessions = [];
+  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
+  renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('app').hidden = true; $('login').hidden = false;
 }
 const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
 const activityTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function receiveList(packet) {
+  // A relay deploy can reach the browser before its computer host is restarted.
+  if (packet.total === undefined) {
+    legacyList = packet;
+    const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
+    const matches = packet.sessions.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(searchQuery))
+      .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt);
+    const offset = Math.min(pageOffset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
+    packet = { ...packet, sessions: matches.slice(offset, offset + 20), total: packet.sessions.length, matched: matches.length,
+      query: searchQuery, requestOffset: pageOffset, offset };
+  }
+  if ((packet.query ?? '') !== searchQuery || (packet.requestOffset ?? 0) !== pageOffset) return;
+  const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
+  sessions = packet.sessions; allowResume = packet.allowResume === true;
+  pageOffset = packet.offset ?? 0; listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
+  listLoading = false; listError = '';
+  for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
+  selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
+  renderList(); updateControls();
+  const warnings = packet.warnings || [];
+  $('diagnostics').hidden = !warnings.length;
+  $('warnings-summary').textContent = `${warnings.length} scan ${warnings.length === 1 ? 'warning' : 'warnings'}`;
+  $('warnings').replaceChildren(...warnings.map(text => el('li', text)));
+}
+async function loadList() {
+  clearTimeout(searchTimer);
+  const generation = ++listRequest;
+  listLoading = true; listError = ''; renderPagination();
+  try {
+    const page = legacyList || await request('list', { offset: pageOffset, query: searchQuery });
+    if (generation === listRequest) receiveList(page);
+  } catch (e) {
+    if (generation !== listRequest) return;
+    listLoading = false; listError = e.message; renderPagination();
+  }
+}
+function renderPagination() {
+  $('sessions').setAttribute('aria-busy', String(listLoading));
+  $('sessions').inert = listLoading;
+  $('list-previous').disabled = !connected || listLoading || pageOffset === 0;
+  $('list-next').disabled = !connected || listLoading || pageOffset + 20 >= listMatched;
+  $('list-retry').hidden = !listError; $('list-retry').disabled = !connected || listLoading;
+  $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' :
+    listMatched ? `${pageOffset + 1}–${pageOffset + sessions.length} of ${listMatched}` : '0 sessions';
+  $('list-empty').hidden = listLoading || !!listError || sessions.length > 0;
+}
 function renderList() {
-  const query = $('search').value.trim().toLowerCase();
-  const matches = sessions.filter(x => [x.title, x.cwd, x.preview].join(' ').toLowerCase().includes(query));
-  $('count').textContent = query ? `${matches.length} / ${sessions.length}` : String(sessions.length);
-  $('list-empty').hidden = matches.length > 0;
-  $('list-empty').textContent = sessions.length ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
+  const matches = sessions;
+  $('count').textContent = searchQuery ? `${listMatched} / ${listTotal}` : String(listTotal);
+  $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
+  renderPagination();
   const fragment = document.createDocumentFragment();
   const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
   for (const [label, items] of [
@@ -229,7 +272,7 @@ function renderList() {
 async function selectSession(id) {
   closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
-  selected = id; unread.delete(id); $('prompt').value = drafts.get(id) || '';
+  selected = id; selectedSummary = sessions.find(item => item.id === id); unread.delete(id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
@@ -364,11 +407,11 @@ function updateControls() {
   $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Changing…' : $('reasoning').selectedOptions[0]?.textContent || state?.thinkingLevel || 'Off';
   $('reasoning-control').hidden = !state?.thinkingLevel;
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
-  const meta = sessions.find(x => x.id === selected);
-  $('resume').disabled = !connected || !meta?.resumable;
+  const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
+  $('resume').disabled = !connected || !resumable;
   $('composer-hint').textContent = !connected ? '' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
-    state && ['saved', 'disconnected'].includes(state.status) ? (meta?.resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
+    state && ['saved', 'disconnected'].includes(state.status) ? (resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
   $('composer-hint').hidden = !$('composer-hint').textContent;
   renderCommands();
 }
@@ -577,7 +620,16 @@ $('login-form').addEventListener('submit', event => {
   event.preventDefault(); token = $('token').value.trim(); localStorage.setItem('pi-remote-token', token); $('token').value = ''; connect();
 });
 $('logout').addEventListener('click', logout);
-$('search').addEventListener('input', renderList);
+$('search').addEventListener('input', () => {
+  clearTimeout(searchTimer); listRequest++;
+  searchQuery = $('search').value.trim().toLowerCase(); pageOffset = 0;
+  listLoading = true; listError = ''; renderPagination(); $('sessions').scrollTop = 0;
+  searchTimer = setTimeout(loadList, 250);
+});
+for (const [id, step] of [['list-previous', -20], ['list-next', 20]]) $(id).addEventListener('click', () => {
+  pageOffset += step; $('sessions').scrollTop = 0; loadList();
+});
+$('list-retry').addEventListener('click', loadList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));
 $('prompt').addEventListener('input', () => {
   closeModels(); resizePrompt();

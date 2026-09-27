@@ -55,6 +55,53 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   assert.match(staticPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
 });
 
+test('session pages and search stay bounded on initial load, updates and reconnect', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-pages-'));
+  const config = loadConfig(dir), host = await startHost({ dir, config, port: 0, roots: [] });
+  const clients = [];
+  t.after(async () => { clients.forEach(client => client.ws.terminate()); await host.close(); rmSync(dir, { recursive: true, force: true }); });
+  for (let i = 0; i < 675; i++) host.service.catalog.set(String(i), {
+    id: String(i), title: `Task ${i}`, cwd: i === 674 ? '/projects/needle' : '/projects/app',
+    status: i < 3 ? 'idle' : 'saved', updatedAt: i, messages: []
+  });
+  const port = host.http.address().port;
+  const connect = async () => {
+    const client = await socket(`ws://127.0.0.1:${port}/ws`, config.clientToken, `http://127.0.0.1:${port}`);
+    clients.push(client); return client;
+  };
+  const client = await connect();
+  const initial = await until(() => client.messages.find(x => x.type === 'sessions'));
+  assert.equal(initial.sessions.length, 20);
+  assert.equal(initial.total, 675);
+  assert.equal(initial.matched, 675);
+  assert.equal(initial.offset, 0);
+  assert.deepEqual(initial.sessions.slice(0, 3).map(x => x.id), ['2', '1', '0']);
+  const second = (await client.request('list', { offset: 20 })).value;
+  assert.equal(second.sessions.length, 20);
+  assert.equal(second.offset, 20);
+  assert.equal(second.sessions.some(x => initial.sessions.some(y => x.id === y.id)), false);
+  host.service.emit('list');
+  const update = await until(() => client.messages.find(x => x.type === 'sessions' && x.offset === 20));
+  assert.deepEqual(update.sessions, second.sessions);
+  const search = (await client.request('list', { query: ' NEEDLE ' })).value;
+  assert.equal(search.total, 675); assert.equal(search.matched, 1);
+  assert.deepEqual(search.sessions.map(x => x.id), ['674']);
+  const empty = (await client.request('list', { query: 'missing' })).value;
+  assert.equal(empty.sessions.length, 0);
+  assert.equal(empty.matched, 0);
+  const last = (await client.request('list', { offset: 660 })).value;
+  assert.equal(last.sessions.length, 15);
+  for (let i = 650; i < 675; i++) host.service.catalog.delete(String(i));
+  const clamped = (await client.request('list', { offset: 660 })).value;
+  assert.equal(clamped.offset, 640); assert.equal(clamped.requestOffset, 660);
+  assert.equal(clamped.sessions.length, 10);
+  for (const options of [{ offset: -1 }, { offset: 1.5 }, { offset: '20' }, { query: {} }, { query: 'a'.repeat(501) }]) {
+    assert.equal((await client.request('list', options)).ok, false);
+  }
+  const reconnected = await connect();
+  assert.equal((await until(() => reconnected.messages.find(x => x.type === 'sessions'))).sessions.length, 20);
+});
+
 test('actual extension registers, forwards prompts and releases ownership on shutdown', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-extension-'));
   const oldHome = process.env.PI_REMOTE_HOME;

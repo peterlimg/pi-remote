@@ -3,10 +3,15 @@ import { parseObject, send, protectSocket } from './config.mjs';
 
 export function attachClient(socket, service) {
   let selected, previous;
-  let version = 0;
+  let version = 0, listOptions = {};
+  const list = options => {
+    const page = service.list(options);
+    listOptions = { offset: page.offset, query: page.query };
+    return page;
+  };
   let busy = 0, closed = false, listTimer, stateTimer;
   const onList = () => {
-    if (!listTimer) listTimer = setTimeout(() => { listTimer = undefined; if (!closed) send(socket, { type: 'sessions', ...service.list() }); }, 150);
+    if (!listTimer) listTimer = setTimeout(() => { listTimer = undefined; if (!closed) send(socket, { type: 'sessions', ...list(listOptions) }); }, 150);
   };
   const onState = id => {
     if (selected === id && !stateTimer) stateTimer = setTimeout(() => {
@@ -23,7 +28,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true }); send(socket, { type: 'sessions', ...service.list() });
+  send(socket, { type: 'ready', supportsImages: true }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -33,7 +38,7 @@ export function attachClient(socket, service) {
       try {
         let value;
         if (message.op === 'ping') value = { pong: true };
-        else if (message.op === 'list') value = service.list();
+        else if (message.op === 'list') value = list(message);
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);
           selected = message.sessionId; version = 0; previous = structuredClone(state);
