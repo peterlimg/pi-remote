@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, statSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { validateImages, MAX_IMAGES } from '../web/images.js';
 import { sessionKey } from './locks.mjs';
 import { sessionTitle } from './session-title.mjs';
 
@@ -26,9 +28,21 @@ export function textContent(content) {
     return '';
   }).filter(Boolean).join('\n');
 }
+function imageReference(part) {
+  try {
+    validateImages([part]);
+    return { id: createHash('sha256').update(part.mimeType).update(part.data).digest('hex'), mimeType: part.mimeType };
+  } catch { return undefined; }
+}
 export function cleanMessage(message, key) {
   const content = Array.isArray(message.content) ? message.content : undefined;
-  const raw = textContent(content ? content.filter(part => part.type !== 'toolCall') : message.content);
+  const images = new Map();
+  for (const [index, part] of (content || []).entries()) {
+    if (part.type !== 'image' || images.size >= MAX_IMAGES) continue;
+    const reference = imageReference(part);
+    if (reference) images.set(index, reference);
+  }
+  const raw = textContent(content ? content.filter((part, index) => part.type !== 'toolCall' && !images.has(index)) : message.content);
   const calls = content?.filter(part => part.type === 'toolCall') || [];
   let budget = Math.max(0, 24000 - raw.length), truncated = raw.length > 24000 || calls.length > 20;
   const toolCalls = calls.slice(0, 20).map(call => {
@@ -38,10 +52,11 @@ export function cleanMessage(message, key) {
     return { id: call.id, name: call.name, text };
   });
   return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
+    ...(images.size ? { images: [...images.values()] } : {}),
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
     isError: !!message.isError, timestamp: message.timestamp };
 }
-export function readSession(file) {
+function readBranch(file) {
   const info = statSync(file);
   if (info.size > 32 * 1024 * 1024) throw new Error('Session exceeds the 32 MiB browsing limit');
   const lines = readFileSync(file, 'utf8').split('\n');
@@ -65,6 +80,21 @@ export function readSession(file) {
     visited.add(leaf.id); branch.push(leaf); leaf = nodes.get(leaf.parentId);
   }
   branch.reverse();
+  return { info, entries, header, branch };
+}
+export function readSessionImage(file, imageId) {
+  if (typeof imageId !== 'string' || !/^[a-f0-9]{64}$/.test(imageId)) throw new Error('Invalid image ID');
+  const { branch } = readBranch(file);
+  for (const entry of branch) {
+    if (entry.type !== 'message' || !Array.isArray(entry.message?.content)) continue;
+    for (const part of entry.message.content) {
+      if (part.type === 'image' && imageReference(part)?.id === imageId) return validateImages([part])[0];
+    }
+  }
+  throw new Error('Image is no longer available in this session');
+}
+export function readSession(file) {
+  const { info, entries, header, branch } = readBranch(file);
   const allMessages = branch.filter(x => x.type === 'message').map(x => cleanMessage(x.message, x.id));
   const modelEntry = branch.findLast(x => x.type === 'model_change' || (x.type === 'message' && x.message?.role === 'assistant' && x.message.provider && x.message.model));
   const model = modelEntry?.type === 'model_change' ? `${modelEntry.provider}/${modelEntry.modelId}` :

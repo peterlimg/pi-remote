@@ -1,7 +1,69 @@
 import { test, expect } from '@playwright/test';
+import { cleanMessage } from '../../src/catalog.mjs';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 const file = { name: 'screenshot.png', mimeType: 'image/png', buffer: png };
+test('thread images load lazily, survive updates, open full size and retry failures', async ({ page }) => {
+  const image = { type: 'image', mimeType: 'image/png', data: png.toString('base64') };
+  const state = { id: 'images', title: 'Screenshot review', cwd: '/project', status: 'idle', messages: [
+    cleanMessage({ role: 'user', content: [{ type: 'text', text: 'Compare these screenshots.' }, image, image] }, 'user'),
+    cleanMessage({ role: 'toolResult', toolName: 'read', toolCallId: 'read', content: [image] }, 'tool'),
+    cleanMessage({ role: 'assistant', content: 'The images are attached above.' }, 'reply')
+  ] };
+  let client, requests = 0, fail = true;
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    client = ws;
+    const packet = JSON.parse(raw);
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+    } else if (packet.op === 'watch') {
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 0, state }));
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+    } else if (packet.op === 'image') {
+      requests++;
+      expect(packet.imageId).toBe(state.messages[0].images[0].id);
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: !fail, value: image, error: fail ? 'Try again' : undefined }));
+      fail = false;
+    } else ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+  }));
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Screenshot review/ }).click();
+  const retry = page.getByRole('button', { name: 'Image unavailable. Retry' });
+  await expect(retry).toBeVisible();
+  await retry.click();
+  const previews = page.locator('.message.user .thread-images img');
+  await expect(previews).toHaveCount(2);
+  await expect.poll(() => previews.evaluateAll(images => images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
+  await expect(page.locator('.message.user')).not.toContainText('[image]');
+  expect(requests).toBe(3); // The collapsed tool image has not been fetched.
+  const urls = await previews.evaluateAll(images => images.map(img => img.src));
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state: { ...state, status: 'working' } }));
+  await expect(page.locator('#abort')).toBeVisible();
+  expect(await previews.evaluateAll(images => images.map(img => img.src))).toEqual(urls);
+  expect(requests).toBe(3);
+  const popup = page.waitForEvent('popup');
+  await page.locator('.message.user .thread-images a').first().click();
+  const opened = await popup;
+  await expect(opened.locator('img')).toBeVisible();
+  await opened.close();
+  await page.screenshot({ path: 'test-results/thread-images-mobile.png' });
+  await page.locator('.tool summary').click();
+  const toolImage = page.locator('.tool .thread-images img');
+  await expect(toolImage).toBeVisible();
+  await expect.poll(() => toolImage.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: 'test-results/thread-images-desktop.png' });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.locator('#transcript img')).toHaveCount(0);
+  expect(await page.evaluate(async url => { try { await fetch(url); return true; } catch { return false; } }, urls[0])).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {
   const states = ['Alpha', 'Beta'].map(id => ({ id, title: id, cwd: '/project', status: 'idle', messages: [] }));
   const commands = [], errors = [];

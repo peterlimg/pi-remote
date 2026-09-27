@@ -1,5 +1,5 @@
 import { patchState } from './protocol.js';
-import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT } from './images.js';
+import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import MarkdownIt from './markdown-it.mjs';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
@@ -45,6 +45,14 @@ window.addEventListener('resize', fitViewport);
 fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
+const threadImages = new Map();
+let imageQueue = Promise.resolve();
+const imageObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) {
+    imageObserver.unobserve(entry.target);
+    loadThreadImage(threadImages.get(entry.target.dataset.imageKey));
+  }
+}, { root: $('transcript'), rootMargin: '160px' });
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -186,6 +194,7 @@ function logout() {
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
   imageDrafts.clear(); sending.clear();
+  clearThreadImages();
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
@@ -302,6 +311,7 @@ function renderProject(cwd = '') {
 async function selectSession(id) {
   closeModels();
   if (selected) drafts.set(selected, $('prompt').value);
+  if (selected !== id) clearThreadImages();
   selected = id; selectedSummary = sessions.find(item => item.id === id); unread.delete(id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
@@ -321,6 +331,63 @@ async function selectSession(id) {
   resizePrompt();
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
+function clearThreadImages(keep = new Set()) {
+  for (const [id, image] of threadImages) if (!keep.has(id)) {
+    imageObserver.unobserve(image.node);
+    if (image.url) URL.revokeObjectURL(image.url);
+    threadImages.delete(id);
+  }
+}
+function loadThreadImage(image) {
+  if (!image || image.loading || image.url) return;
+  image.loading = true;
+  image.button.disabled = true; image.button.textContent = 'Loading image…';
+  // One image at a time leaves the command channel free for prompts and aborts.
+  imageQueue = imageQueue.then(async () => {
+    if (threadImages.get(image.key) !== image) return;
+    try {
+      const value = await request('image', { sessionId: image.sessionId, imageId: image.id });
+      const [data] = validateImages([value]);
+      if (threadImages.get(image.key) !== image) return;
+      const bytes = Uint8Array.from(atob(data.data), char => char.charCodeAt(0));
+      image.url = URL.createObjectURL(new Blob([bytes], { type: data.mimeType }));
+      const link = el('a'), preview = el('img');
+      link.href = image.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.setAttribute('aria-label', 'Open image');
+      preview.src = image.url; preview.alt = 'Attached image';
+      preview.onerror = () => {
+        URL.revokeObjectURL(image.url); image.url = undefined;
+        image.button.textContent = 'Image unavailable. Retry'; image.node.replaceChildren(image.button);
+      };
+      link.append(preview); image.node.replaceChildren(link);
+    } catch (error) {
+      image.button.textContent = 'Image unavailable. Retry'; image.button.title = error.message;
+    } finally { image.loading = false; image.button.disabled = false; }
+  });
+}
+function appendThreadImages(parent, message) {
+  if (!message?.images?.length) return;
+  const gallery = el('div', undefined, 'thread-images');
+  for (const [index, reference] of message.images.entries()) {
+    if (!/^[a-f0-9]{64}$/.test(reference.id) || !IMAGE_TYPES.includes(reference.mimeType)) continue;
+    const key = message.id + ':' + index;
+    let image = threadImages.get(key);
+    if (image && image.id !== reference.id) {
+      imageObserver.unobserve(image.node);
+      if (image.url) URL.revokeObjectURL(image.url);
+      threadImages.delete(key); image = undefined;
+    }
+    if (!image) {
+      const node = el('div', undefined, 'thread-image'), button = el('button', 'Loading image…', 'secondary');
+      button.type = 'button'; node.dataset.imageKey = key; node.append(button);
+      image = { key, id: reference.id, sessionId: selected, node, button };
+      button.addEventListener('click', () => loadThreadImage(image));
+      threadImages.set(key, image); imageObserver.observe(node);
+    }
+    gallery.append(image.node);
+  }
+  parent.append(gallery);
+}
 function renderConversation(state) {
   $('title').textContent = sessions.find(item => item.id === selected)?.title || state.title;
   renderProject(state.cwd);
@@ -331,6 +398,7 @@ function renderConversation(state) {
   const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
   const messages = state.messages || [];
+  clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => message.id + ':' + index))));
   const results = new Map(messages.filter(m => m.role === 'toolResult' && m.toolCallId).map(m => [m.toolCallId, m]));
   const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
   const rendered = new Set();
@@ -378,7 +446,8 @@ function renderConversation(state) {
     }
     detail.append(summary);
     if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
-    detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
+    if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
+    appendThreadImages(detail, result);
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     fragment.append(detail);
   };
@@ -388,17 +457,18 @@ function renderConversation(state) {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
       continue;
     }
-    if (message.text || message.role === 'user') {
+    if (message.text || message.images?.length || message.role === 'user') {
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el(message.role === 'user' ? 'pre' : 'div', undefined, 'message-text');
-      if (message.role === 'user') body.textContent = message.text || '(empty message)';
+      if (message.role === 'user') body.textContent = message.text || (message.images?.length ? '' : '(empty message)');
       else {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
-        body.innerHTML = markdown.render(message.text);
+        body.innerHTML = markdown.render(message.text || '');
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
       }
-      article.append(body); fragment.append(article);
+      if (body.textContent) article.append(body);
+      appendThreadImages(article, message); fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
     if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, statSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { discover, cleanMessage, isInside, readSession } from './catalog.mjs';
+import { discover, cleanMessage, isInside, readSession, readSessionImage } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { acquireLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
@@ -49,11 +49,33 @@ export class SessionService extends EventEmitter {
       warnings: this.warnings, allowResume: this.allowResume };
   }
   read(id) {
-    if (this.live.has(id)) return this.live.get(id).state;
+    if (this.live.has(id)) {
+      const state = this.live.get(id).state;
+      // Already-running terminals may still send the old text-only message format.
+      if (!state.messages?.some(message => !message.images && message.text?.includes('[image]'))) return state;
+      try {
+        if (!isInside(state.file, this.roots)) return state;
+        let saved = this.catalog.get(id);
+        if (saved?.updatedAt !== statSync(state.file).mtimeMs) {
+          saved = readSession(state.file); this.catalog.set(id, saved);
+        }
+        return { ...state, messages: state.messages.map(message => {
+          if (message.images || !message.text?.includes('[image]')) return message;
+          const original = saved.messages.find(item => item.id === message.id || (message.timestamp !== undefined &&
+            item.timestamp === message.timestamp && item.role === message.role && item.toolCallId === message.toolCallId));
+          return original?.images ? { ...message, text: original.text, images: original.images } : message;
+        }) };
+      } catch { return state; } // History may not have been flushed yet.
+    }
     const saved = this.catalog.get(id);
     if (!saved) throw new Error('Session not found');
     if (!isInside(saved.file, this.roots)) throw new Error('Session is outside configured roots');
     return readSession(saved.file);
+  }
+  getImage(id, imageId) {
+    const state = this.live.get(id)?.state || this.catalog.get(id);
+    if (!state?.file || !isInside(state.file, this.roots)) throw new Error('Session not found in configured roots');
+    return readSessionImage(state.file, imageId);
   }
   register(socket, state, owner) {
     if (!state || !state.file || typeof state.cwd !== 'string') throw new Error('Invalid session registration');

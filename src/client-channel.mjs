@@ -43,6 +43,8 @@ export function attachClient(socket, service) {
           const state = service.read(message.sessionId);
           selected = message.sessionId; version = 0; previous = structuredClone(state);
           send(socket, { type: 'snapshot', sessionId: selected, version, state }); value = { watching: selected };
+        } else if (message.op === 'image') {
+          value = service.getImage(message.sessionId, message.imageId);
         } else if (message.op === 'models') {
           value = await service.getModels(message.sessionId);
         } else if (message.op === 'commands') {
