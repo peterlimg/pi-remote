@@ -37,7 +37,15 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   client.ws.send(JSON.stringify(packet));
   const command = await until(() => agents[1].messages.find(x => x.type === 'command'));
   assert.equal(agents[0].messages.filter(x => x.type === 'command').length, 0);
+  const reconnected = await socket(base + '/ws', config.clientToken, 'http://127.0.0.1:' + port);
+  sockets.push(reconnected.ws);
+  const ready = await until(() => reconnected.messages.find(x => x.type === 'ready'));
+  assert.equal(ready.supportsCommandResults, true);
+  const receipt = reconnected.request('commandResult', { sessionId: agents[1].id, requestId });
   agents[1].ws.send(JSON.stringify({ type: 'result', id: command.id, ok: true, value: { accepted: true } }));
+  assert.deepEqual((await receipt).value, { ok: true, value: { accepted: true } });
+  const missing = await reconnected.request('commandResult', { sessionId: agents[1].id, requestId: 'never-sent' });
+  assert.equal(missing.ok, false); assert.match(missing.error, /unknown/);
   await until(() => client.messages.find(x => x.id === requestId && x.type === 'response'));
   client.ws.send(JSON.stringify(packet));
   await until(() => client.messages.filter(x => x.id === requestId && x.type === 'response').length === 2);

@@ -28,7 +28,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -47,6 +47,8 @@ export function attachClient(socket, service) {
           value = await service.getModels(message.sessionId);
         } else if (message.op === 'commands') {
           value = await service.getCommands(message.sessionId);
+        } else if (message.op === 'commandResult') {
+          value = await service.journal.result(message.sessionId, message.requestId);
         } else if (message.op === 'command') {
           value = await service.command(message.sessionId, message.id, message.command);
         } else if (message.op === 'new') {

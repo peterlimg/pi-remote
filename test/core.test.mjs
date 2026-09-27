@@ -152,6 +152,22 @@ test('duplicate requests execute once across concurrency and journal restarts', 
   assert.equal(count, 1);
   await assert.rejects(() => journal.execute('s', 'request-123', { type: 'prompt' }, action), /different content/);
 });
+test('delivery lookup waits for an in-flight result, survives restart and never executes missing requests', async t => {
+  const dir = temp(t), journal = new CommandJournal(dir);
+  let finish;
+  const sent = journal.execute('s', 'request-lookup', {}, () => new Promise(resolve => { finish = resolve; }));
+  const lookup = journal.result('s', 'request-lookup');
+  finish('accepted');
+  assert.deepEqual(await lookup, await sent);
+  assert.deepEqual(await new CommandJournal(dir).result('s', 'request-lookup'), { ok: true, value: 'accepted' });
+  await assert.rejects(() => journal.result('other-session', 'request-lookup'), /unknown/);
+  await assert.rejects(() => journal.result('s', 'never-sent'), /unknown/);
+  await assert.rejects(() => journal.result('s', '../bad'), /Invalid request ID/);
+  await journal.execute('s', 'request-rejected', {}, () => { throw new Error('Rejected'); });
+  assert.deepEqual(await journal.result('s', 'request-rejected'), { ok: false, error: 'Rejected' });
+  void journal.execute('s', 'interrupted-request', {}, () => new Promise(() => {}));
+  await assert.rejects(() => new CommandJournal(dir).result('s', 'interrupted-request'), /unknown/);
+});
 test('interrupted delivery is not replayed', async t => {
   const dir = temp(t), journal = new CommandJournal(dir);
   const original = journal.execute('s', 'request-xyz', {}, () => new Promise(() => {}));

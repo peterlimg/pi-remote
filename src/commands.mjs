@@ -50,6 +50,15 @@ export function requestKey(id) {
 // Persist intent before execution. An interrupted command remains "unknown"; never replay it automatically.
 export class CommandJournal {
   constructor(dir) { this.dir = dir; this.pending = new Map(); ensureDir(dir); }
+  async result(sessionId, id) {
+    const key = createHash('sha256').update(sessionId + ':' + requestKey(id)).digest('hex');
+    if (this.pending.has(key)) return this.pending.get(key);
+    let prior;
+    try { prior = JSON.parse(readFileSync(join(this.dir, key + '.json'), 'utf8')); }
+    catch (e) { if (e.code !== 'ENOENT') throw e; }
+    if (prior?.result) return prior.result;
+    throw new Error('Delivery outcome is unknown. Inspect the conversation before sending again.');
+  }
   async execute(sessionId, id, command, action) {
     requestKey(id);
     const key = createHash('sha256').update(sessionId + ':' + id).digest('hex');

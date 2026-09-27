@@ -45,7 +45,7 @@ const versions = new Map();
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
-let lastDialog, modelPicker, supportsImages = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const sending = new Set(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
@@ -73,7 +73,9 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    pending.set(id, { resolve, reject, timer });
+    const lookup = supportsCommandResults && ['command', 'new', 'resume', 'answer'].includes(op)
+      ? { op: 'commandResult', id, sessionId: extra.sessionId, requestId: id } : undefined;
+    pending.set(id, { resolve, reject, timer, lookup });
     socket.send(JSON.stringify({ op, id, ...extra }));
   });
 }
@@ -81,12 +83,16 @@ function connection(text) { $('connection').textContent = text; updateControls()
 function disconnect() {
   closeModels();
   listRequest++; legacyList = undefined;
-  const old = socket; socket = undefined; connected = false; supportsImages = false; allowResume = false;
+  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
-  for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.')); }
-  pending.clear();
+  for (const [id, item] of pending) {
+    // Keep the original deadline. Recovery reads a receipt; it never resends a command.
+    if (!manualClose && item.lookup) { item.recovering = true; continue; }
+    clearTimeout(item.timer); pending.delete(id);
+    item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.'));
+  }
 }
 function reconnect() {
   disconnect();
@@ -111,6 +117,16 @@ function connect() {
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
       supportsImages = packet.supportsImages === true;
+      supportsCommandResults = packet.supportsCommandResults === true;
+      for (const [id, item] of pending) {
+        if (!item.recovering) continue;
+        item.recovering = false;
+        if (supportsCommandResults) ws.send(JSON.stringify(item.lookup));
+        else {
+          clearTimeout(item.timer); pending.delete(id);
+          item.reject(new Error('Delivery outcome is unknown. Inspect the conversation before sending again.'));
+        }
+      }
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => {
