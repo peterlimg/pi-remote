@@ -159,14 +159,6 @@ pre.message-text { white-space: pre-wrap; }
 .command-option strong { font: 14px/1.5 var(--mono); }
 .command-option span { display: block; font-size: 12px; color: var(--muted); }
 #command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
-#attachment-picker { width: min(100%, 420px); max-width: 100%; max-height: 90dvh; margin: auto auto 0; padding: 12px 16px max(24px, env(safe-area-inset-bottom)); border: 0; border-radius: 24px 24px 0 0; background: var(--bg); color: var(--text); }
-#attachment-picker::backdrop { background: #0005; }
-.attachment-picker-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; margin-bottom: 24px; }
-.attachment-picker-header h2 { margin: 0; font-size: 20px; font-weight: 600; text-align: center; }
-#attachment-cancel { display: grid; place-items: center; width: 44px; padding: 0; color: var(--text); }
-.attachment-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.attachment-sources button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-width: 0; min-height: 104px; padding: 16px 8px; border-radius: 24px; background: var(--panel); color: var(--text); font-size: 18px; font-weight: 400; }
-#attachment-picker-help { margin: 20px 0 0; text-align: center; }
 .attachments { display: flex; gap: 8px; overflow-x: auto; padding: 6px 10px; }
 .attachment { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .attachment img { width: 64px; height: 64px; object-fit: contain; border-radius: 8px; background: var(--panel); }

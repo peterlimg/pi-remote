@@ -21,57 +21,13 @@ test('image picker previews, removes and preserves session drafts until acknowle
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Alpha/ }).click();
-  const attach = page.getByRole('button', { name: 'Attach images' });
-  const sheet = page.getByRole('dialog', { name: 'Add context' });
-  await attach.click();
-  await expect(sheet).toBeVisible();
-  await expect(attach).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('button', { name: 'Close attachment picker' })).toBeFocused();
-  await page.screenshot({ path: 'test-results/attachment-picker-mobile.png' });
-  await page.setViewportSize({ width: 320, height: 568 });
-  const controls = await sheet.locator('.attachment-sources button').evaluateAll(nodes => nodes.map(node => {
-    const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right };
-  }));
-  for (const [i, control] of controls.entries()) {
-    expect(control.width).toBeGreaterThanOrEqual(44);
-    expect(control.height).toBeGreaterThanOrEqual(44);
-    expect(control.y).toBe(controls[0].y);
-    expect(control.right).toBeLessThanOrEqual(320);
-    if (i) expect(control.x).toBeGreaterThan(controls[i - 1].right);
-  }
-  for (const name of ['Camera', 'Photos', 'Files']) {
-    await page.keyboard.press('Tab');
-    await expect(sheet.getByRole('button', { name, exact: true })).toBeFocused();
-  }
-  await page.locator('#prompt').evaluate(input => input.focus());
-  await expect(sheet.getByRole('button', { name: 'Files', exact: true })).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(sheet).toBeHidden();
-  await expect(attach).toBeFocused();
-  await expect(attach).toHaveAttribute('aria-expanded', 'false');
-  await attach.click();
-  await page.getByRole('button', { name: 'Close attachment picker' }).click();
-  await expect(sheet).toBeHidden();
-  await attach.click();
-  await page.mouse.click(10, 10);
-  await expect(sheet).toBeHidden();
-  for (const [name, input] of [['Camera', 'camera-file'], ['Photos', 'photo-files'], ['Files', 'image-files']]) {
-    await attach.click();
-    const picker = page.waitForEvent('filechooser');
-    await sheet.getByRole('button', { name, exact: true }).click();
-    const chooser = await picker;
-    expect(await chooser.element().getAttribute('id')).toBe(input);
-    expect(chooser.isMultiple()).toBe(name !== 'Camera');
-    expect(await chooser.element().getAttribute('accept')).toBe(name === 'Files' ? null : 'image/*');
-    expect(await chooser.element().getAttribute('capture')).toBe(name === 'Camera' ? 'environment' : null);
-    await expect(sheet).toBeHidden();
-    await chooser.setFiles(file);
-    await expect(page.getByRole('img', { name: file.name })).toBeVisible();
-    await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
-    await page.getByRole('button', { name: `Remove ${file.name}` }).click();
-    await expect(page.locator('#attachments')).toBeHidden();
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
+  const picker = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Attach images' }).click();
+  await (await picker).setFiles(file);
+  await expect(page.getByRole('img', { name: file.name })).toBeVisible();
+  await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+  await page.getByRole('button', { name: `Remove ${file.name}` }).click();
+  await expect(page.locator('#attachments')).toBeHidden();
   await page.locator('#image-files').setInputFiles(file);
   await page.locator('#prompt').fill('What is in this image?');
   client.send(JSON.stringify({ type: 'ready' }));
@@ -116,9 +72,6 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: 'test-results/images-desktop.png' });
-  await attach.click();
-  await page.screenshot({ path: 'test-results/attachment-picker-desktop.png' });
-  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#attachments img')).toHaveCount(0);
   expect(errors).toEqual([]);
