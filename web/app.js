@@ -3,6 +3,19 @@ import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT } from './images.
 import MarkdownIt from './markdown-it.mjs';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
+function atThreadBottom() {
+  const box = $('transcript');
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
+}
+function updateScrollButton() { $('scroll-bottom').hidden = atThreadBottom(); }
+$('transcript').addEventListener('scroll', updateScrollButton, { passive: true });
+$('transcript').addEventListener('toggle', updateScrollButton, true);
+new ResizeObserver(updateScrollButton).observe($('transcript'));
+$('scroll-bottom').addEventListener('click', () => {
+  $('transcript').scrollTop = $('transcript').scrollHeight;
+  $('transcript').focus({ preventScroll: true });
+  updateScrollButton();
+});
 function resizePrompt() {
   const input = $('prompt');
   if (!input.clientWidth) return;
@@ -217,6 +230,7 @@ async function selectSession(id) {
   commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
   $('transcript').replaceChildren();
+  updateScrollButton();
   document.querySelector('.session-info').open = false;
   $('project').textContent = sessions.find(x => x.id === id)?.cwd || '';
   $('app').classList.add('viewing'); renderList(); notice('');
@@ -235,7 +249,7 @@ function renderConversation(state) {
   $('project').textContent = state.cwd;
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
-  const box = $('transcript'), bottom = box.scrollHeight - box.scrollTop - box.clientHeight < 100, oldScroll = box.scrollTop;
+  const box = $('transcript'), bottom = atThreadBottom(), oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
   const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
@@ -318,6 +332,7 @@ function renderConversation(state) {
   if (state.error) notice(state.error);
   renderDialog(state);
   updateControls();
+  updateScrollButton();
 }
 function updateControls() {
   const state = cache.get(selected);

@@ -2,6 +2,66 @@ import { test, expect } from '@playwright/test';
 
 const login = '/#token=browser-test-token-only-123456789012345';
 
+test('the bottom button returns to the latest message and resumes following replies', async ({ page }) => {
+  const state = { id: 'scroll', title: 'Long thread', cwd: '/project', status: 'idle', messages: [
+    { id: 'reply', role: 'assistant', text: 'A short reply.' }
+  ] };
+  let client, version = 0;
+  const snapshot = () => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws;
+    ws.onMessage(raw => {
+      const p = JSON.parse(raw);
+      if (p.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready' }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+      } else {
+        if (p.op === 'watch') snapshot();
+        ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true, value: [] }));
+      }
+    });
+  });
+  await page.goto(login);
+  await page.getByRole('button', { name: /Long thread/ }).click();
+  const button = page.getByRole('button', { name: 'Go to thread bottom' });
+  const transcript = page.locator('#transcript');
+  const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
+  await expect(transcript).toContainText('A short reply.');
+  await expect(button).toBeHidden();
+  state.messages[0].text = 'Thread history\n\n'.repeat(60);
+  snapshot();
+  await expect(transcript).toContainText('Thread history');
+  await expect.poll(gap).toBeLessThan(1);
+  await expect(button).toBeHidden();
+  for (const [size, theme, name] of [
+    [{ width: 390, height: 844 }, 'light', 'mobile'],
+    [{ width: 1280, height: 900 }, 'dark', 'desktop']
+  ]) {
+    await page.setViewportSize(size);
+    await page.emulateMedia({ colorScheme: theme });
+    await transcript.evaluate(node => { node.scrollTop = 0; });
+    await expect(button).toBeVisible();
+    state.messages.push({ id: name, role: 'assistant', text: `New ${name} reply` }); snapshot();
+    await expect(transcript).toContainText(`New ${name} reply`);
+    expect(await transcript.evaluate(node => node.scrollTop)).toBe(0);
+    const target = await button.boundingBox(), composer = await page.locator('#composer').boundingBox();
+    expect(target.width).toBe(44);
+    expect(target.height).toBe(44);
+    expect(target.y + target.height).toBeLessThan(composer.y);
+    expect(Math.abs(target.x + target.width / 2 - composer.x - composer.width / 2)).toBeLessThan(1);
+    await page.screenshot({ path: `test-results/bottom-button-${name}.png` });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(gap).toBeLessThan(1);
+    await expect(button).toBeHidden();
+    await expect(transcript).toBeFocused();
+    state.messages.push({ id: `${name}-next`, role: 'assistant', text: `Following ${name} reply` }); snapshot();
+    await expect(transcript).toContainText(`Following ${name} reply`);
+    await expect.poll(gap).toBeLessThan(1);
+    await expect(button).toBeHidden();
+  }
+});
+
 test('dragging the composer cannot scroll the page after sending or resizing', async ({ page }) => {
   await page.goto(login);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
