@@ -689,7 +689,11 @@ $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (modelPicker) openModels(modelPicker.id); });
 $('model-cancel').addEventListener('click', () => closeModels(true));
 document.addEventListener('keydown', event => {
-  if (!modelPicker || event.isComposing) return;
+  if (event.isComposing) return;
+  if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {
+    event.preventDefault(); $('dialog-close').click(); return;
+  }
+  if (!modelPicker) return;
   if (event.key === 'Escape') { event.preventDefault(); closeModels(true); }
   // The picker shares the composer form. Search must never submit its draft.
   if (event.target === $('model-search') && event.key === 'Enter') {
@@ -701,31 +705,68 @@ document.addEventListener('pointerdown', event => {
 });
 function renderDialog(state) {
   const dialog = state.dialog;
-  if (!dialog) { $('dialog').hidden = true; lastDialog = undefined; return; }
+  if (!dialog) {
+    if ($('dialog').contains(document.activeElement)) $('transcript').focus({ preventScroll: true });
+    $('dialog').hidden = true; lastDialog = undefined; return;
+  }
   if (lastDialog === dialog.id) return;
   lastDialog = dialog.id; $('dialog').hidden = false;
-  const form = el('form');
-  form.append(el('h3', dialog.title || 'Pi needs your input'));
-  if (dialog.message) form.append(el('p', dialog.message));
+  const form = el('form'), header = el('header'), body = el('div', undefined, 'dialog-body'), footer = el('footer');
+  const [title, ...details] = (dialog.title || 'Pi needs your input').split(/\r?\n/);
+  const heading = el('h3', title); heading.id = 'dialog-title'; heading.tabIndex = -1;
+  const close = el('button', undefined, 'quiet'); close.type = 'button'; close.id = 'dialog-close';
+  close.setAttribute('aria-label', 'Close dialog');
+  close.append($('model-cancel').firstElementChild.cloneNode(true));
+  header.append(heading, close);
+  const description = [details.join('\n'), dialog.message].filter(Boolean).join('\n\n');
+  if (description) body.append(el('p', description, 'dialog-description'));
   let input;
-  if (dialog.method === 'select') {
-    input = el('select');
-    for (const option of dialog.options || []) { const node = el('option', option); node.value = option; input.append(node); }
-  } else if (dialog.method !== 'confirm') input = el(dialog.method === 'editor' ? 'textarea' : 'input');
-  if (input) { input.setAttribute('aria-label', dialog.title || 'Response'); input.value = dialog.prefill || input.value || ''; form.append(input); }
-  const submit = el('button', dialog.method === 'confirm' ? 'Allow' : 'Submit'); submit.type = 'submit';
-  const cancel = el('button', dialog.method === 'confirm' ? 'Deny' : 'Cancel', 'secondary'); cancel.type = 'button';
+  if (!['select', 'confirm'].includes(dialog.method)) {
+    input = el(dialog.method === 'editor' ? 'textarea' : 'input');
+    input.setAttribute('aria-label', title || 'Response'); input.value = dialog.prefill || ''; body.append(input);
+  }
+  const feedback = el('p', '', 'hint'); feedback.setAttribute('role', 'status'); feedback.hidden = true;
   const id = selected;
-  const answer = async cancelled => {
-    submit.disabled = true; cancel.disabled = true;
+  let busy = false;
+  const answer = async response => {
+    if (busy) return;
+    busy = true;
+    heading.focus({ preventScroll: true });
+    for (const control of form.elements) control.disabled = true;
+    feedback.hidden = false; feedback.classList.remove('dialog-error'); feedback.textContent = 'Sending response…';
     try {
-      await request('answer', { sessionId: id, answer: { dialogId: dialog.id,
-        ...(cancelled ? { cancelled: true } : dialog.method === 'confirm' ? { confirmed: true } : { value: input.value }) } });
-    } catch (e) { notice(e.message); submit.disabled = false; cancel.disabled = false; }
+      await request('answer', { sessionId: id, answer: { dialogId: dialog.id, ...response } });
+      // A receipt also closes the panel when an older host omits the removal patch.
+      const current = cache.get(id);
+      if (current?.dialog?.id === dialog.id) {
+        delete current.dialog;
+        if (selected === id) renderDialog(current);
+      }
+    } catch (e) {
+      busy = false;
+      for (const control of form.elements) control.disabled = false;
+      feedback.classList.add('dialog-error'); feedback.textContent = e.message;
+    }
   };
-  form.addEventListener('submit', event => { event.preventDefault(); answer(false); });
-  cancel.addEventListener('click', () => answer(true));
-  form.append(submit, cancel); $('dialog').replaceChildren(form);
+  if (dialog.method === 'select') {
+    const options = el('div', undefined, 'dialog-options');
+    for (const option of dialog.options || []) {
+      const button = el('button', option, 'command-option'); button.type = 'button';
+      button.addEventListener('click', () => answer({ value: option })); options.append(button);
+    }
+    body.append(options);
+  } else {
+    const submit = el('button', dialog.method === 'confirm' ? 'Allow' : 'Submit'); submit.type = 'submit'; footer.append(submit);
+  }
+  const cancel = el('button', dialog.method === 'confirm' ? 'Deny' : 'Cancel', 'secondary'); cancel.type = 'button';
+  close.addEventListener('click', () => answer({ cancelled: true }));
+  cancel.addEventListener('click', () => answer({ cancelled: true }));
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (dialog.method !== 'select') answer(dialog.method === 'confirm' ? { confirmed: true } : { value: input.value });
+  });
+  footer.append(cancel, feedback); form.append(header, body, footer); $('dialog').replaceChildren(form);
+  close.focus({ preventScroll: true });
 }
 $('login-form').addEventListener('submit', event => {
   event.preventDefault(); token = $('token').value.trim(); localStorage.setItem('pi-remote-token', token); $('token').value = ''; connect();

@@ -4,7 +4,8 @@ export function diffState(previous, next) {
   const { messages: ignored, ...meta } = next;
   const changed = {};
   for (const [key, value] of Object.entries(meta)) if (JSON.stringify(previous[key]) !== JSON.stringify(value)) changed[key] = value;
-  const removed = Object.keys(previous).filter(key => key !== 'messages' && !(key in next));
+  // Undefined fields disappear in JSON, so send their removal explicitly.
+  const removed = Object.keys(previous).filter(key => key !== 'messages' && next[key] === undefined);
   return { meta: changed, removed, order: messages.map(x => x.id), upsert: messages.filter(x => before.get(x.id) !== JSON.stringify(x)) };
 }
 export function patchState(previous, patch) {

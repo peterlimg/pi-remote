@@ -123,4 +123,7 @@ test('mobile patches preserve order, branch resets and metadata removal', () => 
   const patch = diffState(before, after);
   assert.equal(patch.upsert.length, 1);
   assert.deepEqual(patchState(before, patch), after);
+  // The worker clears dialogs with undefined; only the wire representation counts.
+  const cleared = { ...after, dialog: undefined };
+  assert.deepEqual(patchState(before, JSON.parse(JSON.stringify(diffState(before, cleared)))), after);
 });
