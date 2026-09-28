@@ -7,9 +7,14 @@ const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
-let model = models[0], thinkingLevel = 'medium';
+let model = models[0], thinkingLevel = 'medium', usageId = 0;
+const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select', title: 'Provider usage', options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
   if (command.type === 'extension_ui_response') {
+    if (command.id.startsWith('usage-')) {
+      if (command.value === 'Refresh current usage') showUsage();
+      return; // An extension command can finish without running an agent turn.
+    }
     out({ type: 'message_end', message: { role: 'assistant', timestamp: 9, content: 'dialog answered' } });
     out({ type: 'agent_end' }); return;
   }
@@ -35,6 +40,12 @@ const parser = new JsonLines(command => {
     if (fresh) writeFileSync(sessionFile, JSON.stringify({ type: 'session', id: sessionId, cwd: process.cwd() }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'user', content: command.message } }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'assistant', content: 'reply' } }) + '\n');
+    if (command.message.startsWith('/usage')) {
+      if (command.message !== '/usage') out({ type: 'agent_start' });
+      showUsage();
+      if (command.message === '/usage-settled') out({ type: 'agent_end' });
+      return;
+    }
     out({ type: 'agent_start' });
     if (command.message === 'ask') out({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Proceed?' });
     else {

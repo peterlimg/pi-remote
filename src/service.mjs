@@ -149,11 +149,14 @@ export class SessionService extends EventEmitter {
   trackWorker(id, item, discardEmpty = false) {
     const { worker, lock } = item;
     worker.on('event', event => {
+      if (event.type === 'agent_start') item.agentActive = true;
+      if (event.type === 'agent_end' || event.type === 'agent_settled') item.agentActive = false;
       if (event.type === 'extension_ui_request') {
         if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
           item.state.dialog = event; item.state.status = 'waiting';
         }
       } else applyEvent(item.state, event);
+      if (item.state.dialog) item.state.status = 'waiting';
       this.changed(id);
     });
     worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
@@ -214,7 +217,8 @@ export class SessionService extends EventEmitter {
         item.state.messages = (history?.messages || []).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
         item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
         item.state.thinkingLevel = rpcState?.thinkingLevel;
-        item.state.status = rpcState?.isStreaming ? 'working' : 'idle';
+        item.agentActive = !!rpcState?.isStreaming;
+        item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';
         this.changed(id); return { resumed: true };
       } catch (e) { await worker.close(); throw e; }
     });
@@ -234,7 +238,8 @@ export class SessionService extends EventEmitter {
         response.value = answer.value;
       }
       item.worker.process.stdin.write(JSON.stringify(response) + '\n');
-      item.state.dialog = undefined; item.state.status = 'working'; this.changed(id);
+      item.state.dialog = undefined;
+      item.state.status = item.agentActive ? 'working' : 'idle'; this.changed(id);
       return { accepted: true };
     });
   }
