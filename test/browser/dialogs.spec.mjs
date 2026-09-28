@@ -5,7 +5,7 @@ const url = '/#token=browser-test-token-only-123456789012345';
 const usage = {
   id: 'usage-1', method: 'select',
   title: 'Provider usage\nOpenAI Codex Usage · Current\nSemantics: ChatGPT subscription limits\nWeekly limit: [██████████████░░░░░░] 68% left (resets 12:53 on 4 Oct)\nCredits: none\nUsage limit resets: 1 available\nPlan: prolite\nFast mode: Unavailable · gpt-6-astra does not advertise Codex Fast support.',
-  options: ['Refresh current usage', 'Close']
+  options: ['Refresh current usage', 'Settings']
 };
 
 async function setup(page) {
@@ -46,10 +46,18 @@ async function setup(page) {
 test('usage cancellation clears the panel through a serialized state patch', async ({ page }) => {
   const server = await setup(page), panel = page.getByRole('region', { name: 'Provider usage' });
   await expect(panel.getByRole('heading')).toHaveText('Provider usage');
-  await expect(panel.locator('.dialog-description')).toContainText('68% left');
-  expect(await panel.locator('.dialog-description').evaluate(node => getComputedStyle(node).whiteSpace)).toBe('pre-wrap');
+  await expect(panel.getByRole('meter', { name: 'Weekly limit remaining' })).toHaveAttribute('value', '68');
+  await expect(panel.locator('.usage-limit')).toContainText('68% left');
+  await expect(panel.locator('.usage-limit')).toContainText('Resets 12:53 on 4 Oct');
+  await expect(panel.getByText('prolite', { exact: true })).toBeHidden();
+  await expect(panel.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+  const refresh = await panel.getByRole('button', { name: 'Refresh', exact: true }).boundingBox();
+  const settings = await panel.getByRole('button', { name: 'Settings' }).boundingBox();
+  expect(refresh.y).toBe(settings.y);
+  expect(refresh.height).toBeGreaterThanOrEqual(44);
+  expect((await panel.boundingBox()).height).toBeLessThan(320);
   await expect(panel.getByRole('combobox')).toHaveCount(0);
-  for (const [index, dismissal] of ['Cancel', 'Close dialog', 'Escape'].entries()) {
+  for (const [index, dismissal] of ['Close dialog', 'Close dialog', 'Escape'].entries()) {
     if (index) server.update({ ...usage, id: `usage-${index + 1}` });
     await expect(panel).toBeVisible();
     if (index === 1) { await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'dark' }); }
@@ -70,10 +78,32 @@ test('usage cancellation clears the panel through a serialized state patch', asy
   }
 });
 
+test('usage keeps settings, multiple limits and unfamiliar provider text accessible', async ({ page }) => {
+  const server = await setup(page), panel = page.locator('#dialog');
+  await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect.poll(() => server.answers.length).toBe(1);
+  expect(server.answers[0]).toEqual({ dialogId: usage.id, value: 'Settings' });
+  server.respond(undefined, { ...usage, id: 'limits', title: 'Provider usage\nAnother provider\nSession: [░░░░] 0% left\nWeekly: [████] 100% left\nNew limit: [????] unknown\n<img src=x onerror=alert(1)>', options: [] });
+  await expect(panel.getByRole('meter')).toHaveCount(2);
+  await expect(panel.getByRole('meter', { name: 'Session remaining' })).toHaveAttribute('value', '0');
+  await expect(panel.getByRole('meter', { name: 'Weekly remaining' })).toHaveAttribute('value', '100');
+  await expect(panel.getByText('New limit: [????] unknown', { exact: true })).toBeVisible();
+  await expect(panel.locator('img')).toHaveCount(0);
+  // Other extension select dialogs retain their original options and cancellation.
+  server.update({ id: 'select', method: 'select', title: 'Choose a provider', options: ['OpenAI', 'Anthropic'] });
+  await expect(panel).not.toHaveClass(/usage-panel/);
+  await expect(panel.getByRole('button', { name: 'OpenAI', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect.poll(() => server.answers.length).toBe(2);
+  expect(server.answers.at(-1)).toEqual({ dialogId: 'select', cancelled: true });
+  server.respond();
+  await expect(panel).toBeHidden();
+});
+
 test('dialog actions handle refresh, errors, small screens and other input methods', async ({ page }) => {
   const server = await setup(page), panel = page.locator('#dialog');
   await page.locator('#prompt').fill('Keep this draft');
-  await panel.getByRole('button', { name: 'Refresh current usage' }).click();
+  await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(() => server.answers.length).toBe(1);
   expect(server.answers[0]).toEqual({ dialogId: usage.id, value: 'Refresh current usage' });
   await page.keyboard.press('Escape');
@@ -81,11 +111,13 @@ test('dialog actions handle refresh, errors, small screens and other input metho
   server.respond('Could not send response. Try again.');
   await expect(panel.getByRole('status')).toContainText('Try again');
   await expect(panel.getByRole('button', { name: 'Close dialog' })).toBeEnabled();
-  await panel.getByRole('button', { name: 'Refresh current usage' }).click();
+  await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect.poll(() => server.answers.length).toBe(2);
-  server.respond(undefined, { ...usage, id: 'refreshed', title: usage.title.replace('68%', '67%') });
-  await expect(panel.locator('.dialog-description')).toContainText('67% left');
-  await expect(panel.getByRole('button', { name: 'Refresh current usage' })).toBeEnabled();
+  server.respond(undefined, { ...usage, id: 'refreshed', title: usage.title.replace('68%', '67%'), options: ['Refresh current usage', 'Close'] });
+  await expect(panel.locator('.usage-limit')).toContainText('67% left');
+  await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+  await panel.getByText('Plan & details', { exact: true }).click();
+  await expect(panel.getByText('prolite', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 350 });
   await expect.poll(async () => {
     const bounds = await panel.boundingBox();
@@ -94,9 +126,9 @@ test('dialog actions handle refresh, errors, small screens and other input metho
   expect((await panel.boundingBox()).y).toBeGreaterThanOrEqual(0);
   expect(await panel.locator('.dialog-body').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await expect(panel.getByRole('button', { name: 'Close dialog' })).toBeInViewport();
-  await expect(panel.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport();
+  await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeInViewport();
   await page.screenshot({ path: 'test-results/usage-short-viewport.png' });
-  await panel.getByRole('button', { name: 'Close', exact: true }).click();
+  await panel.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await expect.poll(() => server.answers.length).toBe(3);
   expect(server.answers.at(-1)).toEqual({ dialogId: 'refreshed', value: 'Close' });
   server.respond();

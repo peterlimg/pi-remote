@@ -703,6 +703,32 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   if (modelPicker && !$('model-picker').contains(event.target) && !$('model').contains(event.target)) closeModels();
 });
+function renderUsage(description) {
+  const content = el('div', undefined, 'usage-summary'), metadata = el('dl', undefined, 'usage-metadata');
+  for (const line of description.split(/\r?\n/).filter(Boolean)) {
+    const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
+    if (limit && Number(limit[2]) <= 100) {
+      const [, label, remaining, reset] = limit;
+      const metric = el('div', undefined, 'usage-limit'), row = el('div', undefined, 'usage-limit-heading');
+      row.append(el('span', label), el('strong', `${remaining}% left`));
+      const meter = el('meter'); meter.min = 0; meter.max = 100; meter.value = Number(remaining);
+      meter.setAttribute('aria-label', `${label} remaining`);
+      metric.append(row, meter);
+      if (reset) metric.append(el('p', reset.replace(/^resets\b/, 'Resets'), 'hint'));
+      content.append(metric);
+    } else if (/^(Credits|Usage limit resets|Plan|Fast mode):/.test(line)) {
+      const colon = line.indexOf(':');
+      metadata.append(el('dt', line.slice(0, colon)), el('dd', line.slice(colon + 1).trim()));
+    } else {
+      content.append(el('p', line.replace(/^Semantics:\s*/, ''), 'usage-description'));
+    }
+  }
+  if (metadata.childElementCount) {
+    const details = el('details', undefined, 'usage-details');
+    details.append(el('summary', 'Plan & details'), metadata); content.append(details);
+  }
+  return content;
+}
 function renderDialog(state) {
   const dialog = state.dialog;
   if (!dialog) {
@@ -713,13 +739,15 @@ function renderDialog(state) {
   lastDialog = dialog.id; $('dialog').hidden = false;
   const form = el('form'), header = el('header'), body = el('div', undefined, 'dialog-body'), footer = el('footer');
   const [title, ...details] = (dialog.title || 'Pi needs your input').split(/\r?\n/);
+  const usage = dialog.method === 'select' && title === 'Provider usage';
+  $('dialog').classList.toggle('usage-panel', usage);
   const heading = el('h3', title); heading.id = 'dialog-title'; heading.tabIndex = -1;
   const close = el('button', undefined, 'quiet'); close.type = 'button'; close.id = 'dialog-close';
   close.setAttribute('aria-label', 'Close dialog');
   close.append($('model-cancel').firstElementChild.cloneNode(true));
   header.append(heading, close);
   const description = [details.join('\n'), dialog.message].filter(Boolean).join('\n\n');
-  if (description) body.append(el('p', description, 'dialog-description'));
+  if (description) body.append(usage ? renderUsage(description) : el('p', description, 'dialog-description'));
   let input;
   if (!['select', 'confirm'].includes(dialog.method)) {
     input = el(dialog.method === 'editor' ? 'textarea' : 'input');
@@ -733,7 +761,8 @@ function renderDialog(state) {
     busy = true;
     heading.focus({ preventScroll: true });
     for (const control of form.elements) control.disabled = true;
-    feedback.hidden = false; feedback.classList.remove('dialog-error'); feedback.textContent = 'Sending response…';
+    feedback.hidden = false; feedback.classList.remove('dialog-error');
+    feedback.textContent = usage && response.value === 'Refresh current usage' ? 'Refreshing usage…' : 'Sending response…';
     try {
       await request('answer', { sessionId: id, answer: { dialogId: dialog.id, ...response } });
       // A receipt also closes the panel when an older host omits the removal patch.
@@ -749,23 +778,26 @@ function renderDialog(state) {
     }
   };
   if (dialog.method === 'select') {
-    const options = el('div', undefined, 'dialog-options');
+    const options = usage ? footer : el('div', undefined, 'dialog-options');
     for (const option of dialog.options || []) {
-      const button = el('button', option, 'command-option'); button.type = 'button';
+      if (usage && option === 'Close') continue;
+      const refresh = usage && option === 'Refresh current usage';
+      const button = el('button', refresh ? 'Refresh' : option, usage ? 'quiet' : 'command-option'); button.type = 'button';
       button.addEventListener('click', () => answer({ value: option })); options.append(button);
     }
-    body.append(options);
+    if (!usage) body.append(options);
   } else {
     const submit = el('button', dialog.method === 'confirm' ? 'Allow' : 'Submit'); submit.type = 'submit'; footer.append(submit);
   }
   const cancel = el('button', dialog.method === 'confirm' ? 'Deny' : 'Cancel', 'secondary'); cancel.type = 'button';
-  close.addEventListener('click', () => answer({ cancelled: true }));
+  close.addEventListener('click', () => answer(usage && dialog.options?.includes('Close') ? { value: 'Close' } : { cancelled: true }));
   cancel.addEventListener('click', () => answer({ cancelled: true }));
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (dialog.method !== 'select') answer(dialog.method === 'confirm' ? { confirmed: true } : { value: input.value });
   });
-  footer.append(cancel, feedback); form.append(header, body, footer); $('dialog').replaceChildren(form);
+  if (!usage) footer.append(cancel);
+  footer.append(feedback); form.append(header, body, footer); $('dialog').replaceChildren(form);
   close.focus({ preventScroll: true });
 }
 $('login-form').addEventListener('submit', event => {

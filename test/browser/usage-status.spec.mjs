@@ -20,10 +20,10 @@ test('closing usage reflects actual agent activity over the real host and RPC co
     await page.locator('#sessions button.session').click();
     const panel = page.getByRole('region', { name: 'Provider usage' });
     for (const [command, dismissal, expected] of [
-      ['/usage', 'Close', 'idle'],
-      ['/usage', 'Cancel', 'idle'],
+      ['/usage', 'Close dialog', 'idle'],
+      ['/usage', 'Escape', 'idle'],
       ['/usage-settled', 'Close dialog', 'idle'],
-      ['/usage-working', 'Close', 'working']
+      ['/usage-working', 'Close dialog', 'working']
     ]) {
       await page.locator('#prompt').fill(command);
       await page.locator('#send').click();
@@ -31,10 +31,11 @@ test('closing usage reflects actual agent activity over the real host and RPC co
       await expect(page.locator('#status')).toHaveText('waiting');
       await expect(page.locator('#agent-activity')).toBeHidden();
       if (command === '/usage') {
-        await panel.getByRole('button', { name: 'Refresh current usage' }).click();
-        await expect(panel.getByRole('button', { name: 'Refresh current usage' })).toBeEnabled();
+        await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
       }
-      await panel.getByRole('button', { name: dismissal, exact: true }).click();
+      if (dismissal === 'Escape') await page.keyboard.press('Escape');
+      else await panel.getByRole('button', { name: dismissal, exact: true }).click();
       await expect(panel).toBeHidden();
       await expect(page.locator('#status')).toHaveText(expected, { timeout: 1500 });
       if (expected === 'idle') {
