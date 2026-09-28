@@ -785,7 +785,8 @@ function renderImages() {
   $('attachments').replaceChildren(...images.map(image => {
     const item = el('div', undefined, 'attachment'), preview = el('img');
     preview.src = image.url; preview.alt = image.file.name;
-    const remove = el('button', 'Remove', 'quiet'); remove.type = 'button';
+    const remove = el('button'); remove.type = 'button';
+    remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
     remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
     remove.addEventListener('click', () => {
       URL.revokeObjectURL(image.url);

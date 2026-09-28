@@ -140,7 +140,20 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await (await picker).setFiles(file);
   await expect(page.getByRole('img', { name: file.name })).toBeVisible();
   await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
-  await page.getByRole('button', { name: `Remove ${file.name}` }).click();
+  const checkRemoveOverlay = async () => {
+    const preview = await page.locator('#attachments img').first().boundingBox();
+    const remove = page.getByRole('button', { name: `Remove ${file.name}` });
+    await expect(remove.locator('svg')).toBeVisible();
+    await expect(remove).toHaveText('');
+    const target = await remove.boundingBox();
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(target.y).toBe(preview.y);
+    expect(target.x + target.width).toBe(preview.x + preview.width);
+    expect(target.y + target.height).toBeLessThanOrEqual(preview.y + preview.height);
+  };
+  await checkRemoveOverlay();
+  await page.getByRole('button', { name: `Remove ${file.name}` }).tap();
   await expect(page.getByLabel('Attach images', { exact: true })).toBeFocused();
   await expect(page.locator('#attachments')).toBeHidden();
   await page.locator('#image-files').setInputFiles(file);
@@ -186,7 +199,12 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#attachments img')).toHaveCount(2);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
+  await checkRemoveOverlay();
   await page.screenshot({ path: 'test-results/images-desktop.png' });
+  await page.getByRole('button', { name: `Remove ${file.name}` }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#attachments img')).toHaveCount(1);
+  await expect(page.getByRole('img', { name: 'second.png' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#attachments img')).toHaveCount(0);
   expect(errors).toEqual([]);

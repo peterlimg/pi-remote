@@ -167,9 +167,10 @@ pre.message-text { white-space: pre-wrap; }
 .command-option span { display: block; font-size: 12px; color: var(--muted); }
 #command-help { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); }
 .attachments { display: flex; gap: 8px; overflow-x: auto; padding: 6px 10px; }
-.attachment { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.attachment img { width: 64px; height: 64px; object-fit: contain; border-radius: 8px; background: var(--panel); }
-.attachment button { min-width: 44px; min-height: 44px; padding: 6px; font-size: 12px; }
+.attachment { position: relative; flex-shrink: 0; }
+.attachment img { display: block; width: 80px; height: 80px; object-fit: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+/* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
+.attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 16px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.model-picker:not([hidden])) textarea { max-height: 44px; }
 /* The focus border replaces the browser's transient gray tap overlay. */
