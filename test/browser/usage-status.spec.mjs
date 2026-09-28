@@ -28,6 +28,7 @@ test('closing usage reflects actual agent activity over the real host and RPC co
       await page.locator('#prompt').fill(command);
       await page.locator('#send').click();
       await expect(panel).toBeVisible();
+      await expect(page.locator('#composer-send-status')).toBeHidden({ timeout: 1500 });
       await expect(page.locator('#status')).toHaveText('waiting');
       await expect(page.locator('#agent-activity')).toBeHidden();
       if (command === '/usage') {

@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
-import { JsonLines } from '../src/rpc.mjs';
+import { JsonLines, RpcWorker } from '../src/rpc.mjs';
 import { until } from './helpers.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'pi-remote-real-'));
@@ -20,6 +20,9 @@ const receivedImage = join(dir, 'received-image.json');
 writeFileSync(trust, `import { writeFileSync } from 'node:fs';
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
+  pi.registerCommand('smoke-usage', { handler: async (_args, ctx) => {
+    await ctx.ui.select('Provider usage', ['Close']);
+  } });
   pi.on('input', event => {
     if (!event.images?.length) return;
     writeFileSync(${JSON.stringify(receivedImage)}, JSON.stringify(event));
@@ -70,7 +73,17 @@ try {
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.socket);
-  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on. No model calls.');
+  const worker = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions', '-e', trust] });
+  try {
+    let dialog;
+    worker.on('event', event => { if (event.type === 'extension_ui_request' && event.method === 'select') dialog = event; });
+    const sent = worker.command({ type: 'prompt', text: '/smoke-usage' });
+    await until(() => dialog, 25000);
+    assert.deepEqual(await sent, { accepted: true }); // Must not wait for the user to close the dialog.
+    worker.process.stdin.write(JSON.stringify({ type: 'extension_ui_response', id: dialog.id, cancelled: true }) + '\n');
+    await until(() => worker.pending.size === 0);
+  } finally { await worker.close(); }
+  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on, dialog command receipt. No model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

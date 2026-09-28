@@ -45,13 +45,16 @@ export class RpcWorker extends EventEmitter {
     this.pending.clear();
     this.emit('fault', error);
   }
-  request(type, data = {}) {
+  request(type, data = {}, { background = false } = {}) {
     if (this.closed) return Promise.reject(new Error('Pi worker is closed'));
     const id = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Pi response timed out; delivery may have occurred')); }, 30000);
-      this.pending.set(id, { resolve, reject, timer });
-      this.process.stdin.write(JSON.stringify({ ...data, id, type }) + '\n');
+      const timer = background ? undefined : setTimeout(() => { this.pending.delete(id); reject(new Error('Pi response timed out; delivery may have occurred')); }, 30000);
+      this.pending.set(id, { timer, resolve, reject: background ? error => this.emit('fault', error) : reject });
+      this.process.stdin.write(JSON.stringify({ ...data, id, type }) + '\n', error => {
+        if (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
+        else if (background) resolve();
+      });
     });
   }
   async command(command) {
@@ -75,8 +78,15 @@ export class RpcWorker extends EventEmitter {
       await this.request('clear_queue');
       await this.request('abort');
     } else if (command.type === 'prompt' || command.text.startsWith('/')) {
+      // Extension handlers can wait indefinitely for dialog input. Acknowledge dispatch,
+      // not handler completion; keep tracking the RPC response for execution errors.
+      let background = false;
+      if (command.text.startsWith('/')) {
+        const { commands } = await this.request('get_commands');
+        background = commands.some(item => item.source === 'extension' && item.name === command.text.slice(1).split(' ', 1)[0]);
+      }
       // Extension commands must use prompt, even when submitted with Alt+Enter.
-      await this.request('prompt', { message: command.text, ...(command.images ? { images: command.images } : {}), streamingBehavior: command.type === 'followUp' ? 'followUp' : 'steer' });
+      await this.request('prompt', { message: command.text, ...(command.images ? { images: command.images } : {}), streamingBehavior: command.type === 'followUp' ? 'followUp' : 'steer' }, { background });
     } else {
       await this.request(command.type === 'followUp' ? 'follow_up' : 'steer', { message: command.text, ...(command.images ? { images: command.images } : {}) });
     }

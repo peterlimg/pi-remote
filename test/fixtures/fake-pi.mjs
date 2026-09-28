@@ -7,12 +7,16 @@ const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
-let model = models[0], thinkingLevel = 'medium', usageId = 0;
+let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand;
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select', title: 'Provider usage', options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
   if (command.type === 'extension_ui_response') {
     if (command.id.startsWith('usage-')) {
       if (command.value === 'Refresh current usage') showUsage();
+      else if (usageCommand) {
+        out({ id: usageCommand.id, type: 'response', success: true });
+        usageCommand = undefined;
+      }
       return; // An extension command can finish without running an agent turn.
     }
     out({ type: 'message_end', message: { role: 'assistant', timestamp: 9, content: 'dialog answered' } });
@@ -28,14 +32,17 @@ const parser = new JsonLines(command => {
   }
   if (command.type === 'set_thinking_level') thinkingLevel = command.level === 'max' ? 'high' : command.level;
   if (command.type === 'get_messages') data = { messages: fresh ? [] : [{ role: 'user', timestamp: 1, content: 'saved prompt' }] };
-  if (command.type === 'get_commands') data = { commands: [{ name: 'review', description: 'Review changes', source: 'extension', path: '/private/review.ts' }] };
+  if (command.type === 'get_commands') data = { commands: [{ name: 'review', description: 'Review changes', source: 'extension', path: '/private/review.ts' },
+    ...['usage', 'usage-settled', 'usage-working'].map(name => ({ name, source: 'extension' }))] };
   if (command.message?.startsWith('/review') && command.type !== 'prompt') {
     out({ id: command.id, type: 'response', success: false, error: 'Extension commands require prompt' }); return;
   }
   if (!['get_state', 'get_messages', 'get_commands', 'get_available_models', 'set_model', 'set_thinking_level', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
     out({ id: command.id, type: 'response', success: false, error: 'Unknown fake command' }); return;
   }
-  out({ id: command.id, type: 'response', success: true, data });
+  // Pi acknowledges extension commands only after their handler returns.
+  if (command.message?.startsWith('/usage')) usageCommand = command;
+  else out({ id: command.id, type: 'response', success: true, data });
   if (['prompt', 'steer', 'follow_up'].includes(command.type)) {
     if (fresh) writeFileSync(sessionFile, JSON.stringify({ type: 'session', id: sessionId, cwd: process.cwd() }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'user', content: command.message } }) + '\n' +
