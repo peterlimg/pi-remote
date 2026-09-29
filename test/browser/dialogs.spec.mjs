@@ -46,6 +46,9 @@ async function setup(page, dialog = usage) {
 test('usage is plain conversation text and closes its extension menu automatically', async ({ page }) => {
   const server = await setup(page), summary = page.getByRole('article', { name: 'Provider usage' });
   await expect(summary).toHaveText('Weekly limit: 32% used · resets 12:53 on 4 Oct');
+  await expect(summary.locator('p')).toHaveCSS('font-size', '16px');
+  await expect(summary.locator('p')).toHaveCSS('line-height', '26.4px');
+  expect(await summary.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await expect(page.locator('#dialog')).toBeHidden();
   await expect(summary.locator('button, meter, details')).toHaveCount(0);
   await expect.poll(() => server.answers.length).toBe(1);
