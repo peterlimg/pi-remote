@@ -57,6 +57,7 @@ let socket, selected, sessions = [], connected = false, manualClose = false, rec
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
@@ -193,7 +194,8 @@ function logout() {
   token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
-  imageDrafts.clear(); sending.clear();
+  for (const draft of submissions.values()) releaseImages(draft.attachments);
+  imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
@@ -334,13 +336,31 @@ async function selectSession(id) {
 function clearThreadImages(keep = new Set()) {
   for (const [id, image] of threadImages) if (!keep.has(id)) {
     imageObserver.unobserve(image.node);
+    clearTimeout(image.retryTimer);
     if (image.url) URL.revokeObjectURL(image.url);
     threadImages.delete(id);
   }
 }
+function showThreadImage(image, blob) {
+  image.url = URL.createObjectURL(blob);
+  const link = el('a'), preview = el('img');
+  link.href = image.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+  link.setAttribute('aria-label', 'Open image');
+  preview.src = image.url; preview.alt = 'Attached image';
+  preview.onerror = () => {
+    URL.revokeObjectURL(image.url); image.url = undefined;
+    image.button.textContent = 'Image unavailable. Retry'; image.node.replaceChildren(image.button);
+  };
+  link.append(preview); image.node.replaceChildren(link);
+}
+function userMessageText(message) {
+  // Pi adds these coordinate hints for the model, not for the conversation UI.
+  return message.images?.length ? (message.text || '').replace(/^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]\s*$/gm, '').trim() : message.text || '';
+}
 function loadThreadImage(image) {
   if (!image || image.loading || image.url) return;
   image.loading = true;
+  image.retryAt = Date.now() + 1000;
   image.button.disabled = true; image.button.textContent = 'Loading image…';
   // One image at a time leaves the command channel free for prompts and aborts.
   imageQueue = imageQueue.then(async () => {
@@ -350,30 +370,22 @@ function loadThreadImage(image) {
       const [data] = validateImages([value]);
       if (threadImages.get(image.key) !== image) return;
       const bytes = Uint8Array.from(atob(data.data), char => char.charCodeAt(0));
-      image.url = URL.createObjectURL(new Blob([bytes], { type: data.mimeType }));
-      const link = el('a'), preview = el('img');
-      link.href = image.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-      link.setAttribute('aria-label', 'Open image');
-      preview.src = image.url; preview.alt = 'Attached image';
-      preview.onerror = () => {
-        URL.revokeObjectURL(image.url); image.url = undefined;
-        image.button.textContent = 'Image unavailable. Retry'; image.node.replaceChildren(image.button);
-      };
-      link.append(preview); image.node.replaceChildren(link);
+      showThreadImage(image, new Blob([bytes], { type: data.mimeType }));
     } catch (error) {
       image.button.textContent = 'Image unavailable. Retry'; image.button.title = error.message;
     } finally { image.loading = false; image.button.disabled = false; }
   });
 }
-function appendThreadImages(parent, message) {
+function appendThreadImages(parent, message, attachments) {
   if (!message?.images?.length) return;
   const gallery = el('div', undefined, 'thread-images');
   for (const [index, reference] of message.images.entries()) {
-    if (!/^[a-f0-9]{64}$/.test(reference.id) || !IMAGE_TYPES.includes(reference.mimeType)) continue;
+    if ((!attachments && !/^[a-f0-9]{64}$/.test(reference.id)) || !IMAGE_TYPES.includes(reference.mimeType)) continue;
     const key = message.id + ':' + index;
     let image = threadImages.get(key);
     if (image && image.id !== reference.id) {
       imageObserver.unobserve(image.node);
+      clearTimeout(image.retryTimer);
       if (image.url) URL.revokeObjectURL(image.url);
       threadImages.delete(key); image = undefined;
     }
@@ -382,7 +394,15 @@ function appendThreadImages(parent, message) {
       button.type = 'button'; node.dataset.imageKey = key; node.append(button);
       image = { key, id: reference.id, sessionId: selected, node, button };
       button.addEventListener('click', () => loadThreadImage(image));
-      threadImages.set(key, image); imageObserver.observe(node);
+      threadImages.set(key, image);
+      if (attachments?.[index]) showThreadImage(image, attachments[index].file);
+      else imageObserver.observe(node);
+    } else if (!image.url && !image.loading && image.retryAt && !image.retryTimer) {
+      // A live snapshot can precede Pi flushing the image to its session file.
+      image.retryTimer = setTimeout(() => {
+        image.retryTimer = undefined;
+        imageObserver.observe(image.node);
+      }, Math.max(0, image.retryAt - Date.now()));
     }
     gallery.append(image.node);
   }
@@ -397,7 +417,20 @@ function renderConversation(state) {
   const fragment = document.createDocumentFragment();
   const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
-  const messages = state.messages || [];
+  const messages = [...(state.messages || [])], localImages = new Map();
+  const matched = [];
+  for (const outgoing of submissions.values()) {
+    if (outgoing.sessionId !== selected) continue;
+    const index = messages.findIndex(message => message.role === 'user' && !outgoing.knownIds.has(message.id) &&
+      !localImages.has(message.id) && userMessageText(message).trim() === outgoing.text.trim() &&
+      (message.images?.length || 0) === outgoing.attachments.length);
+    const message = index < 0 ? { id: outgoing.key, role: 'user', text: outgoing.text,
+      images: outgoing.attachments.map(({ file }) => ({ id: 'local', mimeType: file.type })),
+      delivery: outgoing.accepted ? 'Sent. Waiting for Pi…' : 'Sending…' } : messages[index];
+    localImages.set(message.id, outgoing.attachments);
+    if (index < 0) messages.push(message);
+    else matched.push({ outgoing, messageId: message.id });
+  }
   if (isUsageDialog(state.dialog) && usageSummaries.get(selected)?.dialog.id !== state.dialog.id) {
     usageSummaries.set(selected, { dialog: state.dialog, afterId: messages.at(-1)?.id });
   }
@@ -466,15 +499,18 @@ function renderConversation(state) {
     if (message.text || message.images?.length || message.role === 'user') {
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
-      const body = el(message.role === 'user' ? 'pre' : 'div', undefined, 'message-text');
-      if (message.role === 'user') body.textContent = message.text || (message.images?.length ? '' : '(empty message)');
+      const body = el('div', undefined, 'message-text');
+      if (message.role === 'user') body.textContent = userMessageText(message) || (message.images?.length ? '' : '(empty message)');
       else {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
         body.innerHTML = markdown.render(message.text || '');
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
       }
+      if (message.role === 'user') appendThreadImages(article, message, localImages.get(message.id));
       if (body.textContent) article.append(body);
-      appendThreadImages(article, message); fragment.append(article);
+      if (message.role !== 'user') appendThreadImages(article, message);
+      if (message.delivery) article.append(el('small', message.delivery, 'delivery-status'));
+      fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
     if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
@@ -482,6 +518,11 @@ function renderConversation(state) {
   if (usagePosition === messages.length) fragment.append(renderUsage(usage));
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
   box.replaceChildren(fragment);
+  for (const { outgoing, messageId } of matched) {
+    submissions.delete(outgoing.key);
+    for (const queued of submissions.values()) if (queued.sessionId === selected) queued.knownIds.add(messageId);
+    if (sending.get(selected) !== outgoing) releaseImages(outgoing.attachments);
+  }
   if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.toolId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
   if (state.error) notice(state.error);
@@ -943,11 +984,17 @@ async function sendMessage(type = 'prompt') {
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
   if (attachments.length && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.length && text.trim().startsWith('/')) { notice('Send images with a message, not a slash command.'); return; }
-  const outgoing = { text, attachments };
+  const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,
+    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
   sending.set(id, outgoing);
+  if (attachments.length) submissions.set(outgoing.key, outgoing);
   // The editor owns the next draft; retain this submission until delivery is confirmed.
   drafts.set(id, ''); imageDrafts.delete(id);
   $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
+  if (attachments.length) {
+    renderConversation(cache.get(id));
+    $('transcript').scrollTop = $('transcript').scrollHeight;
+  }
   let restored = false;
   try {
     const images = await Promise.all(attachments.map(({ file }) => new Promise((resolve, reject) => {
@@ -966,9 +1013,11 @@ async function sendMessage(type = 'prompt') {
       else openModels(id);
     } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}) } });
     if (sending.get(id) !== outgoing) return;
+    outgoing.accepted = true;
     if (created && selected === id) await selectSession(created.sessionId);
   } catch (e) {
     if (sending.get(id) !== outgoing) return;
+    submissions.delete(outgoing.key);
     const nextText = selected === id ? $('prompt').value : drafts.get(id) || '';
     drafts.set(id, [text, nextText].filter(Boolean).join('\n\n'));
     imageDrafts.set(id, attachments); restored = true;
@@ -976,8 +1025,10 @@ async function sendMessage(type = 'prompt') {
     notice(e.message);
   } finally {
     if (sending.get(id) === outgoing) {
-      if (!restored) releaseImages(attachments);
-      sending.delete(id); updateControls();
+      if (!restored && !submissions.has(outgoing.key)) releaseImages(attachments);
+      sending.delete(id);
+      if (selected === id && attachments.length) renderConversation(cache.get(id));
+      else updateControls();
     }
   }
 }
