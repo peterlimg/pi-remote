@@ -8,7 +8,7 @@ import { startHost } from '../../src/host.mjs';
 import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
-test('closing usage reflects actual agent activity over the real host and RPC connection', async ({ page }) => {
+test('inline usage automatically releases the extension and preserves actual agent activity', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-usage-')), file = join(dir, 'usage.jsonl');
   writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
   const config = loadConfig(dir), id = sessionKey(file);
@@ -18,26 +18,18 @@ test('closing usage reflects actual agent activity over the real host and RPC co
     expect((await host.service.resume(id, randomUUID())).ok).toBe(true);
     await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
     await page.locator('#sessions button.session').click();
-    const panel = page.getByRole('region', { name: 'Provider usage' });
-    for (const [command, dismissal, expected] of [
-      ['/usage', 'Close dialog', 'idle'],
-      ['/usage', 'Escape', 'idle'],
-      ['/usage-settled', 'Close dialog', 'idle'],
-      ['/usage-working', 'Close dialog', 'working']
-    ]) {
+    const summary = page.getByRole('article', { name: 'Provider usage' });
+    for (const [index, [command, expected]] of [
+      ['/usage', 'idle'],
+      ['/usage', 'idle'],
+      ['/usage-settled', 'idle'],
+      ['/usage-working', 'working']
+    ].entries()) {
       await page.locator('#prompt').fill(command);
       await page.locator('#send').click();
-      await expect(panel).toBeVisible();
+      await expect(summary).toHaveText(`Weekly limit: ${index + 1}% used · resets tomorrow`);
+      await expect(page.locator('#dialog')).toBeHidden();
       await expect(page.locator('#composer-send-status')).toBeHidden({ timeout: 1500 });
-      await expect(page.locator('#status')).toHaveText('waiting');
-      await expect(page.locator('#agent-activity')).toBeHidden();
-      if (command === '/usage') {
-        await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
-        await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
-      }
-      if (dismissal === 'Escape') await page.keyboard.press('Escape');
-      else await panel.getByRole('button', { name: dismissal, exact: true }).click();
-      await expect(panel).toBeHidden();
       await expect(page.locator('#status')).toHaveText(expected, { timeout: 1500 });
       if (expected === 'idle') {
         await expect(page.locator('#agent-activity')).toBeHidden();

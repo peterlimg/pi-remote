@@ -45,7 +45,7 @@ window.addEventListener('resize', fitViewport);
 fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
-const threadImages = new Map();
+const threadImages = new Map(), usageSummaries = new Map();
 let imageQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) {
@@ -195,7 +195,7 @@ function logout() {
   for (const draft of sending.values()) releaseImages(draft.attachments);
   imageDrafts.clear(); sending.clear();
   clearThreadImages();
-  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -398,6 +398,11 @@ function renderConversation(state) {
   const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
   const messages = state.messages || [];
+  if (isUsageDialog(state.dialog) && usageSummaries.get(selected)?.dialog.id !== state.dialog.id) {
+    usageSummaries.set(selected, { dialog: state.dialog, afterId: messages.at(-1)?.id });
+  }
+  const usage = usageSummaries.get(selected);
+  const usagePosition = usage ? messages.findIndex(message => message.id === usage.afterId) + 1 : -1;
   clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => message.id + ':' + index))));
   const results = new Map(messages.filter(m => m.role === 'toolResult' && m.toolCallId).map(m => [m.toolCallId, m]));
   const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
@@ -452,7 +457,8 @@ function renderConversation(state) {
     fragment.append(detail);
   };
   if (state.historyTruncated) fragment.append(el('p', 'Latest 100 messages.', 'hint'));
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
+    if (index === usagePosition) fragment.append(renderUsage(usage));
     if (message.role === 'toolResult') {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
       continue;
@@ -473,6 +479,7 @@ function renderConversation(state) {
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
     if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
   }
+  if (usagePosition === messages.length) fragment.append(renderUsage(usage));
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
   box.replaceChildren(fragment);
   if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.toolId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
@@ -703,51 +710,68 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   if (modelPicker && !$('model-picker').contains(event.target) && !$('model').contains(event.target)) closeModels();
 });
-function renderUsage(description) {
-  const content = el('div', undefined, 'usage-summary'), metadata = el('dl', undefined, 'usage-metadata');
+function isUsageDialog(dialog) {
+  return dialog?.method === 'select' && dialog.title?.split(/\r?\n/)[0] === 'Provider usage';
+}
+function renderUsage(usage) {
+  const article = el('article', undefined, 'message usage-summary');
+  article.setAttribute('aria-label', 'Provider usage');
+  const content = el('blockquote'), body = el('div', undefined, 'message-text');
+  const description = [usage.dialog.title.split(/\r?\n/).slice(1).join('\n'), usage.dialog.message].filter(Boolean).join('\n');
   for (const line of description.split(/\r?\n/).filter(Boolean)) {
+    if (/^(Credits|Usage limit resets|Plan|Fast mode|Semantics):/.test(line) || / Usage · /.test(line)) continue;
     const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
     if (limit && Number(limit[2]) <= 100) {
       const [, label, remaining, reset] = limit;
-      const metric = el('div', undefined, 'usage-limit'), row = el('div', undefined, 'usage-limit-heading');
-      row.append(el('span', label), el('strong', `${remaining}% left`));
-      const meter = el('meter'); meter.min = 0; meter.max = 100; meter.value = Number(remaining);
-      meter.setAttribute('aria-label', `${label} remaining`);
-      metric.append(row, meter);
-      if (reset) metric.append(el('p', reset.replace(/^resets\b/, 'Resets'), 'hint'));
-      content.append(metric);
-    } else if (/^(Credits|Usage limit resets|Plan|Fast mode):/.test(line)) {
-      const colon = line.indexOf(':');
-      metadata.append(el('dt', line.slice(0, colon)), el('dd', line.slice(colon + 1).trim()));
-    } else {
-      content.append(el('p', line.replace(/^Semantics:\s*/, ''), 'usage-description'));
-    }
+      content.append(el('p', `${label}: ${Number((100 - Number(remaining)).toFixed(2))}% used${reset ? ' · ' + reset : ''}`));
+    } else content.append(el('p', line));
   }
-  if (metadata.childElementCount) {
-    const details = el('details', undefined, 'usage-details');
-    details.append(el('summary', 'Plan & details'), metadata); content.append(details);
+  if (!content.childElementCount) content.append(el('p', 'Usage information is unavailable.'));
+  if (usage.error) {
+    content.append(el('p', usage.error, 'dialog-error'));
+    const retry = el('button', 'Retry closing usage', 'quiet');
+    retry.type = 'button';
+    retry.addEventListener('click', () => { usage.error = undefined; renderConversation(cache.get(selected)); });
+    content.append(retry);
   }
-  return content;
+  body.append(content); article.append(body);
+  return article;
+}
+async function closeUsage(usage, id) {
+  if (usage.busy || usage.error || usage.closed) return;
+  usage.busy = true;
+  try {
+    await request('answer', { sessionId: id, answer: { dialogId: usage.dialog.id,
+      ...(usage.dialog.options?.includes('Close') ? { value: 'Close' } : { cancelled: true }) } });
+    usage.closed = true;
+    const current = cache.get(id);
+    if (current?.dialog?.id === usage.dialog.id) delete current.dialog;
+  } catch (e) {
+    usage.error = e.message;
+  } finally {
+    usage.busy = false;
+    if (selected === id) renderConversation(cache.get(id));
+  }
 }
 function renderDialog(state) {
   const dialog = state.dialog;
-  if (!dialog) {
+  if (!dialog || isUsageDialog(dialog)) {
     if ($('dialog').contains(document.activeElement)) $('transcript').focus({ preventScroll: true });
-    $('dialog').hidden = true; lastDialog = undefined; return;
+    $('dialog').hidden = true; lastDialog = undefined;
+    if (dialog) closeUsage(usageSummaries.get(selected), selected);
+    return;
   }
   if (lastDialog === dialog.id) return;
   lastDialog = dialog.id; $('dialog').hidden = false;
   const form = el('form'), header = el('header'), body = el('div', undefined, 'dialog-body'), footer = el('footer');
   const [title, ...details] = (dialog.title || 'Pi needs your input').split(/\r?\n/);
-  const usage = dialog.method === 'select' && title === 'Provider usage';
-  $('dialog').classList.toggle('usage-panel', usage);
   const heading = el('h3', title); heading.id = 'dialog-title'; heading.tabIndex = -1;
   const close = el('button', undefined, 'quiet'); close.type = 'button'; close.id = 'dialog-close';
   close.setAttribute('aria-label', 'Close dialog');
   close.append($('model-cancel').firstElementChild.cloneNode(true));
   header.append(heading, close);
   const description = [details.join('\n'), dialog.message].filter(Boolean).join('\n\n');
-  if (description) body.append(usage ? renderUsage(description) : el('p', description, 'dialog-description'));
+  if (description) body.append(el('p', description, 'dialog-description'));
   let input;
   if (!['select', 'confirm'].includes(dialog.method)) {
     input = el(dialog.method === 'editor' ? 'textarea' : 'input');
@@ -762,7 +786,7 @@ function renderDialog(state) {
     heading.focus({ preventScroll: true });
     for (const control of form.elements) control.disabled = true;
     feedback.hidden = false; feedback.classList.remove('dialog-error');
-    feedback.textContent = usage && response.value === 'Refresh current usage' ? 'Refreshing usage…' : 'Sending response…';
+    feedback.textContent = 'Sending response…';
     try {
       await request('answer', { sessionId: id, answer: { dialogId: dialog.id, ...response } });
       // A receipt also closes the panel when an older host omits the removal patch.
@@ -778,25 +802,23 @@ function renderDialog(state) {
     }
   };
   if (dialog.method === 'select') {
-    const options = usage ? footer : el('div', undefined, 'dialog-options');
+    const options = el('div', undefined, 'dialog-options');
     for (const option of dialog.options || []) {
-      if (usage && option === 'Close') continue;
-      const refresh = usage && option === 'Refresh current usage';
-      const button = el('button', refresh ? 'Refresh' : option, usage ? 'quiet' : 'command-option'); button.type = 'button';
+      const button = el('button', option, 'command-option'); button.type = 'button';
       button.addEventListener('click', () => answer({ value: option })); options.append(button);
     }
-    if (!usage) body.append(options);
+    body.append(options);
   } else {
     const submit = el('button', dialog.method === 'confirm' ? 'Allow' : 'Submit'); submit.type = 'submit'; footer.append(submit);
   }
   const cancel = el('button', dialog.method === 'confirm' ? 'Deny' : 'Cancel', 'secondary'); cancel.type = 'button';
-  close.addEventListener('click', () => answer(usage && dialog.options?.includes('Close') ? { value: 'Close' } : { cancelled: true }));
+  close.addEventListener('click', () => answer({ cancelled: true }));
   cancel.addEventListener('click', () => answer({ cancelled: true }));
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (dialog.method !== 'select') answer(dialog.method === 'confirm' ? { confirmed: true } : { value: input.value });
   });
-  if (!usage) footer.append(cancel);
+  footer.append(cancel);
   footer.append(feedback); form.append(header, body, footer); $('dialog').replaceChildren(form);
   close.focus({ preventScroll: true });
 }

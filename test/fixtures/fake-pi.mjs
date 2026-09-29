@@ -8,7 +8,8 @@ const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand;
-const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select', title: 'Provider usage', options: ['Refresh current usage', 'Close'] });
+const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
+  title: `Provider usage\nWeekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
   if (command.type === 'extension_ui_response') {
     if (command.id.startsWith('usage-')) {

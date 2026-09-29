@@ -224,25 +224,7 @@ pre.message-text { white-space: pre-wrap; }
 .dialog footer .secondary { margin-left: auto; }
 .dialog footer .hint { width: 100%; margin: 0; overflow-wrap: anywhere; }
 .dialog-error { color: var(--error); }
-.usage-summary { padding: 16px 16px 0; font-size: 13px; overflow-wrap: anywhere; }
-.usage-description { margin-bottom: 4px; white-space: pre-wrap; color: var(--muted); }
-.usage-description:first-child { color: var(--text); font-weight: 500; }
-.usage-limit { margin-block: 16px; }
-.usage-limit-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.usage-limit-heading strong { flex-shrink: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.usage-limit meter { display: block; width: 100%; height: 8px; margin: 8px 0; border: 0; border-radius: 4px; background: var(--line); }
-.usage-limit meter::-webkit-meter-bar { height: 8px; border: 0; border-radius: 4px; background: var(--line); }
-.usage-limit meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 4px; }
-.usage-limit meter::-moz-meter-bar { background: var(--accent); border-radius: 4px; }
-.usage-limit .hint { margin: 0; }
-.usage-details summary { min-height: 44px; padding-block: 12px; color: var(--muted); }
-.usage-metadata { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 4px 0 16px; }
-.usage-metadata dt { color: var(--muted); }
-.usage-metadata dd { margin: 0; }
-.usage-panel footer { gap: 4px; padding: 4px 8px; }
-.usage-panel footer button { font-size: 13px; }
-.usage-panel footer .hint { padding: 0 8px 4px; }
-.usage-panel footer:not(:has(button)):has(.hint[hidden]) { display: none; }
+.usage-summary, .usage-summary .message-text { font: inherit; }
 .model-picker { display: flex; flex-direction: column; max-height: min(24rem, var(--model-menu-height, 50dvh)); }
 .model-search-row { display: flex; align-items: center; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 #model-cancel { display: grid; place-items: center; width: 44px; flex-shrink: 0; padding: 0; color: var(--muted); }
