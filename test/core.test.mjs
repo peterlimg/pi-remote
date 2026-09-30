@@ -59,8 +59,10 @@ test('fast mode follows pi-usage status and clears on model changes', () => {
   const state = initialState({});
   const status = statusText => applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'usage', statusText });
   assert.equal(state.fastMode, undefined);
+  state.updatedAt = 1;
   status('\u001b[32mcodex fast 80%\u001b[0m');
   assert.equal(state.fastMode, true);
+  assert.equal(state.updatedAt, 1);
   applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'other', statusText: 'idle' });
   assert.equal(state.fastMode, true);
   for (const text of ['codex 80%', undefined, 'auth unavailable', 'codex faster']) {

@@ -6,14 +6,19 @@ export function initialState(meta, messages = []) {
   return { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: Date.now() };
 }
 export function applyEvent(state, event) {
+  if (event.type === 'extension_ui_request') {
+    // Status refreshes are not conversation activity. pi-usage only labels
+    // the status "codex fast" when fast routing is effective.
+    if (event.method === 'setStatus' && event.statusKey === 'usage') {
+      state.fastMode = /^codex fast(?:\s|$)/u.test(stripVTControlCharacters(event.statusText || ''));
+      state.revision++;
+    }
+    return state;
+  }
   state.updatedAt = Date.now(); state.revision++;
   if (event.type === 'model_select') {
     state.model = `${event.model.provider}/${event.model.id}`;
     state.fastMode = false;
-  }
-  // pi-usage only labels the status "codex fast" when fast routing is effective.
-  if (event.type === 'extension_ui_request' && event.method === 'setStatus' && event.statusKey === 'usage') {
-    state.fastMode = /^codex fast(?:\s|$)/u.test(stripVTControlCharacters(event.statusText || ''));
   }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
   if (event.type === 'agent_start') state.status = 'working';
