@@ -33,7 +33,7 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   assert.equal(renamed, true);
   assert.deepEqual(await service.getCommands(id), [
     { name: 'review', description: 'Review changes', source: 'extension' },
-    ...['usage', 'usage-settled', 'usage-working'].map(name => ({ name, description: undefined, source: 'extension' })),
+    ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, description: undefined, source: 'extension' })),
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
     { name: 'model', description: 'Switch model for this session', source: 'remote' }
   ]);
@@ -82,7 +82,7 @@ test('remote /new creates an independent session in the same working directory',
   assert.deepEqual(service.read(id).messages, []);
   assert.deepEqual(await service.getCommands(id), [
     { name: 'review', description: 'Review changes', source: 'extension' },
-    ...['usage', 'usage-settled', 'usage-working'].map(name => ({ name, description: undefined, source: 'extension' })),
+    ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, description: undefined, source: 'extension' })),
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
     { name: 'model', description: 'Switch model for this session', source: 'remote' }
   ]);
