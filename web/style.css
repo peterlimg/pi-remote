@@ -181,7 +181,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer textarea { -webkit-tap-highlight-color: transparent; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-color: var(--accent); }
-.composer-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 /* Pinch zoom can leave less space than the smallest layout-viewport breakpoint. */
 @container (max-width: 260px) {
@@ -190,8 +190,8 @@ pre.message-text { white-space: pre-wrap; }
 }
 .composer-actions button { font-size: 12px; }
 /* Keep 44px tap targets around the smaller 32px circles. */
-.composer-toolbar #attach, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
-.composer-toolbar #attach, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
+.composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
+.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
 /* Keep the native file input aligned with its visible attachment control. */
 #attach { position: relative; }
@@ -203,7 +203,8 @@ pre.message-text { white-space: pre-wrap; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 24px; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
-#reasoning-control { display: inline-flex; align-items: center; flex-shrink: 0; color: var(--muted); text-transform: capitalize; }
+#reasoning-control { display: inline-flex; align-items: center; color: var(--muted); text-transform: capitalize; }
+#reasoning-value { overflow: hidden; text-overflow: ellipsis; }
 #reasoning-control:not(:first-child) { padding-left: 6px; }
 #reasoning-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 #reasoning-control:has(select:disabled) { opacity: .45; }

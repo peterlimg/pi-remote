@@ -44,8 +44,9 @@ test('compact composer keeps controls on one row across draft, working and offli
   await expect(page.locator('#reasoning-value')).toHaveText('Medium');
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
   await expect(page.locator('#abort')).toBeHidden();
+  await expect(page.locator('#commands')).toBeEnabled();
   const rowFits = async () => {
-    const controls = await page.locator('#attach, #model, #reasoning-control, #send:not([hidden]), #abort:not([hidden])')
+    const controls = await page.locator('#attach, #model, #reasoning-control, #commands, #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
       }));
@@ -63,6 +64,8 @@ test('compact composer keeps controls on one row across draft, working and offli
   state.status = 'working'; snapshot();
   await expect(page.locator('#abort')).toBeVisible();
   await expect(page.locator('#send')).toBeHidden();
+  await expect(page.locator('#commands')).toBeEnabled();
+  await rowFits();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Message Pi while it works…');
   await page.screenshot({ path: 'test-results/clean-composer-working.png' });
   await page.locator('#prompt').fill('Keep working on the tests');
@@ -86,6 +89,7 @@ test('compact composer keeps controls on one row across draft, working and offli
   state.status = 'saved'; snapshot();
   await expect(page.locator('#resume')).toBeVisible();
   await expect(page.locator('#send')).toBeDisabled();
+  await expect(page.locator('#commands')).toBeDisabled();
   await expect(page.locator('#reasoning')).toBeDisabled();
   await expect(page.locator('#composer-hint')).toBeVisible();
   await page.setViewportSize({ width: 320, height: 568 });

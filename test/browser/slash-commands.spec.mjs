@@ -45,6 +45,42 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await expect(prompt).toHaveValue('/settings');
 });
 
+test('slash shortcut opens and reopens commands without sending or replacing a message draft', async ({ page }) => {
+  const sent = [];
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
+    const packet = JSON.parse(payload.toString());
+    if (packet.op === 'command') sent.push(packet.command);
+  }));
+  await page.goto(url);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const shortcut = page.getByRole('button', { name: 'Open slash commands' });
+  const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
+  await shortcut.tap();
+  await expect(prompt).toHaveValue('/');
+  await expect(prompt).toBeFocused();
+  await expect(shortcut).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu.getByRole('option')).toHaveCount(5);
+  await page.screenshot({ path: 'test-results/commands-shortcut-mobile.png' });
+  await prompt.press('Escape');
+  await expect(shortcut).toHaveAttribute('aria-expanded', 'false');
+  await shortcut.tap();
+  await expect(menu).toBeVisible();
+  await menu.getByRole('option', { name: /\/review/ }).tap();
+  await expect(prompt).toHaveValue('/review ');
+  await expect(shortcut).toBeDisabled();
+  await prompt.fill('Keep this message');
+  await expect(shortcut).toBeDisabled();
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await page.getByRole('button', { name: /Project Beta/ }).click();
+  await shortcut.tap();
+  await expect(menu.getByRole('option', { name: /\/deploy/ })).toBeVisible();
+  await expect(menu.getByRole('option', { name: /\/review/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(prompt).toHaveValue('Keep this message');
+  expect(sent).toHaveLength(0);
+});
+
 test('arrows navigate, Tab completes, Enter runs the selected command, and IME does not submit', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, hasTouch: false });
   const page = await context.newPage();

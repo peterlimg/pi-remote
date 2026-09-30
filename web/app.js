@@ -585,10 +585,13 @@ async function loadCommands(id) {
 function renderCommands() {
   const input = $('prompt'), query = input.value.slice(1).toLowerCase();
   const state = cache.get(selected);
-  const open = connected && state && ['idle', 'working', 'waiting'].includes(state.status) &&
-    !commandDismissed && /^\/[^\s]*$/.test(input.value) && input.selectionStart === input.value.length;
+  const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
+  const commandDraft = /^\/[^\s]*$/.test(input.value);
+  $('commands').disabled = !live || (!!input.value && !commandDraft);
+  const open = live && !commandDismissed && commandDraft && input.selectionStart === input.value.length;
   $('command-menu').hidden = !open;
   input.setAttribute('aria-expanded', String(!!open));
+  $('commands').setAttribute('aria-expanded', String(!!open));
   if (!open) {
     input.removeAttribute('aria-activedescendant');
     commandOptions = []; commandRender = undefined;
@@ -884,6 +887,12 @@ $('prompt').addEventListener('input', () => {
   commandDismissed = false; commandIndex = 0;
   if ($('prompt').value === '/' && selected) loadCommands(selected);
   updateControls();
+});
+$('commands').addEventListener('click', () => {
+  const input = $('prompt');
+  input.value = '/';
+  input.focus(); input.setSelectionRange(1, 1);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 });
 $('prompt').addEventListener('click', renderCommands);
 $('composer').addEventListener('focusout', event => {
