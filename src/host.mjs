@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { join } from 'node:path';
 import { loadConfig, dataDir, parseObject, equalSecret, send, originAllowed, protectSocket, publicOrigin } from './config.mjs';
-import { acquireLock } from './locks.mjs';
+import { acquireLock, processExists, unlockDead } from './locks.mjs';
 import { SessionService } from './service.mjs';
 import { rootsFromEnv } from './catalog.mjs';
 import { attachClient } from './client-channel.mjs';
@@ -15,7 +15,7 @@ export async function startHost(options = {}) {
   const port = options.port ?? config.port;
   const publicUrl = publicOrigin(options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL || config.publicUrl || 'http://127.0.0.1:' + port);
   const relayUrl = options.relayUrl ?? process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
-  const lock = acquireLock(join(dir, 'locks'), 'service', { kind: 'service' });
+  let lock;
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: !!options.allowResume, workerOptions: options.workerOptions });
   let closing;
   const logStop = message => {
@@ -75,11 +75,28 @@ export async function startHost(options = {}) {
   try {
     await new Promise((resolve, reject) => { http.once('error', reject); http.listen(port, '127.0.0.1', resolve); });
     const actualPort = http.address().port;
+    const locks = join(dir, 'locks');
+    const claim = () => acquireLock(locks, 'service', { kind: 'service', port: actualPort });
+    try { lock = claim(); }
+    catch (error) {
+      if (error.code !== 'ELOCKED') throw error;
+      let owner, recoveryPort;
+      try {
+        owner = JSON.parse(readFileSync(join(locks, 'service.json'), 'utf8'));
+        recoveryPort = owner?.port ?? JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')).port;
+      } catch { throw error; }
+      if (owner?.kind !== 'service' || processExists(owner.pid) || recoveryPort !== actualPort) throw error;
+      // Binding the recorded port serializes recovery across processes. Never
+      // unlink before listen, or a concurrent starter could lose its new lock.
+      unlockDead(locks, 'service');
+      lock = claim();
+    }
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
     if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken);
   } catch (e) {
     logStop('stopping: error: ' + e.message);
-    await service.close(); lock.release(); http.close();
+    await service.close(); lock?.release();
+    await new Promise(resolve => http.close(resolve));
     logStop('stopped: error: ' + e.message);
     throw e;
   }

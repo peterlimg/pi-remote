@@ -50,6 +50,7 @@ export function unlockDead(dir, key) {
   const owner = JSON.parse(readFileSync(file, 'utf8'));
   if (processExists(owner.pid)) throw new Error('Owner process still exists; refusing unlock');
   if (owner.kind === 'rpc' && (!owner.workerPid || processExists(owner.workerPid))) throw new Error('RPC worker may still exist; refusing unlock');
-  // No code automatically replaces locks. This local recovery command is the only stale-lock remover.
+  // Session recovery stays manual. Host startup also calls this for service
+  // locks, but only while holding the dead host's listening port.
   unlinkSync(file);
 }
