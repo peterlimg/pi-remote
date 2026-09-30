@@ -60,14 +60,12 @@ test('compact composer keeps controls on one row across draft, working and offli
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   };
   await rowFits();
-  await page.screenshot({ path: 'test-results/clean-composer-mobile.png' });
   state.status = 'working'; snapshot();
   await expect(page.locator('#abort')).toBeVisible();
   await expect(page.locator('#send')).toBeHidden();
   await expect(page.locator('#commands')).toBeEnabled();
   await rowFits();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Message Pi while it works…');
-  await page.screenshot({ path: 'test-results/clean-composer-working.png' });
   await page.locator('#prompt').fill('Keep working on the tests');
   await expect(page.locator('#send')).toBeVisible();
   await rowFits();
@@ -85,7 +83,6 @@ test('compact composer keeps controls on one row across draft, working and offli
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await rowFits();
-  await page.screenshot({ path: 'test-results/clean-composer-desktop.png' });
   state.status = 'saved'; snapshot();
   await expect(page.locator('#resume')).toBeVisible();
   await expect(page.locator('#send')).toBeDisabled();

@@ -3,15 +3,10 @@ import { test, expect } from '@playwright/test';
 const token = 'browser-test-token-only-123456789012345';
 const key = 'pi-remote-token';
 
-for (const method of ['QR', 'manual', 'existing tab']) test(`${method} login survives reopening and sign out clears it across tabs`, async ({ page, context }) => {
-  await page.goto(method === 'QR' ? '/#token=' + token : '/');
-  if (method === 'manual') {
-    await page.locator('#token').fill(token);
-    await page.locator('#login-form button').click();
-  } else if (method === 'existing tab') {
-    await page.evaluate(({ key, token }) => sessionStorage.setItem(key, token), { key, token });
-    await page.reload();
-  }
+test('manual login survives reopening and sign out clears it across tabs', async ({ page, context }) => {
+  await page.goto('/');
+  await page.locator('#token').fill(token);
+  await page.locator('#login-form button').click();
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   expect(new URL(page.url()).hash).toBe('');
   await page.reload();
@@ -32,6 +27,17 @@ for (const method of ['QR', 'manual', 'existing tab']) test(`${method} login sur
   await expect(reopened.locator('#login')).toBeVisible();
 });
 
+test('an existing tab login migrates to persistent storage', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(({ key, token }) => sessionStorage.setItem(key, token), { key, token });
+  await page.reload();
+  await expect(page.locator('#connection')).toHaveText('Computer connected');
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(token);
+  await page.reload();
+  await expect(page.locator('#connection')).toHaveText('Computer connected');
+});
+
 test('a new QR replaces stale credentials and rejected credentials are cleared', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(key => {
@@ -41,6 +47,7 @@ test('a new QR replaces stale credentials and rejected credentials are cleared',
   await page.goto('/#token=' + token);
   await page.reload(); // A fragment-only navigation does not reload the app.
   await expect(page.locator('#connection')).toHaveText('Computer connected');
+  expect(new URL(page.url()).hash).toBe('');
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(token);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
   await page.goto('/#token=invalid-token');

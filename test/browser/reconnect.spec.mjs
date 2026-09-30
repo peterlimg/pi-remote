@@ -46,15 +46,11 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await expect(page.locator('#composer-hint')).toBeHidden();
   const row = await connecting.boundingBox(), prompt = await page.locator('#prompt').boundingBox();
   expect(row.y + row.height).toBeLessThanOrEqual(prompt.y);
-  await page.screenshot({ path: 'test-results/connecting-mobile.png' });
   await page.clock.runFor(1100);
   await expect.poll(() => channels.length).toBe(2);
   channels[1].send(JSON.stringify({ type: 'notice', error: 'Computer is offline' }));
   await expect(page.locator('#notice')).toBeHidden();
   await expect(connecting).toBeVisible();
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-  await page.screenshot({ path: 'test-results/connecting-desktop.png' });
   channels[1].send(JSON.stringify({ type: 'notice', error: 'An unrelated warning' }));
   await expect(page.locator('#notice')).toHaveText('An unrelated warning');
   channels[1].send(JSON.stringify({ type: 'ready' }));

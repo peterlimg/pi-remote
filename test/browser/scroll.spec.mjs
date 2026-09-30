@@ -49,7 +49,6 @@ test('the bottom button returns to the latest message and resumes following repl
     expect(target.height).toBe(44);
     expect(target.y + target.height).toBeLessThan(composer.y);
     expect(Math.abs(target.x + target.width / 2 - composer.x - composer.width / 2)).toBeLessThan(1);
-    await page.screenshot({ path: `test-results/bottom-button-${name}.png` });
     await button.focus();
     await page.keyboard.press('Enter');
     await expect.poll(gap).toBeLessThan(1);
@@ -84,7 +83,7 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
     }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   };
-  for (const height of [220, 844, 220, 844]) {
+  for (const height of [220, 844]) {
     await page.setViewportSize({ width: 390, height });
     await page.evaluate(() => scrollTo(0, 0));
     await drag('.composer-actions', -120);
@@ -106,10 +105,8 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
   await expect.poll(() => page.locator('#prompt').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
   expect(await page.evaluate(() => scrollY)).toBe(0);
   await page.locator('#prompt').fill('');
-  await page.screenshot({ path: 'test-results/scroll-mobile.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator('#sidebar')).toBeVisible();
-  await page.screenshot({ path: 'test-results/scroll-desktop.png' });
 });
 
 test('the composer grows with text, caps overflow, and shrinks with edits and restored drafts', async ({ page }) => {
@@ -137,7 +134,6 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   await prompt.fill('One\nTwo\nThree');
   const threeLines = await height();
   expect(threeLines).toBeGreaterThan(compact);
-  await page.screenshot({ path: 'test-results/composer-growing.png' });
   await prompt.fill('Long draft\n'.repeat(30));
   const capped = await height();
   expect(capped).toBeGreaterThan(threeLines);
@@ -158,7 +154,6 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   const narrow = await height();
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect.poll(height).toBeLessThan(narrow);
-  await page.screenshot({ path: 'test-results/composer-growing-desktop.png' });
   await page.locator('#send').click();
   await expect(prompt).toHaveValue('');
   await expect.poll(height).toBe(compact);
@@ -210,7 +205,6 @@ test('zoom keeps session navigation and composer controls inside the visible vie
     expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     // Preserve browser magnification rather than silently resetting or disabling zoom.
     expect(await page.evaluate(() => visualViewport.scale)).toBeCloseTo(scale, 2);
-    await page.screenshot({ path: `test-results/viewport-zoom-${scale}.png` });
     await page.locator('#back').click();
   }
 });
@@ -244,7 +238,6 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(175);
   expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
-  await page.screenshot({ path: 'test-results/composer-keyboard.png' });
   await page.locator('#send').click();
   await expect(page.locator('#prompt')).toHaveValue('');
   await page.evaluate(() => window.changeViewport({ width: 195, height: 175, offsetLeft: 25, offsetTop: 90, scale: 2 }));

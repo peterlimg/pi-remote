@@ -44,8 +44,4 @@ test('home paths hide usernames in tool labels, details and project locations', 
   const shell = page.locator('[data-tool-id="shell"]');
   await expect(shell.locator('.tool-preview-text')).toHaveText('~\n~/.agents\n/var/log/system.log');
   await expect(page.locator('#transcript')).not.toContainText(/local-user|linux-user/);
-  for (const width of [390, 1280]) {
-    await page.setViewportSize({ width, height: 844 });
-    await page.screenshot({ path: `test-results/private-paths-${width}.png`, fullPage: true });
-  }
 });

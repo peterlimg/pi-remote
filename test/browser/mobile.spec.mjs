@@ -40,7 +40,6 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await expect(page.locator('#transcript')).not.toContainText('instruction for beta');
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
   expect(new URL(page.url()).hash).toBe('');
-  await page.screenshot({ path: 'test-results/mobile-session.png', fullPage: true });
   expect(errors).toEqual([]);
 });
 
@@ -86,7 +85,6 @@ test('conversation header centers and truncates long titles without crowding its
     await expect(page.locator('#project')).toHaveText(state.cwd);
     await expect(page.locator('#project')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: `test-results/header-${width}.png`, fullPage: true });
     await details.click();
   }
 });
@@ -120,12 +118,10 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
   await page.getByRole('button', { name: /Project Beta/ }).click();
   await expect(page.locator('#title')).toHaveText('Project Beta');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/quiet-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('#sidebar')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/quiet-desktop.png', fullPage: true });
 });
 
 test('tool summaries show context and a short shell tail without losing full details', async ({ page }) => {
@@ -154,11 +150,7 @@ test('tool summaries show context and a short shell tail without losing full det
   await shell.scrollIntoViewIfNeeded();
   expect((await read.boundingBox()).height).toBeLessThan(65);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/compact-tools-mobile.png', fullPage: true });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await shell.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'test-results/compact-tools-desktop.png', fullPage: true });
+
 });
 
 test('streaming tool input, errors and shortened output stay readable and safe', async ({ page }) => {

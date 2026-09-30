@@ -14,7 +14,6 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await prompt.fill('/');
   await expect(menu.getByRole('option')).toHaveCount(5);
   await expect(prompt).toHaveAttribute('aria-expanded', 'true');
-  await page.screenshot({ path: 'test-results/commands-mobile.png' });
   await prompt.fill('/rvw');
   await expect(menu.getByRole('option')).toHaveCount(1);
   await menu.getByRole('option', { name: /\/review/ }).tap();
@@ -60,7 +59,6 @@ test('slash shortcut opens and reopens commands without sending or replacing a m
   await expect(prompt).toBeFocused();
   await expect(shortcut).toHaveAttribute('aria-expanded', 'true');
   await expect(menu.getByRole('option')).toHaveCount(5);
-  await page.screenshot({ path: 'test-results/commands-shortcut-mobile.png' });
   await prompt.press('Escape');
   await expect(shortcut).toHaveAttribute('aria-expanded', 'false');
   await shortcut.tap();
@@ -105,7 +103,6 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await prompt.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
     await expect(prompt).toHaveValue('/');
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.screenshot({ path: 'test-results/commands-desktop.png' });
     await prompt.press('Enter');
     await expect(prompt).toHaveValue('');
     await expect(page.locator('#transcript')).toContainText('/skill:debug');

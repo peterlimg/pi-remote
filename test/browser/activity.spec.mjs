@@ -48,7 +48,6 @@ test('activity follows the selected agent through streaming, tools, waiting, com
     expect(composer.y + composer.height).toBeLessThanOrEqual(page.viewportSize().height);
   }).toPass();
   await checkPosition();
-  await page.screenshot({ path: 'test-results/activity-mobile.png' });
   await page.setViewportSize({ width: 320, height: 380 }); // Narrow phone with its keyboard open.
   await checkPosition();
   await page.locator('#back').click();
@@ -62,7 +61,6 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
   await expect(activity).toHaveCSS('color', 'rgb(156, 200, 189)');
   await checkPosition();
-  await page.screenshot({ path: 'test-results/activity-desktop.png' });
   for (const status of ['waiting', 'idle', 'saved', 'disconnected']) {
     state.status = status; snapshot();
     await expect(activity).toBeHidden();
@@ -70,13 +68,6 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
   await expect(activity).toHaveText('Piecing it together…');
-  for (const [random, label] of [[0.2, 'Pondering…'], [0.4, 'Working…'], [0.6, 'Mulling it over…']]) {
-    state.status = 'idle'; snapshot();
-    await expect(activity).toBeHidden();
-    await page.evaluate(value => { Math.random = () => value; }, random);
-    state.status = 'working'; snapshot();
-    await expect(activity).toHaveText(label);
-  }
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();

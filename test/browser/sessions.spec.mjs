@@ -57,11 +57,9 @@ test('same-project sessions show their tasks, previews, status and activity with
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
   })).toBe(true);
   await noOverflow();
-  await page.screenshot({ path: 'test-results/sessions-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await noOverflow();
-  await page.screenshot({ path: 'test-results/sessions-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.getByRole('button', { name: 'Next session page' }).click();

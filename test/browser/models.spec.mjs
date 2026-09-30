@@ -43,7 +43,6 @@ test('/model switches only the selected session without sending a prompt', async
   expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(menuBounds.width - composerBounds.width)).toBeLessThanOrEqual(2);
   expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
-  await page.screenshot({ path: 'test-results/model-picker-mobile.png' });
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
   await expect(picker.locator('.model-option')).toHaveCount(1);
   await expect(picker.locator('.model-option')).toContainText('GPT-5.4');
@@ -71,8 +70,6 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(picker).toBeVisible();
   await expect(page.locator('#model')).toHaveText('first');
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: 'test-results/model-picker-desktop.png' });
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toBeFocused();

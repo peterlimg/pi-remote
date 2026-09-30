@@ -63,10 +63,6 @@ test('usage is plain conversation text and closes its extension menu automatical
   const bounds = await summary.boundingBox(), composer = await page.locator('#composer').boundingBox();
   expect(bounds.y + bounds.height).toBeLessThan(composer.y);
   expect(await summary.evaluate(node => node.closest('#transcript') !== null)).toBe(true);
-  await page.screenshot({ path: 'test-results/usage-mobile.png' });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: 'test-results/usage-desktop-dark.png' });
   // Later messages must not move the usage response to the end of the conversation.
   server.update(undefined, [{ id: 'prompt', role: 'user', text: '/usage' }, { id: 'later', role: 'assistant', text: 'Later reply' }]);
   await expect(page.locator('#transcript article')).toHaveText(['/usage', 'Weekly limit: 32% used · resets 12:53 on 4 Oct', 'Later reply']);
@@ -86,7 +82,6 @@ test('usage handles multiple limits, unavailable data and unknown provider text 
   await expect(page.locator('#prompt')).toBeInViewport();
   await summary.scrollIntoViewIfNeeded();
   await expect(summary).toBeInViewport();
-  await page.screenshot({ path: 'test-results/usage-short-viewport.png' });
   server.update({ ...usage, id: 'unavailable', title: 'Provider usage' });
   await expect(summary).toHaveText('Usage information is unavailable.');
   await expect.poll(() => server.answers.length).toBe(3);

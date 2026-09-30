@@ -49,14 +49,12 @@ test('thread images load lazily, survive updates, open full size and retry failu
   const opened = await popup;
   await expect(opened.locator('img')).toBeVisible();
   await opened.close();
-  await page.screenshot({ path: 'test-results/thread-images-mobile.png' });
   await page.locator('.tool summary').click();
   const toolImage = page.locator('.tool .thread-images img');
   await expect(toolImage).toBeVisible();
   await expect.poll(() => toolImage.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: 'test-results/thread-images-desktop.png' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#transcript img')).toHaveCount(0);
@@ -163,7 +161,6 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#notice')).toContainText('Restart Pi Remote');
   expect(commands).toHaveLength(0);
   client.send(JSON.stringify({ type: 'ready', supportsImages: true }));
-  await page.screenshot({ path: 'test-results/images-mobile.png' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await page.getByRole('button', { name: /Beta/ }).click();
@@ -200,7 +197,6 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await checkRemoveOverlay();
-  await page.screenshot({ path: 'test-results/images-desktop.png' });
   await page.getByRole('button', { name: `Remove ${file.name}` }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#attachments img')).toHaveCount(1);

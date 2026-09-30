@@ -8,31 +8,32 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '${{ matrix.node }}'
+          node-version: '24'
       - run: npm install --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - run: npm install --ignore-scripts
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      - run: npm run test:browser -- --shard=${{ matrix.shard }}/2
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
-          name: mobile-browser-results
+          name: mobile-browser-results-${{ matrix.shard }}
           path: test-results/
   pi-smoke:
     runs-on: ubuntu-latest

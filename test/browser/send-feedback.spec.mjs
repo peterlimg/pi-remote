@@ -40,10 +40,7 @@ for (const rejected of [false, true]) test(`slow image acknowledgement frees the
   await expect.poll(() => commands.length).toBe(1);
   await expect(page.locator('#send')).toBeDisabled();
   await page.locator('#prompt').fill('My next message');
-  await page.screenshot({ path: `test-results/sending-mobile-${rejected}.png` });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: `test-results/sending-desktop-${rejected}.png` });
   if (rejected) {
     await page.getByRole('button', { name: /Other session/ }).click();
     await page.locator('#prompt').fill('Other session draft');

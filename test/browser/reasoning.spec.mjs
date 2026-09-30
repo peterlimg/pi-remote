@@ -33,7 +33,6 @@ test('reasoning changes preserve drafts, show applied levels and stay scoped to 
   await page.locator('#prompt').fill('Keep this draft');
   await expect(page.locator('#model')).toHaveText('claude-sonnet-4-6');
   await expect(effort).toHaveValue('high');
-  await page.screenshot({ path: 'test-results/reasoning-mobile.png' });
   await effort.selectOption('max');
   await expect(effort).toBeDisabled();
   await expect.poll(() => commands.length).toBe(1);
@@ -60,9 +59,6 @@ test('reasoning changes preserve drafts, show applied levels and stay scoped to 
   await page.getByRole('button', { name: /Alpha/ }).click();
   await expect(effort).toHaveValue('low');
   await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: 'test-results/reasoning-desktop.png' });
   states[0].thinkingLevel = 'off'; snapshot(states[0]);
   await expect(effort).toHaveValue('off');
   states[0].status = 'saved'; snapshot(states[0]);
