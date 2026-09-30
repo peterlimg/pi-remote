@@ -7,7 +7,7 @@ const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
-let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand;
+let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false;
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
   title: `Provider usage\nWeekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
@@ -34,7 +34,7 @@ const parser = new JsonLines(command => {
   if (command.type === 'set_thinking_level') thinkingLevel = command.level === 'max' ? 'high' : command.level;
   if (command.type === 'get_messages') data = { messages: fresh ? [] : [{ role: 'user', timestamp: 1, content: 'saved prompt' }] };
   if (command.type === 'get_commands') data = { commands: [{ name: 'review', description: 'Review changes', source: 'extension', path: '/private/review.ts' },
-    ...['usage', 'usage-settled', 'usage-working'].map(name => ({ name, source: 'extension' }))] };
+    ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, source: 'extension' }))] };
   if (command.message?.startsWith('/review') && command.type !== 'prompt') {
     out({ id: command.id, type: 'response', success: false, error: 'Extension commands require prompt' }); return;
   }
@@ -48,6 +48,11 @@ const parser = new JsonLines(command => {
     if (fresh) writeFileSync(sessionFile, JSON.stringify({ type: 'session', id: sessionId, cwd: process.cwd() }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'user', content: command.message } }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'assistant', content: 'reply' } }) + '\n');
+    if (command.message === '/fast') {
+      fastMode = !fastMode;
+      out({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'usage', statusText: fastMode ? 'codex fast 80%' : 'codex 80%' });
+      return;
+    }
     if (command.message.startsWith('/usage')) {
       if (command.message !== '/usage') out({ type: 'agent_start' });
       showUsage();

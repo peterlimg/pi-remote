@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { cleanMessage, textContent } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 
@@ -6,7 +7,14 @@ export function initialState(meta, messages = []) {
 }
 export function applyEvent(state, event) {
   state.updatedAt = Date.now(); state.revision++;
-  if (event.type === 'model_select') state.model = `${event.model.provider}/${event.model.id}`;
+  if (event.type === 'model_select') {
+    state.model = `${event.model.provider}/${event.model.id}`;
+    state.fastMode = false;
+  }
+  // pi-usage only labels the status "codex fast" when fast routing is effective.
+  if (event.type === 'extension_ui_request' && event.method === 'setStatus' && event.statusKey === 'usage') {
+    state.fastMode = /^codex fast(?:\s|$)/u.test(stripVTControlCharacters(event.statusText || ''));
+  }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
   if (event.type === 'agent_start') state.status = 'working';
   if (event.type === 'agent_end' || event.type === 'agent_settled') state.status = 'idle';

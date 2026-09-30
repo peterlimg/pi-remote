@@ -565,6 +565,7 @@ function updateControls() {
   $('reasoning').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Changing…' : $('reasoning').selectedOptions[0]?.textContent || state?.thinkingLevel || 'Off';
   $('reasoning-control').hidden = !state?.thinkingLevel;
+  $('fast-mode').toggleAttribute('hidden', !live || state?.fastMode !== true);
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
   $('resume').disabled = !connected || !resumable;

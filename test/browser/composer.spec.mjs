@@ -59,6 +59,9 @@ test('compact composer keeps controls on one row across draft, working and offli
     expect(controls.at(-1).right).toBeLessThanOrEqual(page.viewportSize().width - 8);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   };
+  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
+  state.fastMode = true; snapshot();
+  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeVisible();
   await rowFits();
   state.status = 'working'; snapshot();
   await expect(page.locator('#abort')).toBeVisible();
@@ -85,6 +88,7 @@ test('compact composer keeps controls on one row across draft, working and offli
   await rowFits();
   state.status = 'saved'; snapshot();
   await expect(page.locator('#resume')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
   await expect(page.locator('#send')).toBeDisabled();
   await expect(page.locator('#commands')).toBeDisabled();
   await expect(page.locator('#reasoning')).toBeDisabled();

@@ -155,7 +155,8 @@ export class SessionService extends EventEmitter {
         if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
           item.state.dialog = event; item.state.status = 'waiting';
         }
-      } else applyEvent(item.state, event);
+      }
+      applyEvent(item.state, event);
       if (item.state.dialog) item.state.status = 'waiting';
       this.changed(id);
     });

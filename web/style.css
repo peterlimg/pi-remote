@@ -182,6 +182,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-color: var(--accent); }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#fast-mode { flex-shrink: 0; color: var(--accent); }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 /* Pinch zoom can leave less space than the smallest layout-viewport breakpoint. */
 @container (max-width: 260px) {

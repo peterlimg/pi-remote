@@ -55,6 +55,23 @@ test('composer metadata follows live model and reasoning changes and saved branc
   assert.equal(readSession(file).model, 'openai/o3');
   assert.equal(readSession(file).thinkingLevel, 'high');
 });
+test('fast mode follows pi-usage status and clears on model changes', () => {
+  const state = initialState({});
+  const status = statusText => applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'usage', statusText });
+  assert.equal(state.fastMode, undefined);
+  status('\u001b[32mcodex fast 80%\u001b[0m');
+  assert.equal(state.fastMode, true);
+  applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'other', statusText: 'idle' });
+  assert.equal(state.fastMode, true);
+  for (const text of ['codex 80%', undefined, 'auth unavailable', 'codex faster']) {
+    status('codex fast');
+    status(text);
+    assert.equal(state.fastMode, false);
+  }
+  status('codex fast');
+  applyEvent(state, { type: 'model_select', model: { provider: 'test', id: 'other' } });
+  assert.equal(state.fastMode, false);
+});
 test('discovery skips unrelated JSONL but still warns about damaged Pi sessions', t => {
   const dir = temp(t);
   const header = JSON.stringify({ type: 'session', id: 'saved', cwd: dir });
