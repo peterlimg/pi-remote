@@ -197,7 +197,13 @@ test('zoom keeps session navigation and composer controls inside the visible vie
     await page.locator('.session').first().click();
     await page.locator('#prompt').fill('A draft keeps both Send and Abort available');
     await expect(page.locator('#send')).toBeVisible();
-    await fits(['#app', '#back', '.session-info summary', '#transcript', '#composer', '#attach', '#model', '#reasoning-control', '#send', '#abort']);
+    const controls = ['#app', '#back', '.session-info summary', '#transcript', '#composer', '#attach', '#model', '#reasoning-control', '#commands', '#send', '#abort'];
+    await fits(controls);
+    await page.locator('#prompt').fill('');
+    await page.getByRole('button', { name: 'Open slash commands' }).tap();
+    await expect(page.locator('#prompt')).toHaveValue('/');
+    await fits(controls);
+    await page.locator('#prompt').press('Escape');
     await page.locator('.session-info summary').click();
     await fits(['#project']);
     await page.locator('.session-info summary').click();

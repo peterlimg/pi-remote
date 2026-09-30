@@ -187,6 +187,7 @@ pre.message-text { white-space: pre-wrap; }
 @container (max-width: 260px) {
   .composer-toolbar { flex-wrap: wrap; }
   .composer-settings { order: -1; width: 100%; }
+  .composer textarea { max-height: 44px; }
 }
 .composer-actions button { font-size: 12px; }
 /* Keep 44px tap targets around the smaller 32px circles. */
