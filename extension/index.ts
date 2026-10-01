@@ -157,7 +157,7 @@ export default function remoteExtension(pi: any) {
     controlling = true;
     try {
       const action = args.trim();
-      if (!['', 'start', 'stop', 'status', 'setup'].includes(action)) throw new Error('Usage: /pi-remote [start|stop|status|setup]');
+      if (!['', 'start', 'stop', 'restart', 'status', 'setup'].includes(action)) throw new Error('Usage: /pi-remote [start|stop|restart|status|setup]');
       let config = loadConfig();
       let running = await hostStatus(config);
       if (action === 'status') {
@@ -170,6 +170,11 @@ export default function remoteExtension(pi: any) {
         await stopHost(config);
         context.ui.notify('Pi Remote stopped for all sessions. Terminal agents keep running; saved-session workers stop.', 'info');
         return;
+      }
+      if (action === 'restart' && running) {
+        context.ui.notify('Restarting Pi Remote...', 'info');
+        await stopHost(config);
+        running = null;
       }
       if (context.mode !== 'tui') throw new Error('Open /pi-remote in an interactive Pi terminal to set up and display the private QR.');
       if (!state || !lock) throw new Error('Resolve session ownership and /reload first');
@@ -207,8 +212,8 @@ export default function remoteExtension(pi: any) {
     finally { controlling = false; }
   };
   pi.registerCommand('pi-remote', {
-    description: 'Start mobile control and show login QR: /pi-remote [stop|status|setup]',
-    getArgumentCompletions: (prefix: string) => ['start', 'stop', 'status', 'setup']
+    description: 'Start mobile control and show login QR: /pi-remote [stop|restart|status|setup]',
+    getArgumentCompletions: (prefix: string) => ['start', 'stop', 'restart', 'status', 'setup']
       .filter(value => value.startsWith(prefix)).map(value => ({ value, label: value })),
     handler: control
   });
