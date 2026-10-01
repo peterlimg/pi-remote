@@ -5,9 +5,10 @@ import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import { deploymentScreen, checkRelay, verifyRelay } from '../src/setup.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
+import { e2eKey } from '../src/e2e.mjs';
 import { until } from './helpers.mjs';
 
-const config = { relayToken: 'h'.repeat(40), clientToken: 'c'.repeat(40) };
+const config = { relayToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), bridgeToken: 'b'.repeat(40) };
 const keys = { matches: (key, name) => key === name.replace('tui.select.', '') };
 
 test('deployment guide keeps tokens UI-only and scrolls within narrow terminal bounds', () => {
@@ -53,7 +54,7 @@ test('relay verification waits for a real host and rejects a wrong phone token',
   // The probe must not accept an online relay with an offline computer.
   await new Promise(resolve => setTimeout(resolve, 100));
   assert.equal(verified, false);
-  disconnect = connectRelay(service, publicUrl.replace('http:', 'ws:'), config.relayToken, { allowInsecure: true });
+  disconnect = connectRelay(service, publicUrl.replace('http:', 'ws:'), config.relayToken, { key: e2eKey(config), allowInsecure: true });
   await pending;
   assert.equal(verified, true);
   const ui = { custom: factory => new Promise(resolve => {

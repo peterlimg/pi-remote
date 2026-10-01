@@ -9,6 +9,7 @@ import { rootsFromEnv } from './catalog.mjs';
 import { attachClient } from './client-channel.mjs';
 import { serveStatic } from './http.mjs';
 import { connectRelay } from './relay.mjs';
+import { acceptSealed, e2eKey } from './e2e.mjs';
 
 export async function startHost(options = {}) {
   const dir = options.dir || dataDir(), config = options.config || loadConfig(dir);
@@ -37,7 +38,8 @@ export async function startHost(options = {}) {
     res.end(JSON.stringify(status()));
     if (req.method === 'DELETE') void close('DELETE /_pi/remote').catch(() => {}); // close logs shutdown failures.
   });
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+  // Sealed loopback frames add base64 overhead to image prompts.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 6 * 1024 * 1024 });
   const origins = new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port]);
   origins.add(publicUrl);
   http.on('upgrade', (req, socket, head) => {
@@ -54,7 +56,12 @@ export async function startHost(options = {}) {
         try {
           const auth = parseObject(raw);
           if (auth.type !== 'auth' || !equalSecret(auth.token, bridge ? config.bridgeToken : config.clientToken)) throw new Error('Authentication failed');
-          if (!bridge) { attachClient(ws, service); return; }
+          if (!bridge) {
+            // Loopback browsers may stay plaintext; anything relayed is sealed in connectRelay.
+            if (auth.e2e === true) acceptSealed(ws, e2eKey(config), sealed => attachClient(sealed, service));
+            else attachClient(ws, service);
+            return;
+          }
           protectSocket(ws);
           ws.on('message', raw => {
             try {
@@ -92,7 +99,7 @@ export async function startHost(options = {}) {
       lock = claim();
     }
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
-    if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken);
+    if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken, { key: e2eKey(config) });
   } catch (e) {
     logStop('stopping: error: ' + e.message);
     await service.close(); lock?.release();

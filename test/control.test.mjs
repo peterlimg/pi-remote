@@ -11,6 +11,7 @@ import { loadConfig, saveConnection, publicOrigin } from '../src/config.mjs';
 import { startHost } from '../src/host.mjs';
 import { ensureHost, stopHost, restartHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
+import { e2eKey } from '../src/e2e.mjs';
 import { until } from './helpers.mjs';
 
 async function environment(t) {
@@ -184,7 +185,7 @@ test('setup persists only validated origins and QR decodes to the private fragme
   assert.equal(mobileUrl('http://127.0.0.1:8787'), false);
   assert.equal(mobileUrl('https://localhost'), false);
   const url = pairingUrl(saved);
-  assert.equal(new URL(url).hash, '#token=' + config.clientToken);
+  assert.equal(new URL(url).hash, '#token=' + config.clientToken + '&key=' + e2eKey(config));
   const code = pairingQr(url), lines = code.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
   const scale = 4, width = lines[0].length * scale, height = lines.length * 2 * scale;
   const pixels = new Uint8ClampedArray(width * height * 4);

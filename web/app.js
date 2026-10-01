@@ -1,6 +1,7 @@
 import { patchState } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import MarkdownIt from './markdown-it.mjs';
+import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
 function atThreadBottom() {
@@ -55,18 +56,22 @@ const imageObserver = new IntersectionObserver(entries => {
 }, { root: $('transcript'), rootMargin: '160px' });
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
+let key = localStorage.getItem('pi-remote-key') || '';
+// Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
+const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
-const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
+const hashParams = new URLSearchParams(location.hash.slice(1)), hashToken = hashParams.get('token');
 if (hashToken) {
-  token = hashToken;
+  token = hashToken; key = hashParams.get('key') || '';
   history.replaceState(null, '', location.pathname);
 }
 // Preserve existing tab logins when upgrading to persistent browser storage.
 if (token) localStorage.setItem('pi-remote-token', token);
+if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
 sessionStorage.removeItem('pi-remote-token');
 const el = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -87,9 +92,16 @@ function request(op, extra = {}) {
     const lookup = supportsCommandResults && ['command', 'new', 'resume', 'answer'].includes(op)
       ? { op: 'commandResult', id, sessionId: extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
-    socket.send(JSON.stringify({ op, id, ...extra }));
+    transmit(socket, { op, id, ...extra });
   });
 }
+function transmit(ws, value) {
+  const text = JSON.stringify(value);
+  if (!ws.channel) { ws.send(text); return; }
+  // Seals complete in call order, so frames leave in counter order.
+  ws.channel.then(sealed => sealed.seal(text)).then(frame => { if (ws.readyState === WebSocket.OPEN) ws.send(frame); }, () => {});
+}
+function loginFailed(text) { $('login-error').textContent = text; $('login-error').hidden = false; logout(); }
 function connection(text) { $('connection').textContent = text; updateControls(); renderPagination(); }
 function disconnect() {
   closeModels();
@@ -113,17 +125,33 @@ function reconnect() {
 }
 function connect() {
   disconnect(); manualClose = false;
+  if (key ? !validKey(key) : !loopback) { loginFailed('This login link has no encryption key. Scan the QR code on your computer again.'); return; }
   $('login').hidden = true; $('app').hidden = false;
   connection('Connecting…');
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   socket = ws;
   // Bound the whole attempt, including an open transport that never receives ready.
   connectionTimer = setTimeout(reconnect, 20000);
-  ws.addEventListener('open', () => { if (socket === ws) ws.send(JSON.stringify({ type: 'auth', token })); });
+  ws.addEventListener('open', () => {
+    if (socket !== ws) return;
+    ws.send(JSON.stringify({ type: 'auth', token, ...(key ? { e2e: true } : {}) }));
+    if (key) { ws.hello = hello(); ws.send(JSON.stringify(ws.hello.packet)); }
+  });
+  const encryptionFailed = () => { if (socket === ws) loginFailed('Encryption check failed. Scan the QR code on your computer again.'); };
   ws.addEventListener('message', event => {
     if (socket !== ws) return;
+    if (!key) { receive(event.data); return; }
+    if (ws.channel) { ws.channel.then(sealed => sealed.open(event.data)).then(receive, encryptionFailed); return; }
+    // Before the host's hello, only relay notices arrive in plaintext.
     let packet;
     try { packet = JSON.parse(event.data); } catch { return; }
+    if (packet?.type === 'hello' && ws.hello) { ws.channel = channel(key, ws.hello.nonce, packet.nonce); ws.channel.catch(encryptionFailed); }
+    else if (packet?.type === 'notice') notice(packet.error);
+  });
+  function receive(data) {
+    if (socket !== ws) return;
+    let packet;
+    try { packet = JSON.parse(data); } catch { return; }
     if (!packet || typeof packet !== 'object') return;
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
@@ -132,7 +160,7 @@ function connect() {
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
         item.recovering = false;
-        if (supportsCommandResults) ws.send(JSON.stringify(item.lookup));
+        if (supportsCommandResults) transmit(ws, item.lookup);
         else {
           clearTimeout(item.timer); pending.delete(id);
           item.reject(new Error('Delivery outcome is unknown. Inspect the conversation before sending again.'));
@@ -143,7 +171,7 @@ function connect() {
       heartbeatTimer = setInterval(() => {
         if (socket !== ws || connectionTimer) return;
         connectionTimer = setTimeout(reconnect, 10000);
-        ws.send(JSON.stringify({ op: 'ping', id: crypto.randomUUID() }));
+        transmit(ws, { op: 'ping', id: crypto.randomUUID() });
       }, 20000);
       if (pageOffset || searchQuery || listError) loadList();
       if (selected) {
@@ -170,7 +198,7 @@ function connect() {
       if (!packet.ok || packet.value?.ok === false) item.reject(new Error(packet.error || packet.value.error));
       else item.resolve(packet.value?.value ?? packet.value);
     } else if (packet.type === 'notice') notice(packet.error);
-  });
+  }
   ws.addEventListener('close', event => {
     if (socket !== ws) return;
     // Host and relay also use 1008 when auth delivery exceeds five seconds.
@@ -191,7 +219,7 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   manualClose = true; disconnect();
-  token = ''; localStorage.removeItem('pi-remote-token'); sessionStorage.removeItem('pi-remote-token');
+  token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
   for (const draft of submissions.values()) releaseImages(draft.attachments);
@@ -868,7 +896,15 @@ function renderDialog(state) {
   close.focus({ preventScroll: true });
 }
 $('login-form').addEventListener('submit', event => {
-  event.preventDefault(); token = $('token').value.trim(); localStorage.setItem('pi-remote-token', token); $('token').value = ''; connect();
+  event.preventDefault();
+  // Accept the full private link (token and key) or, on this computer, a bare token.
+  const value = $('token').value.trim();
+  let params;
+  try { params = new URLSearchParams(new URL(value).hash.slice(1)); } catch { /* Bare token. */ }
+  token = params?.get('token') || value; key = params?.get('key') || '';
+  localStorage.setItem('pi-remote-token', token);
+  if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
+  $('token').value = ''; connect();
 });
 $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', () => {

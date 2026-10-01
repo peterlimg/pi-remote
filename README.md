@@ -13,7 +13,7 @@ flowchart LR
     Phone["Phone browser"] <-->|"HTTPS / WSS"| Relay
 ```
 
-Your computer makes an outbound connection; no inbound port is needed. Pi and model credentials stay on your computer. The relay can read conversation traffic; there is no end-to-end encryption.
+Your computer makes an outbound connection; no inbound port is needed. Pi and model credentials stay on your computer. Traffic between your phone and computer is end-to-end encrypted: the relay forwards ciphertext and cannot read conversations or send commands. It still serves the web app, so a tampered relay deployment could ship modified page code. Deploy only from a repository you trust.
 
 ## Get started
 
@@ -79,8 +79,9 @@ Select a session to send prompts; switching sessions does not stop their work. T
 
 ## Security and troubleshooting
 
-- The QR is a reusable login link granting access to all exposed sessions. Keep it private and use trusted browsers. Login persists until you sign out or clear browser data.
-- To revoke phone access, stop the host and relay, replace `clientToken` in `~/.pi/remote/config.json` with a fresh 32-byte random secret, update `PI_REMOTE_RELAY_CLIENT_TOKEN` on the relay, and restart both. There is no per-device revocation.
+- The QR is a reusable login link granting access to all exposed sessions. It carries the login token and an encryption key; the key stays in the link fragment and never reaches the relay. Keep it private and use trusted browsers. Login persists until you sign out or clear browser data.
+- Phones signed in before end-to-end encryption must scan the QR again.
+- To revoke phone access, stop the host and relay, replace `clientToken` in `~/.pi/remote/config.json` with a fresh 32-byte random secret, update `PI_REMOTE_RELAY_CLIENT_TOKEN` on the relay, and restart both. This also rotates the encryption key. There is no per-device revocation.
 - If connection fails, check `/pi-remote status` and `~/.pi/remote/host.log`. Run `/pi-remote stop`, then `/pi-remote setup` to see your tokens and correct the address. `/health` checks only the relay, not the computer connection.
 - The configured HTTPS address must match the one your phone uses. For a Render custom domain, update the start command's `PI_REMOTE_PUBLIC_URL` and run `/pi-remote setup`. Environment overrides take precedence over saved settings.
 

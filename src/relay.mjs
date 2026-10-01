@@ -5,12 +5,16 @@ import { randomUUID } from 'node:crypto';
 import { equalSecret, parseObject, send, protectSocket, originAllowed } from './config.mjs';
 import { serveStatic } from './http.mjs';
 import { attachClient } from './client-channel.mjs';
+import { acceptSealed } from './e2e.mjs';
+
+// Sealed frames are base64 of JSON that may already carry base64 images; leave headroom.
+const MAX_RELAY_PAYLOAD = 6 * 1024 * 1024;
 
 export async function startRelay({ hostToken, clientToken, publicUrl, port = 8788, bind = '127.0.0.1' }) {
   if (!hostToken || hostToken.length < 32 || !clientToken || clientToken.length < 32 || hostToken === clientToken) throw new Error('Relay requires two distinct secrets of at least 32 characters');
   if (!publicUrl) throw new Error('PI_REMOTE_PUBLIC_URL is required');
   const origin = new URL(publicUrl).origin;
-  const http = createServer(serveStatic), wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+  const http = createServer(serveStatic), wss = new WebSocketServer({ noServer: true, maxPayload: MAX_RELAY_PAYLOAD });
   let host;
   const clients = new Map();
   http.on('upgrade', (req, socket, head) => {
@@ -74,14 +78,15 @@ class VirtualSocket extends EventEmitter {
     this.readyState = 3; send(this.host, { type: 'close', id: this.id }); this.emit('close');
   }
 }
-export function connectRelay(service, url, token, { allowInsecure = false } = {}) {
+export function connectRelay(service, url, token, { key, allowInsecure = false } = {}) {
+  if (!key) throw new Error('Relay channels require an encryption key');
   const target = new URL(url);
   if (target.protocol !== 'wss:' && !(allowInsecure && target.protocol === 'ws:' && ['127.0.0.1', 'localhost'].includes(target.hostname))) throw new Error('Relay URL must use wss:// (loopback ws:// only in tests)');
   target.pathname = '/host'; target.search = ''; target.hash = '';
   let stopped = false, connected = false, socket, timer;
   const connect = () => {
     if (stopped) return;
-    const ws = new WebSocket(target, { maxPayload: 4 * 1024 * 1024 }); socket = ws;
+    const ws = new WebSocket(target, { maxPayload: MAX_RELAY_PAYLOAD }); socket = ws;
     const virtual = new Map();
     const readyTimer = setTimeout(() => ws.terminate(), 20000);
     protectSocket(ws);
@@ -94,7 +99,8 @@ export function connectRelay(service, url, token, { allowInsecure = false } = {}
         else if (packet.type === 'open' && typeof packet.id === 'string') {
           if (virtual.has(packet.id) || virtual.size >= 16) throw new Error('Too many channels');
           const client = new VirtualSocket(ws, packet.id); virtual.set(packet.id, client);
-          client.once('close', () => virtual.delete(packet.id)); attachClient(client, service);
+          client.once('close', () => virtual.delete(packet.id));
+          acceptSealed(client, key, sealed => attachClient(sealed, service));
         } else if (packet.type === 'data' && typeof packet.data === 'string') virtual.get(packet.id)?.emit('message', packet.data);
         else if (packet.type === 'close') virtual.get(packet.id)?.close();
       } catch { ws.close(1008, 'Invalid relay message'); }

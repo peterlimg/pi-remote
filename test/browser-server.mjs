@@ -8,7 +8,7 @@ import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until } from './helpers.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 const dir = mkdtempSync(join(tmpdir(), 'pi-remote-browser-'));
-const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345' };
+const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345', bridgeToken: 'browser-test-bridge-token-only-1234567890' };
 const scanRoot = join(dir, 'saved'); mkdirSync(scanRoot);
 for (let i = 0; i < 20; i++) writeFileSync(join(scanRoot, `damaged-${i}.jsonl`), 'invalid JSON\n');
 const host = await startHost({ dir, config, port: 8799, roots: [scanRoot] });

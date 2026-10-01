@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionService } from '../src/service.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
-import { socket, until } from './helpers.mjs';
+import { socket, until, testKey } from './helpers.mjs';
 
 const image = { type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' };
 test('image commands allow image-only input and enforce format, count and total size', () => {
@@ -59,11 +59,11 @@ test('saved and existing live previews load over the authenticated relay with se
   assert.throws(() => readSessionImage(file, cleanMessage({ content: [other] }, 'other').images[0].id), /no longer available/);
   const service = new SessionService({ dir, roots: [dir] });
   const relay = await startRelay({ hostToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), publicUrl: 'http://localhost', port: 0 });
-  const disconnect = connectRelay(service, `ws://127.0.0.1:${relay.http.address().port}`, 'h'.repeat(40), { allowInsecure: true });
+  const disconnect = connectRelay(service, `ws://127.0.0.1:${relay.http.address().port}`, 'h'.repeat(40), { key: testKey, allowInsecure: true });
   let client;
   t.after(async () => { client?.ws.terminate(); disconnect(); await service.close(); await relay.close(); rmSync(dir, { recursive: true, force: true }); });
   await until(disconnect.connected);
-  client = await socket(`ws://127.0.0.1:${relay.http.address().port}/ws`, 'c'.repeat(40), 'http://localhost');
+  client = await socket(`ws://127.0.0.1:${relay.http.address().port}/ws`, 'c'.repeat(40), 'http://localhost', testKey);
   assert.equal((await client.request('watch', { sessionId: saved.id })).ok, true);
   const snapshot = await until(() => client.messages.find(packet => packet.type === 'snapshot'));
   assert.deepEqual(snapshot.state.messages[0].images, [reference]);

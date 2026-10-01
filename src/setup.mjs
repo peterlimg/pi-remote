@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { publicOrigin, parseObject, send } from './config.mjs';
+import { e2eKey, sealClient } from './e2e.mjs';
 
 const deployUrl = 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main';
 const wrap = (text, width) => text.match(new RegExp('.{1,' + Math.max(1, width) + '}', 'g')) || [''];
@@ -64,9 +65,12 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
       const ws = new WebSocket(url, { origin, handshakeTimeout: 20000, maxPayload: 4 * 1024 * 1024 });
       socket = ws;
       attemptTimer = setTimeout(() => ws.terminate(), 20000);
-      ws.on('open', () => send(ws, { type: 'auth', token: config.clientToken }));
-      ws.on('message', raw => {
-        try { if (parseObject(raw).type === 'ready') finish(); } catch { /* Wait for a valid ready packet. */ }
+      // A ready packet that decrypts proves the token, the key and the computer connection.
+      ws.on('open', () => {
+        send(ws, { type: 'auth', token: config.clientToken, e2e: true });
+        sealClient(ws, e2eKey(config), sealed => sealed.on('message', raw => {
+          try { if (parseObject(raw).type === 'ready') finish(); } catch { /* Wait for a valid ready packet. */ }
+        }));
       });
       ws.on('error', () => {}); // close handles retry; never expose server errors or credentials.
       ws.on('close', (code, reason) => {

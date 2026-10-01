@@ -1,9 +1,10 @@
 import qr from 'qrcode-terminal';
 import { publicOrigin } from './config.mjs';
+import { e2eKey } from './e2e.mjs';
 
 export function pairingUrl(config, publicUrl = config.publicUrl || 'http://127.0.0.1:' + config.port) {
   const url = new URL(publicOrigin(publicUrl));
-  url.hash = 'token=' + config.clientToken;
+  url.hash = 'token=' + config.clientToken + '&key=' + e2eKey(config);
   return url.href;
 }
 

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { SessionService } from '../src/service.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
-import { socket, until } from './helpers.mjs';
+import { socket, until, testKey } from './helpers.mjs';
 import { diffState, patchState } from '../web/protocol.js';
 
 test('saved session resume rejects existing owners, runs a worker and answers dialogs', async t => {
@@ -103,15 +103,16 @@ test('relay carries browser requests and closes channels when the computer disco
   const hostToken = 'h'.repeat(40), clientToken = 'c'.repeat(40);
   const relay = await startRelay({ hostToken, clientToken, publicUrl: 'http://localhost:9000', port: 0 });
   const port = relay.http.address().port;
-  const disconnect = connectRelay(service, 'ws://127.0.0.1:' + port, hostToken, { allowInsecure: true });
+  const disconnect = connectRelay(service, 'ws://127.0.0.1:' + port, hostToken, { key: testKey, allowInsecure: true });
   assert.equal(disconnect.connected(), false);
   let client;
   t.after(async () => { client?.ws.terminate(); disconnect(); await relay.close(); await service.close(); rmSync(dir, { recursive: true, force: true }); });
   // Wait for host authentication using the public client path; offline connections are closed.
   for (let attempt = 0; attempt < 10; attempt++) {
-    client = await socket('ws://127.0.0.1:' + port + '/ws', clientToken, 'http://localhost:9000');
-    try { await until(() => client.messages.find(x => x.type === 'ready'), 300); break; }
-    catch { client.ws.terminate(); if (attempt === 9) throw new Error('Relay host never connected'); }
+    try {
+      client = await socket('ws://127.0.0.1:' + port + '/ws', clientToken, 'http://localhost:9000', testKey);
+      await until(() => client.messages.find(x => x.type === 'ready'), 300); break;
+    } catch { client?.ws.terminate(); if (attempt === 9) throw new Error('Relay host never connected'); await new Promise(resolve => setTimeout(resolve, 100)); }
   }
   assert.equal((await client.request('list')).ok, true);
   assert.deepEqual((await client.request('ping')).value, { pong: true });

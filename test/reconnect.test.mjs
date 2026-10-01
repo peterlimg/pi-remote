@@ -30,7 +30,7 @@ for (const stall of ['upgrade', 'ready']) test(`relay retries a connection stall
   });
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const disconnect = connectRelay({}, 'ws://127.0.0.1:' + http.address().port, 'h'.repeat(40), { allowInsecure: true });
+  const disconnect = connectRelay({}, 'ws://127.0.0.1:' + http.address().port, 'h'.repeat(40), { key: 'k'.repeat(43), allowInsecure: true });
   t.after(async () => {
     disconnect();
     t.mock.timers.reset();
