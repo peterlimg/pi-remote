@@ -106,8 +106,11 @@ export function readSession(file) {
     updatedAt: info.mtimeMs, status: 'saved', messages: allMessages.slice(-100),
     historyTruncated: allMessages.length > 100 };
 }
+// Parsed sessions keyed by file. Unchanged files (same size and mtime) are not reparsed:
+// a full parse of a large history takes seconds and blocks the host on every scan.
+const parsed = new Map();
 export function discover(roots) {
-  const sessions = new Map(), warnings = [];
+  const sessions = new Map(), warnings = [], seen = new Set();
   let count = 0;
   function walk(dir, depth = 0) {
     if (depth > 6 || count >= 5000) return;
@@ -120,12 +123,23 @@ export function discover(roots) {
       if (entry.isDirectory()) walk(file, depth + 1);
       else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
         count++;
-        try { if (isInside(file, roots)) { const session = readSession(file); sessions.set(session.id, session); } }
-        catch (e) { if (e.code !== 'NOT_PI_SESSION') warnings.push(entry.name + ': ' + e.message); }
+        if (!isInside(file, roots)) continue;
+        seen.add(file);
+        try {
+          const { size, mtimeMs } = statSync(file), cached = parsed.get(file);
+          let result = cached?.size === size && cached.mtimeMs === mtimeMs ? cached.result : undefined;
+          if (!result) {
+            try { result = { session: readSession(file) }; } catch (error) { result = { error }; }
+            parsed.set(file, { size, mtimeMs, result });
+          }
+          if (result.error) throw result.error;
+          sessions.set(result.session.id, result.session);
+        } catch (e) { if (e.code !== 'NOT_PI_SESSION') warnings.push(entry.name + ': ' + e.message); }
       }
     }
   }
   roots.forEach(root => walk(root));
+  for (const file of parsed.keys()) if (!seen.has(file)) parsed.delete(file);
   if (count >= 5000) warnings.push('Session scan capped at 5000 files');
   return { sessions, warnings };
 }

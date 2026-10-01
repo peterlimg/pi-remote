@@ -112,12 +112,14 @@ export async function startHost(options = {}) {
   function close(reason = 'API close') {
     return closing ??= (async () => {
       logStop('stopping: ' + reason);
+      const started = Date.now(), elapsed = () => Date.now() - started + 'ms';
       try {
         disconnectRelay?.();
         for (const ws of wss.clients) ws.terminate();
         wss.close(); await service.close();
+        const workers = elapsed();
         await new Promise(resolve => http.close(resolve)); lock.release();
-        logStop('stopped: ' + reason);
+        logStop(`stopped: ${reason} (workers ${workers}, connections ${elapsed()})`);
       } catch (error) {
         logStop('stop failed: ' + reason + ': ' + error.message);
         throw error;

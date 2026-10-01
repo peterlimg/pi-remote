@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireLock, sessionKey, unlockDead } from '../src/locks.mjs';
@@ -73,6 +73,16 @@ test('fast mode follows pi-usage status and clears on model changes', () => {
   status('codex fast');
   applyEvent(state, { type: 'model_select', model: { provider: 'test', id: 'other' } });
   assert.equal(state.fastMode, false);
+});
+test('discovery reparses only sessions whose file changed', t => {
+  const dir = temp(t), file = join(dir, 'cached.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'cached', cwd: dir }) + '\n');
+  const first = discover([dir]).sessions.get(sessionKey(file));
+  assert.equal(discover([dir]).sessions.get(sessionKey(file)), first);
+  appendFileSync(file, JSON.stringify({ type: 'message', id: 'm1', parentId: null, message: { role: 'user', content: 'appended' } }) + '\n');
+  const changed = discover([dir]).sessions.get(sessionKey(file));
+  assert.notEqual(changed, first);
+  assert.equal(changed.messages.at(-1).text, 'appended');
 });
 test('discovery skips unrelated JSONL but still warns about damaged Pi sessions', t => {
   const dir = temp(t);
