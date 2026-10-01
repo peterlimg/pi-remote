@@ -33,7 +33,13 @@ export async function startRelay({ hostToken, clientToken, publicUrl, port = 878
           ws.close(1008, 'Authentication failed'); return;
         }
         if (isHost) {
-          if (host?.readyState === 1) { ws.close(1008, 'Computer already connected'); return; }
+          // A restarted computer replaces a connection whose close the relay has not seen yet;
+          // otherwise it would wait for the heartbeat (up to 40 s) to drop the stale one.
+          if (host) {
+            const stale = host; host = undefined;
+            for (const client of clients.values()) client.close(1012, 'Computer reconnected');
+            clients.clear(); stale.terminate();
+          }
           host = ws; send(ws, { type: 'ready' });
           ws.on('message', raw => {
             try {

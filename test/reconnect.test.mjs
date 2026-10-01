@@ -52,3 +52,22 @@ for (const stall of ['upgrade', 'ready']) test(`relay retries a connection stall
   t.mock.timers.tick(60000);
   assert.equal(attempts, 2);
 });
+
+test('a restarted computer replaces the stale relay connection instead of waiting for it to time out', async t => {
+  const { startRelay } = await import('../src/relay.mjs');
+  const { default: WebSocket } = await import('ws');
+  const relay = await startRelay({ hostToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), publicUrl: 'http://localhost', port: 0 });
+  t.after(() => relay.close());
+  const connect = () => new Promise((resolve, reject) => {
+    const ws = new WebSocket('ws://127.0.0.1:' + relay.http.address().port + '/host');
+    ws.once('open', () => ws.send(JSON.stringify({ type: 'auth', token: 'h'.repeat(40) })));
+    ws.once('message', raw => JSON.parse(raw).type === 'ready' ? resolve(ws) : reject(new Error(raw.toString())));
+    ws.once('close', (code, reason) => reject(new Error(code + ' ' + reason)));
+  });
+  const stale = await connect();
+  const closed = new Promise(resolve => stale.once('close', resolve));
+  const fresh = await connect();
+  await closed;
+  assert.equal(fresh.readyState, 1);
+  fresh.terminate();
+});
