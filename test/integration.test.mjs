@@ -110,11 +110,12 @@ test('session pages and search stay bounded on initial load, updates and reconne
   assert.equal((await until(() => reconnected.messages.find(x => x.type === 'sessions'))).sessions.length, 20);
 });
 
-test('actual extension registers, forwards prompts and releases ownership on shutdown', async t => {
+test('actual extension registers, reattaches after host restart and releases ownership on shutdown', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-extension-'));
   const oldHome = process.env.PI_REMOTE_HOME;
   process.env.PI_REMOTE_HOME = dir;
-  const config = loadConfig(dir), host = await startHost({ dir, config, port: 0, roots: [] });
+  const config = loadConfig(dir);
+  let host = await startHost({ dir, config, port: 0, roots: [] });
   config.port = host.http.address().port;
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const file = join(dir, 'session.jsonl'); writeFileSync(file, '');
@@ -223,6 +224,13 @@ test('actual extension registers, forwards prompts and releases ownership on shu
   sessionName = 'My manual task title';
   await emit('agent_start', { type: 'agent_start' });
   await until(() => host.service.list().sessions[0].title === 'My manual task title');
+  await host.close();
+  host = await startHost({ dir, config, roots: [] });
+  await until(() => host.service.live.has(id));
+  assert.equal(host.service.live.get(id).worker, undefined, 'A terminal keeps ownership across host restarts');
+  assert.equal(host.service.read(id).supportsImages, true);
+  assert.equal((await host.service.command(id, randomUUID(), imageCommand)).ok, true);
+  assert.deepEqual(prompts.at(-1), { text: [{ type: 'text', text: 'Look here' }, ...images], options: { deliverAs: 'steer', expandPromptTemplates: true } });
   await emit('session_shutdown');
   assert.throws(() => readFileSync(join(dir, 'locks', id + '.json')), /ENOENT/);
 });

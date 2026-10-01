@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, fork } from 'node:child_process';
+import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync, readFileSync, statSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,11 +13,13 @@ import { startHost } from '../src/host.mjs';
 import { ensureHost, stopHost, restartHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
 import { e2eKey } from '../src/e2e.mjs';
-import { until } from './helpers.mjs';
+import { socket, until } from './helpers.mjs';
+import { sessionKey, acquireLock } from '../src/locks.mjs';
+import { restartAndResume } from '../scripts/restart-and-resume.mjs';
 
 async function environment(t) {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-control-'));
-  const env = { PI_REMOTE_HOME: dir, PI_REMOTE_PORT: undefined, PI_REMOTE_PUBLIC_URL: undefined, PI_REMOTE_RELAY_URL: undefined, PI_REMOTE_SESSION_DIRS: dir };
+  const env = { PI_REMOTE_HOME: dir, PI_REMOTE_PORT: undefined, PI_REMOTE_PUBLIC_URL: undefined, PI_REMOTE_RELAY_URL: undefined, PI_REMOTE_SESSION_DIRS: dir, PI_REMOTE_PI_BIN: undefined };
   const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -37,6 +40,36 @@ async function environment(t) {
   return { dir, config };
 }
 
+async function remoteList(config) {
+  const client = await socket(`ws://127.0.0.1:${config.port}/ws`, config.clientToken, `http://127.0.0.1:${config.port}`);
+  try { return (await client.request('list')).value; }
+  finally { client.ws.terminate(); }
+}
+
+for (const flag of ['--allow-resume', '--no-allow-resume']) test(`serve supports ${flag}`, async t => {
+  const { dir, config } = await environment(t);
+  const file = join(dir, 'saved.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  const child = fork(fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), ['serve', flag], {
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc']
+  });
+  t.after(() => child.kill());
+  const [message] = await once(child, 'message', { signal: AbortSignal.timeout(10000) });
+  assert.equal(message.type, 'ready');
+  const list = await remoteList(config), allowed = flag === '--allow-resume';
+  assert.equal(list.allowResume, allowed);
+  assert.equal(list.sessions.find(session => session.id === sessionKey(file)).resumable, allowed);
+  if (!allowed) {
+    const client = await socket(`ws://127.0.0.1:${config.port}/ws`, config.clientToken, `http://127.0.0.1:${config.port}`);
+    try {
+      const result = (await client.request('resume', { sessionId: sessionKey(file) })).value;
+      assert.equal(result.ok, false);
+      assert.match(result.error, /resume.*disabled/i);
+      assert.equal(existsSync(join(dir, 'locks', sessionKey(file) + '.json')), false);
+    } finally { client.ws.terminate(); }
+  }
+});
+
 test('stop keeps waiting after a status timeout once DELETE was accepted', async t => {
   const methods = [];
   t.mock.method(globalThis, 'fetch', async (_url, options) => {
@@ -48,6 +81,21 @@ test('stop keeps waiting after a status timeout once DELETE was accepted', async
   assert.equal(await stopHost({ port: 1, bridgeToken: 'test-only' }), true);
   assert.deepEqual(methods, ['DELETE', 'GET', 'GET']);
 });
+
+for (const code of ['ECONNRESET', 'ECONNREFUSED']) {
+  for (const phase of ['DELETE', 'GET']) test(`stop tolerates ${code} during ${phase}`, async t => {
+    const methods = [];
+    t.mock.method(globalThis, 'fetch', async (_url, { method }) => {
+      methods.push(method);
+      if (method === phase && methods.length <= 2) throw new TypeError('fetch failed', { cause: { code } });
+      if (method === 'DELETE') return Response.json({ protocol: 1, pid: process.pid });
+      throw new TypeError('fetch failed', { cause: { code: 'ECONNREFUSED' } });
+    });
+    assert.equal(await stopHost({ port: 1, bridgeToken: 'test-only' }), !(code === 'ECONNREFUSED' && phase === 'DELETE'));
+    assert.equal(methods[0], 'DELETE');
+    if (code === 'ECONNRESET') assert.equal(methods.at(-1), 'GET');
+  });
+}
 
 test('stop finishes when the known host exits even if status keeps timing out', async t => {
   let exited = false;
@@ -96,7 +144,52 @@ test('restart retries startup after a failed stop wait and a transient startup s
     assert.notEqual(restarted.pid, first.pid);
     assert.ok(failures >= 3);
     assert.equal((await hostStatus(config)).pid, restarted.pid);
+    assert.equal((await remoteList(config)).allowResume, true);
   } finally { mock.mock.restore(); }
+});
+
+test('restart-and-resume upgrades an old host and starts a replacement after a shutdown reset', async t => {
+  const { dir, config } = await environment(t);
+  const fakePi = fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url));
+  const bin = join(dir, 'fake-pi');
+  writeFileSync(bin, `#!${process.execPath}\nimport ${JSON.stringify(new URL('./fixtures/fake-pi.mjs', import.meta.url).href)};\n`, { mode: 0o700 });
+  process.env.PI_REMOTE_PI_BIN = bin;
+  const file = join(dir, 'saved.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  const id = sessionKey(file);
+  const host = await startHost({ dir, config, roots: [dir], allowResume: true,
+    workerOptions: { bin: process.execPath, prefix: [fakePi] } });
+  t.after(() => host.close());
+  assert.equal((await host.service.resume(id, 'initial-resume')).ok, true);
+  const terminal = acquireLock(join(dir, 'locks'), 'a'.repeat(64), { kind: 'terminal' });
+  t.after(() => terminal.release());
+  // The old host closes workers without writing a restore list.
+  t.mock.method(host.service, 'close', async () => {
+    clearInterval(host.service.timer);
+    await Promise.all([...host.service.live.values()].filter(item => item.worker).map(item => item.worker.close()));
+  });
+  const fetch = globalThis.fetch;
+  let deleting = false, reset = false;
+  const mock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (options.method === 'DELETE') deleting = true;
+    else if (deleting && !reset) {
+      reset = true;
+      throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+    }
+    return fetch(url, options);
+  });
+  let restarted;
+  try { restarted = await restartAndResume(config, dir); }
+  finally { mock.mock.restore(); }
+  assert.equal(reset, true);
+  assert.notEqual(restarted.pid, process.pid);
+  assert.equal((await hostStatus(config)).pid, restarted.pid);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')), [id]);
+  const client = await socket(`ws://127.0.0.1:${config.port}/ws`, config.clientToken, `http://127.0.0.1:${config.port}`);
+  t.after(() => client.ws.terminate());
+  assert.equal((await client.request('list')).value.allowResume, true);
+  await until(() => client.messages.some(message => message.type === 'sessions' && message.sessions.some(session => session.id === id && session.status === 'idle')));
+  assert.equal((await client.request('command', { sessionId: id, command: { type: 'prompt', text: 'restored' } })).value.ok, true);
 });
 
 test('restart makes a startup attempt after DELETE fails and reports bounded recovery failure', async t => {
@@ -126,6 +219,7 @@ test('background host starts once, survives callers, and stops without signallin
   assert.notEqual(first.pid, process.pid);
   assert.equal((await ensureHost(config, dir)).pid, first.pid);
   assert.equal((await hostStatus(config)).publicUrl, config.publicUrl);
+  assert.equal((await remoteList(config)).allowResume, true);
   assert.equal(statSync(join(dir, 'host.log')).mode & 0o777, 0o600);
   assert.ok(!readFileSync(join(dir, 'host.log'), 'utf8').includes(config.clientToken));
   assert.equal(await stopHost(config), true);
@@ -133,11 +227,14 @@ test('background host starts once, survives callers, and stops without signallin
   assert.equal(existsSync(join(dir, 'locks', 'service.json')), false);
   const stoppedLog = readFileSync(join(dir, 'host.log'), 'utf8');
   assert.match(stoppedLog, /\d{4}-\d\d-\d\dT[^\n]+ Pi Remote host \d+: stopped: DELETE \/_pi\/remote/);
-  const restarted = await ensureHost(config, dir);
+  execFileSync(process.execPath, [fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), 'start'], { timeout: 15000 });
+  const restarted = await hostStatus(config);
   assert.notEqual(restarted.pid, first.pid);
+  assert.equal((await remoteList(config)).allowResume, true);
   execFileSync(process.execPath, [fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), 'restart'], { timeout: 15000 });
   const cliRestarted = await hostStatus(config);
   assert.notEqual(cliRestarted.pid, restarted.pid);
+  assert.equal((await remoteList(config)).allowResume, true);
   process.kill(cliRestarted.pid, 'SIGTERM'); // Only this test's temporary host, never a Pi worker.
   await until(() => readFileSync(join(dir, 'host.log'), 'utf8').includes('stopped: SIGTERM'));
 });
@@ -270,6 +367,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   assert.ok(first);
   assert.equal(first.publicUrl, 'https://phone.example');
   assert.equal(first.relayUrl, 'wss://phone.example');
+  assert.equal((await remoteList(config)).allowResume, true);
   assert.equal(inputs, 2);
   assert.ok(screens[0].join('').includes(config.clientToken));
   for (const token of [config.relayToken, config.clientToken]) assert.ok(!JSON.stringify(notices).includes(token));

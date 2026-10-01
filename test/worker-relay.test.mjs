@@ -1,21 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, appendFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, statSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { SessionService } from '../src/service.mjs';
+import { startHost } from '../src/host.mjs';
+import { loadConfig } from '../src/config.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until, testKey } from './helpers.mjs';
 import { diffState, patchState } from '../web/protocol.js';
 
-test('saved session resume rejects existing owners, runs a worker and answers dialogs', async t => {
+test('saved session resume is allowed by default, rejects existing owners, runs a worker and answers dialogs', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-worker-')), file = join(dir, 'saved.jsonl');
   writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
   const id = sessionKey(file);
-  const service = new SessionService({ dir, roots: [dir], allowResume: true,
+  const service = new SessionService({ dir, roots: [dir],
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
   t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
   const lock = acquireLock(join(dir, 'locks'), id);
@@ -64,6 +66,78 @@ test('saved session resume rejects existing owners, runs a worker and answers di
   assert.equal(answer.ok, true);
   await until(() => service.read(id).messages.some(x => x.text === 'dialog answered'));
 });
+test('host restart restores every managed session with phone prompts, images and dialogs', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-restore-'));
+  const config = loadConfig(dir);
+  const options = { dir, config, port: 0, roots: [dir],
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } };
+  for (const name of ['first', 'second', 'archive']) writeFileSync(join(dir, name + '.jsonl'),
+    JSON.stringify({ type: 'session', id: name, cwd: dir }) + '\n');
+  const ids = ['first', 'second'].map(name => sessionKey(join(dir, name + '.jsonl')));
+  const archive = sessionKey(join(dir, 'archive.jsonl'));
+  let host = await startHost(options);
+  let client;
+  t.after(async () => { client?.ws.terminate(); await host.close(); rmSync(dir, { recursive: true, force: true }); });
+  for (const id of ids) assert.equal((await host.service.resume(id, randomUUID())).ok, true);
+  const created = await host.service.newSession(ids[0], randomUUID());
+  assert.equal(created.ok, true);
+  ids.push(created.value.sessionId);
+  await host.service.command(ids.at(-1), randomUUID(), { type: 'prompt', text: 'save new session' });
+  await until(() => host.service.read(ids.at(-1)).status === 'idle');
+  const pids = ids.map(id => host.service.live.get(id).worker.process.pid);
+  await host.close();
+  assert.equal(statSync(join(dir, 'resume-sessions.json')).mode & 0o777, 0o600);
+  host = await startHost(options); // The normal background start has no --allow-resume flag.
+  await until(() => ids.every(id => host.service.read(id).status === 'idle'));
+  const port = host.http.address().port;
+  client = await socket(`ws://127.0.0.1:${port}/ws`, config.clientToken, `http://127.0.0.1:${port}`);
+  const list = (await client.request('list')).value;
+  for (const [index, id] of ids.entries()) {
+    assert.equal(list.sessions.find(session => session.id === id)?.status, 'idle');
+    assert.notEqual(host.service.live.get(id).worker.process.pid, pids[index]);
+    assert.equal((await client.request('watch', { sessionId: id })).ok, true);
+    const snapshot = await until(() => client.messages.find(message => message.type === 'snapshot' && message.sessionId === id));
+    assert.equal(snapshot.state.status, 'idle');
+    for (const command of [{ type: 'prompt', text: 'after restart' },
+      { type: 'prompt', text: 'image', images: [{ type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' }] }]) {
+      assert.equal((await client.request('command', { sessionId: id, command })).value.ok, true);
+      await until(() => host.service.read(id).messages.some(message => message.text === 'reply: ' + command.text));
+    }
+    assert.equal((await client.request('command', { sessionId: id, command: { type: 'prompt', text: 'ask' } })).value.ok, true);
+    await until(() => host.service.read(id).dialog);
+    assert.equal((await client.request('answer', { sessionId: id, answer: { dialogId: 'dialog-1', confirmed: true } })).value.ok, true);
+    await until(() => host.service.read(id).messages.some(message => message.text === 'dialog answered'));
+  }
+  // Previously unopened sessions are resumable too, without spawning them all at startup.
+  assert.equal(list.allowResume, true);
+  assert.equal(list.sessions.find(session => session.id === archive).status, 'saved');
+  assert.equal(list.sessions.find(session => session.id === archive).resumable, true);
+  assert.equal((await client.request('resume', { sessionId: archive })).value.ok, true);
+  assert.equal((await client.request('watch', { sessionId: archive })).ok, true);
+  const snapshot = await until(() => client.messages.find(message => message.type === 'snapshot' && message.sessionId === archive));
+  assert.equal(snapshot.state.status, 'idle');
+  assert.equal((await client.request('command', { sessionId: archive, command: { type: 'prompt', text: 'archive after restart' } })).value.ok, true);
+  await until(() => host.service.read(archive).messages.some(message => message.text === 'reply: archive after restart'));
+});
+
+test('restoration respects owners and roots, reports failures and continues restoring other sessions', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-restore-lock-'));
+  const files = ['owned', 'valid'].map(name => join(dir, name + '.jsonl'));
+  for (const [index, file] of files.entries()) writeFileSync(file, JSON.stringify({ type: 'session', id: String(index), cwd: dir }) + '\n');
+  const [owned, valid] = files.map(sessionKey), missing = 'b'.repeat(64);
+  const lock = acquireLock(join(dir, 'locks'), owned, { file: files[0] });
+  writeFileSync(join(dir, 'resume-sessions.json'), JSON.stringify([owned, missing, valid]));
+  const host = await startHost({ dir, config: loadConfig(dir), port: 0, roots: [dir],
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
+  t.after(async () => { await host.close(); lock.release(); rmSync(dir, { recursive: true, force: true }); });
+  await until(() => host.service.list().warnings.length === 2 && host.service.read(valid).status === 'idle');
+  assert.equal(host.service.live.has(owned), false);
+  assert.equal(JSON.parse(readFileSync(join(dir, 'locks', owned + '.json'), 'utf8')).nonce, lock.owner.nonce);
+  host.service.scan();
+  assert.match(host.service.list().warnings.join('\n'), /owned or has a stale lock/);
+  assert.match(host.service.list().warnings.join('\n'), /not found in configured roots/);
+});
+
 test('remote /new creates an independent session in the same working directory', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-new-')), file = join(dir, 'saved.jsonl');
   writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');

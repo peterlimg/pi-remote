@@ -11,7 +11,7 @@ const [command = 'serve', ...args] = process.argv.slice(2);
 try {
   if (command === 'serve') {
     const config = loadConfig();
-    const host = await startHost({ config, allowResume: args.includes('--allow-resume') });
+    const host = await startHost({ config, allowResume: !args.includes('--no-allow-resume') });
     console.log('Pi Remote: http://127.0.0.1:' + config.port);
     console.log('Use /pi-remote in Pi for your phone login QR.');
     let closing = false;
@@ -62,7 +62,7 @@ try {
     console.log(!status ? 'Pi Remote stopped' : status.closing ? 'Pi Remote stopping' :
       'Pi Remote running' + (status.relayUrl ? (status.relayConnected ? '; relay connected' : '; relay reconnecting') : ''));
   } else {
-    throw new Error('Commands: start, stop, restart, serve [--allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
+    throw new Error('Commands: start, stop, restart, serve [--no-allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
   }
 } catch (error) {
   console.error(error.message);

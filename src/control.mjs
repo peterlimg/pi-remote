@@ -71,20 +71,33 @@ export async function ensureHost(config = loadConfig(), dir = dataDir()) {
   }
 }
 
+function shutdownDisconnect(error) {
+  for (let cause = error; cause; cause = cause.cause) {
+    if (cause.code === 'ECONNRESET' || cause.code === 'ECONNREFUSED') return true;
+  }
+  return false;
+}
+
 export async function stopHost(config = loadConfig()) {
   const deadline = Date.now() + 30000;
-  const stopping = await hostStatus(config, 'DELETE');
-  if (!stopping) return false;
+  let stopping;
+  try {
+    stopping = await hostStatus(config, 'DELETE');
+    if (!stopping) return false;
+  } catch (error) {
+    // DELETE may have been accepted before the connection was reset.
+    if (!shutdownDisconnect(error)) throw error;
+  }
   while (Date.now() < deadline) {
-    if (!processExists(stopping.pid)) return true;
+    if (stopping && !processExists(stopping.pid)) return true;
     await delay(100);
     try { if (!await hostStatus(config)) return true; }
     catch (error) {
       // An accepted DELETE can outlive individual status requests while workers close.
-      if ((error.cause ?? error).name !== 'TimeoutError') throw error;
+      if ((error.cause ?? error).name !== 'TimeoutError' && !shutdownDisconnect(error)) throw error;
     }
   }
-  if (!processExists(stopping.pid)) return true;
+  if (stopping && !processExists(stopping.pid)) return true;
   throw new Error('Pi Remote is still stopping after 30 seconds. Check /pi-remote status.');
 }
 

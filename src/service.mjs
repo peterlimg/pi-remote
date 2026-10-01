@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession, readSessionImage } from './catalog.mjs';
@@ -15,9 +15,10 @@ function inside(file, dir) {
 }
 
 export class SessionService extends EventEmitter {
-  constructor({ dir, roots, workerOptions = {}, allowResume = false }) {
+  constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
+    this.restoreIds = new Set(); this.restoreWarnings = [];
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.scan();
     this.setMaxListeners(50);
@@ -25,7 +26,7 @@ export class SessionService extends EventEmitter {
   }
   scan() {
     const { sessions, warnings } = discover(this.roots);
-    this.catalog = sessions; this.warnings = warnings.slice(0, 20);
+    this.catalog = sessions; this.warnings = [...this.restoreWarnings, ...warnings].slice(0, 20);
     for (const [id, item] of this.live) {
       const saved = sessions.get(id);
       if (!item.socket && saved && saved.title !== item.state.title) {
@@ -34,6 +35,21 @@ export class SessionService extends EventEmitter {
       }
     }
     this.emit('list');
+  }
+  async restore() {
+    try {
+      const ids = JSON.parse(readFileSync(join(this.dir, 'resume-sessions.json'), 'utf8'));
+      if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid session restore list');
+      this.restoreIds = new Set(ids); this.restoreLoaded = true;
+      await Promise.all([...this.restoreIds].map(async id => {
+        try { await this.startWorker(id); }
+        catch (error) { this.restoreWarnings.push(`Could not restore ${id}: ${error.message}`); }
+      }));
+    } catch (error) {
+      if (error.code === 'ENOENT') this.restoreLoaded = true;
+      else this.restoreWarnings.push('Could not read session restore list: ' + error.message);
+    }
+    this.scan();
   }
   list({ offset = 0, query = '' } = {}) {
     if (!Number.isSafeInteger(offset) || offset < 0 || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
@@ -172,6 +188,7 @@ export class SessionService extends EventEmitter {
   async newSession(id, requestId) {
     requestKey(requestId);
     return this.journal.execute(id, requestId, { type: 'new' }, async () => {
+      if (this.stopping) throw new Error('Pi Remote is stopping');
       if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) throw new Error('Session is not connected. Resume a saved session first.');
       const source = this.read(id);
       if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
@@ -197,32 +214,37 @@ export class SessionService extends EventEmitter {
   async resume(id, requestId) {
     requestKey(requestId);
     return this.journal.execute(id, requestId, { type: 'resume' }, async () => {
-      if (!this.allowResume) throw new Error('Enable saved-session resume locally with serve --allow-resume');
-      const current = this.live.get(id);
-      if (current?.socket || current?.worker) return { attached: true };
-      const saved = this.catalog.get(id);
-      if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
-      const actual = readSession(saved.file);
-      if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
-      const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
-      let worker;
-      try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
-      catch (e) { lock.release(); throw e; }
-      if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-      const item = { worker, lock, state: initialState(actual, actual.messages) };
-      item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
-      this.trackWorker(id, item);
-      try {
-        const rpcState = await worker.request('get_state');
-        const history = await worker.request('get_messages');
-        item.state.messages = (history?.messages || []).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
-        item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
-        item.state.thinkingLevel = rpcState?.thinkingLevel;
-        item.agentActive = !!rpcState?.isStreaming;
-        item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';
-        this.changed(id); return { resumed: true };
-      } catch (e) { await worker.close(); throw e; }
+      if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
+      return this.startWorker(id);
     });
+  }
+  async startWorker(id) {
+    if (this.stopping) throw new Error('Pi Remote is stopping');
+    const current = this.live.get(id);
+    if (current?.socket || current?.worker) return { attached: true };
+    const saved = this.catalog.get(id);
+    if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
+    const actual = readSession(saved.file);
+    if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
+    const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
+    let worker;
+    try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
+    catch (e) { lock.release(); throw e; }
+    if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
+    const item = { worker, lock, state: initialState(actual, actual.messages) };
+    item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
+    this.trackWorker(id, item);
+    try {
+      const rpcState = await worker.request('get_state');
+      const history = await worker.request('get_messages');
+      item.state.messages = (history?.messages || []).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
+      item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
+      item.state.thinkingLevel = rpcState?.thinkingLevel;
+      item.agentActive = !!rpcState?.isStreaming;
+      item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';
+      this.restoreIds.delete(id);
+      this.changed(id); return { resumed: true };
+    } catch (e) { await worker.close(); throw e; }
   }
   async answer(id, requestId, answer) {
     return this.journal.execute(id, requestId, { type: 'answer', answer }, async () => {
@@ -245,7 +267,17 @@ export class SessionService extends EventEmitter {
     });
   }
   async close() {
+    if (this.stopping) return;
     clearInterval(this.timer);
+    // Remember only host-owned workers. Terminal bridges reconnect themselves;
+    // other saved sessions resume on demand from the phone.
+    const ids = [...new Set([...this.restoreIds, ...[...this.live].filter(([, item]) => item.worker).map(([id]) => id)])];
+    if (this.restoreLoaded || this.live.size) {
+      const file = join(this.dir, 'resume-sessions.json');
+      writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
+      renameSync(file + '.tmp', file);
+    }
+    this.stopping = true;
     await Promise.all([...this.live.values()].filter(x => x.worker).map(x => x.worker.close()));
     for (const item of this.live.values()) if (item.socket) item.socket.close();
     for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('Service stopped')); }

@@ -17,7 +17,7 @@ export async function startHost(options = {}) {
   const publicUrl = publicOrigin(options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL || config.publicUrl || 'http://127.0.0.1:' + port);
   const relayUrl = options.relayUrl ?? process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
   let lock;
-  const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: !!options.allowResume, workerOptions: options.workerOptions });
+  const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions });
   let closing;
   const logStop = message => {
     const line = `${new Date().toISOString()} Pi Remote host ${process.pid}: ${message.replace(/[\r\n]+/g, ' ')}\n`;
@@ -98,6 +98,8 @@ export async function startHost(options = {}) {
       unlockDead(locks, 'service');
       lock = claim();
     }
+    // Worker startup must not consume the background host's readiness timeout.
+    void service.restore();
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
     if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken, { key: e2eKey(config) });
   } catch (e) {
