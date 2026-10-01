@@ -4,7 +4,7 @@ import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession, readSessionImage } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
-import { acquireLock, sessionKey, canonical } from './locks.mjs';
+import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
@@ -184,7 +184,7 @@ export class SessionService extends EventEmitter {
         const path = canonical(info.sessionFile);
         if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
         const nextId = sessionKey(path);
-        lock = acquireLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
+        lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
         if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
         const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd: source.cwd, piSessionId: info.sessionId,
           model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, thinkingLevel: info.thinkingLevel }) };
@@ -204,7 +204,7 @@ export class SessionService extends EventEmitter {
       if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
       const actual = readSession(saved.file);
       if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
-      const lock = acquireLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
+      const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
       let worker;
       try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
       catch (e) { lock.release(); throw e; }

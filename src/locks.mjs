@@ -44,13 +44,25 @@ export function acquireLock(dir, key, details = {}) {
     } catch (e) { if (e.code !== 'ENOENT') throw e; }
   }};
 }
+export function acquireSessionLock(dir, key, details = {}) {
+  // Serialize recovery separately so two resumptions cannot unlink a new owner.
+  const recovery = acquireLock(dir, key + '-recovery', { kind: 'recovery' });
+  try {
+    try { return acquireLock(dir, key, details); }
+    catch (error) {
+      if (error.code !== 'ELOCKED') throw error;
+      try { unlockDead(dir, key); }
+      catch { throw error; } // Live workers and malformed owners still fail closed.
+      return acquireLock(dir, key, details);
+    }
+  } finally { recovery.release(); }
+}
 export function unlockDead(dir, key) {
   if (!/^[a-zA-Z0-9-]+$/.test(key)) throw new Error('Invalid lock ID');
   const file = join(dir, key + '.json');
   const owner = JSON.parse(readFileSync(file, 'utf8'));
   if (processExists(owner.pid)) throw new Error('Owner process still exists; refusing unlock');
   if (owner.kind === 'rpc' && (!owner.workerPid || processExists(owner.workerPid))) throw new Error('RPC worker may still exist; refusing unlock');
-  // Session recovery stays manual. Host startup also calls this for service
-  // locks, but only while holding the dead host's listening port.
+  // Callers serialize recovery with a separate lock or the host's listening port.
   unlinkSync(file);
 }

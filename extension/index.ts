@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection, publicOrigin } from '../src/config.mjs';
-import { acquireLock, sessionKey } from '../src/locks.mjs';
+import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
@@ -125,7 +125,7 @@ export default function remoteExtension(pi: any) {
     }
     try {
       const id = sessionKey(file);
-      lock = acquireLock(join(dataDir(), 'locks'), id, { file, instanceId });
+      lock = acquireSessionLock(join(dataDir(), 'locks'), id, { file, instanceId });
       journal = new CommandJournal(join(dataDir(), 'extension-commands'));
       state = initialState({ id, file, piSessionId: ctx.sessionManager.getSessionId(),
         cwd: ctx.cwd, title: pi.getSessionName?.() || 'Pi · ' + ctx.cwd.split('/').pop(), instanceId });
