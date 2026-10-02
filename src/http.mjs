@@ -10,15 +10,21 @@ const files = new Map([
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/icon.svg', ['icon.svg', 'image/svg+xml']]
 ]);
-export function serveStatic(req, res) {
+// The fixed list is the only thing a relay can request from the computer.
+export const assetPath = req => {
+  const path = (req.url || '/').split('?')[0];
+  return req.method === 'GET' && files.has(path) ? path : undefined;
+};
+export const readAsset = path => readFileSync(new URL('../web/' + files.get(path)[0], import.meta.url));
+// A relay passes the body it got from the computer; otherwise serve this install's copy.
+export function serveStatic(req, res, body) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   const path = (req.url || '/').split('?')[0];
   if (path === '/health' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
-  const item = files.get(path);
-  if (req.method !== 'GET' || !item) { res.writeHead(404); res.end('Not found'); return; }
-  res.writeHead(200, { 'Content-Type': item[1] });
-  res.end(readFileSync(new URL('../web/' + item[0], import.meta.url)));
+  if (!assetPath(req)) { res.writeHead(404); res.end('Not found'); return; }
+  res.writeHead(200, { 'Content-Type': files.get(path)[1] });
+  res.end(body ?? readAsset(path));
 }

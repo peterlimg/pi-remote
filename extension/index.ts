@@ -151,6 +151,8 @@ export default function remoteExtension(pi: any) {
   for (const name of ['session_compact', 'session_tree']) {
     pi.on(name, () => { resetHistory(); publish(); });
   }
+  // Render services created from the public repository URL never auto-deploy.
+  const relayOutdated = 'Pi Remote: your relay runs an older version. Redeploy it: in Render, open the service and choose Manual Deploy > Deploy latest commit. On your own server, pull and restart it.';
   let controlling = false;
   const control = async (args: string, context: any) => {
     if (controlling) { context.ui.notify('Pi Remote is already opening. Close its screen first.', 'info'); return; }
@@ -164,6 +166,7 @@ export default function remoteExtension(pi: any) {
         context.ui.notify(!running ? 'Pi Remote is stopped. /pi-remote starts it.' :
           'Pi Remote is ' + (running.closing ? 'stopping' : 'running') + ' at ' + running.publicUrl +
           (running.relayUrl ? (running.relayConnected ? '. Relay connected.' : '. Relay reconnecting; phone access is not ready.') : ''), 'info');
+        if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
         return;
       }
       if (action === 'stop') {
@@ -203,6 +206,7 @@ export default function remoteExtension(pi: any) {
         try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
       }
       if (running.relayUrl && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
+      if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
       if (stopped) return;
       const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);
       // UI-only: never persist the bearer link in session entries or model context.

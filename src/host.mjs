@@ -25,7 +25,7 @@ export async function startHost(options = {}) {
     catch (error) { console.error(line.trimEnd(), 'Could not write host.log:', error.message); }
   };
   const status = () => ({ protocol: 1, pid: process.pid, publicUrl, relayUrl,
-    relayConnected: disconnectRelay?.connected() ?? false, closing: !!closing });
+    relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing });
   const http = createServer((req, res) => {
     if (req.url !== '/_pi/remote') { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');

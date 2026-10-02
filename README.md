@@ -13,7 +13,7 @@ flowchart LR
     Phone["Phone browser"] <-->|"HTTPS / WSS"| Relay
 ```
 
-Your computer makes an outbound connection; no inbound port is needed. Pi and model credentials stay on your computer. Traffic between your phone and computer is end-to-end encrypted: the relay forwards ciphertext and cannot read conversations or send commands. It still serves the web app, so a tampered relay deployment could ship modified page code. Deploy only from a repository you trust.
+Your computer makes an outbound connection; no inbound port is needed. Pi and model credentials stay on your computer. Traffic between your phone and computer is end-to-end encrypted: the relay forwards ciphertext and cannot read conversations or send commands. It still delivers the web app's page code from your computer to your phone, so a tampered relay deployment could ship modified page code. Deploy only from a repository you trust.
 
 ## Get started
 
@@ -89,7 +89,9 @@ Select a session to send prompts; switching sessions does not stop their work. T
 
 ## Update
 
-Run `pi update git:github.com/peterlimg/pi-remote`. The Render blueprint follows this repo's `main` branch and deploys after CI passes. Stop remote access with `/pi-remote stop`, exit and restart all Pi terminals, resume your sessions, and run `/pi-remote`. Refresh the phone page. `/reload` alone does not refresh cached shared modules after code changes.
+Run `pi update git:github.com/peterlimg/pi-remote`. Stop remote access with `/pi-remote stop`, exit and restart all Pi terminals, resume your sessions, and run `/pi-remote`. Refresh the phone page. `/reload` alone does not refresh cached shared modules after code changes.
+
+Your relay serves the phone app from your computer, so app updates need no relay redeploy. Render does not redeploy a relay created from this public repository on its own. When `/pi-remote` says your relay runs an older version, open the service in Render and choose **Manual Deploy > Deploy latest commit**. On your own server, pull and restart the relay.
 
 ## Development checks
 

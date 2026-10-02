@@ -60,7 +60,7 @@ try {
   } else if (command === 'status') {
     const status = await hostStatus();
     console.log(!status ? 'Pi Remote stopped' : status.closing ? 'Pi Remote stopping' :
-      'Pi Remote running' + (status.relayUrl ? (status.relayConnected ? '; relay connected' : '; relay reconnecting') : ''));
+      'Pi Remote running' + (status.relayUrl ? (status.relayConnected ? '; relay connected' + (status.relayOutdated ? ' but outdated; redeploy it' : '') : '; relay reconnecting') : ''));
   } else {
     throw new Error('Commands: start, stop, restart, serve [--no-allow-resume], pair, relay-env, relay, unlock <session-file | service>, status');
   }
