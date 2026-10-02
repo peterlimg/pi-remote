@@ -324,11 +324,11 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
         // The network-backed check is tested with real sockets in setup.test.mjs.
         if (!options.overlayOptions) { checks++; return verified; }
         let closed = false, result;
-        const component = factory({ terminal: { rows: 60 }, requestRender() {} }, {},
+        const component = factory({ terminal: { rows: 60 }, requestRender() {} }, { fg: (_color, text) => text, bold: text => text },
           { matches: (key, name) => key === name.replace('tui.select.', '') },
           value => { closed = true; result = value; });
         const lines = component.render(120);
-        if (lines[0].startsWith('Deploy your relay')) {
+        if (lines[0].includes('Deploy your relay')) {
           // Walk every step, so the guide shows both tokens before deploying or cancelling.
           const seen = [...lines];
           for (let step = 1; step < 5; step++) { component.handleInput('confirm'); seen.push(...component.render(120)); }

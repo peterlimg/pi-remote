@@ -15,12 +15,15 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   const tui = { terminal: { rows: 12 }, requestRender() {} };
   const opened = [], copied = [];
   let result;
-  const screen = deploymentScreen(config, tui, keys, value => { result = value; }, url => opened.push(url),
-    async text => { copied.push(text); return copied.length === 1; });
+  const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
+    copy: async text => { copied.push(text); return copied.length === 1; } });
   const screens = [];
   for (let step = 0; step < 5; step++) {
     const lines = screen.render(40);
     assert.equal(lines.length, 12); // Covers the whole terminal, whatever the step's length.
+    // Keys follow the step directly; only padding comes after them.
+    const keysAt = lines.findIndex(line => line.includes('Esc Cancel'));
+    assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
     screen.handleInput('O'); screen.handleInput('c');
@@ -36,9 +39,9 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     [[false, false], [false, false], [true, false], [false, true], [false, false]]);
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, true);
-  const again = deploymentScreen(config, tui, keys, value => { result = value; }, () => {}, async () => true);
+  const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open() {}, copy: async () => true });
   again.handleInput('confirm'); again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /Step 1 of 5: Create a free Render account/);
+  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy your relay\nCreate a free Render account/);
   again.handleInput('cancel');
   assert.equal(result, false);
 });

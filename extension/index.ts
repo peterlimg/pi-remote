@@ -191,8 +191,8 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
-        const deployed = await context.ui.custom((tui: any, _theme: any, keys: any, done: any) =>
-          deploymentScreen(config, tui, keys, done),
+        const deployed = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
+          deploymentScreen(config, tui, keys, done, { theme }),
         { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
         if (!deployed || stopped) return;
         const value = await context.ui.input('Paste your deployed relay HTTPS address', 'https://your-service.onrender.com');

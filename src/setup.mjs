@@ -26,9 +26,11 @@ const wrap = (text, width) => {
   return text.match(new RegExp('\\S.{0,' + (width - 1) + '}(?=\\s|$)|\\S{1,' + width + '}', 'g')) || [''];
 };
 
+const plain = { fg: (_color, text) => text, bold: text => text };
+
 // Only render these credentials in a temporary terminal overlay, never in messages or logs.
 // One step per screen; sign-up comes before the deploy link because Render's sign-up drops it.
-export function deploymentScreen(config, tui, keys, done, open = openUrl, copy = copyText) {
+export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy = copyText, theme = plain } = {}) {
   const steps = [
     { title: 'Create a free Render account', body: 'Already have one? Press Enter to skip.', link: signupUrl },
     { title: 'Open the deploy page', body: 'It deploys peterlimg/pi-remote from GitHub. No fork or local build needed.', link: deployUrl },
@@ -37,18 +39,35 @@ export function deploymentScreen(config, tui, keys, done, open = openUrl, copy =
     { title: 'Deploy', body: 'Click Deploy and wait until the service is Live. Then press Enter and paste its https://<name>.onrender.com address.' }
   ];
   let step = 0, copied; // copied: undefined until C is pressed on this step.
+  const muted = text => theme.fg('muted', text), accent = text => theme.fg('accent', text);
   return {
     render(width) {
       const rows = Math.max(2, tui.terminal.rows), current = steps[step], last = step === steps.length - 1;
-      const lines = ['Deploy your relay. Step ' + (step + 1) + ' of ' + steps.length + ': ' + current.title, '', current.body];
-      if (current.link) lines.push('', current.link);
-      if (current.token) lines.push('', current.token, '', copied === undefined ? 'Keep it private. Do not paste it into chat.'
-        : copied ? 'Copied to the clipboard.' : 'Could not copy. Select the value above.');
-      const hints = [current.link && 'O: open', current.token && 'C: copy', step > 0 && 'B: back', last ? 'Enter: done' : 'Enter: next', 'Esc: cancel'];
-      const footer = wrap(hints.filter(Boolean).join(' | '), width).slice(0, rows - 1);
+      const content = [], add = (text, style = text => text) => content.push(...wrap(text, width).map(style));
+      add('Step ' + (step + 1) + ' of ' + steps.length + ' · Deploy your relay', muted);
+      add(current.title, theme.bold);
+      content.push(''); add(current.body);
+      if (current.link) { content.push(''); add(current.link, accent); }
+      if (current.token) {
+        content.push(''); add(current.token, accent); content.push('');
+        if (copied === undefined) add('Keep it private. Do not paste it into chat.', muted);
+        else if (copied) add('Copied to the clipboard.', text => theme.fg('success', text));
+        else add('Could not copy. Select the value above.', text => theme.fg('warning', text));
+      }
+      // Keys sit right under the step, not at the bottom of a tall terminal.
+      const hints = [current.link && ['O', 'Open in browser'], current.token && ['C', 'Copy'], step > 0 && ['B', 'Back'],
+        ['Enter', last ? 'Done' : 'Next'], ['Esc', 'Cancel']].filter(Boolean);
+      const styled = ([key, label]) => theme.bold(accent(key)) + ' ' + muted(label), text = ([key, label]) => key + ' ' + label;
+      const packed = []; // Pack hints onto as few lines as fit, so a short terminal keeps the token visible.
+      for (const hint of hints) {
+        const line = packed.at(-1);
+        if (line && line.width + 3 + text(hint).length <= width) { line.width += 3 + text(hint).length; line.text += '   ' + styled(hint); }
+        else packed.push({ width: text(hint).length, text: styled(hint) });
+      }
+      const keyLines = packed.map(line => line.text);
+      const lines = [...content.slice(0, Math.max(0, rows - keyLines.length - 1)), '', ...keyLines].slice(-rows);
       // Fill the terminal so Pi's startup output never shows around a short step.
-      const text = lines.flatMap(line => wrap(line, width)).slice(0, rows - footer.length - 1);
-      return [...text, ...Array(rows - text.length - footer.length).fill(''), ...footer];
+      return [...lines, ...Array(rows - lines.length).fill('')];
     },
     invalidate() {},
     handleInput(data) {
