@@ -1,22 +1,31 @@
+import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import { publicOrigin, parseObject, send } from './config.mjs';
 import { e2eKey, sealClient } from './e2e.mjs';
 
 const deployUrl = 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main';
+const signupUrl = 'https://dashboard.render.com/register';
+// Best effort: the link stays on screen if no browser opener exists.
+export function openUrl(url) {
+  try { spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch { /* Link is shown. */ }
+}
 const wrap = (text, width) => text.match(new RegExp('.{1,' + Math.max(1, width) + '}', 'g')) || [''];
 
 // Only render these credentials in a temporary terminal overlay, never in messages or logs.
-export function deploymentScreen(config, tui, keys, done) {
+export function deploymentScreen(config, tui, keys, done, open = openUrl) {
+  // Render's sign-up drops the deploy link, so sign-up comes first and O reopens the link.
   const text = [
     'Deploy your relay on Render (one-time setup)', '',
-    '1. Open this link and sign in to your Render account:', deployUrl,
+    '1. No Render account? Create one first (free):', signupUrl,
+    'Already have one? Skip this step.', '',
+    '2. Press O to open the deploy page (press again after signing up):', deployUrl,
     'Source: peterlimg/pi-remote, branch main. No fork or local build needed.', '',
-    '2. Paste these values into the matching Render fields:',
+    '3. Paste these values into the matching Render fields:',
     'PI_REMOTE_RELAY_HOST_TOKEN', config.relayToken, '',
     'PI_REMOTE_RELAY_CLIENT_TOKEN', config.clientToken, '',
     'Keep these values private. Do not paste them into chat.', '',
-    '3. Click Deploy and wait until the service is Live.',
-    '4. Copy its HTTPS address, then return here and press Enter.', '',
+    '4. Click Deploy and wait until the service is Live.',
+    '5. Copy its HTTPS address, then return here and press Enter.', '',
     'Render handles HTTPS/WSS. The Free plan may sleep; a paid instance avoids this.',
     'Already deployed elsewhere? Configure the same tokens there, then press Enter.'
   ];
@@ -24,7 +33,7 @@ export function deploymentScreen(config, tui, keys, done) {
   return {
     render(width) {
       const rows = Math.max(2, tui.terminal.rows);
-      const footer = wrap('Up/Down: scroll | Enter: deployed | Esc: cancel', width).slice(0, rows - 1);
+      const footer = wrap('O: open deploy page | Up/Down: scroll | Enter: deployed | Esc: cancel', width).slice(0, rows - 1);
       const lines = text.flatMap(line => wrap(line, width));
       const size = rows - footer.length;
       maximum = Math.max(0, lines.length - size); offset = Math.min(offset, maximum);
@@ -34,6 +43,7 @@ export function deploymentScreen(config, tui, keys, done) {
     handleInput(data) {
       if (keys.matches(data, 'tui.select.confirm')) { done(true); return; }
       if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { done(false); return; }
+      if (data === 'o' || data === 'O') open(deployUrl);
       if (keys.matches(data, 'tui.select.up')) offset = Math.max(0, offset - 1);
       if (keys.matches(data, 'tui.select.down')) offset = Math.min(maximum, offset + 1);
       tui.requestRender();

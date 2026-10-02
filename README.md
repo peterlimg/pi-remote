@@ -31,12 +31,13 @@ Pi downloads the package and installs its dependencies. No manual clone, fork, o
 
 On first run, `/pi-remote` shows a private setup screen:
 
-1. Open the provided [Deploy to Render link](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main) and sign in. It uses this repository's `main` branch directly.
-2. Copy the two displayed token values into Render's `PI_REMOTE_RELAY_HOST_TOKEN` and `PI_REMOTE_RELAY_CLIENT_TOKEN` fields. Do not paste them into chat.
-3. Click **Deploy** and wait for the service to be **Live**. Render handles installation, HTTPS, and WSS automatically.
-4. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
+1. No Render account? [Create one](https://dashboard.render.com/register) first. Render's sign-up does not return you to the deploy page.
+2. Press **O** on the setup screen to open the [Deploy to Render link](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main), or press it again after signing up. It uses this repository's `main` branch directly.
+3. Copy the two displayed token values into Render's `PI_REMOTE_RELAY_HOST_TOKEN` and `PI_REMOTE_RELAY_CLIENT_TOKEN` fields. Do not paste them into chat.
+4. Click **Deploy** and wait for the service to be **Live**. Render handles installation, HTTPS, and WSS automatically.
+5. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
 
-No Render account? Sign up for free from the same link; no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
+Render's Free plan is enough, and no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
 
 ### 3. Scan the QR
 

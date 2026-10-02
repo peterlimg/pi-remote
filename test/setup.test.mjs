@@ -14,7 +14,8 @@ const keys = { matches: (key, name) => key === name.replace('tui.select.', '') }
 test('deployment guide keeps tokens UI-only and scrolls within narrow terminal bounds', () => {
   const tui = { terminal: { rows: 12 }, requestRender() {} };
   let result;
-  const screen = deploymentScreen(config, tui, keys, value => { result = value; });
+  const opened = [];
+  const screen = deploymentScreen(config, tui, keys, value => { result = value; }, url => opened.push(url));
   const visible = [];
   for (let i = 0; i < 100; i++) {
     const lines = screen.render(40);
@@ -30,6 +31,10 @@ test('deployment guide keeps tokens UI-only and scrolls within narrow terminal b
   const wide = deploymentScreen(config, { ...tui, terminal: { rows: 60 } }, keys, () => {}).render(120).join('\n');
   assert.match(wide, /https:\/\/render.com\/deploy\?repo=https:\/\/github.com\/peterlimg\/pi-remote\/tree\/main/);
   assert.match(wide, /No fork/);
+  // Render's sign-up drops the deploy link, so sign-up is offered first and O reopens the link.
+  assert.match(wide, /https:\/\/dashboard.render.com\/register/);
+  screen.handleInput('O'); screen.handleInput('o');
+  assert.deepEqual(opened, Array(2).fill('https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main'));
   assert.doesNotMatch(wide, /npm install|relay-env|#token=/);
   screen.handleInput('confirm');
   assert.equal(result, true);
