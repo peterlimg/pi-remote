@@ -197,6 +197,11 @@ export default function remoteExtension(pi: any) {
       context.ui.notify(running ? 'Pi Remote is running. Checking connection...' : 'Starting Pi Remote...', 'info');
       running = await ensureHost(config);
       if (!enabled) setChannel(true, context);
+      // A just-started host needs a moment to reach the relay; checking earlier only meets an offline relay.
+      for (const end = Date.now() + 15000; running.relayUrl && !running.relayConnected && Date.now() < end;) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
+      }
       if (running.relayUrl && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
       if (stopped) return;
       const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);

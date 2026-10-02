@@ -134,6 +134,8 @@ function connect() {
   connectionTimer = setTimeout(reconnect, 20000);
   ws.addEventListener('open', () => {
     if (socket !== ws) return;
+    // A connected computer answers within seconds; relay close frames can be lost in its proxy.
+    clearTimeout(connectionTimer); connectionTimer = setTimeout(reconnect, 8000);
     ws.send(JSON.stringify({ type: 'auth', token, ...(key ? { e2e: true } : {}) }));
     if (key) { ws.hello = hello(); ws.send(JSON.stringify(ws.hello.packet)); }
   });
@@ -146,7 +148,7 @@ function connect() {
     let packet;
     try { packet = JSON.parse(event.data); } catch { return; }
     if (packet?.type === 'hello' && ws.hello) { ws.channel = channel(key, ws.hello.nonce, packet.nonce); ws.channel.catch(encryptionFailed); }
-    else if (packet?.type === 'notice') notice(packet.error);
+    else if (packet?.type === 'notice') { notice(packet.error); if (packet.error === 'Computer is offline') reconnect(); }
   });
   function receive(data) {
     if (socket !== ws) return;

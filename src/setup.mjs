@@ -67,6 +67,12 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
       attemptTimer = setTimeout(() => ws.terminate(), 20000);
       // A ready packet that decrypts proves the token, the key and the computer connection.
       ws.on('open', () => {
+        // Once open, a connected computer answers within a second. Relay notices and close
+        // frames can be lost in its proxy, so never wait out the full attempt for them.
+        clearTimeout(attemptTimer); attemptTimer = setTimeout(() => ws.terminate(), 5000);
+        ws.on('message', raw => {
+          try { if (parseObject(raw).error === 'Computer is offline') ws.terminate(); } catch { /* Sealed frame. */ }
+        });
         send(ws, { type: 'auth', token: config.clientToken, e2e: true });
         sealClient(ws, e2eKey(config), sealed => sealed.on('message', raw => {
           try { if (parseObject(raw).type === 'ready') finish(); } catch { /* Wait for a valid ready packet. */ }

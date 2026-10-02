@@ -93,3 +93,14 @@ test('a silent verification is bounded and cancellation closes its socket', asyn
   assert.equal(await checkRelay(ui, options), false);
   await until(() => wss.clients.size === 0);
 });
+
+test('verification retries an open relay connection that goes silent instead of waiting 20 s', async t => {
+  const http = createServer(), wss = new WebSocketServer({ server: http });
+  await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { for (const ws of wss.clients) ws.terminate(); wss.close(); await new Promise(resolve => http.close(resolve)); });
+  let connections = 0;
+  wss.on('connection', () => connections++); // Lost notices and close frames look like silence.
+  const started = Date.now();
+  await assert.rejects(verifyRelay({ ...config, publicUrl: 'http://127.0.0.1:' + http.address().port }, AbortSignal.timeout(7500)), /Timed out/);
+  assert.ok(connections >= 2, 'retried within ' + (Date.now() - started) + ' ms');
+});
