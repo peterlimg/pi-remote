@@ -36,7 +36,7 @@ On first run, `/pi-remote` shows a private setup screen:
 3. Click **Deploy** and wait for the service to be **Live**. Render handles installation, HTTPS, and WSS automatically.
 4. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
 
-You need access to this GitHub repository while it is private. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
+No Render account? Sign up for free from the same link; no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
 
 ### 3. Scan the QR
 
