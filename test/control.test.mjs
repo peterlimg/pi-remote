@@ -329,7 +329,10 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
           value => { closed = true; result = value; });
         const lines = component.render(120);
         if (lines[0].startsWith('Deploy your relay')) {
-          guides.push(lines);
+          // Walk every step, so the guide shows both tokens before deploying or cancelling.
+          const seen = [...lines];
+          for (let step = 1; step < 5; step++) { component.handleInput('confirm'); seen.push(...component.render(120)); }
+          guides.push(seen);
           component.handleInput(deployed ? 'confirm' : 'cancel');
         } else {
           assert.equal(verified, true, 'Never show a QR before the relay check succeeds');
