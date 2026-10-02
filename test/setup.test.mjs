@@ -20,7 +20,7 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   const screens = [];
   for (let step = 0; step < 5; step++) {
     const lines = screen.render(40);
-    assert.ok(lines.length <= 12);
+    assert.equal(lines.length, 12); // Covers the whole terminal, whatever the step's length.
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
     screen.handleInput('O'); screen.handleInput('c');

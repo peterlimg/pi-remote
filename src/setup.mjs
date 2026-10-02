@@ -46,7 +46,9 @@ export function deploymentScreen(config, tui, keys, done, open = openUrl, copy =
         : copied ? 'Copied to the clipboard.' : 'Could not copy. Select the value above.');
       const hints = [current.link && 'O: open', current.token && 'C: copy', step > 0 && 'B: back', last ? 'Enter: done' : 'Enter: next', 'Esc: cancel'];
       const footer = wrap(hints.filter(Boolean).join(' | '), width).slice(0, rows - 1);
-      return [...lines.flatMap(line => wrap(line, width)).slice(0, rows - footer.length - 1), '', ...footer];
+      // Fill the terminal so Pi's startup output never shows around a short step.
+      const text = lines.flatMap(line => wrap(line, width)).slice(0, rows - footer.length - 1);
+      return [...text, ...Array(rows - text.length - footer.length).fill(''), ...footer];
     },
     invalidate() {},
     handleInput(data) {
