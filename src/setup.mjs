@@ -9,43 +9,58 @@ const signupUrl = 'https://dashboard.render.com/register';
 export function openUrl(url) {
   try { spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch { /* Link is shown. */ }
 }
-const wrap = (text, width) => text.match(new RegExp('.{1,' + Math.max(1, width) + '}', 'g')) || [''];
+// Resolves false when no clipboard tool exists, so the screen never claims a copy it did not make.
+export function copyText(text) {
+  const [command, ...args] = process.platform === 'darwin' ? ['pbcopy'] : process.env.WAYLAND_DISPLAY ? ['wl-copy'] : ['xclip', '-selection', 'clipboard'];
+  return new Promise(resolve => {
+    try {
+      const child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'] });
+      child.on('error', () => resolve(false)).on('close', code => resolve(code === 0));
+      child.stdin.on('error', () => {}); child.stdin.end(text);
+    } catch { resolve(false); }
+  });
+}
+// Break at spaces; split only words longer than the line, such as links and tokens.
+const wrap = (text, width) => {
+  width = Math.max(1, width);
+  return text.match(new RegExp('\\S.{0,' + (width - 1) + '}(?=\\s|$)|\\S{1,' + width + '}', 'g')) || [''];
+};
 
 // Only render these credentials in a temporary terminal overlay, never in messages or logs.
-export function deploymentScreen(config, tui, keys, done, open = openUrl) {
-  // Render's sign-up drops the deploy link, so sign-up comes first and O reopens the link.
-  const text = [
-    'Deploy your relay on Render (one-time setup)', '',
-    '1. No Render account? Create one first (free):', signupUrl,
-    'Already have one? Skip this step.', '',
-    '2. Press O to open the deploy page (press again after signing up):', deployUrl,
-    'Source: peterlimg/pi-remote, branch main. No fork or local build needed.', '',
-    '3. Paste these values into the matching Render fields:',
-    'PI_REMOTE_RELAY_HOST_TOKEN', config.relayToken, '',
-    'PI_REMOTE_RELAY_CLIENT_TOKEN', config.clientToken, '',
-    'Keep these values private. Do not paste them into chat.', '',
-    '4. Click Deploy and wait until the service is Live.',
-    '5. Copy its HTTPS address, then return here and press Enter.', '',
-    'Render handles HTTPS/WSS. The Free plan may sleep; a paid instance avoids this.',
-    'Already deployed elsewhere? Configure the same tokens there, then press Enter.'
+// One step per screen; sign-up comes before the deploy link because Render's sign-up drops it.
+export function deploymentScreen(config, tui, keys, done, open = openUrl, copy = copyText) {
+  const steps = [
+    { title: 'Create a free Render account', body: 'Already have one? Press Enter to skip.', link: signupUrl },
+    { title: 'Open the deploy page', body: 'It deploys peterlimg/pi-remote from GitHub. No fork or local build needed.', link: deployUrl },
+    { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken },
+    { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
+    { title: 'Deploy', body: 'Click Deploy and wait until the service is Live. Then press Enter and paste its https://<name>.onrender.com address.' }
   ];
-  let offset = 0, maximum = 0;
+  let step = 0, copied; // copied: undefined until C is pressed on this step.
   return {
     render(width) {
-      const rows = Math.max(2, tui.terminal.rows);
-      const footer = wrap('O: open deploy page | Up/Down: scroll | Enter: deployed | Esc: cancel', width).slice(0, rows - 1);
-      const lines = text.flatMap(line => wrap(line, width));
-      const size = rows - footer.length;
-      maximum = Math.max(0, lines.length - size); offset = Math.min(offset, maximum);
-      return [...lines.slice(offset, offset + size), ...footer];
+      const rows = Math.max(2, tui.terminal.rows), current = steps[step], last = step === steps.length - 1;
+      const lines = ['Deploy your relay. Step ' + (step + 1) + ' of ' + steps.length + ': ' + current.title, '', current.body];
+      if (current.link) lines.push('', current.link);
+      if (current.token) lines.push('', current.token, '', copied === undefined ? 'Keep it private. Do not paste it into chat.'
+        : copied ? 'Copied to the clipboard.' : 'Could not copy. Select the value above.');
+      const hints = [current.link && 'O: open', current.token && 'C: copy', step > 0 && 'B: back', last ? 'Enter: done' : 'Enter: next', 'Esc: cancel'];
+      const footer = wrap(hints.filter(Boolean).join(' | '), width).slice(0, rows - 1);
+      return [...lines.flatMap(line => wrap(line, width)).slice(0, rows - footer.length - 1), '', ...footer];
     },
     invalidate() {},
     handleInput(data) {
-      if (keys.matches(data, 'tui.select.confirm')) { done(true); return; }
+      const current = steps[step], key = data.toLowerCase();
       if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { done(false); return; }
-      if (data === 'o' || data === 'O') open(deployUrl);
-      if (keys.matches(data, 'tui.select.up')) offset = Math.max(0, offset - 1);
-      if (keys.matches(data, 'tui.select.down')) offset = Math.min(maximum, offset + 1);
+      if (keys.matches(data, 'tui.select.confirm')) {
+        if (step === steps.length - 1) { done(true); return; }
+        step++; copied = undefined;
+      } else if (key === 'b' && step > 0) { step--; copied = undefined; }
+      else if (key === 'o' && current.link) open(current.link);
+      else if (key === 'c' && current.token) {
+        const at = step;
+        void copy(current.token).then(ok => { if (step === at) { copied = ok; tui.requestRender(); } });
+      }
       tui.requestRender();
     }
   };

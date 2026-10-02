@@ -29,13 +29,13 @@ Pi downloads the package and installs its dependencies. No manual clone, fork, o
 
 ### 2. Deploy from `/pi-remote`
 
-On first run, `/pi-remote` shows a private setup screen:
+On first run, `/pi-remote` walks you through five short steps, one per screen. Press Enter to go to the next one.
 
-1. No Render account? [Create one](https://dashboard.render.com/register) first. Render's sign-up does not return you to the deploy page.
-2. Press **O** on the setup screen to open the [Deploy to Render link](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main), or press it again after signing up. It uses this repository's `main` branch directly.
-3. Copy the two displayed token values into Render's `PI_REMOTE_RELAY_HOST_TOKEN` and `PI_REMOTE_RELAY_CLIENT_TOKEN` fields. Do not paste them into chat.
-4. Click **Deploy** and wait for the service to be **Live**. Render handles installation, HTTPS, and WSS automatically.
-5. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
+1. Create a free [Render account](https://dashboard.render.com/register) (press **O** to open it), or skip this step if you have one. Sign up first: Render's sign-up does not return you to the deploy page.
+2. Press **O** to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly.
+3. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
+4. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
+5. Click **Deploy** and wait for the service to be **Live**. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
 
 Render's Free plan is enough, and no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
 

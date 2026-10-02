@@ -11,34 +11,35 @@ import { until } from './helpers.mjs';
 const config = { relayToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), bridgeToken: 'b'.repeat(40) };
 const keys = { matches: (key, name) => key === name.replace('tui.select.', '') };
 
-test('deployment guide keeps tokens UI-only and scrolls within narrow terminal bounds', () => {
+test('deployment guide shows one step at a time and keeps each token on its own screen', async () => {
   const tui = { terminal: { rows: 12 }, requestRender() {} };
+  const opened = [], copied = [];
   let result;
-  const opened = [];
-  const screen = deploymentScreen(config, tui, keys, value => { result = value; }, url => opened.push(url));
-  const visible = [];
-  for (let i = 0; i < 100; i++) {
+  const screen = deploymentScreen(config, tui, keys, value => { result = value; }, url => opened.push(url),
+    async text => { copied.push(text); return copied.length === 1; });
+  const screens = [];
+  for (let step = 0; step < 5; step++) {
     const lines = screen.render(40);
     assert.ok(lines.length <= 12);
     assert.ok(lines.every(line => line.length <= 40));
-    visible.push(...lines);
-    screen.handleInput('down');
+    screens.push(lines.join(''));
+    screen.handleInput('O'); screen.handleInput('c');
+    await new Promise(resolve => setImmediate(resolve));
+    if (step === 2) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
+    if (step === 3) assert.match(screen.render(40).join(''), /Could not copy/);
+    screen.handleInput('confirm');
   }
-  const text = visible.join('');
-  assert.ok(text.includes(config.relayToken));
-  assert.ok(text.includes(config.clientToken));
-  // Check the complete deployment link without terminal wrapping.
-  const wide = deploymentScreen(config, { ...tui, terminal: { rows: 60 } }, keys, () => {}).render(120).join('\n');
-  assert.match(wide, /https:\/\/render.com\/deploy\?repo=https:\/\/github.com\/peterlimg\/pi-remote\/tree\/main/);
-  assert.match(wide, /No fork/);
-  // Render's sign-up drops the deploy link, so sign-up is offered first and O reopens the link.
-  assert.match(wide, /https:\/\/dashboard.render.com\/register/);
-  screen.handleInput('O'); screen.handleInput('o');
-  assert.deepEqual(opened, Array(2).fill('https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main'));
-  assert.doesNotMatch(wide, /npm install|relay-env|#token=/);
-  screen.handleInput('confirm');
+  // Render's sign-up drops the deploy link, so sign-up comes first.
+  assert.deepEqual(opened, ['https://dashboard.render.com/register', 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main']);
+  assert.deepEqual(copied, [config.relayToken, config.clientToken]);
+  assert.deepEqual(screens.map(text => [text.includes(config.relayToken), text.includes(config.clientToken)]),
+    [[false, false], [false, false], [true, false], [false, true], [false, false]]);
+  assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, true);
-  screen.handleInput('cancel');
+  const again = deploymentScreen(config, tui, keys, value => { result = value; }, () => {}, async () => true);
+  again.handleInput('confirm'); again.handleInput('b');
+  assert.match(again.render(80).join('\n'), /Step 1 of 5: Create a free Render account/);
+  again.handleInput('cancel');
   assert.equal(result, false);
 });
 
