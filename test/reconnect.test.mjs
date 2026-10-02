@@ -71,3 +71,17 @@ test('a restarted computer replaces the stale relay connection instead of waitin
   assert.equal(fresh.readyState, 1);
   fresh.terminate();
 });
+
+test('stopping the computer sends the relay a close frame instead of a bare reset', async t => {
+  const http = createServer(), wss = new WebSocketServer({ server: http });
+  await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { wss.close(); await new Promise(resolve => http.close(resolve)); });
+  const closed = new Promise(resolve => wss.once('connection', ws => {
+    ws.once('message', () => ws.send(JSON.stringify({ type: 'ready' })));
+    ws.once('close', code => resolve(code));
+  }));
+  const disconnect = connectRelay({}, 'ws://127.0.0.1:' + http.address().port, 'h'.repeat(40), { key: 'k'.repeat(43), allowInsecure: true });
+  await eventually(() => disconnect.connected());
+  disconnect();
+  assert.equal(await closed, 1001);
+});

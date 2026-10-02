@@ -120,7 +120,14 @@ export function connectRelay(service, url, token, { key, allowInsecure = false }
     });
   };
   connect();
-  const disconnect = () => { stopped = true; connected = false; clearTimeout(timer); socket?.terminate(); };
+  const disconnect = () => {
+    stopped = true; connected = false; clearTimeout(timer);
+    // A close frame tells the relay at once; a bare TCP reset may never cross its proxy,
+    // and the relay would keep routing phones to this dead connection until its heartbeat.
+    const ws = socket;
+    if (ws?.readyState === 1) { ws.close(1001, 'Computer stopping'); setTimeout(() => ws.terminate(), 1000).unref(); }
+    else ws?.terminate();
+  };
   disconnect.connected = () => connected;
   return disconnect;
 }
