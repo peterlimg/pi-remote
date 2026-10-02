@@ -116,6 +116,9 @@ export default function remoteExtension(pi: any) {
     if (lock) { lock.release(); lock = undefined; }
     state = undefined;
   };
+  // Render services created from the public repository URL never auto-deploy.
+  const relayOutdated = 'Pi Remote: your relay runs an older version. Redeploy it: in Render, open the service and choose Manual Deploy > Deploy latest commit. On your own server, pull and restart it.';
+  let outdatedShown = false;
   pi.on('session_start', async (_event: any, context: any) => {
     cleanup(); ctx = context; stopped = false;
     const file = ctx.sessionManager.getSessionFile();
@@ -132,6 +135,10 @@ export default function remoteExtension(pi: any) {
       state.supportsImages = true;
       resetHistory(); enabled = true; connect(generation);
       ctx.ui.setStatus('pi-remote', 'remote connecting');
+      // Users who never open /pi-remote still learn that their relay needs a redeploy, once per Pi start.
+      if (!outdatedShown) void hostStatus(loadConfig()).then(running => {
+        if (running?.relayOutdated && !outdatedShown) { outdatedShown = true; context.ui.notify(relayOutdated, 'warning'); }
+      }, () => {});
     } catch (error: any) {
       ctx.ui.notify('Pi Remote: ' + error.message, 'error');
     }
@@ -151,8 +158,6 @@ export default function remoteExtension(pi: any) {
   for (const name of ['session_compact', 'session_tree']) {
     pi.on(name, () => { resetHistory(); publish(); });
   }
-  // Render services created from the public repository URL never auto-deploy.
-  const relayOutdated = 'Pi Remote: your relay runs an older version. Redeploy it: in Render, open the service and choose Manual Deploy > Deploy latest commit. On your own server, pull and restart it.';
   let controlling = false;
   const control = async (args: string, context: any) => {
     if (controlling) { context.ui.notify('Pi Remote is already opening. Close its screen first.', 'info'); return; }

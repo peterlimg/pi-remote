@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -53,4 +54,36 @@ for (const kind of ['terminal', 'rpc']) test(`Mac and Remote reconnect through a
   assert.deepEqual(inputs, ['remote prompt']);
   events.get('message_end')({ type: 'message_end', message: { role: 'user', timestamp: 1, content: 'local prompt' } });
   await until(() => host.service.read(id).messages.some(message => message.text === 'local prompt'));
+});
+
+test('Pi start warns once when the relay is older than the computer', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-outdated-'));
+  const previous = process.env.PI_REMOTE_HOME;
+  process.env.PI_REMOTE_HOME = dir;
+  const events = new Map(), notifications = [];
+  // Stands in for a running host whose relay reported an older protocol.
+  const status = createServer((_req, res) => res.end(JSON.stringify({ protocol: 1, relayConnected: true, relayOutdated: true })));
+  await new Promise(resolve => status.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    await events.get('session_shutdown')?.();
+    await new Promise(resolve => status.close(resolve));
+    if (previous === undefined) delete process.env.PI_REMOTE_HOME;
+    else process.env.PI_REMOTE_HOME = previous;
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const config = loadConfig(dir);
+  config.port = status.address().port;
+  writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
+  const file = join(dir, 'session.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'test', cwd: dir }) + '\n');
+  remoteExtension({ on: (name, handler) => events.set(name, handler), registerCommand() {},
+    getSessionName: () => 'Session', getThinkingLevel: () => 'medium', sendUserMessage() {} });
+  const context = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
+    ui: { notify: (message, type) => notifications.push(type + ': ' + message), setStatus() {} } };
+  // A second session start, such as /new, must not repeat the warning.
+  for (let i = 0; i < 2; i++) await events.get('session_start')({}, context);
+  await until(() => notifications.length);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0], /^warning: .*Manual Deploy > Deploy latest commit/);
 });
