@@ -29,7 +29,9 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
-    screen.handleInput('O'); screen.handleInput('c');
+    if (step === 1) assert.match(screens[1], /Enter Open in browser/); // Enter opens the deploy page and moves on.
+    else screen.handleInput('O');
+    screen.handleInput('c');
     await new Promise(resolve => setImmediate(resolve));
     if (step === 2) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
     if (step === 3) assert.match(screen.render(40).join(''), /Could not copy/);
@@ -57,7 +59,7 @@ test('an existing relay gets this computer\'s tokens instead of a second deploym
   const screen = deploymentScreen(config, { terminal: { rows: 20 }, requestRender() {} }, keys, value => { result = value; },
     { open: url => opened.push(url), copy: async () => true });
   screen.handleInput('Y');
-  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); screen.handleInput('o'); screen.handleInput('confirm'); }
+  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); screen.handleInput('confirm'); }
   assert.deepEqual(opened, ['https://dashboard.render.com']);
   assert.match(screens[0], /Step 1 of 4 · Use your relay\nOpen your relay in Render/);
   assert.ok(screens[1].includes(config.relayToken) && screens[2].includes(config.clientToken));

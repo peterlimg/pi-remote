@@ -19,7 +19,7 @@ import { restartAndResume } from '../scripts/restart-and-resume.mjs';
 
 async function environment(t) {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-control-'));
-  const env = { PI_REMOTE_HOME: dir, PI_REMOTE_PORT: undefined, PI_REMOTE_PUBLIC_URL: undefined, PI_REMOTE_RELAY_URL: undefined, PI_REMOTE_SESSION_DIRS: dir, PI_REMOTE_PI_BIN: undefined };
+  const env = { PI_REMOTE_HOME: dir, PI_REMOTE_PORT: undefined, PI_REMOTE_PUBLIC_URL: undefined, PI_REMOTE_RELAY_URL: undefined, PI_REMOTE_SESSION_DIRS: dir, PI_REMOTE_PI_BIN: undefined, BROWSER: 'true' };
   const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
