@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { deploymentScreen, checkRelay, relayGone } from '../src/setup.mjs';
+import { deploymentScreen, checkRelay, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -201,7 +201,7 @@ export default function remoteExtension(pi: any) {
         // The guide ends by asking for the relay address, already validated.
         const origin = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
           deploymentScreen(config, tui, keys, done, { theme }),
-        { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
+        fullScreen);
         if (!origin || stopped) return;
         saveConnection(origin, true);
         config = loadConfig();
@@ -225,7 +225,7 @@ export default function remoteExtension(pi: any) {
         handleInput(data: string) {
           if (keys.matches(data, 'tui.select.confirm') || keys.matches(data, 'tui.select.cancel') || data === '\u0003') done();
         }
-      }), { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
+      }), fullScreen);
     } catch (error: any) { context.ui.notify('Pi Remote: ' + error.message, 'error'); }
     finally { controlling = false; }
   };

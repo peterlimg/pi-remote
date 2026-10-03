@@ -189,22 +189,29 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
   });
 }
 
+// Pi's default overlay is a box over the middle of the conversation; cover the whole terminal instead.
+export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } };
+
 export async function checkRelay(ui, config) {
-  const result = await ui.custom((_tui, _theme, keys, done) => {
+  const result = await ui.custom((tui, theme = plain, keys, done) => {
     const controller = new AbortController();
     let finished = false;
     const finish = value => { if (!finished) { finished = true; done(value); } };
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]);
     verifyRelay(config, signal).then(() => finish(true), error => finish(error.message));
     return {
-      render: width => ['Checking relay and phone login...', 'A sleeping Render service can take a minute. Esc cancels.'].flatMap(line => wrap(line, width)),
+      render: width => {
+        const rows = Math.max(2, tui.terminal.rows), lines = [...wrap('Checking relay and phone login...', width).map(theme.bold),
+          ...wrap('A sleeping Render service can take a minute. Esc cancels.', width).map(text => theme.fg('muted', text))].slice(0, rows);
+        return [...lines, ...Array(rows - lines.length).fill('')];
+      },
       invalidate() {},
       handleInput(data) {
         if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { finish(false); controller.abort(); }
       },
       dispose() { finished = true; controller.abort(); }
     };
-  }, { overlay: true });
+  }, fullScreen);
   if (typeof result === 'string') throw new Error(result);
   return result === true;
 }

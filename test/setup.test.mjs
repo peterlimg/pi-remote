@@ -103,8 +103,10 @@ test('relay verification waits for a real host and rejects a wrong phone token',
   await pending;
   assert.equal(verified, true);
   const ui = { custom: factory => new Promise(resolve => {
-    const component = factory({}, {}, keys, value => { component.dispose(); resolve(value); });
-    assert.match(component.render(80).join(''), /Checking relay/);
+    const component = factory({ terminal: { rows: 6 } }, undefined, keys, value => { component.dispose(); resolve(value); });
+    const lines = component.render(80);
+    assert.match(lines.join(''), /Checking relay/);
+    assert.equal(lines.length, 6); // Covers the conversation instead of a box over its middle.
   }) };
   assert.equal(await checkRelay(ui, options), true);
   await assert.rejects(checkRelay(ui, { ...options, clientToken: 'wrong' }), /client token/);
@@ -130,7 +132,7 @@ test('a silent verification is bounded and cancellation closes its socket', asyn
   await until(() => wss.clients.size === 0);
 
   const ui = { custom: factory => new Promise(resolve => {
-    const component = factory({}, {}, keys, resolve);
+    const component = factory({ terminal: { rows: 6 } }, undefined, keys, resolve);
     assert.match(component.render(80).join(''), /Checking relay/);
     component.handleInput('cancel');
     component.dispose();

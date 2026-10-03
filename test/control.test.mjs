@@ -322,7 +322,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
       input: async () => assert.fail('The relay address is entered in the guide'),
       custom: async (factory, options) => {
         // The network-backed check is tested with real sockets in setup.test.mjs.
-        if (!options.overlayOptions) { checks++; return verified; }
+        if (String(factory).includes('Checking relay')) { checks++; return verified; }
         let closed = false, result;
         const component = factory({ terminal: { rows: 60 }, requestRender() {} }, { fg: (_color, text) => text, bold: text => text },
           { matches: (key, name) => key === name.replace('tui.select.', '') },
