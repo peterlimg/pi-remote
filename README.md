@@ -33,7 +33,7 @@ On first run, `/pi-remote` asks whether you already have a relay on Render, then
 
 If you answer **N** (no relay yet):
 
-1. Create a free [Render account](https://dashboard.render.com/register) (press **O** to open it), or skip this step if you have one. Sign up first: Render's sign-up does not return you to the deploy page.
+1. Press Enter to create a free [Render account](https://dashboard.render.com/register), or **S** to skip if you have one. Sign up first: Render's sign-up does not return you to the deploy page.
 2. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly.
 3. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
 4. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.

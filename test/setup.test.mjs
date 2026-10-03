@@ -29,8 +29,7 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
-    if (step === 1) assert.match(screens[1], /Enter Open in browser/); // Enter opens the deploy page and moves on.
-    else screen.handleInput('O');
+    if (step < 2) assert.match(screens[step], /Enter Open in browser/); // Enter opens the page and moves on.
     screen.handleInput('c');
     await new Promise(resolve => setImmediate(resolve));
     if (step === 2) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
@@ -44,8 +43,12 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     [[false, false], [false, false], [true, false], [false, true], [false, false]]);
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, true);
-  const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open() {}, copy: async () => true });
-  again.handleInput('n'); again.handleInput('confirm'); again.handleInput('b');
+  const skipped = [];
+  const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => skipped.push(url), copy: async () => true });
+  again.handleInput('n'); again.handleInput('s');
+  assert.match(again.render(80).join('\n'), /Step 2 of 5/);
+  assert.deepEqual(skipped, []); // Skipping sign-up opens nothing.
+  again.handleInput('b');
   assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy a new relay\nCreate a free Render account/);
   again.handleInput('b');
   assert.match(again.render(80).join('\n'), /already have a Pi Remote relay/);

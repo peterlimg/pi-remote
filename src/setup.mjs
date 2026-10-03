@@ -36,14 +36,14 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
   const live = 'wait until the service is Live. Then press Enter and paste its https://<name>.onrender.com address.';
   const paths = {
     n: ['Deploy a new relay', [
-      { title: 'Create a free Render account', body: 'Already have one? Press Enter to skip.', link: signupUrl },
-      { title: 'Open the deploy page', body: 'It deploys peterlimg/pi-remote from GitHub. No fork or local build needed.', link: deployUrl, openOnEnter: true },
+      { title: 'Create a free Render account', body: 'Sign up before deploying: Render\'s sign-up page does not return to the deploy page.', link: signupUrl, skip: true },
+      { title: 'Open the deploy page', body: 'It deploys peterlimg/pi-remote from GitHub. No fork or local build needed.', link: deployUrl },
       { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken },
       { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
       { title: 'Deploy', body: 'Click Deploy and ' + live }
     ]],
     y: ['Use your relay', [
-      { title: 'Open your relay in Render', body: 'Click your relay\'s name in the service list, such as pi-remote-relay. On the service page that opens, choose Environment in the left menu.', link: dashboardUrl, openOnEnter: true },
+      { title: 'Open your relay in Render', body: 'Click your relay\'s name in the service list, such as pi-remote-relay. On the service page that opens, choose Environment in the left menu.', link: dashboardUrl },
       { title: 'Set the host token', body: 'Set PI_REMOTE_RELAY_HOST_TOKEN to it. If it already matches, press Enter.', token: config.relayToken },
       { title: 'Set the client token', body: 'Set PI_REMOTE_RELAY_CLIENT_TOKEN to it. If it already matches, press Enter.', token: config.clientToken },
       { title: 'Save', body: 'Save the changes if you made any, and ' + live }
@@ -72,9 +72,9 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
           else if (copied) add('Copied to the clipboard.', text => theme.fg('success', text));
           else add('Could not copy. Select the value above.', text => theme.fg('warning', text));
         }
-        // A required page opens on Enter; an optional one, such as sign-up, only on O.
-        hints = [current.link && !current.openOnEnter && ['O', 'Open in browser'], current.token && ['C', 'Copy'], ['B', 'Back'],
-          ['Enter', current.openOnEnter ? 'Open in browser' : step === steps.length - 1 ? 'Done' : 'Next'], ['Esc', 'Cancel']].filter(Boolean);
+        // Enter always does the step's action: open its page, or finish it.
+        hints = [['Enter', current.link ? 'Open in browser' : step === steps.length - 1 ? 'Done' : 'Next'],
+          current.skip && ['S', 'Skip, I have one'], current.token && ['C', 'Copy'], ['B', 'Back'], ['Esc', 'Cancel']].filter(Boolean);
       }
       // Keys sit right under the step, not at the bottom of a tall terminal.
       const styled = ([key, label]) => theme.bold(accent(key)) + ' ' + muted(label), text = ([key, label]) => key + ' ' + label;
@@ -96,10 +96,10 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       if (!current) { if (paths[key]) path = key; }
       else if (keys.matches(data, 'tui.select.confirm')) {
         if (step === steps.length - 1) { done(true); return; }
-        if (current.openOnEnter) open(current.link);
+        if (current.link) open(current.link);
         step++; copied = undefined;
-      } else if (key === 'b') { if (step > 0) step--; else path = undefined; copied = undefined; }
-      else if (key === 'o' && current.link) open(current.link);
+      } else if (key === 's' && current.skip) step++;
+      else if (key === 'b') { if (step > 0) step--; else path = undefined; copied = undefined; }
       else if (key === 'c' && current.token) {
         const at = current;
         void copy(current.token).then(ok => { if (paths[path]?.[1][step] === at) { copied = ok; tui.requestRender(); } });
