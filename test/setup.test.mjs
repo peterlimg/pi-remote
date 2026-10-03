@@ -17,6 +17,9 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   let result;
   const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
     copy: async text => { copied.push(text); return copied.length === 1; } });
+  assert.match(screen.render(40).join(' '), /already have a Pi Remote relay/);
+  screen.handleInput('confirm'); // Only an answer leaves the question.
+  screen.handleInput('n');
   const screens = [];
   for (let step = 0; step < 5; step++) {
     const lines = screen.render(40);
@@ -40,10 +43,26 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, true);
   const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open() {}, copy: async () => true });
-  again.handleInput('confirm'); again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy your relay\nCreate a free Render account/);
+  again.handleInput('n'); again.handleInput('confirm'); again.handleInput('b');
+  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy a new relay\nCreate a free Render account/);
+  again.handleInput('b');
+  assert.match(again.render(80).join('\n'), /already have a Pi Remote relay/);
   again.handleInput('cancel');
   assert.equal(result, false);
+});
+
+test('an existing relay gets this computer\'s tokens instead of a second deployment', () => {
+  const opened = [], screens = [];
+  let result;
+  const screen = deploymentScreen(config, { terminal: { rows: 20 }, requestRender() {} }, keys, value => { result = value; },
+    { open: url => opened.push(url), copy: async () => true });
+  screen.handleInput('Y');
+  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); screen.handleInput('o'); screen.handleInput('confirm'); }
+  assert.deepEqual(opened, ['https://dashboard.render.com']);
+  assert.match(screens[0], /Step 1 of 4 · Use your relay\nOpen your relay in Render/);
+  assert.ok(screens[1].includes(config.relayToken) && screens[2].includes(config.clientToken));
+  assert.doesNotMatch(screens.join(''), /render\.com\/deploy/);
+  assert.equal(result, true);
 });
 
 test('relay verification waits for a real host and rejects a wrong phone token', async t => {
