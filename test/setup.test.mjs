@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { deploymentScreen, checkRelay, verifyRelay } from '../src/setup.mjs';
+import { deploymentScreen, checkRelay, verifyRelay, relayGone } from '../src/setup.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { e2eKey } from '../src/e2e.mjs';
 import { until } from './helpers.mjs';
@@ -131,4 +131,16 @@ test('verification retries an open relay connection that goes silent instead of 
   const started = Date.now();
   await assert.rejects(verifyRelay({ ...config, publicUrl: 'http://127.0.0.1:' + http.address().port }, AbortSignal.timeout(7500)), /Timed out/);
   assert.ok(connections >= 2, 'retried within ' + (Date.now() - started) + ' ms');
+});
+
+test('only a definite non-relay answer marks a saved relay as gone', async () => {
+  let status = 404;
+  const http = createServer((_req, res) => { res.statusCode = status; res.end(status === 200 ? 'ok' : 'Not Found'); });
+  await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
+  const origin = 'http://127.0.0.1:' + http.address().port;
+  assert.equal(await relayGone(origin), true); // Render's reply for a deleted service.
+  status = 200; assert.equal(await relayGone(origin), false); // A relay.
+  status = 503; assert.equal(await relayGone(origin), false); // Restarting.
+  http.closeAllConnections(); await new Promise(resolve => http.close(resolve));
+  assert.equal(await relayGone(origin), false); // Unreachable may be temporary.
 });

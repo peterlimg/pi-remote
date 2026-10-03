@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { deploymentScreen, checkRelay } from '../src/setup.mjs';
+import { deploymentScreen, checkRelay, relayGone } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -186,7 +186,14 @@ export default function remoteExtension(pi: any) {
       }
       if (context.mode !== 'tui') throw new Error('Open /pi-remote in an interactive Pi terminal to set up and display the private QR.');
       if (!state || !lock) throw new Error('Resolve session ownership and /reload first');
-      if (action === 'setup' || !mobileUrl(running?.publicUrl || config.publicUrl)) {
+      const saved = running?.publicUrl || config.publicUrl;
+      // Setup outlives uninstalling the package, so a saved relay may since have been deleted.
+      const gone = action !== 'setup' && mobileUrl(saved) && await relayGone(saved);
+      if (gone) {
+        context.ui.notify('No relay answers at ' + saved + '. It may have been deleted. Set up a new one.', 'warning');
+        if (running) { await stopHost(config); running = null; }
+      }
+      if (action === 'setup' || gone || !mobileUrl(saved)) {
         if (running) throw new Error('Stop Pi Remote with /pi-remote stop before changing its phone address.');
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');

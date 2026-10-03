@@ -106,6 +106,16 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
   };
 }
 
+// A relay always answers /health with 'ok'. Any other definite answer, such as Render's 404 for a
+// deleted service, means the saved address is not a relay. Network errors, timeouts (a sleeping
+// service) and 5xx (a restarting one) may be temporary, so they never count.
+export async function relayGone(origin, signal = AbortSignal.timeout(5000)) {
+  try {
+    const res = await fetch(new URL('/health', origin), { signal });
+    return res.status < 500 && (await res.text()) !== 'ok';
+  } catch { return false; }
+}
+
 // Exercise the phone's authentication path. A relay /health response alone cannot
 // prove that either token matches or that the computer has connected.
 export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
