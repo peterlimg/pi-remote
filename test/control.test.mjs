@@ -239,6 +239,15 @@ test('background host starts once, survives callers, and stops without signallin
   await until(() => readFileSync(join(dir, 'host.log'), 'utf8').includes('stopped: SIGTERM'));
 });
 
+test('a host exits once its config is replaced, so a reinstall can take the port', async t => {
+  const { dir, config } = await environment(t);
+  const { pid } = await ensureHost(config, dir);
+  // Deleting ~/.pi/remote and reinstalling recreates the config with new tokens.
+  writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...config, bridgeToken: 'n'.repeat(43) }));
+  await until(() => readFileSync(join(dir, 'host.log'), 'utf8').includes('stopped: install or config removed'), 10000);
+  await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } });
+});
+
 test('host control requires the local bridge credential and rejects browser origins', async t => {
   const { dir, config } = await environment(t);
   const host = await startHost({ dir, config, roots: [] });

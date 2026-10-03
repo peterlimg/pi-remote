@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { loadConfig, dataDir } from '../src/config.mjs';
 import { startHost } from '../src/host.mjs';
 import { startRelay } from '../src/relay.mjs';
@@ -15,11 +17,23 @@ try {
     console.log('Pi Remote: http://127.0.0.1:' + config.port);
     console.log('Use /pi-remote in Pi for your phone login QR.');
     let closing = false;
-    for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
+    const stop = async reason => {
       if (closing) return; closing = true;
-      try { await host.close(signal); process.exit(0); }
+      try { await host.close(reason); process.exit(0); }
       catch { process.exitCode = 1; } // close records the failure in host.log.
-    });
+    };
+    for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => stop(signal));
+    // `pi remove` and deleting ~/.pi/remote leave this process running, holding the port with a
+    // token no install knows, so a reinstall cannot control or replace it. Exit once this install's
+    // code or config is gone. Two misses in a row, so a config being written is not mistaken for one.
+    const code = fileURLToPath(import.meta.url), configFile = join(dataDir(), 'config.json');
+    let misses = 0;
+    setInterval(() => {
+      let ours = false;
+      try { ours = existsSync(code) && JSON.parse(readFileSync(configFile, 'utf8')).bridgeToken === config.bridgeToken; } catch { /* Missing or mid-write. */ }
+      misses = ours ? 0 : misses + 1;
+      if (misses >= 2) void stop('install or config removed');
+    }, 2000).unref();
     process.send?.({ type: 'ready', status: host.status() });
   } else if (command === 'start') {
     await ensureHost(); console.log('Pi Remote running. Use /pi-remote in Pi to log in.');
