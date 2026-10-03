@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, dataDir, send, parseObject, saveConnection, publicOrigin } from '../src/config.mjs';
+import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
 import { initialState, applyEvent } from '../src/state.mjs';
@@ -198,14 +198,11 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
-        const deployed = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
+        // The guide ends by asking for the relay address, already validated.
+        const origin = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
           deploymentScreen(config, tui, keys, done, { theme }),
         { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } });
-        if (!deployed || stopped) return;
-        const value = await context.ui.input('Paste your deployed relay HTTPS address', 'https://your-service.onrender.com');
-        if (value === undefined) return;
-        const origin = publicOrigin(value.trim());
-        if (!mobileUrl(origin)) throw new Error('Your relay needs a non-local HTTPS address. Deploy your own relay first; see README.');
+        if (!origin || stopped) return;
         saveConnection(origin, true);
         config = loadConfig();
       }

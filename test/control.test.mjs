@@ -312,14 +312,14 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
     registerCommand(name, command) { commands.set(name, command); }, getSessionName: () => 'Control test'
   };
-  let inputs = 0, deployed = false, address, verified = false, checks = 0;
+  let address, verified = false, checks = 0;
   const guides = [];
   const ctx = { mode: 'tui', cwd: dir,
     sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
     ui: {
       notify: (text, type) => notices.push({ text, type }), setStatus: (_key, text) => statuses.push(text),
       select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
-      input: async () => { inputs++; return address; },
+      input: async () => assert.fail('The relay address is entered in the guide'),
       custom: async (factory, options) => {
         // The network-backed check is tested with real sockets in setup.test.mjs.
         if (!options.overlayOptions) { checks++; return verified; }
@@ -329,11 +329,12 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
           value => { closed = true; result = value; });
         const lines = component.render(120);
         if (lines[0].includes('Set up your relay')) {
-          // Walk every new-relay step, so the guide shows both tokens before deploying or cancelling.
+          // Walk every new-relay step, so the guide shows both tokens before pasting an address or cancelling.
           const seen = [...lines];
           for (const key of ['n', 'confirm', 'confirm', 'confirm', 'confirm']) { component.handleInput(key); seen.push(...component.render(120)); }
           guides.push(seen);
-          component.handleInput(deployed ? 'confirm' : 'cancel');
+          if (address) { component.handleInput('\x1b[200~' + address + '\x1b[201~'); component.handleInput('confirm'); }
+          else component.handleInput('cancel');
         } else {
           assert.equal(verified, true, 'Never show a QR before the relay check succeeds');
           screens.push(lines);
@@ -349,36 +350,31 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   t.after(() => emit('session_shutdown'));
   await emit('session_start');
   const run = args => commands.get('pi-remote').handler(args, ctx);
-  await run(''); // Cancelling the deployment guide must not ask for an address or start a host.
-  assert.equal(inputs, 0);
-  assert.equal(await hostStatus(config), null);
-  assert.equal(screens.length, 0);
-  for (const token of [config.relayToken, config.clientToken]) assert.ok(guides[0].join('').includes(token));
-  deployed = true;
-  await run(''); // Cancelling URL entry must leave configuration untouched.
+  await run(''); // Cancelling the deployment guide must leave configuration untouched and start no host.
   assert.equal(await hostStatus(config), null);
   assert.equal(loadConfig(dir).relayUrl, '');
+  assert.equal(screens.length, 0);
+  for (const token of [config.relayToken, config.clientToken]) assert.ok(guides[0].join('').includes(token));
   address = 'https://phone.example';
   await run(''); // An unverified relay must not reveal a login QR.
   assert.equal(screens.length, 0);
   assert.equal(checks, 1);
   verified = true;
   await run('');
-  assert.equal(guides.length, 3);
+  assert.equal(guides.length, 2);
   assert.equal(notices.filter(x => x.type === 'error').length, 0, JSON.stringify(notices));
   const first = await hostStatus(loadConfig(dir));
   assert.ok(first);
   assert.equal(first.publicUrl, 'https://phone.example');
   assert.equal(first.relayUrl, 'wss://phone.example');
   assert.equal((await remoteList(config)).allowResume, true);
-  assert.equal(inputs, 2);
   assert.ok(screens[0].join('').includes(config.clientToken));
   for (const token of [config.relayToken, config.clientToken]) assert.ok(!JSON.stringify(notices).includes(token));
   await until(() => statuses.includes('remote connected'));
   await emit('session_shutdown'); await emit('session_start');
   await run('start');
   assert.equal((await hostStatus(loadConfig(dir))).pid, first.pid);
-  assert.equal(inputs, 2); assert.equal(guides.length, 3);
+  assert.equal(guides.length, 2);
   await commands.get('remote').handler('off', ctx);
   assert.equal(statuses.at(-1), 'remote off');
   await run('');

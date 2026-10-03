@@ -30,10 +30,19 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
     if (step < 2) assert.match(screens[step], /Enter Open in browser/); // Enter opens the page and moves on.
-    screen.handleInput('c');
+    if (step < 4) screen.handleInput('c');
     await new Promise(resolve => setImmediate(resolve));
     if (step === 2) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
     if (step === 3) assert.match(screen.render(40).join(''), /Could not copy/);
+    if (step === 4) {
+      // The address is typed in the guide; invalid addresses stay on screen with a hint.
+      for (const key of 'http://x.onrender.com') screen.handleInput(key);
+      screen.handleInput('confirm');
+      assert.match(screen.render(40).join(''), /Use the https:\/\/ address/);
+      assert.equal(result, undefined);
+      for (const _ of 'http://x.onrender.com') screen.handleInput('\x7f');
+      screen.handleInput('\x1b[200~https://x.onrender.com/\x1b[201~');
+    }
     screen.handleInput('confirm');
   }
   // Render's sign-up drops the deploy link, so sign-up comes first.
@@ -42,7 +51,7 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   assert.deepEqual(screens.map(text => [text.includes(config.relayToken), text.includes(config.clientToken)]),
     [[false, false], [false, false], [true, false], [false, true], [false, false]]);
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
-  assert.equal(result, true);
+  assert.equal(result, 'https://x.onrender.com');
   const skipped = [];
   const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => skipped.push(url), copy: async () => true });
   again.handleInput('n'); again.handleInput('s');
@@ -62,12 +71,15 @@ test('an existing relay gets this computer\'s tokens instead of a second deploym
   const screen = deploymentScreen(config, { terminal: { rows: 20 }, requestRender() {} }, keys, value => { result = value; },
     { open: url => opened.push(url), copy: async () => true });
   screen.handleInput('Y');
-  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); screen.handleInput('confirm'); }
+  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); if (step < 3) screen.handleInput('confirm'); }
+  screen.handleInput('\x7f'); // Backspace on an empty address goes back.
+  assert.match(screen.render(80).join('\n'), /Step 3 of 4/);
+  screen.handleInput('confirm'); screen.handleInput('https://relay.example'); screen.handleInput('confirm');
   assert.deepEqual(opened, ['https://dashboard.render.com']);
   assert.match(screens[0], /Step 1 of 4 · Use your relay\nOpen your relay in Render/);
   assert.ok(screens[1].includes(config.relayToken) && screens[2].includes(config.clientToken));
   assert.doesNotMatch(screens.join(''), /render\.com\/deploy/);
-  assert.equal(result, true);
+  assert.equal(result, 'https://relay.example');
 });
 
 test('relay verification waits for a real host and rejects a wrong phone token', async t => {

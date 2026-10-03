@@ -37,7 +37,7 @@ If you answer **N** (no relay yet):
 2. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly.
 3. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
 4. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
-5. Click **Deploy** and wait for the service to be **Live**. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
+5. Click **Deploy** and wait for the service to be **Live**. Return to Pi, paste your service's `https://…onrender.com` address into the same screen, and press Enter.
 
 If you answer **Y**, Pi does not deploy a second relay. Press Enter to open the Render dashboard, click your relay's name in the service list, then choose **Environment** in the service page's left menu, set both tokens from **C**, save, and paste the relay's address. If this computer set up the relay, the tokens already match and you can press Enter through.
 

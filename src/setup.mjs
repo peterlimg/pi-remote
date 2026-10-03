@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import { publicOrigin, parseObject, send } from './config.mjs';
 import { e2eKey, sealClient } from './e2e.mjs';
+import { mobileUrl } from './pairing.mjs';
 
 const deployUrl = 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main';
 const signupUrl = 'https://dashboard.render.com/register', dashboardUrl = 'https://dashboard.render.com';
@@ -33,23 +34,23 @@ const plain = { fg: (_color, text) => text, bold: text => text };
 // One step per screen. A new relay starts with sign-up because Render's sign-up drops the deploy
 // link; an existing relay only needs this computer's tokens, not a second deployment.
 export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy = copyText, theme = plain } = {}) {
-  const live = 'wait until the service is Live. Then press Enter and paste its https://<name>.onrender.com address.';
+  const live = 'wait until the service is Live. Then paste its https://<name>.onrender.com address here.';
   const paths = {
     n: ['Deploy a new relay', [
       { title: 'Create a free Render account', body: 'Sign up before deploying: Render\'s sign-up page does not return to the deploy page.', link: signupUrl, skip: true },
       { title: 'Open the deploy page', body: 'It deploys peterlimg/pi-remote from GitHub. No fork or local build needed.', link: deployUrl },
       { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken },
       { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
-      { title: 'Deploy', body: 'Click Deploy and ' + live }
+      { title: 'Deploy and paste the address', body: 'Click Deploy and ' + live, address: true }
     ]],
     y: ['Use your relay', [
       { title: 'Open your relay in Render', body: 'Click your relay\'s name in the service list, such as pi-remote-relay. On the service page that opens, choose Environment in the left menu.', link: dashboardUrl },
       { title: 'Set the host token', body: 'Set PI_REMOTE_RELAY_HOST_TOKEN to it. If it already matches, press Enter.', token: config.relayToken },
       { title: 'Set the client token', body: 'Set PI_REMOTE_RELAY_CLIENT_TOKEN to it. If it already matches, press Enter.', token: config.clientToken },
-      { title: 'Save', body: 'Save the changes if you made any, and ' + live }
+      { title: 'Save and paste the address', body: 'Save the changes if you made any, and ' + live, address: true }
     ]]
   };
-  let path, step = 0, copied; // path: undefined while asking; copied: undefined until C is pressed on this step.
+  let path, step = 0, copied, address = '', invalid = false; // path: undefined while asking; copied: undefined until C is pressed on this step.
   const muted = text => theme.fg('muted', text), accent = text => theme.fg('accent', text);
   return {
     render(width) {
@@ -72,9 +73,15 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
           else if (copied) add('Copied to the clipboard.', text => theme.fg('success', text));
           else add('Could not copy. Select the value above.', text => theme.fg('warning', text));
         }
+        if (current.address) {
+          content.push(''); add('> ' + address + '_', accent);
+          if (invalid) add('Use the https:// address from the Render service page.', text => theme.fg('warning', text));
+        }
         // Enter always does the step's action: open its page, or finish it.
-        hints = [['Enter', current.link ? 'Open in browser' : step === steps.length - 1 ? 'Done' : 'Next'],
-          current.skip && ['S', 'Skip, I have one'], current.token && ['C', 'Copy'], ['B', 'Back'], ['Esc', 'Cancel']].filter(Boolean);
+        // Letters type into the address, so its step goes back with Backspace on an empty field.
+        hints = [['Enter', current.link ? 'Open in browser' : current.address ? 'Done' : 'Next'],
+          current.skip && ['S', 'Skip, I have one'], current.token && ['C', 'Copy'],
+          current.address ? !address && ['Backspace', 'Back'] : ['B', 'Back'], ['Esc', 'Cancel']].filter(Boolean);
       }
       // Keys sit right under the step, not at the bottom of a tall terminal.
       const styled = ([key, label]) => theme.bold(accent(key)) + ' ' + muted(label), text = ([key, label]) => key + ' ' + label;
@@ -95,9 +102,21 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { done(false); return; }
       if (!current) { if (paths[key]) path = key; }
       else if (keys.matches(data, 'tui.select.confirm')) {
-        if (step === steps.length - 1) { done(true); return; }
-        if (current.link) open(current.link);
-        step++; copied = undefined;
+        if (current.address) {
+          let origin;
+          try { origin = publicOrigin(address.trim()); } catch { /* Shown as invalid. */ }
+          if (origin && mobileUrl(origin)) { done(origin); return; }
+          invalid = true;
+        } else {
+          if (current.link) open(current.link);
+          step++; copied = undefined;
+        }
+      } else if (current.address) {
+        // Bracketed paste arrives wrapped in markers; other escape sequences are cursor keys.
+        const text = data.replace(/\x1b\[20[01]~/g, '');
+        if (data === '\x7f' || data === '\b') { if (address) address = address.slice(0, -1); else step--; }
+        else if (!text.startsWith('\x1b')) address += text.replace(/[\x00-\x1f\x7f]/g, '');
+        invalid = false;
       } else if (key === 's' && current.skip) step++;
       else if (key === 'b') { if (step > 0) step--; else path = undefined; copied = undefined; }
       else if (key === 'c' && current.token) {
