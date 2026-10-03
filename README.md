@@ -39,7 +39,7 @@ If you answer **N** (no relay yet):
 4. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
 5. Click **Deploy** and wait for the service to be **Live**. Return to Pi, press Enter, and paste your service's `https://…onrender.com` address.
 
-If you answer **Y**, Pi does not deploy a second relay. Press **O** to open the Render dashboard, open your relay's **Environment**, set both tokens from **C**, save, and paste the relay's address. If this computer set up the relay, the tokens already match and you can press Enter through.
+If you answer **Y**, Pi does not deploy a second relay. Press **O** to open the Render dashboard, click your relay service, choose **Environment** in its left menu (not Environment Groups), set both tokens from **C**, save, and paste the relay's address. If this computer set up the relay, the tokens already match and you can press Enter through.
 
 Render's Free plan is enough, and no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
 

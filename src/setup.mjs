@@ -42,7 +42,7 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       { title: 'Deploy', body: 'Click Deploy and ' + live }
     ]],
     y: ['Use your relay', [
-      { title: 'Open your relay in Render', body: 'Open the relay service, then Environment.', link: dashboardUrl },
+      { title: 'Open your relay in Render', body: 'Click your relay service, such as pi-remote-relay. In its left menu, choose Environment, not Environment Groups.', link: dashboardUrl },
       { title: 'Set the host token', body: 'Set PI_REMOTE_RELAY_HOST_TOKEN to it. If it already matches, press Enter.', token: config.relayToken },
       { title: 'Set the client token', body: 'Set PI_REMOTE_RELAY_CLIENT_TOKEN to it. If it already matches, press Enter.', token: config.clientToken },
       { title: 'Save', body: 'Save the changes if you made any, and ' + live }
