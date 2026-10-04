@@ -18,7 +18,7 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
     copy: async text => { copied.push(text); return copied.length === 1; } });
   const screens = [];
-  for (let step = 0; step < 5; step++) {
+  for (let step = 0; step < 4; step++) {
     const lines = screen.render(40);
     assert.equal(lines.length, 12); // Covers the whole terminal, whatever the step's length.
     // Keys follow the step directly; only padding comes after them.
@@ -26,12 +26,13 @@ test('deployment guide shows one step at a time and keeps each token on its own 
     assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
-    if (step < 2) assert.match(screens[step], /Enter Open in browser/); // Enter opens the page and moves on.
-    if (step < 4) screen.handleInput('c');
+    if (step === 0) assert.match(screens[0], /free plan.*Enter Open in browser/); // Enter opens the page and moves on.
+    if (step === 1) screen.handleInput('o'); // Render's sign-up drops the deploy page.
+    if (step < 3) screen.handleInput('c');
     await new Promise(resolve => setImmediate(resolve));
-    if (step === 2) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
-    if (step === 3) assert.match(screen.render(40).join(''), /Could not copy/);
-    if (step === 4) {
+    if (step === 1) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
+    if (step === 2) assert.match(screen.render(40).join(''), /Could not copy/);
+    if (step === 3) {
       // The address is typed in the guide; invalid addresses stay on screen with a hint.
       for (const key of 'http://x.onrender.com') screen.handleInput(key);
       screen.handleInput('confirm');
@@ -39,26 +40,22 @@ test('deployment guide shows one step at a time and keeps each token on its own 
       assert.equal(result, undefined);
       for (const _ of 'http://x.onrender.com') screen.handleInput('\x7f');
       screen.handleInput('\x7f'); // Backspace on an empty address goes back.
-      assert.match(screen.render(40).join(''), /Step 4 of 5/);
+      assert.match(screen.render(40).join(''), /Step 3 of 4/);
       screen.handleInput('confirm');
       screen.handleInput('\x1b[200~https://x.onrender.com/\x1b[201~');
     }
     screen.handleInput('confirm');
   }
-  // Render's sign-up drops the deploy link, so sign-up comes first.
-  assert.deepEqual(opened, ['https://dashboard.render.com/register', 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main']);
+  const deploy = 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main';
+  assert.deepEqual(opened, [deploy, deploy]);
   assert.deepEqual(copied, [config.relayToken, config.clientToken]);
   assert.deepEqual(screens.map(text => [text.includes(config.relayToken), text.includes(config.clientToken)]),
-    [[false, false], [false, false], [true, false], [false, true], [false, false]]);
+    [[false, false], [true, false], [false, true], [false, false]]);
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, 'https://x.onrender.com');
-  const skipped = [];
-  const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => skipped.push(url), copy: async () => true });
-  again.handleInput('s');
-  assert.match(again.render(80).join('\n'), /Step 2 of 5/);
-  assert.deepEqual(skipped, []); // Skipping sign-up opens nothing.
-  again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy your relay\nCreate a free Render account/);
+  const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open() {}, copy: async () => true });
+  again.handleInput('confirm'); again.handleInput('b');
+  assert.match(again.render(80).join('\n'), /Step 1 of 4 · Deploy your relay\nOpen the Render deploy page/);
   again.handleInput('cancel');
   assert.equal(result, false);
 });

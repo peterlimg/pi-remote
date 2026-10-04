@@ -5,7 +5,6 @@ import { e2eKey, sealClient } from './e2e.mjs';
 import { mobileUrl } from './pairing.mjs';
 
 const deployUrl = 'https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main';
-const signupUrl = 'https://dashboard.render.com/register';
 // Best effort: the link stays on screen if no browser opener exists. BROWSER overrides the
 // opener, as in many CLIs, for SSH sessions and tests.
 export function openUrl(url) {
@@ -31,12 +30,12 @@ const wrap = (text, width) => {
 const plain = { fg: (_color, text) => text, bold: text => text };
 
 // Only render these credentials in a temporary terminal overlay, never in messages or logs.
-// One step per screen. Sign-up comes first because Render's sign-up drops the deploy link.
+// One step per screen. The deploy page asks new users to sign up, but Render's sign-up drops the
+// deploy link, so the next step offers to reopen it.
 export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy = copyText, theme = plain } = {}) {
   const steps = [
-    { title: 'Create a free Render account', body: 'Sign up before deploying: Render\'s sign-up page does not return to the deploy page.', link: signupUrl, skip: true },
-    { title: 'Open the deploy page', body: 'It deploys a relay for this computer from peterlimg/pi-remote on GitHub. No fork or local build needed.', link: deployUrl },
-    { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken },
+    { title: 'Open the Render deploy page', body: 'Render\'s free plan is a good choice for hosting the relay. No account yet? Render asks you to sign up, which takes a few clicks.', link: deployUrl },
+    { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken, reopen: deployUrl },
     { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
     { title: 'Deploy and paste the address', body: 'Click Deploy and wait until the service is Live. Then paste its https://<name>.onrender.com address here.', address: true }
   ];
@@ -63,8 +62,8 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       // Enter always does the step's action: open its page, or finish it.
       // Letters type into the address, so its step goes back with Backspace on an empty field.
       const hints = [['Enter', current.link ? 'Open in browser' : current.address ? 'Done' : 'Next'],
-        current.skip && ['S', 'Skip, I have one'], current.token && ['C', 'Copy'],
-        current.address ? !address && ['Backspace', 'Back'] : step > 0 && ['B', 'Back'], ['Esc', 'Cancel']].filter(Boolean);
+        current.token && ['C', 'Copy'], current.address ? !address && ['Backspace', 'Back'] : step > 0 && ['B', 'Back'],
+        current.reopen && ['O', 'Reopen deploy page'], ['Esc', 'Cancel']].filter(Boolean);
       // Keys sit right under the step, not at the bottom of a tall terminal.
       const styled = ([key, label]) => theme.bold(accent(key)) + ' ' + muted(label), text = ([key, label]) => key + ' ' + label;
       const packed = []; // Pack hints onto as few lines as fit, so a short terminal keeps the token visible.
@@ -98,7 +97,7 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
         if (data === '\x7f' || data === '\b') { if (address) address = address.slice(0, -1); else step--; }
         else if (!text.startsWith('\x1b')) address += text.replace(/[\x00-\x1f\x7f]/g, '');
         invalid = false;
-      } else if (key === 's' && current.skip) step++;
+      } else if (key === 'o' && current.reopen) open(current.reopen);
       else if (key === 'b' && step > 0) { step--; copied = undefined; }
       else if (key === 'c' && current.token) {
         const at = step;

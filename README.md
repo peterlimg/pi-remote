@@ -29,13 +29,12 @@ Pi downloads the package and installs its dependencies. No manual clone, fork, o
 
 ### 2. Deploy from `/pi-remote`
 
-On first run, `/pi-remote` walks you through five short steps, one per screen. Enter does each step's action.
+On first run, `/pi-remote` walks you through four short steps, one per screen. Enter does each step's action.
 
-1. Press Enter to create a free [Render account](https://dashboard.render.com/register), or **S** to skip if you have one. Sign up first: Render's sign-up does not return you to the deploy page.
-2. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly.
-3. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
-4. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
-5. Click **Deploy** and wait for the service to be **Live**. Return to Pi, paste your service's `https://…onrender.com` address into the same screen, and press Enter.
+1. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly. No Render account? Render asks you to sign up first, which takes a few clicks. Its sign-up does not return you to the deploy page, so the next step offers **O** to reopen it.
+2. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
+3. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
+4. Click **Deploy** and wait for the service to be **Live**. Return to Pi, paste your service's `https://…onrender.com` address into the same screen, and press Enter.
 
 Render's Free plan is enough, and no GitHub connection is needed because this repository is public. The relay runs in your Render account, not a shared service. Keep one instance per computer; it supports up to 16 browser connections and needs no database. The Free plan can sleep and take about a minute to wake.
 
