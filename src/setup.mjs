@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { hostname } from 'node:os';
 import WebSocket from 'ws';
 import { publicOrigin, parseObject, send } from './config.mjs';
 import { e2eKey, sealClient } from './e2e.mjs';
@@ -33,9 +34,11 @@ const plain = { fg: (_color, text) => text, bold: text => text };
 // One step per screen. The deploy page asks new users to sign up, but Render's sign-up drops the
 // deploy link, so the next step offers to reopen it.
 export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy = copyText, theme = plain } = {}) {
+  // Render's deploy link cannot prefill the Blueprint name, which must be unique in the workspace.
+  const name = 'pi-remote-' + (hostname().split('.')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'relay');
   const steps = [
     { title: 'Open the Render deploy page', body: 'Render\'s free plan is a good choice for hosting the relay. Already have an account? Sign in and deploy directly. No account yet? Render asks you to sign up, which takes a few clicks.', link: deployUrl },
-    { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken, reopen: deployUrl },
+    { title: 'Paste the host token', body: 'In Render, name the Blueprint ' + name + ', then paste this into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken, reopen: deployUrl },
     { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
     { title: 'Deploy and paste the address', body: 'Click Deploy and wait until the service is Live. Then paste its https://<name>.onrender.com address here.', address: true }
   ];

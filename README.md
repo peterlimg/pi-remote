@@ -32,7 +32,7 @@ Pi downloads the package and installs its dependencies. No manual clone, fork, o
 On first run, `/pi-remote` walks you through four short steps, one per screen. Enter does each step's action.
 
 1. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly. Already have a Render account? Sign in and deploy directly. No account? Render asks you to sign up first, which takes a few clicks. Its sign-up does not return you to the deploy page, so the next step offers **O** to reopen it.
-2. Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
+2. Name the Blueprint as Pi suggests (`pi-remote-<your computer>`; Render's link cannot prefill it). Press **C** to copy the host token, and paste it into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field.
 3. Press **C** to copy the client token, and paste it into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
 4. Click **Deploy** and wait for the service to be **Live**. Return to Pi, paste your service's `https://…onrender.com` address into the same screen, and press Enter.
 

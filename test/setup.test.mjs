@@ -12,7 +12,7 @@ const config = { relayToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), bridge
 const keys = { matches: (key, name) => key === name.replace('tui.select.', '') };
 
 test('deployment guide shows one step at a time and keeps each token on its own screen', async () => {
-  const tui = { terminal: { rows: 12 }, requestRender() {} };
+  const tui = { terminal: { rows: 16 }, requestRender() {} };
   const opened = [], copied = [];
   let result;
   const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
@@ -20,14 +20,17 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   const screens = [];
   for (let step = 0; step < 4; step++) {
     const lines = screen.render(40);
-    assert.equal(lines.length, 12); // Covers the whole terminal, whatever the step's length.
+    assert.equal(lines.length, 16); // Covers the whole terminal, whatever the step's length.
     // Keys follow the step directly; only padding comes after them.
     const keysAt = lines.findIndex(line => line.includes('Esc Cancel'));
     assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
     assert.ok(lines.every(line => line.length <= 40));
     screens.push(lines.join(''));
     if (step === 0) assert.match(screens[0], /free plan.*Enter Open in browser/); // Enter opens the page and moves on.
-    if (step === 1) screen.handleInput('o'); // Render's sign-up drops the deploy page.
+    if (step === 1) {
+      assert.match(screens[1], /name the Blueprint\s*pi-remote-[a-z0-9-]+,/); // The deploy link cannot prefill it.
+      screen.handleInput('o'); // Render's sign-up drops the deploy page.
+    }
     if (step < 3) screen.handleInput('c');
     await new Promise(resolve => setImmediate(resolve));
     if (step === 1) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
