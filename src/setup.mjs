@@ -34,7 +34,7 @@ const plain = { fg: (_color, text) => text, bold: text => text };
 // deploy link, so the next step offers to reopen it.
 export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy = copyText, theme = plain } = {}) {
   const steps = [
-    { title: 'Open the Render deploy page', body: 'Render\'s free plan is a good choice for hosting the relay. No account yet? Render asks you to sign up, which takes a few clicks.', link: deployUrl },
+    { title: 'Open the Render deploy page', body: 'Render\'s free plan is a good choice for hosting the relay. Already have an account? Sign in and deploy directly. No account yet? Render asks you to sign up, which takes a few clicks.', link: deployUrl },
     { title: 'Paste the host token', body: 'In Render, paste it into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken, reopen: deployUrl },
     { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
     { title: 'Deploy and paste the address', body: 'Click Deploy and wait until the service is Live. Then paste its https://<name>.onrender.com address here.', address: true }
