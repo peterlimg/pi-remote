@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { deploymentScreen, checkRelay, relayGone, fullScreen } from '../src/setup.mjs';
+import { deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -206,14 +206,15 @@ export default function remoteExtension(pi: any) {
         saveConnection(origin, true);
         config = loadConfig();
       }
-      context.ui.notify(running ? 'Pi Remote is running. Checking connection...' : 'Starting Pi Remote...', 'info');
-      running = await ensureHost(config);
-      if (!enabled) setChannel(true, context);
-      // A just-started host needs a moment to reach the relay; checking earlier only meets an offline relay.
-      for (const end = Date.now() + 15000; running.relayUrl && !running.relayConnected && Date.now() < end;) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
-      }
+      if (!await progress(context.ui, running ? 'Checking Pi Remote...' : 'Starting Pi Remote...', async (signal: AbortSignal) => {
+        running = await ensureHost(config);
+        if (!enabled) setChannel(true, context);
+        // A just-started host needs a moment to reach the relay; checking earlier only meets an offline relay.
+        for (const end = Date.now() + 15000; running.relayUrl && !running.relayConnected && Date.now() < end && !signal.aborted;) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
+        }
+      })) return;
       if (running.relayUrl && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
       if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
       if (stopped) return;

@@ -16,6 +16,7 @@ import { e2eKey } from '../src/e2e.mjs';
 import { socket, until } from './helpers.mjs';
 import { sessionKey, acquireLock } from '../src/locks.mjs';
 import { restartAndResume } from '../scripts/restart-and-resume.mjs';
+import { fullScreen } from '../src/setup.mjs';
 
 async function environment(t) {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-control-'));
@@ -330,13 +331,16 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
       select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
       input: async () => assert.fail('The relay address is entered in the guide'),
       custom: async (factory, options) => {
-        // The network-backed check is tested with real sockets in setup.test.mjs.
-        if (String(factory).includes('Checking relay')) { checks++; return verified; }
-        let closed = false, result;
+        let closed = false, result, resolve;
+        const finished = new Promise(r => { resolve = r; });
         const component = factory({ terminal: { rows: 60 }, requestRender() {} }, { fg: (_color, text) => text, bold: text => text },
           { matches: (key, name) => key === name.replace('tui.select.', '') },
-          value => { closed = true; result = value; });
+          value => { closed = true; result = value; resolve(value); });
         const lines = component.render(120);
+        assert.equal(options, fullScreen); // Never a box over the middle of the conversation.
+        // The network-backed check is tested with real sockets in setup.test.mjs.
+        if (lines[0].includes('Checking relay')) { component.dispose(); checks++; return verified && {}; }
+        if (/^(Starting|Checking) Pi Remote/.test(lines[0])) return finished;
         if (lines[0].includes('Set up your relay')) {
           // Walk every new-relay step, so the guide shows both tokens before pasting an address or cancelling.
           const seen = [...lines];

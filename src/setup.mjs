@@ -192,16 +192,17 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
 // Pi's default overlay is a box over the middle of the conversation; cover the whole terminal instead.
 export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } };
 
-export async function checkRelay(ui, config) {
+// Run a slow task on a full-screen progress view, so the conversation never shows a stalled line.
+// True when the task finishes, false when Esc cancels it; the task's error is rethrown.
+export async function progress(ui, title, task) {
   const result = await ui.custom((tui, theme = plain, keys, done) => {
     const controller = new AbortController();
     let finished = false;
     const finish = value => { if (!finished) { finished = true; done(value); } };
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]);
-    verifyRelay(config, signal).then(() => finish(true), error => finish(error.message));
+    task(controller.signal).then(() => finish({}), error => finish({ error }));
     return {
       render: width => {
-        const rows = Math.max(2, tui.terminal.rows), lines = [...wrap('Checking relay and phone login...', width).map(theme.bold),
+        const rows = Math.max(2, tui.terminal.rows), lines = [...wrap(title, width).map(theme.bold),
           ...wrap('A sleeping Render service can take a minute. Esc cancels.', width).map(text => theme.fg('muted', text))].slice(0, rows);
         return [...lines, ...Array(rows - lines.length).fill('')];
       },
@@ -212,6 +213,9 @@ export async function checkRelay(ui, config) {
       dispose() { finished = true; controller.abort(); }
     };
   }, fullScreen);
-  if (typeof result === 'string') throw new Error(result);
-  return result === true;
+  if (result?.error) throw result.error;
+  return !!result;
 }
+
+export const checkRelay = (ui, config) => progress(ui, 'Checking relay and phone login...',
+  signal => verifyRelay(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])));
