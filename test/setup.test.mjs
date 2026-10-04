@@ -11,16 +11,16 @@ import { until } from './helpers.mjs';
 const config = { relayToken: 'h'.repeat(40), clientToken: 'c'.repeat(40), bridgeToken: 'b'.repeat(40) };
 const keys = { matches: (key, name) => key === name.replace('tui.select.', '') };
 
-test('deployment guide shows one step at a time and keeps each token on its own screen', async () => {
-  const tui = { terminal: { rows: 16 }, requestRender() {} };
+test('deployment guide shows one step at a time and shows both tokens on one screen', async () => {
+  const tui = { terminal: { rows: 20 }, requestRender() {} };
   const opened = [], copied = [];
   let result;
   const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
     copy: async text => { copied.push(text); return copied.length === 1; } });
   const screens = [];
-  for (let step = 0; step < 4; step++) {
+  for (let step = 0; step < 3; step++) {
     const lines = screen.render(40);
-    assert.equal(lines.length, 16); // Covers the whole terminal, whatever the step's length.
+    assert.equal(lines.length, 20); // Covers the whole terminal, whatever the step's length.
     // Keys follow the step directly; only padding comes after them.
     const keysAt = lines.findIndex(line => line.includes('Esc Cancel'));
     assert.ok(keysAt > 0 && lines.slice(keysAt + 1).every(line => line === ''), lines.join('|'));
@@ -31,11 +31,13 @@ test('deployment guide shows one step at a time and keeps each token on its own 
       assert.match(screens[1], /name the Blueprint\s*pi-remote-[a-z0-9-]+,/); // The deploy link cannot prefill it.
       screen.handleInput('o'); // Render's sign-up drops the deploy page.
     }
-    if (step < 3) screen.handleInput('c');
-    await new Promise(resolve => setImmediate(resolve));
-    if (step === 1) assert.match(screen.render(40).join(''), /Copied to the clipboard/);
-    if (step === 2) assert.match(screen.render(40).join(''), /Could not copy/);
-    if (step === 3) {
+    if (step === 1) {
+      screen.handleInput('1'); await new Promise(resolve => setImmediate(resolve));
+      assert.match(screen.render(40).join(''), /Copied PI_REMOTE_RELAY_HOST_TOKEN/);
+      screen.handleInput('2'); await new Promise(resolve => setImmediate(resolve));
+      assert.match(screen.render(40).join(''), /Could not copy/);
+    }
+    if (step === 2) {
       // The address is typed in the guide; invalid addresses stay on screen with a hint.
       for (const key of 'http://x.onrender.com') screen.handleInput(key);
       screen.handleInput('confirm');
@@ -43,7 +45,7 @@ test('deployment guide shows one step at a time and keeps each token on its own 
       assert.equal(result, undefined);
       for (const _ of 'http://x.onrender.com') screen.handleInput('\x7f');
       screen.handleInput('\x7f'); // Backspace on an empty address goes back.
-      assert.match(screen.render(40).join(''), /Step 3 of 4/);
+      assert.match(screen.render(40).join(''), /Step 2 of 3/);
       screen.handleInput('confirm');
       screen.handleInput('\x1b[200~https://x.onrender.com/\x1b[201~');
     }
@@ -53,12 +55,12 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   assert.deepEqual(opened, [deploy, deploy]);
   assert.deepEqual(copied, [config.relayToken, config.clientToken]);
   assert.deepEqual(screens.map(text => [text.includes(config.relayToken), text.includes(config.clientToken)]),
-    [[false, false], [true, false], [false, true], [false, false]]);
+    [[false, false], [true, true], [false, false]]);
   assert.doesNotMatch(screens.join(''), /npm install|relay-env|#token=/);
   assert.equal(result, 'https://x.onrender.com');
   const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open() {}, copy: async () => true });
   again.handleInput('confirm'); again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /Step 1 of 4 · Deploy your relay\nOpen the Render deploy page/);
+  assert.match(again.render(80).join('\n'), /Step 1 of 3 · Deploy your relay\nOpen the Render deploy page/);
   again.handleInput('cancel');
   assert.equal(result, false);
 });

@@ -38,11 +38,11 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
   const name = 'pi-remote-' + (hostname().split('.')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'relay');
   const steps = [
     { title: 'Open the Render deploy page', body: 'Render\'s free plan is a good choice for hosting the relay. Already have an account? Sign in and deploy directly. No account yet? Render asks you to sign up, which takes a few clicks.', link: deployUrl },
-    { title: 'Paste the host token', body: 'In Render, name the Blueprint ' + name + ', then paste this into PI_REMOTE_RELAY_HOST_TOKEN.', token: config.relayToken, reopen: deployUrl },
-    { title: 'Paste the client token', body: 'Paste it into PI_REMOTE_RELAY_CLIENT_TOKEN.', token: config.clientToken },
+    { title: 'Paste the tokens', body: 'In Render, name the Blueprint ' + name + ', then paste each token into the field with its name.',
+      tokens: [['PI_REMOTE_RELAY_HOST_TOKEN', config.relayToken], ['PI_REMOTE_RELAY_CLIENT_TOKEN', config.clientToken]], reopen: deployUrl },
     { title: 'Deploy and paste the address', body: 'Click Deploy and wait until the service is Live. Then paste its https://<name>.onrender.com address here.', address: true }
   ];
-  let step = 0, copied, address = '', invalid = false; // copied: undefined until C is pressed on this step.
+  let step = 0, copied, address = '', invalid = false; // copied: { field, ok } once 1 or 2 is pressed on this step.
   const muted = text => theme.fg('muted', text), accent = text => theme.fg('accent', text);
   return {
     render(width) {
@@ -52,10 +52,11 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       add(current.title, theme.bold);
       content.push(''); add(current.body);
       if (current.link) { content.push(''); add(current.link, accent); }
-      if (current.token) {
-        content.push(''); add(current.token, accent); content.push('');
-        if (copied === undefined) add('Keep it private. Do not paste it into chat.', muted);
-        else if (copied) add('Copied to the clipboard.', text => theme.fg('success', text));
+      if (current.tokens) {
+        for (const [field, token] of current.tokens) { content.push(''); add(field); add(token, accent); }
+        content.push('');
+        if (!copied) add('Keep them private. Do not paste them into chat.', muted);
+        else if (copied.ok) add('Copied ' + copied.field + '.', text => theme.fg('success', text));
         else add('Could not copy. Select the value above.', text => theme.fg('warning', text));
       }
       if (current.address) {
@@ -65,7 +66,7 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
       // Enter always does the step's action: open its page, or finish it.
       // Letters type into the address, so its step goes back with Backspace on an empty field.
       const hints = [['Enter', current.link ? 'Open in browser' : current.address ? 'Done' : 'Next'],
-        current.token && ['C', 'Copy'], current.address ? !address && ['Backspace', 'Back'] : step > 0 && ['B', 'Back'],
+        current.tokens && ['1', 'Copy host'], current.tokens && ['2', 'Copy client'], current.address ? !address && ['Backspace', 'Back'] : step > 0 && ['B', 'Back'],
         current.reopen && ['O', 'Reopen deploy page'], ['Esc', 'Cancel']].filter(Boolean);
       // Keys sit right under the step, not at the bottom of a tall terminal.
       const styled = ([key, label]) => theme.bold(accent(key)) + ' ' + muted(label), text = ([key, label]) => key + ' ' + label;
@@ -102,9 +103,9 @@ export function deploymentScreen(config, tui, keys, done, { open = openUrl, copy
         invalid = false;
       } else if (key === 'o' && current.reopen) open(current.reopen);
       else if (key === 'b' && step > 0) { step--; copied = undefined; }
-      else if (key === 'c' && current.token) {
-        const at = step;
-        void copy(current.token).then(ok => { if (step === at) { copied = ok; tui.requestRender(); } });
+      else if (current.tokens?.[data - 1]) {
+        const at = step, [field, token] = current.tokens[data - 1];
+        void copy(token).then(ok => { if (step === at) { copied = { field, ok }; tui.requestRender(); } });
       }
       tui.requestRender();
     }
