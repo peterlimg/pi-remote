@@ -17,9 +17,6 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   let result;
   const screen = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => opened.push(url),
     copy: async text => { copied.push(text); return copied.length === 1; } });
-  assert.match(screen.render(40).join(' '), /already have a Pi Remote relay/);
-  screen.handleInput('confirm'); // Only an answer leaves the question.
-  screen.handleInput('n');
   const screens = [];
   for (let step = 0; step < 5; step++) {
     const lines = screen.render(40);
@@ -41,6 +38,9 @@ test('deployment guide shows one step at a time and keeps each token on its own 
       assert.match(screen.render(40).join(''), /Use the https:\/\/ address/);
       assert.equal(result, undefined);
       for (const _ of 'http://x.onrender.com') screen.handleInput('\x7f');
+      screen.handleInput('\x7f'); // Backspace on an empty address goes back.
+      assert.match(screen.render(40).join(''), /Step 4 of 5/);
+      screen.handleInput('confirm');
       screen.handleInput('\x1b[200~https://x.onrender.com/\x1b[201~');
     }
     screen.handleInput('confirm');
@@ -54,32 +54,13 @@ test('deployment guide shows one step at a time and keeps each token on its own 
   assert.equal(result, 'https://x.onrender.com');
   const skipped = [];
   const again = deploymentScreen(config, tui, keys, value => { result = value; }, { open: url => skipped.push(url), copy: async () => true });
-  again.handleInput('n'); again.handleInput('s');
+  again.handleInput('s');
   assert.match(again.render(80).join('\n'), /Step 2 of 5/);
   assert.deepEqual(skipped, []); // Skipping sign-up opens nothing.
   again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy a new relay\nCreate a free Render account/);
-  again.handleInput('b');
-  assert.match(again.render(80).join('\n'), /already have a Pi Remote relay/);
+  assert.match(again.render(80).join('\n'), /Step 1 of 5 · Deploy your relay\nCreate a free Render account/);
   again.handleInput('cancel');
   assert.equal(result, false);
-});
-
-test('an existing relay gets this computer\'s tokens instead of a second deployment', () => {
-  const opened = [], screens = [];
-  let result;
-  const screen = deploymentScreen(config, { terminal: { rows: 20 }, requestRender() {} }, keys, value => { result = value; },
-    { open: url => opened.push(url), copy: async () => true });
-  screen.handleInput('Y');
-  for (let step = 0; step < 4; step++) { screens.push(screen.render(80).join('\n')); if (step < 3) screen.handleInput('confirm'); }
-  screen.handleInput('\x7f'); // Backspace on an empty address goes back.
-  assert.match(screen.render(80).join('\n'), /Step 3 of 4/);
-  screen.handleInput('confirm'); screen.handleInput('https://relay.example'); screen.handleInput('confirm');
-  assert.deepEqual(opened, ['https://dashboard.render.com']);
-  assert.match(screens[0], /Step 1 of 4 · Use your relay\nOpen your relay in Render/);
-  assert.ok(screens[1].includes(config.relayToken) && screens[2].includes(config.clientToken));
-  assert.doesNotMatch(screens.join(''), /render\.com\/deploy/);
-  assert.equal(result, 'https://relay.example');
 });
 
 test('relay verification waits for a real host and rejects a wrong phone token', async t => {
