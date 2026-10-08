@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
+import { wakeHint, connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -227,7 +227,7 @@ export default function remoteExtension(pi: any) {
           await new Promise(resolve => setTimeout(resolve, 200));
           try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
         }
-      })) return;
+      }, wakeHint(config))) return;
       if (mobileUrl(running.publicUrl) && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
       if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
       if (stopped) return;

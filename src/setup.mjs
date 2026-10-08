@@ -232,7 +232,10 @@ export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxH
 
 // Run a slow task on a full-screen progress view, so the conversation never shows a stalled line.
 // True when the task finishes, false when Esc cancels it; the task's error is rethrown.
-export async function progress(ui, title, task, hint = 'A sleeping Render service can take a minute.') {
+// Only a relay sleeps; a tunnel reaches this computer directly.
+export const wakeHint = config => config.relayUrl ? 'A sleeping Render service can take a minute.' : '';
+
+export async function progress(ui, title, task, hint = '') {
   const result = await ui.custom((tui, theme = plain, keys, done) => {
     const controller = new AbortController();
     let finished = false;
@@ -241,7 +244,7 @@ export async function progress(ui, title, task, hint = 'A sleeping Render servic
     return {
       render: width => {
         const rows = Math.max(2, tui.terminal.rows), lines = [...wrap(title, width).map(theme.bold),
-          ...wrap(hint + ' Esc cancels.', width).map(text => theme.fg('muted', text))].slice(0, rows);
+          ...wrap((hint + ' Esc cancels.').trim(), width).map(text => theme.fg('muted', text))].slice(0, rows);
         return [...lines, ...Array(rows - lines.length).fill('')];
       },
       invalidate() {},
@@ -256,4 +259,4 @@ export async function progress(ui, title, task, hint = 'A sleeping Render servic
 }
 
 export const checkRelay = (ui, config) => progress(ui, 'Checking phone login...',
-  signal => verifyRelay(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])));
+  signal => verifyRelay(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])), wakeHint(config));

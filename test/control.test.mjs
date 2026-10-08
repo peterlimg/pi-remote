@@ -350,6 +350,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
     registerCommand(name, command) { commands.set(name, command); }, getSessionName: () => 'Control test'
   };
   let address, verified = false, checks = 0, tunnel = false;
+  const waits = []; // Progress screens, to check their hints.
   const guides = [];
   const ctx = { mode: 'tui', cwd: dir,
     sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
@@ -366,8 +367,8 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
         const lines = component.render(120);
         assert.equal(options, fullScreen); // Never a box over the middle of the conversation.
         // The network-backed check is tested with real sockets in setup.test.mjs.
-        if (lines[0].includes('Checking phone login')) { component.dispose(); checks++; return verified && {}; }
-        if (/^(Starting|Checking) Pi Remote|^Creating your tunnel/.test(lines[0])) return finished;
+        if (lines[0].includes('Checking phone login')) { waits.push(lines.join(' ')); component.dispose(); checks++; return verified && {}; }
+        if (/^(Starting|Checking) Pi Remote|^Creating your tunnel/.test(lines[0])) { waits.push(lines.join(' ')); return finished; }
         if (lines[0].includes('Connect your phone')) { component.handleInput(tunnel ? 'confirm' : 'r'); return result; }
         if (lines[0].includes('Deploy your relay')) {
           // Walk every step, so the guide shows both tokens before pasting an address or cancelling.
@@ -434,13 +435,15 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   mkdirSync(bin);
   writeFileSync(join(bin, 'opentunnel'), '#!/bin/sh\necho "$@" > "$0.args"\necho "Added route"\necho https://pi-remote.abc.opentunnel.xyz\n', { mode: 0o755 });
   process.env.PATH = bin + ':' + path; t.after(() => { process.env.PATH = path; });
-  tunnel = true; checks = 0; const seen = notices.length;
+  assert.ok(waits.some(text => text.includes('sleeping Render')));
+  tunnel = true; checks = 0; const seen = notices.length; waits.length = 0;
   await run('setup');
   assert.equal(readFileSync(join(bin, 'opentunnel.args'), 'utf8').trim(), 'route add pi-remote ' + config.port);
   const direct = await hostStatus(loadConfig(dir));
   assert.equal(direct.publicUrl, 'https://pi-remote.abc.opentunnel.xyz');
   assert.equal(direct.relayUrl, '');
   assert.equal(checks, 1); // The phone login path is checked through the tunnel before the QR.
+  assert.ok(waits.length >= 3 && !waits.some(text => text.includes('Render')), waits.join('\n'));
   assert.equal(notices.slice(seen).filter(x => x.type === 'error').length, 0, JSON.stringify(notices.slice(seen)));
   assert.equal(guides.length, 2);
   await run('stop');
