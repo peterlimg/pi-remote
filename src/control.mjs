@@ -6,7 +6,19 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { dataDir, loadConfig } from './config.mjs';
 import { processExists } from './locks.mjs';
 
-export async function hostStatus(config = loadConfig(), method = 'GET') {
+// A host left by an older install, or one whose config was replaced, holds the port with a token
+// this install lacks. Hosts since 2026-10-03 exit on their own; older ones never do. The service
+// lock in this data directory still names it, so stop it by pid.
+async function stopUncontrollable(config, dir) {
+  let owner;
+  try { owner = JSON.parse(readFileSync(join(dir, 'locks', 'service.json'), 'utf8')); } catch { return false; }
+  if (owner?.kind !== 'service' || owner.port !== config.port || !processExists(owner.pid) || owner.pid === process.pid) return false;
+  try { process.kill(owner.pid, 'SIGTERM'); } catch { return false; }
+  for (const end = Date.now() + 30000; Date.now() < end; await delay(100)) if (!processExists(owner.pid)) return true;
+  return false;
+}
+
+export async function hostStatus(config = loadConfig(), method = 'GET', dir = dataDir()) {
   let response;
   try {
     response = await fetch('http://127.0.0.1:' + config.port + '/_pi/remote', {
@@ -17,7 +29,10 @@ export async function hostStatus(config = loadConfig(), method = 'GET') {
     if (error.cause?.code === 'ECONNREFUSED') return null;
     throw new Error('Cannot reach Pi Remote: ' + error.message, { cause: error });
   }
-  if (!response.ok) throw new Error('Cannot control the service on port ' + config.port + '. Stop the old host manually once, then run /pi-remote again.');
+  if (!response.ok) {
+    if (response.status === 403 && await stopUncontrollable(config, dir)) return null;
+    throw new Error('Cannot control the service on port ' + config.port + '. Stop it once with: kill $(lsof -tiTCP:' + config.port + ' -sTCP:LISTEN), then run /pi-remote again.');
+  }
   const status = await response.json();
   if (status.protocol !== 1) throw new Error('Unsupported Pi Remote service');
   return status;
@@ -25,7 +40,7 @@ export async function hostStatus(config = loadConfig(), method = 'GET') {
 
 export async function ensureHost(config = loadConfig(), dir = dataDir()) {
   dir = resolve(dir);
-  const running = await hostStatus(config);
+  const running = await hostStatus(config, 'GET', dir);
   if (running) {
     if (running.closing) throw new Error('Pi Remote is stopping. Try again shortly.');
     return running;
