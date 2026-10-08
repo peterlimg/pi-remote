@@ -13,8 +13,11 @@ async function stopUncontrollable(config, dir) {
   let owner;
   try { owner = JSON.parse(readFileSync(join(dir, 'locks', 'service.json'), 'utf8')); } catch { return false; }
   if (owner?.kind !== 'service' || owner.port !== config.port || !processExists(owner.pid) || owner.pid === process.pid) return false;
-  try { process.kill(owner.pid, 'SIGTERM'); } catch { return false; }
-  for (const end = Date.now() + 30000; Date.now() < end; await delay(100)) if (!processExists(owner.pid)) return true;
+  // Hosts whose earlier shutdown failed ignore SIGTERM, so force them after a graceful chance.
+  for (const [signal, wait] of [['SIGTERM', 10000], ['SIGKILL', 2000]]) {
+    try { process.kill(owner.pid, signal); } catch { return !processExists(owner.pid); }
+    for (const end = Date.now() + wait; Date.now() < end; await delay(100)) if (!processExists(owner.pid)) return true;
+  }
   return false;
 }
 

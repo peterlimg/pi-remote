@@ -19,8 +19,10 @@ try {
     let closing = false;
     const stop = async reason => {
       if (closing) return; closing = true;
-      try { await host.close(reason); process.exit(0); }
-      catch { process.exitCode = 1; } // close records the failure in host.log.
+      // close records failures in host.log. Exit regardless: a failed close (such as saving state
+      // into a deleted data directory) would otherwise keep the port with a token no install knows.
+      try { await host.close(reason); } catch { process.exitCode = 1; }
+      process.exit();
     };
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => stop(signal));
     // `pi remove` and deleting ~/.pi/remote leave this process running, holding the port with a

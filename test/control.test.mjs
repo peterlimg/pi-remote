@@ -249,12 +249,20 @@ test('a host exits once its config is replaced, so a reinstall can take the port
   await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } });
 });
 
+test('a host exits once its data directory is deleted, even though it cannot save state there', async t => {
+  const { dir, config } = await environment(t);
+  const { pid } = await ensureHost(config, dir);
+  rmSync(dir, { recursive: true, force: true });
+  await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, 10000);
+});
+
 test('a host that rejects this install\'s token is stopped through its service lock', async t => {
   const { dir, config } = await environment(t);
-  // Hosts from before 2026-10-03 never exit on their own when the install or config changes.
+  // Hosts from before 2026-10-03 never exit when the install or config changes, and one whose
+  // shutdown failed ignores SIGTERM.
   const script = `import { startHost } from ${JSON.stringify(new URL('../src/host.mjs', import.meta.url).href)};
-    const host = await startHost({ roots: [] });
-    process.on('SIGTERM', async () => { await host.close('SIGTERM'); process.exit(0); });
+    await startHost({ roots: [] });
+    process.on('SIGTERM', () => {});
     process.send('ready');`;
   const old = fork('--input-type=module', ['-e', script], { execArgv: [], env: { ...process.env, PI_REMOTE_PORT: String(config.port) } });
   t.after(() => old.kill('SIGKILL'));
@@ -262,8 +270,9 @@ test('a host that rejects this install\'s token is stopped through its service l
   writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...config, bridgeToken: 'n'.repeat(43) }));
   const fresh = loadConfig(dir);
   assert.equal(await hostStatus(fresh), null);
-  assert.equal(old.exitCode, 0);
-  const { pid } = await ensureHost(fresh, dir);
+  if (old.signalCode === null) await once(old, 'exit');
+  assert.equal(old.signalCode, 'SIGKILL');
+  const { pid } = await ensureHost(fresh, dir); // Recovers the dead host's service lock.
   assert.notEqual(pid, old.pid);
 });
 
