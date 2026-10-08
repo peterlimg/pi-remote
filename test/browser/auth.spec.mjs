@@ -81,3 +81,20 @@ test('a real server authentication timeout retries without deleting the token or
   await expect(page.locator('#send')).toBeEnabled();
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(token);
 });
+
+test('a QR login goes straight from connecting to the session list', async ({ page }) => {
+  await page.addInitScript(() => {
+    // Record every painted frame: the login form or an empty app must never flash.
+    window.flashes = [];
+    const check = () => {
+      const shown = id => document.getElementById(id) && !document.getElementById(id).hidden;
+      if (shown('login')) window.flashes.push('login');
+      if (shown('app') && !document.querySelector('#sessions button')) window.flashes.push('empty app');
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+  await page.goto('/#token=' + token);
+  await expect(page.getByRole('button', { name: /Project Alpha/ })).toBeVisible();
+  expect(await page.evaluate(() => [...new Set(window.flashes)])).toEqual([]);
+});

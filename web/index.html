@@ -12,7 +12,11 @@
   <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <section id="login" class="login">
+  <section id="boot" class="login">
+    <h1>Pi Remote</h1>
+    <p class="boot-status" role="status"><span class="connection-spinner" aria-hidden="true"></span>Connecting to your computer…</p>
+  </section>
+  <section id="login" class="login" hidden>
     <h1>Pi Remote</h1>
     <p>Connect to Pi on your computer.</p>
     <form id="login-form">

@@ -102,6 +102,8 @@ function transmit(ws, value) {
   ws.channel.then(sealed => sealed.seal(text)).then(frame => { if (ws.readyState === WebSocket.OPEN) ws.send(frame); }, () => {});
 }
 function loginFailed(text) { $('login-error').textContent = text; $('login-error').hidden = false; logout(); }
+// The first connection keeps the boot screen until sessions arrive, so the app never flashes empty.
+function showApp() { $('boot').hidden = true; $('app').hidden = false; }
 function connection(text) { $('connection').textContent = text; updateControls(); renderPagination(); }
 function disconnect() {
   closeModels();
@@ -120,13 +122,13 @@ function disconnect() {
 function reconnect() {
   disconnect();
   if (manualClose || !token) return;
-  connection('Computer disconnected. Retrying…');
+  showApp(); connection('Computer disconnected. Retrying…');
   reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
 }
 function connect() {
   disconnect(); manualClose = false;
   if (key ? !validKey(key) : !loopback) { loginFailed('This login link has no encryption key. Scan the QR code on your computer again.'); return; }
-  $('login').hidden = true; $('app').hidden = false;
+  $('login').hidden = true; if ($('app').hidden) $('boot').hidden = false;
   connection('Connecting…');
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   socket = ws;
@@ -232,7 +234,7 @@ function logout() {
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
-  $('app').hidden = true; $('login').hidden = false;
+  $('app').hidden = true; $('boot').hidden = true; $('login').hidden = false;
 }
 const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
 const activityTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -251,7 +253,7 @@ function receiveList(packet) {
   const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
   sessions = packet.sessions; allowResume = packet.allowResume === true;
   pageOffset = packet.offset ?? 0; listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
-  listLoading = false; listError = '';
+  listLoading = false; listError = ''; showApp();
   for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
   renderList(); updateControls();
@@ -1090,4 +1092,4 @@ $('resume').addEventListener('click', async () => {
   catch (e) { notice(e.message); }
   finally { updateControls(); }
 });
-if (token) connect();
+if (token) connect(); else { $('boot').hidden = true; $('login').hidden = false; }

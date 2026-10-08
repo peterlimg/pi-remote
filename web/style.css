@@ -273,3 +273,4 @@ pre.message-text { white-space: pre-wrap; }
   .notice { padding: 12px 16px; }
   .login { margin: 6vh auto; }
 }
+.boot-status { display: flex; align-items: center; gap: 10px; }
