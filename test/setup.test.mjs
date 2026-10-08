@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { deploymentScreen, checkRelay, verifyRelay, relayGone } from '../src/setup.mjs';
+import { connectionScreen, openTunnel, deploymentScreen, checkRelay, verifyRelay, relayGone } from '../src/setup.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { e2eKey } from '../src/e2e.mjs';
 import { until } from './helpers.mjs';
@@ -88,7 +88,7 @@ test('relay verification waits for a real host and rejects a wrong phone token',
   const ui = { custom: factory => new Promise(resolve => {
     const component = factory({ terminal: { rows: 6 } }, undefined, keys, value => { component.dispose(); resolve(value); });
     const lines = component.render(80);
-    assert.match(lines.join(''), /Checking relay/);
+    assert.match(lines.join(''), /Checking phone login/);
     assert.equal(lines.length, 6); // Covers the conversation instead of a box over its middle.
   }) };
   assert.equal(await checkRelay(ui, options), true);
@@ -116,7 +116,7 @@ test('a silent verification is bounded and cancellation closes its socket', asyn
 
   const ui = { custom: factory => new Promise(resolve => {
     const component = factory({ terminal: { rows: 6 } }, undefined, keys, resolve);
-    assert.match(component.render(80).join(''), /Checking relay/);
+    assert.match(component.render(80).join(''), /Checking phone login/);
     component.handleInput('cancel');
     component.dispose();
   }) };
@@ -145,4 +145,26 @@ test('only a definite non-relay answer marks a saved relay as gone', async () =>
   status = 503; assert.equal(await relayGone(origin), false); // Restarting.
   http.closeAllConnections(); await new Promise(resolve => http.close(resolve));
   assert.equal(await relayGone(origin), false); // Unreachable may be temporary.
+});
+
+test('connection screen offers opentunnel first and Render as the alternative', () => {
+  const results = [];
+  for (const key of ['confirm', 'R', 'cancel']) {
+    const screen = connectionScreen({ terminal: { rows: 20 } }, keys, value => results.push(value));
+    const lines = screen.render(40);
+    assert.equal(lines.length, 20);
+    assert.ok(lines.every(line => line.length <= 40));
+    assert.match(lines.join(' '), /npm install -g opentunnel/);
+    screen.handleInput(key);
+  }
+  assert.deepEqual(results, ['opentunnel', 'render', false]);
+});
+
+test('openTunnel returns the printed address and explains failures', async () => {
+  const fake = (error, stdout, stderr) => (_file, args, _options, callback) => { assert.deepEqual(args, ['route', 'add', 'pi-remote', '8787']); callback(error, stdout, stderr); };
+  assert.equal(await openTunnel(8787, undefined, fake(null, 'Tunnel is ready.\nAdded route\nhttps://pi-remote.abc.opentunnel.xyz\n')),
+    'https://pi-remote.abc.opentunnel.xyz');
+  await assert.rejects(openTunnel(8787, undefined, fake(Object.assign(new Error('spawn'), { code: 'ENOENT' }))), /npm install -g opentunnel/);
+  await assert.rejects(openTunnel(8787, undefined, fake(new Error('exit 1'), '', 'starting\nerror: rate limited\n')), /opentunnel failed: error: rate limited/);
+  await assert.rejects(openTunnel(8787, undefined, fake(null, 'http://pi-remote.abc.opentunnel.xyz\n')), /did not print an https address/);
 });

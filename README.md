@@ -2,22 +2,24 @@
 
 Control Pi coding-agent sessions from your phone. Browse conversations, send prompts, and switch sessions while others keep working.
 
-Self-hosted only: deploy your own relay, enter its HTTPS address once, and scan the QR.
+Run `/pi-remote`, let it create an [opentunnel](https://opentunnel.xyz) address for your computer, and scan the QR. Prefer your own relay? Deploy one on Render instead.
 
 ```mermaid
 flowchart LR
     subgraph Computer["Your computer"]
-        Pi["Pi sessions"] <--> Host["Background host"]
+        Pi["Pi sessions"] <--> Host["Background host + web app"]
+        Host <--> Tunnel["opentunnel"]
     end
-    Host <-->|"WSS"| Relay["Your relay + web app<br/>Render or another server"]
-    Phone["Phone browser"] <-->|"HTTPS / WSS"| Relay
+    Phone["Phone browser"] <-->|"HTTPS / WSS"| Edge["opentunnel relay<br/>(cannot decrypt)"] <--> Tunnel
 ```
 
-Your computer makes an outbound connection; no inbound port is needed. Pi and model credentials stay on your computer. Traffic between your phone and computer is end-to-end encrypted: the relay forwards ciphertext and cannot read conversations or send commands. It still delivers the web app's page code from your computer to your phone, so a tampered relay deployment could ship modified page code. Deploy only from a repository you trust.
+Your computer makes an outbound connection; no inbound port is needed. With opentunnel, HTTPS ends on your computer: the tunnel routes encrypted traffic by hostname and has no key to read it, and the web app's page code comes straight from your computer. opentunnel is a young third-party service that issues your certificate through DNS it controls, so it could in principle issue another one; conversations stay end-to-end encrypted regardless. Its hostname appears in public certificate logs, and the login token protects access.
+
+With a Render relay instead, the host connects out to a relay you deploy, and the phone connects to that relay. Pi and model credentials stay on your computer. Traffic between your phone and computer is end-to-end encrypted: the relay forwards ciphertext and cannot read conversations or send commands. It still delivers the web app's page code from your computer to your phone, so a tampered relay deployment could ship modified page code. Deploy only from a repository you trust.
 
 ## Get started
 
-Requires Node.js 22.19+, Git, a working Pi installation on macOS/Linux, and a Render account.
+Requires Node.js 22.19+, Git, and a working Pi installation on macOS/Linux.
 
 ### 1. Install
 
@@ -27,9 +29,19 @@ pi install git:github.com/peterlimg/pi-remote
 
 Pi downloads the package and installs its dependencies. No manual clone, fork, or `npm install` is needed. Start Pi, or run `/reload` in an existing terminal.
 
-### 2. Deploy from `/pi-remote`
+### 2. Connect with `/pi-remote`
 
-On first run, `/pi-remote` walks you through three short steps, one per screen. Enter does each step's action.
+Install the opentunnel CLI (no account needed):
+
+```sh
+npm install -g opentunnel   # or: brew install anomalyco/tap/opentunnel
+```
+
+Run `/pi-remote` and press Enter on **Use opentunnel**. Pi runs `opentunnel route add pi-remote <port>`, which creates your tunnel, starts it at login, and returns a fixed `https://pi-remote.<id>.opentunnel.xyz` address. The first tunnel waits for its certificate, which can take a few minutes. The address stays the same until you run `opentunnel delete`.
+
+### Or deploy a Render relay
+
+Press **R** on the same screen for three short steps, one per screen. Enter does each step's action.
 
 1. Press Enter to open the [Deploy to Render page](https://render.com/deploy?repo=https://github.com/peterlimg/pi-remote/tree/main). It uses this repository's `main` branch directly. Already have a Render account? Sign in and deploy directly. No account? Render asks you to sign up first, which takes a few clicks. Its sign-up does not return you to the deploy page, so the next step offers **O** to reopen it.
 2. Name the Blueprint as Pi suggests (`pi-remote-<your computer>`; Render's link cannot prefill it). Both tokens are on this screen: press **1** to copy the host token into Render's `PI_REMOTE_RELAY_HOST_TOKEN` field and **2** for the client token into `PI_REMOTE_RELAY_CLIENT_TOKEN`. Do not paste either token into chat.
@@ -39,11 +51,11 @@ Render's Free plan is enough, and no GitHub connection is needed because this re
 
 ### 3. Scan the QR
 
-Pi starts the background host and checks the relay's phone-login path before showing the QR. Scan it to open the mobile web app and log in. If the check fails, Pi explains what to fix instead of showing an unusable QR. Escape cancels the check; run `/pi-remote` to retry.
+Pi starts the background host and checks the phone-login path through your tunnel or relay before showing the QR. Scan it to open the mobile web app and log in. If the check fails, Pi explains what to fix instead of showing an unusable QR. Escape cancels the check; run `/pi-remote` to retry.
 
-### Another server
+### Or run a relay on another server
 
-Render is optional. Get your tokens from `/pi-remote setup`, then deploy this repository on a server with Node.js 22.19+ using `npm ci --omit=dev --ignore-scripts`. Configure these variables privately in your process manager:
+A relay can also run on your own server. Get your tokens from `/pi-remote setup` (press **R**), then deploy this repository on a server with Node.js 22.19+ using `npm ci --omit=dev --ignore-scripts`. Configure these variables privately in your process manager:
 
 ```text
 PI_REMOTE_RELAY_HOST_TOKEN=<host token from your Pi computer>
@@ -63,9 +75,9 @@ Allow ports 80 and 443 for Caddy; keep 8788 private. When the server is ready, c
 
 ## Daily use
 
-The relay address is saved in `~/.pi/remote/config.json`. Future `/pi-remote` runs skip deployment instructions, check connectivity, and show the QR.
+The phone address is saved in `~/.pi/remote/config.json`. Future `/pi-remote` runs skip deployment instructions, check connectivity, and show the QR.
 
-Keep your computer awake and the relay running. The background host survives closing the terminal. You can add the web app to your phone's home screen.
+Keep your computer awake and the tunnel or relay running. The background host survives closing the terminal. You can add the web app to your phone's home screen.
 
 | Command in Pi | Action |
 |---|---|
@@ -73,7 +85,7 @@ Keep your computer awake and the relay running. The background host survives clo
 | `/pi-remote status` | Check host and relay connectivity |
 | `/pi-remote stop` | Stop remote access, not terminal agents |
 | `/pi-remote restart` | Restart the host after code changes and show the QR |
-| `/pi-remote setup` | Change the relay address after stopping the host |
+| `/pi-remote setup` | Choose opentunnel or a relay again after stopping the host |
 
 Select a session to send prompts; switching sessions does not stop their work. Type `/` for that session's extension commands, templates, and skills. `/new` starts a separate session in the same project and opens it on your phone; the original session keeps running. Use `/model` to choose from the session's available models, or `/model provider/model-id` to switch directly. This changes only that session, not the default for new sessions. Other built-in menus such as `/settings` still require the computer. If a send loses its acknowledgement, inspect the conversation before retrying; uncertain commands are not replayed automatically.
 

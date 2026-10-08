@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
+import { connectionScreen, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -198,12 +198,22 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
-        // The guide ends by asking for the relay address, already validated.
-        const origin = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
-          deploymentScreen(config, tui, keys, done, { theme }),
-        fullScreen);
-        if (!origin || stopped) return;
-        saveConnection(origin, true);
+        const choice = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
+          connectionScreen(tui, keys, done, { theme }), fullScreen);
+        if (!choice || stopped) return;
+        let origin: string | undefined;
+        if (choice === 'opentunnel') {
+          // The phone reaches the host directly through the tunnel, so no relay is saved.
+          if (!await progress(context.ui, 'Creating your tunnel...', async (signal: AbortSignal) => { origin = await openTunnel(config.port, signal); },
+            'The first tunnel waits for its certificate, which can take a few minutes.') || !origin || stopped) return;
+        } else {
+          // The guide ends by asking for the relay address, already validated.
+          origin = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
+            deploymentScreen(config, tui, keys, done, { theme }),
+          fullScreen);
+          if (!origin || stopped) return;
+        }
+        saveConnection(origin, choice === 'render');
         config = loadConfig();
       }
       if (!await progress(context.ui, running ? 'Checking Pi Remote...' : 'Starting Pi Remote...', async (signal: AbortSignal) => {
@@ -215,7 +225,7 @@ export default function remoteExtension(pi: any) {
           try { running = await hostStatus(config) ?? running; } catch { /* Busy starting; keep waiting. */ }
         }
       })) return;
-      if (running.relayUrl && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
+      if (mobileUrl(running.publicUrl) && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
       if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
       if (stopped) return;
       const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);

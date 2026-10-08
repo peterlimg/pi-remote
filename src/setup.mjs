@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { hostname } from 'node:os';
 import WebSocket from 'ws';
 import { publicOrigin, parseObject, send } from './config.mjs';
@@ -29,6 +29,45 @@ const wrap = (text, width) => {
 };
 
 const plain = { fg: (_color, text) => text, bold: text => text };
+
+const install = 'npm install -g opentunnel';
+// First setup screen: a tunnel from this computer, or the Render relay guide. Resolves
+// 'opentunnel', 'render', or false on cancel.
+export function connectionScreen(tui, keys, done, { theme = plain } = {}) {
+  const muted = text => theme.fg('muted', text), accent = text => theme.fg('accent', text);
+  return {
+    render(width) {
+      const rows = Math.max(2, tui.terminal.rows), lines = [];
+      const add = (text, style = text => text) => lines.push(...wrap(text, width).map(style));
+      add('Connect your phone', theme.bold);
+      lines.push(''); add('opentunnel gives this computer a fixed https address with no account. HTTPS ends on this computer, so the tunnel cannot read your traffic.');
+      lines.push(''); add('Needs the opentunnel command:', muted); add(install, accent);
+      lines.push('');
+      for (const [key, label] of [['Enter', 'Use opentunnel'], ['R', 'Deploy a Render relay instead'], ['Esc', 'Cancel']]) add(theme.bold(accent(key)) + ' ' + muted(label));
+      return [...lines.slice(0, rows), ...Array(Math.max(0, rows - lines.length)).fill('')];
+    },
+    invalidate() {},
+    handleInput(data) {
+      if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') done(false);
+      else if (keys.matches(data, 'tui.select.confirm')) done('opentunnel');
+      else if (data.toLowerCase() === 'r') done('render');
+    }
+  };
+}
+
+// Route the host's port through opentunnel and return the phone address. `route add` creates the
+// tunnel on first use (certificate issuance can take minutes), is idempotent, and prints the URL last.
+export function openTunnel(port, signal, run = execFile) {
+  return new Promise((resolve, reject) => {
+    run('opentunnel', ['route', 'add', 'pi-remote', String(port)], { signal, timeout: 600000 }, (error, stdout = '', stderr = '') => {
+      if (error?.code === 'ENOENT') { reject(new Error('opentunnel is not installed. Run ' + install + ', then /pi-remote again.')); return; }
+      if (error) { reject(new Error('opentunnel failed: ' + (String(stderr).trim().split('\n').at(-1) || error.message))); return; }
+      const url = String(stdout).match(/https:\/\/pi-remote\.\S+/)?.[0];
+      try { if (url && mobileUrl(url)) { resolve(publicOrigin(url)); return; } } catch { /* Reported below. */ }
+      reject(new Error('opentunnel did not print an https address. Check opentunnel status.'));
+    });
+  });
+}
 
 // Only render these credentials in a temporary terminal overlay, never in messages or logs.
 // One step per screen. The deploy page asks new users to sign up, but Render's sign-up drops the
@@ -139,7 +178,7 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
       error ? reject(error) : resolve();
     };
     const abort = () => finish(new Error(signal.reason?.name === 'TimeoutError'
-      ? 'Timed out checking relay. Check Render is Live and both tokens match. Run /pi-remote to retry, or stop and run /pi-remote setup to correct the settings.'
+      ? 'Timed out checking phone login. Check that the relay or tunnel is up and both tokens match. Run /pi-remote to retry, or stop and run /pi-remote setup to correct the settings.'
       : 'Relay check cancelled'));
     const connect = () => {
       if (finished) return;
@@ -178,7 +217,7 @@ export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxH
 
 // Run a slow task on a full-screen progress view, so the conversation never shows a stalled line.
 // True when the task finishes, false when Esc cancels it; the task's error is rethrown.
-export async function progress(ui, title, task) {
+export async function progress(ui, title, task, hint = 'A sleeping Render service can take a minute.') {
   const result = await ui.custom((tui, theme = plain, keys, done) => {
     const controller = new AbortController();
     let finished = false;
@@ -187,7 +226,7 @@ export async function progress(ui, title, task) {
     return {
       render: width => {
         const rows = Math.max(2, tui.terminal.rows), lines = [...wrap(title, width).map(theme.bold),
-          ...wrap('A sleeping Render service can take a minute. Esc cancels.', width).map(text => theme.fg('muted', text))].slice(0, rows);
+          ...wrap(hint + ' Esc cancels.', width).map(text => theme.fg('muted', text))].slice(0, rows);
         return [...lines, ...Array(rows - lines.length).fill('')];
       },
       invalidate() {},
@@ -201,5 +240,5 @@ export async function progress(ui, title, task) {
   return !!result;
 }
 
-export const checkRelay = (ui, config) => progress(ui, 'Checking relay and phone login...',
+export const checkRelay = (ui, config) => progress(ui, 'Checking phone login...',
   signal => verifyRelay(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])));
