@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { connectionScreen, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
+import { connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -198,11 +198,14 @@ export default function remoteExtension(pi: any) {
         if (process.env.PI_REMOTE_PUBLIC_URL || process.env.PI_REMOTE_RELAY_URL !== undefined) {
           throw new Error('Phone address is set by PI_REMOTE_PUBLIC_URL / PI_REMOTE_RELAY_URL. Update those variables and restart Pi, or unset them to use saved setup.');
         }
+        const installed = await opentunnelInstalled();
         const choice = await context.ui.custom((tui: any, theme: any, keys: any, done: any) =>
-          connectionScreen(tui, keys, done, { theme }), fullScreen);
+          connectionScreen(tui, keys, done, { theme, installed }), fullScreen);
         if (!choice || stopped) return;
         let origin: string | undefined;
         if (choice === 'opentunnel') {
+          if (!installed && (!await progress(context.ui, 'Installing opentunnel...', (signal: AbortSignal) => installOpentunnel(signal),
+            'npm downloads the opentunnel command.') || stopped)) return;
           // The phone reaches the host directly through the tunnel, so no relay is saved.
           if (!await progress(context.ui, 'Creating your tunnel...', async (signal: AbortSignal) => { origin = await openTunnel(config.port, signal); },
             'The first tunnel waits for its certificate, which can take a few minutes.') || !origin || stopped) return;

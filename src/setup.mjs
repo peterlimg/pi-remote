@@ -31,9 +31,9 @@ const wrap = (text, width) => {
 const plain = { fg: (_color, text) => text, bold: text => text };
 
 const install = 'npm install -g opentunnel';
-// First setup screen: a tunnel from this computer, or the Render relay guide. Resolves
-// 'opentunnel', 'render', or false on cancel.
-export function connectionScreen(tui, keys, done, { theme = plain } = {}) {
+// First setup screen: a tunnel from this computer, or the Render relay guide. `installed` tells
+// whether Enter uses opentunnel or installs it first. Resolves 'opentunnel', 'render', or false.
+export function connectionScreen(tui, keys, done, { theme = plain, installed = true } = {}) {
   const muted = text => theme.fg('muted', text), accent = text => theme.fg('accent', text);
   return {
     render(width) {
@@ -41,9 +41,9 @@ export function connectionScreen(tui, keys, done, { theme = plain } = {}) {
       const add = (text, style = text => text) => lines.push(...wrap(text, width).map(style));
       add('Connect your phone', theme.bold);
       lines.push(''); add('opentunnel gives this computer a fixed https address with no account. HTTPS ends on this computer, so the tunnel cannot read your traffic.');
-      lines.push(''); add('Needs the opentunnel command:', muted); add(install, accent);
+      if (!installed) { lines.push(''); add('opentunnel is not installed. Enter installs it with:', muted); add(install, accent); }
       lines.push('');
-      for (const [key, label] of [['Enter', 'Use opentunnel'], ['R', 'Deploy a Render relay instead'], ['Esc', 'Cancel']]) add(theme.bold(accent(key)) + ' ' + muted(label));
+      for (const [key, label] of [['Enter', installed ? 'Use opentunnel' : 'Install and use opentunnel'], ['R', 'Deploy a Render relay instead'], ['Esc', 'Cancel']]) add(theme.bold(accent(key)) + ' ' + muted(label));
       return [...lines.slice(0, rows), ...Array(Math.max(0, rows - lines.length)).fill('')];
     },
     invalidate() {},
@@ -55,13 +55,28 @@ export function connectionScreen(tui, keys, done, { theme = plain } = {}) {
   };
 }
 
+const runFile = (run, file, args, options) => new Promise(resolve =>
+  run(file, args, options, (error, stdout = '', stderr = '') => resolve({ error, stdout: String(stdout), stderr: String(stderr) })));
+const lastLine = text => text.trim().split('\n').at(-1);
+
+export async function opentunnelInstalled(run = execFile) {
+  return !(await runFile(run, 'opentunnel', ['--version'], { timeout: 10000 })).error;
+}
+
+// Global npm installs can need permissions or a PATH entry this process lacks; say what to run.
+export async function installOpentunnel(signal, run = execFile) {
+  const { error, stderr } = await runFile(run, 'npm', ['install', '-g', 'opentunnel'], { signal, timeout: 300000 });
+  if (error) throw new Error('Could not install opentunnel' + (lastLine(stderr) ? ': ' + lastLine(stderr) : '') + '. Run ' + install + ' yourself, then /pi-remote again.');
+  if (!await opentunnelInstalled(run)) throw new Error('opentunnel was installed but is not on PATH. Add npm\'s global bin folder to PATH, restart Pi, and run /pi-remote again.');
+}
+
 // Route the host's port through opentunnel and return the phone address. `route add` creates the
 // tunnel on first use (certificate issuance can take minutes), is idempotent, and prints the URL last.
 export function openTunnel(port, signal, run = execFile) {
   return new Promise((resolve, reject) => {
     run('opentunnel', ['route', 'add', 'pi-remote', String(port)], { signal, timeout: 600000 }, (error, stdout = '', stderr = '') => {
       if (error?.code === 'ENOENT') { reject(new Error('opentunnel is not installed. Run ' + install + ', then /pi-remote again.')); return; }
-      if (error) { reject(new Error('opentunnel failed: ' + (String(stderr).trim().split('\n').at(-1) || error.message))); return; }
+      if (error) { reject(new Error('opentunnel failed: ' + (lastLine(String(stderr)) || error.message))); return; }
       const url = String(stdout).match(/https:\/\/pi-remote\.\S+/)?.[0];
       try { if (url && mobileUrl(url)) { resolve(publicOrigin(url)); return; } } catch { /* Reported below. */ }
       reject(new Error('opentunnel did not print an https address. Check opentunnel status.'));

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { connectionScreen, openTunnel, deploymentScreen, checkRelay, verifyRelay, relayGone } from '../src/setup.mjs';
+import { connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, verifyRelay, relayGone } from '../src/setup.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { e2eKey } from '../src/e2e.mjs';
 import { until } from './helpers.mjs';
@@ -147,17 +147,29 @@ test('only a definite non-relay answer marks a saved relay as gone', async () =>
   assert.equal(await relayGone(origin), false); // Unreachable may be temporary.
 });
 
-test('connection screen offers opentunnel first and Render as the alternative', () => {
+test('connection screen offers opentunnel first, installing it when missing', () => {
   const results = [];
-  for (const key of ['confirm', 'R', 'cancel']) {
-    const screen = connectionScreen({ terminal: { rows: 20 } }, keys, value => results.push(value));
-    const lines = screen.render(40);
+  for (const [key, installed] of [['confirm', true], ['confirm', false], ['R', false], ['cancel', true]]) {
+    const screen = connectionScreen({ terminal: { rows: 20 } }, keys, value => results.push(value), { installed });
+    const lines = screen.render(40), text = lines.join(' ');
     assert.equal(lines.length, 20);
     assert.ok(lines.every(line => line.length <= 40));
-    assert.match(lines.join(' '), /npm install -g opentunnel/);
+    assert.equal(/npm install -g opentunnel/.test(text), !installed);
+    assert.match(text, installed ? /Enter Use opentunnel/ : /Enter Install and use opentunnel/);
     screen.handleInput(key);
   }
-  assert.deepEqual(results, ['opentunnel', 'render', false]);
+  assert.deepEqual(results, ['opentunnel', 'opentunnel', 'render', false]);
+});
+
+test('opentunnel install runs npm and explains what to run when it fails', async () => {
+  const fake = outcomes => (file, args, _options, callback) => { const [error, stderr] = outcomes[file + ' ' + args.join(' ')]; callback(error, '', stderr); };
+  const missing = Object.assign(new Error('spawn opentunnel'), { code: 'ENOENT' });
+  assert.equal(await opentunnelInstalled(fake({ 'opentunnel --version': [missing] })), false);
+  assert.equal(await opentunnelInstalled(fake({ 'opentunnel --version': [null] })), true);
+  await installOpentunnel(undefined, fake({ 'npm install -g opentunnel': [null], 'opentunnel --version': [null] }));
+  await assert.rejects(installOpentunnel(undefined, fake({ 'npm install -g opentunnel': [new Error('exit 243'), 'npm error code EACCES\n'] })),
+    /Could not install opentunnel: npm error code EACCES\. Run npm install -g opentunnel yourself/);
+  await assert.rejects(installOpentunnel(undefined, fake({ 'npm install -g opentunnel': [null], 'opentunnel --version': [missing] })), /not on PATH/);
 });
 
 test('openTunnel returns the printed address and explains failures', async () => {

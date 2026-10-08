@@ -31,13 +31,7 @@ Pi downloads the package and installs its dependencies. No manual clone, fork, o
 
 ### 2. Connect with `/pi-remote`
 
-Install the opentunnel CLI (no account needed):
-
-```sh
-npm install -g opentunnel   # or: brew install anomalyco/tap/opentunnel
-```
-
-Run `/pi-remote` and press Enter on **Use opentunnel**. Pi runs `opentunnel route add pi-remote <port>`, which creates your tunnel, starts it at login, and returns a fixed `https://pi-remote.<id>.opentunnel.xyz` address. The first tunnel waits for its certificate, which can take a few minutes. The address stays the same until you run `opentunnel delete`.
+Run `/pi-remote` and press Enter on **Use opentunnel**. If the opentunnel CLI is missing, the same Enter installs it with `npm install -g opentunnel` (no account needed). Pi then runs `opentunnel route add pi-remote <port>`, which creates your tunnel, starts it at login, and returns a fixed `https://pi-remote.<id>.opentunnel.xyz` address. The first tunnel waits for its certificate, which can take a few minutes. The address stays the same until you run `opentunnel delete`.
 
 ### Or deploy a Render relay
 
