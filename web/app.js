@@ -783,7 +783,7 @@ function renderModels() {
   $('picker-options').replaceChildren(fragment);
   $('picker-help').classList.remove('picker-error');
   $('picker-help').textContent = !picker.models.length ? 'No models available. Configure a provider in the Pi terminal.'
-    : !matches.length ? 'No matching models. Try a model name or provider.' : 'Select to switch this session. Esc to close.';
+    : !matches.length ? 'No matching models. Try a model name or provider.' : '';
 }
 async function openModels(id, opener) {
   const picker = openPicker(id, 'model', opener);
@@ -833,7 +833,7 @@ function openReasoning(id) {
     button.addEventListener('click', () => chooseReasoning(picker, level));
     $('picker-options').append(button);
   }
-  $('picker-help').textContent = 'Pi applies the closest level supported by this model. Esc to close.';
+  $('picker-help').textContent = '';
   if (matchMedia('(pointer: fine)').matches) $('picker-options').querySelector('[aria-pressed=true]')?.focus();
 }
 async function chooseReasoning(picker, level) {

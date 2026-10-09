@@ -41,7 +41,7 @@ test('/model switches only the selected session without sending a prompt', async
   expect(await page.locator('dialog[open]').count()).toBe(0);
   const menuBounds = await picker.boundingBox(), composerBounds = await page.locator('#composer').boundingBox();
   expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(menuBounds.width - composerBounds.width)).toBeLessThanOrEqual(2);
+  expect(menuBounds.width).toBeLessThanOrEqual(Math.min(composerBounds.width, 320) + 2);
   expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
   await expect(picker.locator('.picker-option')).toHaveCount(1);
