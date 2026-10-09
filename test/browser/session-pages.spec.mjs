@@ -12,16 +12,16 @@ test('a relay-first upgrade still pages and searches an older host catalog', asy
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('.session')).toHaveCount(20);
-  await page.getByRole('button', { name: 'Next session page' }).click();
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 615');
-  await expect(page.locator('.session').first()).toContainText('Task 20');
+  await page.locator('.session').last().scrollIntoViewIfNeeded();
+  await expect(page.locator('#list-page')).toHaveText('40 of 615');
+  await expect(page.locator('.session').last()).toContainText('Task 39');
   await page.locator('#search').fill('Task 614');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('Task 614');
   await expect(page.locator('#count')).toHaveText('1 / 615');
 });
 
-test('search ignores stale replies, debounces typing, and restores its page after reconnect', async ({ page }) => {
+test('search ignores stale replies, debounces typing, and restores its scroll window after reconnect', async ({ page }) => {
   const states = Array.from({ length: 45 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/projects/app',
     status: 'saved', updatedAt: 45 - i, messages: [] }));
   const service = { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true };
@@ -51,21 +51,20 @@ test('search ignores stale replies, debounces typing, and restores its page afte
   await page.locator('.session').first().click();
   await expect(page.locator('#resume')).toBeHidden();
   await page.getByRole('button', { name: 'Show sessions' }).click();
-  await page.getByRole('button', { name: 'Next session page' }).click();
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 45');
-  // The selected session can disconnect after it leaves the current page.
+  await page.locator('.session').last().scrollIntoViewIfNeeded();
+  await expect(page.locator('#list-page')).toHaveText('40 of 45');
+  // The selected session can disconnect while the list is grown.
   states[0].status = 'disconnected'; service.live.get('0').socket = undefined;
   client.send(JSON.stringify({ type: 'snapshot', sessionId: '0', version: 1, state: states[0] }));
   await expect(page.locator('#resume')).toBeEnabled();
   client.close({ code: 1012, reason: 'Reconnect test' });
-  await expect.poll(() => requests.filter(packet => packet.offset === 20).length).toBe(2);
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 45');
-  await page.getByRole('button', { name: 'Next session page' }).click();
-  await expect(page.locator('.session')).toHaveCount(5);
-  await expect(page.locator('#list-page')).toHaveText('41–45 of 45');
-  await expect(page.getByRole('button', { name: 'Next session page' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Previous session page' }).click();
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 45');
+  await expect.poll(() => requests.filter(packet => packet.limit === 40).length).toBe(2);
+  await expect(page.locator('#list-page')).toHaveText('40 of 45');
+  await page.locator('.session').last().scrollIntoViewIfNeeded();
+  await expect(page.locator('.session')).toHaveCount(45);
+  await expect(page.locator('#list-page')).toHaveText('45 of 45');
+  await page.locator('.session').last().scrollIntoViewIfNeeded();
+  expect(requests.filter(packet => packet.limit > 60)).toHaveLength(0); // Stops at the end.
 
   hold = true;
   await page.locator('#search').fill('Task 44');
@@ -75,7 +74,7 @@ test('search ignores stale replies, debounces typing, and restores its page afte
   await page.locator('#search').fill('Task 43');
   await expect.poll(() => replies.length).toBe(2);
   expect(requests.length - beforeTyping).toBe(1);
-  expect(requests.at(-1)).toMatchObject({ query: 'task 43', offset: 0 });
+  expect(requests.at(-1)).toMatchObject({ query: 'task 43', limit: 20 });
   replies[1]();
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('Task 43');

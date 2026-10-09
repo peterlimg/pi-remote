@@ -41,8 +41,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session')).toHaveCount(3);
   await expect(saved.locator('.session')).toHaveCount(17);
   await expect(page.locator('.session')).toHaveCount(20);
-  await expect(page.locator('#list-page')).toHaveText('1–20 of 675');
-  await expect(page.getByRole('button', { name: 'Previous session page' })).toBeDisabled();
+  await expect(page.locator('#list-page')).toHaveText('20 of 675');
   expect(requests).toHaveLength(0); // No eager fetch of the remaining pages.
   await expect(page.locator('#count')).toHaveText('675');
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
@@ -62,17 +61,15 @@ test('same-project sessions show their tasks, previews, status and activity with
   await noOverflow();
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
-  await page.getByRole('button', { name: 'Next session page' }).click();
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 675');
-  await expect(page.locator('.session')).toHaveCount(20);
-  await expect(online).toHaveCount(0);
-  publish();
-  await expect(page.locator('#list-page')).toHaveText('21–40 of 675');
+  await page.locator('.session').last().scrollIntoViewIfNeeded();
+  await expect(page.locator('#list-page')).toHaveText('40 of 675');
+  await expect(page.locator('.session')).toHaveCount(40);
+  publish(); // Live updates keep the grown list.
+  await expect(page.locator('.session')).toHaveCount(40);
   await page.locator('#search').fill('session 672');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('session 672');
-  await expect(page.locator('#list-page')).toHaveText('1–1 of 1');
-  await expect(page.getByRole('button', { name: 'Next session page' })).toBeDisabled();
+  await expect(page.locator('#list-page')).toHaveText('1 of 1');
   await page.locator('#search').fill('authentication');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('#count')).toHaveText('1 / 675');

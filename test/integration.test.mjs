@@ -91,6 +91,11 @@ test('session pages and search stay bounded on initial load, updates and reconne
   host.service.emit('list');
   const update = await until(() => client.messages.find(x => x.type === 'sessions' && x.offset === 20));
   assert.deepEqual(update.sessions, second.sessions);
+  const window = (await client.request('list', { limit: 40 })).value;
+  assert.equal(window.sessions.length, 40); assert.equal(window.limit, 40);
+  host.service.emit('list');
+  const grown = await until(() => client.messages.find(x => x.type === 'sessions' && x.limit === 40));
+  assert.deepEqual(grown.sessions, window.sessions);
   const search = (await client.request('list', { query: ' NEEDLE ' })).value;
   assert.equal(search.total, 675); assert.equal(search.matched, 1);
   assert.deepEqual(search.sessions.map(x => x.id), ['674']);
@@ -103,7 +108,7 @@ test('session pages and search stay bounded on initial load, updates and reconne
   const clamped = (await client.request('list', { offset: 660 })).value;
   assert.equal(clamped.offset, 640); assert.equal(clamped.requestOffset, 660);
   assert.equal(clamped.sessions.length, 10);
-  for (const options of [{ offset: -1 }, { offset: 1.5 }, { offset: '20' }, { query: {} }, { query: 'a'.repeat(501) }]) {
+  for (const options of [{ offset: -1 }, { offset: 1.5 }, { offset: '20' }, { limit: 0 }, { limit: '40' }, { query: {} }, { query: 'a'.repeat(501) }]) {
     assert.equal((await client.request('list', options)).ok, false);
   }
   const reconnected = await connect();

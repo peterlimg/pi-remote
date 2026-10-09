@@ -191,8 +191,8 @@ test('zoom keeps session navigation and composer controls inside the visible vie
     await page.evaluate(() => document.getElementById('sidebar').scrollTo(0, 0));
     await fits(['#app', '#search', '#logout']);
     // Pagination ends the scrolling list on phones.
-    await page.locator('#list-next').scrollIntoViewIfNeeded();
-    await fits(['#list-next']);
+    await page.locator('#list-page').scrollIntoViewIfNeeded();
+    await fits(['#list-page']);
     await page.locator('.session').first().click();
     await page.locator('#prompt').fill('A draft keeps both Send and Abort available');
     await expect(page.locator('#send')).toBeVisible();

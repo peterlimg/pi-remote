@@ -6,7 +6,7 @@ export function attachClient(socket, service) {
   let version = 0, listOptions = {};
   const list = options => {
     const page = service.list(options);
-    listOptions = { offset: page.offset, query: page.query };
+    listOptions = { offset: page.offset, limit: page.limit, query: page.query };
     return page;
   };
   let busy = 0, closed = false, listTimer, stateTimer;

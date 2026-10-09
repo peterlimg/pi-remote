@@ -60,7 +60,7 @@ let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 let lastDialog, modelPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
-let pageOffset = 0, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let listLimit = 20, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
@@ -177,7 +177,7 @@ function connect() {
         connectionTimer = setTimeout(reconnect, 10000);
         transmit(ws, { op: 'ping', id: crypto.randomUUID() });
       }, 20000);
-      if (pageOffset || searchQuery || listError) loadList();
+      if (listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
         request('watch', { sessionId: selected }).catch(e => notice(e.message));
         loadCommands(selected);
@@ -230,7 +230,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
-  clearTimeout(searchTimer); $('search').value = ''; pageOffset = 0; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
+  clearTimeout(searchTimer); $('search').value = ''; listLimit = 20; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -254,14 +254,14 @@ function receiveList(packet) {
     const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
     const matches = packet.sessions.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(searchQuery))
       .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt);
-    const offset = Math.min(pageOffset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
-    packet = { ...packet, sessions: matches.slice(offset, offset + 20), total: packet.sessions.length, matched: matches.length,
-      query: searchQuery, requestOffset: pageOffset, offset };
+    packet = { ...packet, sessions: matches.slice(0, listLimit), total: packet.sessions.length, matched: matches.length,
+      query: searchQuery, limit: listLimit };
   }
-  if ((packet.query ?? '') !== searchQuery || (packet.requestOffset ?? 0) !== pageOffset) return;
+  // Older hosts omit `limit` and always answer with 20; loadMore stops there.
+  if ((packet.query ?? '') !== searchQuery || (packet.limit ?? listLimit) !== listLimit) return;
   const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
   sessions = packet.sessions; allowResume = packet.allowResume === true;
-  pageOffset = packet.offset ?? 0; listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
+  listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
   listLoading = false; listError = ''; showApp();
   for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
@@ -276,7 +276,7 @@ async function loadList() {
   const generation = ++listRequest;
   listLoading = true; listError = ''; renderPagination();
   try {
-    const page = legacyList || await request('list', { offset: pageOffset, query: searchQuery });
+    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery });
     if (generation === listRequest) receiveList(page);
   } catch (e) {
     if (generation !== listRequest) return;
@@ -286,12 +286,16 @@ async function loadList() {
 function renderPagination() {
   $('sessions').setAttribute('aria-busy', String(listLoading));
   $('sessions').inert = listLoading;
-  $('list-previous').disabled = !connected || listLoading || pageOffset === 0;
-  $('list-next').disabled = !connected || listLoading || pageOffset + 20 >= listMatched;
   $('list-retry').hidden = !listError; $('list-retry').disabled = !connected || listLoading;
   $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' :
-    listMatched ? `${pageOffset + 1}–${pageOffset + sessions.length} of ${listMatched}` : '0 sessions';
+    listMatched ? `${sessions.length} of ${listMatched}` : '0 sessions';
   $('list-empty').hidden = listLoading || !!listError || sessions.length > 0;
+}
+// Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
+const moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 400px' });
+function loadMore() {
+  if (!connected || listLoading || listError || sessions.length < listLimit || sessions.length >= listMatched) return;
+  listLimit += 20; loadList();
 }
 function renderList() {
   const matches = sessions;
@@ -344,6 +348,9 @@ function renderList() {
     fragment.append(group);
   }
   $('sessions').replaceChildren(fragment);
+  moreObserver.disconnect();
+  const last = [...$('sessions').querySelectorAll('.session')].at(-1);
+  if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
@@ -927,12 +934,9 @@ $('login-form').addEventListener('submit', event => {
 $('logout').addEventListener('click', logout);
 $('search').addEventListener('input', () => {
   clearTimeout(searchTimer); listRequest++;
-  searchQuery = $('search').value.trim().toLowerCase(); pageOffset = 0;
+  searchQuery = $('search').value.trim().toLowerCase(); listLimit = 20;
   listLoading = true; listError = ''; renderPagination(); $('sessions').scrollTop = 0;
   searchTimer = setTimeout(loadList, 250);
-});
-for (const [id, step] of [['list-previous', -20], ['list-next', 20]]) $(id).addEventListener('click', () => {
-  pageOffset += step; $('sessions').scrollTop = 0; loadList();
 });
 $('list-retry').addEventListener('click', loadList);
 $('back').addEventListener('click', () => $('app').classList.remove('viewing'));

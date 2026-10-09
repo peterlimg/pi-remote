@@ -51,8 +51,10 @@ export class SessionService extends EventEmitter {
     }
     this.scan();
   }
-  list({ offset = 0, query = '' } = {}) {
-    if (!Number.isSafeInteger(offset) || offset < 0 || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
+  // Phones grow `limit` as they scroll; `offset` serves older pagers.
+  list({ offset = 0, limit = 20, query = '' } = {}) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1
+      || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
     const requestOffset = offset;
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));
@@ -61,7 +63,7 @@ export class SessionService extends EventEmitter {
     const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
-    return { sessions: matches.slice(offset, offset + 20), total: all.size, matched: matches.length, offset, requestOffset, query,
+    return { sessions: matches.slice(offset, offset + limit), total: all.size, matched: matches.length, offset, limit, requestOffset, query,
       warnings: this.warnings, allowResume: this.allowResume };
   }
   read(id) {
