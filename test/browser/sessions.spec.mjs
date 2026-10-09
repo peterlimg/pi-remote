@@ -82,6 +82,9 @@ test('same-project sessions show their tasks, previews, status and activity with
   await page.getByRole('button', { name: 'Close search' }).click(); // Closing clears the filter.
   await expect(page.locator('#search')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Search sessions' })).toBeFocused();
+  await page.getByRole('button', { name: 'Search sessions' }).click();
+  await page.locator('#search').blur(); // Leaving an empty search folds it away.
+  await expect(page.locator('#search')).toBeHidden();
   await expect(page.locator('#list-page')).toHaveText('Could not load sessions. Try again.');
   failList = false;
   await page.getByRole('button', { name: 'Try again', exact: true }).click();

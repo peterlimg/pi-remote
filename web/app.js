@@ -1012,6 +1012,8 @@ function closeSearch() {
 }
 $('search-open').addEventListener('click', () => { $('search-bar').classList.add('open'); $('search').focus(); });
 $('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
+// An empty search folds back into its button once you leave it; a live filter stays visible.
+$('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
 $('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
