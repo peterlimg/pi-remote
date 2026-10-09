@@ -104,7 +104,7 @@ function transmit(ws, value) {
 function loginFailed(text) { $('login-error').textContent = text; $('login-error').hidden = false; logout(); }
 // The first connection keeps the boot screen until sessions arrive, so the app never flashes empty.
 function showApp() { $('boot').hidden = true; $('app').hidden = false; }
-function connection(text) { $('connection').textContent = text; updateControls(); renderPagination(); }
+function connection(text) { $('connection').textContent = text; $('connection').hidden = connected; updateControls(); renderPagination(); }
 function disconnect() {
   closeModels();
   listRequest++; legacyList = undefined;
@@ -237,7 +237,16 @@ function logout() {
   $('app').hidden = true; $('boot').hidden = true; $('login').hidden = false;
 }
 const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
-const activityTime = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const shortDate = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+// Compact age for the list; the exact time stays in the tooltip.
+function age(date) {
+  const minutes = Math.floor((Date.now() - date) / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return minutes + 'm';
+  if (minutes < 1440) return Math.floor(minutes / 60) + 'h';
+  if (minutes < 10080) return Math.floor(minutes / 1440) + 'd';
+  return shortDate.format(date);
+}
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
@@ -305,26 +314,31 @@ function renderList() {
       const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
       const top = el('div', undefined, 'session-top');
-      const title = el('strong', item.title); title.title = item.title;
+      const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
       top.append(title);
       if (unread.has(item.id)) top.append(el('span', 'New', 'badge'));
       button.append(top);
       if (item.preview && item.preview !== item.title) {
-        button.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + item.preview, 'session-preview'));
+        button.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(item.preview), 'session-preview'));
       }
       const meta = el('div', undefined, 'session-meta');
       const cwd = displayPaths(item.cwd);
       const project = el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'session-project');
       project.title = cwd;
-      const status = el('span', statusLabels[item.status] || item.status, 'session-state');
-      status.dataset.status = item.status;
-      meta.append(project, status);
-      const time = el('time', undefined, 'session-time');
+      meta.append(project);
       const date = new Date(item.updatedAt);
       if (Number.isFinite(date.getTime())) {
-        time.dateTime = date.toISOString(); time.textContent = activityTime.format(date); time.title = 'Last activity: ' + date.toLocaleString();
+        const time = el('time', age(date), 'session-time');
+        time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
+        meta.append(time);
       }
-      button.append(meta, time);
+      // Ready and Saved are the resting states; only label what needs attention.
+      if (!['idle', 'saved'].includes(item.status)) {
+        const status = el('span', statusLabels[item.status] || item.status, 'session-state');
+        status.dataset.status = item.status;
+        meta.append(status);
+      }
+      button.append(meta);
       button.addEventListener('click', () => selectSession(item.id)); group.append(button);
     }
     fragment.append(group);

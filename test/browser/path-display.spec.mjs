@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('home paths hide usernames in tool labels, details and project locations', async ({ page }) => {
-  const state = { id: 'paths', title: 'Private paths', cwd: '/Users/local-user/workspace/project', status: 'working', messages: [
+  const state = { id: 'paths', title: 'Private paths', cwd: '/Users/local-user/workspace/project', status: 'working', updatedAt: Date.now() - 5 * 60000,
+    preview: 'Read /Users/local-user/workspace/project/notes.md', messages: [
     { id: 'calls', role: 'assistant', toolCalls: [
       { id: 'external', name: 'read', text: JSON.stringify({ path: '/Users/local-user/.pi/agent/skills/SKILL.md', offset: 1 }) },
       { id: 'relative', name: 'read', text: JSON.stringify({ path: '/Users/local-user/workspace/project/src/app.js', offset: 3, limit: 2 }) },
@@ -24,6 +25,8 @@ test('home paths hide usernames in tool labels, details and project locations', 
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('.session-project')).toHaveAttribute('title', '~/workspace/project');
+  await expect(page.locator('.session-preview')).toHaveText('Pi: Read ~/workspace/project/notes.md');
+  await expect(page.locator('.session-time')).toHaveText('5m');
   await page.locator('.session').click();
   await page.locator('.session-info summary').click();
   await expect(page.locator('#project')).toHaveText('~/workspace/project');

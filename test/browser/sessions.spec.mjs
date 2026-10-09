@@ -50,7 +50,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
-  await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working', 'Ready']);
+  await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.locator('.session').first().locator('.session-preview')).toHaveCount(0);
   const noOverflow = async () => expect(await page.evaluate(() => {
     const sidebar = document.getElementById('sidebar');
@@ -92,6 +92,6 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('#title')).toHaveText('Fix login timing out after the browser reconnects');
   await page.locator('#back').click();
   await expect(online.locator('.session').first()).toHaveAttribute('aria-current', 'true');
-  await expect(online.locator('.session').first().locator('.session-state')).toHaveText('Ready');
+  await expect(online.locator('.session').first().locator('.session-state')).toHaveCount(0);
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });

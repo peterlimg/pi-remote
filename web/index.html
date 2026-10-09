@@ -36,8 +36,8 @@
   </section>
   <div id="app" class="shell" hidden>
     <aside id="sidebar">
-      <header class="brand"><strong>Pi Remote</strong><button id="logout" class="quiet">Sign out</button></header>
-      <div class="list-heading"><h2>Sessions</h2><span id="count" class="badge">0</span></div>
+      <header class="brand"><h2>Sessions</h2><span id="count" class="badge">0</span><button id="logout" class="quiet">Sign out</button></header>
+      <p id="connection" role="status">Connecting…</p>
       <label class="sr-only" for="search">Search sessions</label>
       <input id="search" type="search" placeholder="Search task or project" maxlength="500">
       <nav id="sessions" aria-label="Pi sessions"></nav>
@@ -49,7 +49,6 @@
         <button id="list-retry" type="button" class="quiet" hidden>Try again</button>
       </nav>
       <footer>
-        <span id="connection" role="status">Connecting…</span>
         <details id="diagnostics" hidden><summary id="warnings-summary"></summary><ul id="warnings"></ul></details>
       </footer>
     </aside>

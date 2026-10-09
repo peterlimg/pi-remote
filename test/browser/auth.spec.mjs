@@ -14,8 +14,8 @@ test('manual login survives reopening and sign out clears it across tabs', async
   await page.close();
   const reopened = await context.newPage();
   await reopened.goto('/');
-  await expect(reopened.locator('#connection')).toBeVisible({ timeout: 2000 });
-  await expect(reopened.locator('#connection')).toHaveText('Computer connected');
+  await expect(reopened.locator('#connection')).toHaveText('Computer connected', { timeout: 2000 });
+  await expect(reopened.locator('#connection')).toBeHidden();
   expect(await reopened.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
   const other = await context.newPage();
   await other.goto('/');
