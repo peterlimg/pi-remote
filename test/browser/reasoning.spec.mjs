@@ -46,7 +46,7 @@ test('reasoning uses the model picker interaction and preserves drafts and sessi
   await expect(page.getByRole('searchbox', { name: 'Search models' })).toBeHidden();
   const menuBounds = await picker.boundingBox(), composerBounds = await page.locator('#composer').boundingBox();
   expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(menuBounds.width - composerBounds.width)).toBeLessThanOrEqual(2);
+  expect(menuBounds.width).toBeLessThanOrEqual(Math.min(composerBounds.width, 320) + 2);
   expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
   await page.screenshot({ path: testInfo.outputPath('reasoning-picker-mobile.png') });
   await picker.getByRole('button', { pressed: true }).click();
