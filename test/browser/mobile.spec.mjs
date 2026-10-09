@@ -37,6 +37,11 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await expect(page.locator('#diagnostics')).toBeHidden();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#prompt')).toHaveValue('draft for alpha');
+  // Edge-swipe back is browser history: it returns to the list and stays in the app.
+  await page.evaluate(() => history.back());
+  await expect(page.getByRole('button', { name: /Project Beta/ })).toBeVisible();
+  await expect(page.locator('#prompt')).toBeHidden();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#transcript')).not.toContainText('instruction for beta');
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
   expect(new URL(page.url()).hash).toBe('');

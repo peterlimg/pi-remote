@@ -391,6 +391,8 @@ async function selectSession(id) {
   updateScrollButton();
   document.querySelector('.session-info').open = false;
   renderProject(selectedSummary?.cwd);
+  // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
+  if (!history.state?.session) history.pushState({ session: true }, '');
   $('app').classList.add('viewing'); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
@@ -955,7 +957,8 @@ $('search').addEventListener('input', () => {
   searchTimer = setTimeout(loadList, 250);
 });
 $('list-retry').addEventListener('click', loadList);
-$('back').addEventListener('click', () => $('app').classList.remove('viewing'));
+$('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
+window.addEventListener('popstate', () => $('app').classList.remove('viewing'));
 $('prompt').addEventListener('input', () => {
   closeModels(); resizePrompt();
   if (selected) drafts.set(selected, $('prompt').value);
