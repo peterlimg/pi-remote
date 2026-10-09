@@ -340,6 +340,7 @@ function renderList() {
       const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
       top.append(title);
       if (unread.has(item.id)) top.append(el('span', 'New', 'badge'));
+      if (item.status === 'working') top.append(el('span', undefined, 'connection-spinner session-spinner'));
       body.append(top);
       if (item.preview && item.preview !== item.title) {
         body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(item.preview), 'session-preview'));
@@ -374,14 +375,13 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
-// Hand for "needs you", spinner while working, a plain ring otherwise.
+// Hand for "needs you", a plain ring otherwise; working rows show a spinner at the right.
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
   icon.dataset.status = status;
   icon.setAttribute('aria-hidden', 'true');
   icon.innerHTML = status === 'waiting'
     ? '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
-    : status === 'working' ? '<span class="connection-spinner"></span>'
     : '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>';
   return icon;
 }
