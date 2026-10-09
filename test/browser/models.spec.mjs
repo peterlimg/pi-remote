@@ -136,4 +136,7 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   expect(await page.locator('#picker-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await page.getByRole('button', { name: /Current model/ }).click();
   await expect(page.locator('#settings-picker')).toBeHidden();
+  await open(5);
+  await expect(page.locator('.picker-option')).toHaveCount(41);
+  await expect(page.locator('#picker-help')).toHaveText('');
 });

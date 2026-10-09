@@ -808,16 +808,20 @@ function renderModels() {
   $('picker-help').textContent = !picker.models.length ? 'No models available. Configure a provider in the Pi terminal.'
     : !matches.length ? 'No matching models. Try a model name or provider.' : '';
 }
+const modelLists = new Map();
 async function openModels(id, opener) {
-  const picker = openPicker(id, 'model', opener);
-  $('picker-help').textContent = 'Loading available models…';
+  const picker = openPicker(id, 'model', opener), cached = modelLists.get(id);
+  if (cached) { Object.assign(picker, cached, { current: cache.get(id)?.model || cached.current }); renderModels(); }
+  else $('picker-help').textContent = 'Loading available models…';
   if (matchMedia('(pointer: fine)').matches) $('model-search').focus();
   try {
     const result = await request('models', { sessionId: id });
     if (settingsPicker !== picker || selected !== id) return;
+    if (result.models?.length) modelLists.set(id, result);
+    if (cached && JSON.stringify(cached.models) === JSON.stringify(result.models) && picker.current === result.current) return;
     Object.assign(picker, result); renderModels();
   } catch (e) {
-    if (settingsPicker !== picker) return;
+    if (settingsPicker !== picker || cached) return;
     $('picker-help').classList.add('picker-error'); $('model-retry').hidden = false;
     $('picker-help').textContent = e.message === 'Unsupported command'
       ? 'Restart this Pi terminal to load remote model switching, then reopen /model.' : e.message;
