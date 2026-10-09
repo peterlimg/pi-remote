@@ -219,7 +219,7 @@ pre.message-text { white-space: pre-wrap; }
 /* Inset focus rings keep adjacent settings from overlapping. */
 .composer-settings .setting-control:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .composer-settings :is(#model, #reasoning-control):not(:disabled):active,
-.composer-settings :is(#model, #reasoning-control)[aria-expanded=true] { background: var(--selection); color: var(--text); }
+.composer-settings :is(#model, #reasoning-control)[aria-expanded=true] { background: color-mix(in srgb, var(--selection) 35%, var(--panel)); color: var(--text); }
 #resume { align-self: flex-start; padding-inline: 10px; }
 #composer-hint, #composer-send-status { margin: 0; padding: 4px 10px; }
 .dialog { display: flex; flex-direction: column; width: calc(100% - 48px); max-width: var(--content-width); min-height: 0; max-height: min(32rem, calc(var(--viewport-height, 100dvh) * .55)); margin: 0 auto 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
