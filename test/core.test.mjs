@@ -55,6 +55,13 @@ test('composer metadata follows live model and reasoning changes and saved branc
   assert.equal(readSession(file).model, 'openai/o3');
   assert.equal(readSession(file).thinkingLevel, 'high');
 });
+test('a terminal dialog returns to the status it interrupted', () => {
+  const state = initialState({});
+  for (const type of ['ui_prompt_start', 'ui_prompt_end']) applyEvent(state, { type });
+  assert.equal(state.status, 'idle');
+  for (const type of ['agent_start', 'ui_prompt_start', 'ui_prompt_end']) applyEvent(state, { type });
+  assert.equal(state.status, 'working');
+});
 test('fast mode follows pi-usage status and clears on model changes', () => {
   const state = initialState({});
   const status = statusText => applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'usage', statusText });
