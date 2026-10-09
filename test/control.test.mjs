@@ -363,7 +363,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
       select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
       input: async () => assert.fail('The relay address is entered in the guide'),
       // Progress is a widget above the composer; record each one shown.
-      setWidget: (_key, factory) => { if (factory) waits.push(factory(undefined, { fg: (_color, text) => text, bold: text => text }).render(120).join(' ')); },
+      setWidget: (_key, factory) => { if (typeof factory === 'function') waits.push(factory(undefined, { fg: (_color, text) => text, bold: text => text }).render(120).join(' ')); },
       onTerminalInput: () => () => {},
       custom: async (factory, options) => {
         let closed = false, result, resolve;

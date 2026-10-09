@@ -233,11 +233,13 @@ export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxH
 // Only a relay sleeps; a tunnel reaches this computer directly.
 export const wakeHint = config => config.relayUrl ? 'A sleeping Render service can take a minute.' : '';
 
+export const progressWidget = 'pi-remote-progress';
+
 // Run a slow task with its status in a widget above the composer, which stays visible. Esc, raw or
 // in the kitty keyboard protocol, cancels it. True when the task finishes, false when cancelled;
 // the task's error is rethrown.
 export async function progress(ui, title, task, hint = '') {
-  const controller = new AbortController(), key = 'pi-remote-progress';
+  const controller = new AbortController(), key = progressWidget;
   let cancel;
   const cancelled = new Promise(resolve => { cancel = resolve; });
   ui.setWidget(key, (_tui, theme = plain) => ({

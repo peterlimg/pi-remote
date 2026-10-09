@@ -9,7 +9,7 @@ import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
-import { wakeHint, connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
+import { progressWidget, wakeHint, connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
 // All Pi interaction is through its documented ExtensionAPI / ExtensionContext methods.
@@ -162,6 +162,8 @@ export default function remoteExtension(pi: any) {
   const control = async (args: string, context: any) => {
     if (controlling) { context.ui.notify('Pi Remote is already opening. Close its screen first.', 'info'); return; }
     controlling = true;
+    // Status, relay and install checks can take seconds before the first step shows; say so at once.
+    context.ui.setWidget(progressWidget, ['Opening Pi Remote...']);
     try {
       const action = args.trim();
       if (!['', 'start', 'stop', 'restart', 'status', 'setup'].includes(action)) throw new Error('Usage: /pi-remote [start|stop|restart|status|setup]');
@@ -241,7 +243,7 @@ export default function remoteExtension(pi: any) {
         }
       }), fullScreen);
     } catch (error: any) { context.ui.notify('Pi Remote: ' + error.message, 'error'); }
-    finally { controlling = false; }
+    finally { controlling = false; context.ui.setWidget(progressWidget, undefined); }
   };
   pi.registerCommand('pi-remote', {
     description: 'Start mobile control and show login QR: /pi-remote [stop|restart|status|setup]',
