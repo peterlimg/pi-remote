@@ -51,6 +51,12 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .quiet, .secondary { color: var(--accent); background: transparent; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+.boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
+.boot-content { max-width: 100%; }
+.boot-logo { display: block; margin: 0 auto 28px; }
+.boot h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
+.boot-status { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 20px 0 0; color: var(--muted); }
+.boot-status .connection-spinner { width: 12px; height: 12px; animation-duration: 1.6s; }
 .login { max-width: 400px; margin: 12vh auto; padding: 24px; }
 .login h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
 .login p { color: var(--muted); }

@@ -12,9 +12,17 @@
   <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <section id="boot" class="login">
-    <h1>Pi Remote</h1>
-    <p class="boot-status" role="status"><span class="connection-spinner" aria-hidden="true"></span>Connecting to your computer…</p>
+  <section id="boot" class="boot" aria-labelledby="boot-title">
+    <div class="boot-content">
+      <!-- Pi's logo from https://pi.dev, embedded so startup needs no extra request. -->
+      <svg class="boot-logo" viewBox="0 0 470 470" width="72" height="72" role="img" aria-label="Pi agent logo">
+        <path fill="#F09082" d="M0 0H352.07V234.71H234.71V117.36H0Z"/>
+        <path fill="#4D9ABF" d="M0 117.36H117.36V234.71H234.71V352.07H117.36V469.43H0Z"/>
+        <path fill="#F1BE58" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"/>
+      </svg>
+      <h1 id="boot-title">Pi Remote</h1>
+      <p class="boot-status" role="status"><span class="connection-spinner" aria-hidden="true"></span><span>Connecting to your computer…</span></p>
+    </div>
   </section>
   <section id="login" class="login" hidden>
     <h1>Pi Remote</h1>
