@@ -230,7 +230,7 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
 // Pi's default overlay is a box over the middle of the conversation; cover the whole terminal instead.
 export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } };
 
-// Run a slow task on a full-screen progress view, so the conversation never shows a stalled line.
+// Run a slow task in the editor's place, keeping the conversation visible and Esc available.
 // True when the task finishes, false when Esc cancels it; the task's error is rethrown.
 // Only a relay sleeps; a tunnel reaches this computer directly.
 export const wakeHint = config => config.relayUrl ? 'A sleeping Render service can take a minute.' : '';
@@ -242,22 +242,15 @@ export async function progress(ui, title, task, hint = '') {
     const finish = value => { if (!finished) { finished = true; done(value); } };
     task(controller.signal).then(() => finish({}), error => finish({ error }));
     return {
-      // Centered, so the full-screen cover does not read as a mostly empty page.
-      render: width => {
-        const rows = Math.max(2, tui.terminal.rows);
-        const center = style => text => ' '.repeat(Math.max(0, Math.floor((width - text.length) / 2))) + style(text);
-        const body = [...wrap(title, width).map(center(theme.bold)), '',
-          ...wrap((hint + ' Esc cancels.').trim(), width).map(center(text => theme.fg('muted', text)))].slice(0, rows);
-        const top = Math.floor((rows - body.length) / 2);
-        return [...Array(top).fill(''), ...body, ...Array(rows - top - body.length).fill('')];
-      },
+      render: width => [...wrap(title, width).map(theme.bold),
+        ...wrap((hint + ' Esc cancels.').trim(), width).map(text => theme.fg('muted', text))],
       invalidate() {},
       handleInput(data) {
         if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { finish(false); controller.abort(); }
       },
       dispose() { finished = true; controller.abort(); }
     };
-  }, fullScreen);
+  });
   if (result?.error) throw result.error;
   return !!result;
 }

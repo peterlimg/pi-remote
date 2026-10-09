@@ -89,7 +89,7 @@ test('relay verification waits for a real host and rejects a wrong phone token',
     const component = factory({ terminal: { rows: 6 } }, undefined, keys, value => { component.dispose(); resolve(value); });
     const lines = component.render(80);
     assert.match(lines.join(''), /Checking phone login/);
-    assert.equal(lines.length, 6); // Covers the conversation instead of a box over its middle.
+    assert.equal(lines.length, 2); // A compact block in the editor's place, not a full-screen cover.
   }) };
   assert.equal(await checkRelay(ui, options), true);
   await assert.rejects(checkRelay(ui, { ...options, clientToken: 'wrong' }), /client token/);

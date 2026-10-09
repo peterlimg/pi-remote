@@ -365,8 +365,8 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
           { matches: (key, name) => key === name.replace('tui.select.', '') },
           value => { closed = true; result = value; resolve(value); });
         const lines = component.render(120);
-        lines[0] = lines.find(line => line.trim())?.trim() ?? ''; // Progress screens are centered.
-        assert.equal(options, fullScreen); // Never a box over the middle of the conversation.
+        // Progress takes the editor's place; other screens never draw a box over the conversation.
+        assert.equal(options, /^(Starting|Checking|Creating|Installing) /.test(lines[0]) ? undefined : fullScreen);
         // The network-backed check is tested with real sockets in setup.test.mjs.
         if (lines[0].includes('Checking phone login')) { waits.push(lines.join(' ')); component.dispose(); checks++; return verified && {}; }
         if (/^(Starting|Checking) Pi Remote|^Creating your tunnel/.test(lines[0])) { waits.push(lines.join(' ')); return finished; }
