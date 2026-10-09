@@ -19,7 +19,7 @@ test('focusing the message field has no tap overlay and keeps the composer focus
   }
 });
 
-test('compact composer keeps controls on one row across draft, working and offline states', async ({ page }) => {
+test('compact composer keeps controls on one row across draft, working and offline states', async ({ page }, testInfo) => {
   const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
     model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium', messages: [
       { id: 'reply', role: 'assistant', text: 'The changes are ready to review.' }
@@ -63,6 +63,7 @@ test('compact composer keeps controls on one row across draft, working and offli
   state.fastMode = true; snapshot();
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeVisible();
   await rowFits();
+  await page.screenshot({ path: testInfo.outputPath('composer-mobile.png') });
   state.status = 'working'; snapshot();
   await expect(page.locator('#abort')).toBeVisible();
   await expect(page.locator('#send')).toBeHidden();
@@ -86,6 +87,7 @@ test('compact composer keeps controls on one row across draft, working and offli
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await rowFits();
+  await page.screenshot({ path: testInfo.outputPath('composer-desktop-dark.png') });
   state.status = 'saved'; snapshot();
   await expect(page.locator('#resume')).toBeVisible();
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
