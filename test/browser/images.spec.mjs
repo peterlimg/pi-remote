@@ -49,6 +49,7 @@ test('thread images load lazily, survive updates, open full size and retry failu
   const opened = await popup;
   await expect(opened.locator('img')).toBeVisible();
   await opened.close();
+  await page.locator('.tool-activity > summary').click();
   await page.locator('.tool summary').click();
   const toolImage = page.locator('.tool .thread-images img');
   await expect(toolImage).toBeVisible();

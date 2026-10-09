@@ -501,8 +501,8 @@ function renderConversation(state) {
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   const box = $('transcript'), bottom = atThreadBottom(), oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
-  const expanded = new Map([...box.querySelectorAll('details[data-tool-id]')].map(node => [node.dataset.toolId, node.open]));
-  const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.toolId : undefined;
+  const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
+  const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
   const messages = [...(state.messages || [])], localImages = new Map();
   const matched = [];
   for (const outgoing of submissions.values()) {
@@ -525,15 +525,25 @@ function renderConversation(state) {
   clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => message.id + ':' + index))));
   const results = new Map(messages.filter(m => m.role === 'toolResult' && m.toolCallId).map(m => [m.toolCallId, m]));
   const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
-  const rendered = new Set();
+  const rendered = new Set(), activityGroups = [];
+  let activity;
   const appendTool = (id, name, input, result) => {
     if (rendered.has(id)) return;
     rendered.add(id);
     const live = tools.get(id), status = result ? (result.isError ? 'error' : 'done') : live?.status || 'pending';
     const detail = el('details', undefined, 'tool');
     detail.dataset.toolId = id; detail.dataset.status = status;
-    detail.open = expanded.get(id) ?? status === 'error';
+    detail.dataset.disclosureId = 'tool:' + id;
+    detail.open = expanded.get(detail.dataset.disclosureId) ?? false;
     const toolName = name || live?.name || 'Tool';
+    if (!activity) {
+      const node = el('details', undefined, 'tool-activity'), summary = el('summary');
+      node.dataset.disclosureId = 'activity:' + id;
+      node.open = expanded.get(node.dataset.disclosureId) ?? false;
+      node.append(summary); fragment.append(node);
+      activity = { node, summary, tools: [] }; activityGroups.push(activity);
+    }
+    activity.tools.push({ name: toolName, status });
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
     let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
@@ -561,28 +571,22 @@ function renderConversation(state) {
     statusLabel.hidden = status === 'done';
     heading.append(statusLabel); summary.append(heading);
     const output = displayPaths(result?.text || live?.text || '');
-    if (toolName === 'bash' && output) {
-      const lines = output.trimEnd().split(/\r?\n/), preview = el('span', undefined, 'tool-preview');
-      if (lines.length > 5) preview.append(el('span', `${lines.length - 5} earlier lines · expand`, 'tool-preview-hint'));
-      if (result?.truncated) preview.append(el('span', 'Output shortened for mobile.', 'tool-preview-hint'));
-      preview.append(el('span', lines.slice(-5).join('\n'), 'tool-preview-text'));
-      summary.append(preview);
-    }
     detail.append(summary);
     if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
     if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
     appendThreadImages(detail, result);
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
-    fragment.append(detail);
+    activity.node.append(detail);
   };
   if (state.historyTruncated) fragment.append(el('p', 'Latest 100 messages.', 'hint'));
   for (const [index, message] of messages.entries()) {
-    if (index === usagePosition) fragment.append(renderUsage(usage));
+    if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
       continue;
     }
     if (message.text || message.images?.length || message.role === 'user') {
+      activity = undefined;
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el('div', undefined, 'message-text');
@@ -599,17 +603,38 @@ function renderConversation(state) {
       fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
-    if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
+    if (message.truncated) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
   }
-  if (usagePosition === messages.length) fragment.append(renderUsage(usage));
+  if (usagePosition === messages.length) { activity = undefined; fragment.append(renderUsage(usage)); }
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
+  for (const group of activityGroups) {
+    const counts = new Map();
+    for (const tool of group.tools) counts.set(tool.name, (counts.get(tool.name) || 0) + 1);
+    const actions = { bash: ['Ran', 'Running', 'command'], read: ['Read', 'Reading', 'file'],
+      edit: ['Edited', 'Editing', 'file'], write: ['Wrote', 'Writing', 'file'],
+      grep: ['Searched', 'Searching', 'time'], find: ['Searched', 'Searching', 'time'],
+      ffgrep: ['Searched', 'Searching', 'time'], fffind: ['Searched', 'Searching', 'time'],
+      ls: ['Listed', 'Listing', 'directory', 'directories'] };
+    const labels = [...counts].map(([name, count], index) => {
+      const [past, present, noun, plural] = Object.hasOwn(actions, name) ? actions[name] : ['Used ' + name, 'Using ' + name, 'time'];
+      const active = group.tools.some(tool => tool.name === name && ['working', 'pending'].includes(tool.status));
+      const verb = active ? present : past;
+      return `${index ? verb[0].toLowerCase() + verb.slice(1) : verb} ${count} ${count === 1 ? noun : plural || noun + 's'}`;
+    });
+    const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
+    group.summary.append(label);
+    for (const [status, text] of [['error', 'failed'], ['working', 'running'], ['pending', 'pending']]) {
+      const count = group.tools.filter(tool => tool.status === status).length;
+      if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
+    }
+  }
   box.replaceChildren(fragment);
   for (const { outgoing, messageId } of matched) {
     submissions.delete(outgoing.key);
     for (const queued of submissions.values()) if (queued.sessionId === selected) queued.knownIds.add(messageId);
     if (sending.get(selected) !== outgoing) releaseImages(outgoing.attachments);
   }
-  if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.toolId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
+  if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.disclosureId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
   if (state.error) notice(state.error);
   renderDialog(state);

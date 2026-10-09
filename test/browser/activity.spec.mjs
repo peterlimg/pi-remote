@@ -36,7 +36,9 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.messages[1].text += ' The first run took longer.'; snapshot();
   await expect(activity).toBeVisible();
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
-  await expect(page.locator('.tool')).toBeVisible();
+  await expect(page.locator('.tool-activity > summary')).toBeVisible();
+  await expect(page.locator('.tool-activity-working')).toHaveText('1 running');
+  await expect(page.locator('.tool')).toBeHidden();
   await expect(activity).toHaveText('Thinking…'); // Streaming updates must not shuffle the label.
   await page.locator('#prompt').fill('Keep checking');
   await expect(activity).toHaveText('Thinking…');

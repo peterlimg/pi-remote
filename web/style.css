@@ -158,8 +158,16 @@ pre.message-text { white-space: pre-wrap; }
 .thread-image img { object-fit: contain; }
 .thread-image button { font-size: 12px; line-height: 1.5; }
 .tool > .thread-images { padding: 12px; }
+.tool-activity { max-width: var(--content-width); margin: 0 auto 18px; color: var(--muted); }
+.tool-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; }
+.tool-activity > summary::-webkit-details-marker { display: none; }
+.tool-activity > summary::after { content: ''; width: 8px; height: 8px; margin: 0 4px 0 auto; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
+.tool-activity[open] > summary::after { transform: rotate(135deg); }
+.tool-activity-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-activity-error, .tool-activity-working, .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
+.tool-activity-error { color: var(--error); }
+.tool-activity-working { color: var(--accent); }
 .tool { font-size: 13px; color: var(--muted); background: var(--panel); margin-bottom: 8px; }
-.tool + .message { margin-top: 18px; }
 .tool summary { min-height: 44px; padding: 12px; }
 .tool-heading { display: inline-flex; align-items: baseline; gap: 8px; width: calc(100% - 1.5em); vertical-align: top; }
 .tool summary strong { font-weight: 500; color: var(--text); flex-shrink: 0; }
@@ -167,10 +175,6 @@ pre.message-text { white-space: pre-wrap; }
 .tool-directory { overflow: hidden; text-overflow: ellipsis; }
 .tool-target { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tool-status { margin-left: auto; font-size: 12px; flex-shrink: 0; }
-.tool-preview { display: block; margin: 12px 0 0 1.5em; font-size: 12px; }
-.tool-preview-hint { display: block; margin-bottom: 4px; }
-.tool-preview-text { display: block; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.tool[open] .tool-preview { display: none; }
 .tool[data-status=error] summary, .tool[data-status=error] summary strong { color: var(--error); }
 .tool pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--mono); padding: 12px; margin: 0; }
 .tool-input { border-bottom: 1px solid var(--line); }
@@ -278,7 +282,7 @@ pre.message-text { white-space: pre-wrap; }
 .mobile-only { display: none; }
 @media (hover: hover) {
   button:not(:disabled):hover { filter: brightness(.92); }
-  .session:hover, .tool summary:hover { background: var(--user); }
+  .session:hover, .tool summary:hover, .tool-activity > summary:hover { background: var(--user); }
   summary:hover, .quiet:hover { color: var(--text); }
 }
 @media (max-width: 700px) {

@@ -111,6 +111,8 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
   await expect(page.locator('#tools, .message-label')).toHaveCount(0);
   await expect(page.locator('#composer-hint')).toBeHidden();
   expect((await page.locator('.conversation-header').boundingBox()).height).toBeLessThan(80);
+  await expect(page.locator('.tool-activity > summary')).toHaveText('Read 1 file');
+  await page.locator('.tool-activity > summary').click();
   await tool.locator('summary').click();
   await expect(tool.locator('.tool-output')).toBeVisible();
   await page.locator('#prompt').fill('Keep the tool expanded');
@@ -129,22 +131,28 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('tool summaries show context and a short shell tail without losing full details', async ({ page }) => {
+test('tool summaries group consecutive activity and hide raw commands until expanded', async ({ page }, testInfo) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Beta/ }).click();
   const shell = page.locator('[data-tool-id="run-checks"]');
   await expect(shell.locator('.tool-context')).toHaveText('npm run check && npm test');
-  await expect(shell.locator('.tool-preview')).toContainText('44 earlier lines');
-  await expect(shell.locator('.tool-preview-text')).toHaveText('108 tests passed\n0 failed\nTypeScript passed\nLint passed\nWorking tree clean');
+  const group = page.locator('.tool-activity').last();
+  await expect(group.locator(':scope > summary')).toHaveText('Ran 1 command, read 2 files');
+  await expect(shell.locator('.tool-context')).toBeHidden();
+  await expect(page.locator('.tool-preview')).toHaveCount(0);
+  await group.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('activity-mobile.png') });
   await expect(shell.locator('.tool-input')).toBeHidden();
   await expect(shell.locator('.tool-output')).toBeHidden();
   const read = page.locator('[data-tool-id="read-source"]');
   await expect(read.locator('.tool-context')).toHaveText('src/server/api/routers/history/bets.ts:270-386');
   await expect(read.locator('.tool-output')).toBeHidden();
   await expect(read.locator('.tool-preview')).toHaveCount(0);
+  await group.locator(':scope > summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(shell.locator('.tool-context')).toBeVisible();
   await shell.locator('summary').focus();
   await page.keyboard.press('Enter');
-  await expect(shell.locator('.tool-preview')).toBeHidden();
   await expect(shell.locator('.tool-output')).toContainText('check 1: passed');
   await expect(shell.locator('.tool-input')).toContainText('"timeout": 120');
   await page.locator('#prompt').fill('Keep the shell expanded');
@@ -155,7 +163,11 @@ test('tool summaries show context and a short shell tail without losing full det
   await shell.scrollIntoViewIfNeeded();
   expect((await read.boundingBox()).height).toBeLessThan(65);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await group.locator(':scope > summary').click();
+  await expect(shell).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath('activity-desktop-dark.png') });
 });
 
 test('streaming tool input, errors and shortened output stay readable and safe', async ({ page }) => {
@@ -190,7 +202,9 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await expect(page.locator('#transcript img')).toHaveCount(0);
   const shell = page.locator('[data-tool-id="shell"]');
   await expect(shell.locator('.tool-status')).toHaveText('working');
-  await expect(shell.locator('.tool-preview')).toHaveText('Checking…');
+  const group = page.locator('.tool-activity');
+  await expect(group.locator('.tool-activity-working')).toHaveText('1 running');
+  await expect(shell).toBeHidden();
   state.messages.push({ id: 'failed', role: 'toolResult', toolCallId: 'shell', text: 'Tests failed', isError: true, truncated: true });
   state.model = 'anthropic/claude-sonnet-4-5'; state.thinkingLevel = 'off';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
@@ -198,8 +212,12 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await expect(page.locator('#model')).toHaveText('claude-sonnet-4-5');
   await expect(page.getByRole('button', { name: 'Reasoning effort' })).toHaveText('Off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(shell.locator('.tool-preview')).toContainText('Output shortened for mobile.');
+  await expect(group.locator('.tool-activity-error')).toHaveText('1 failed');
+  await expect(group.locator('.tool-activity-error')).toBeVisible();
+  await expect(shell).toBeHidden();
+  await group.locator(':scope > summary').click();
   await shell.locator('summary').click();
+  await expect(shell.locator('.hint')).toHaveText('Output shortened for mobile.');
   await expect(shell.locator('.tool-output')).toHaveText('Tests failed');
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
 });

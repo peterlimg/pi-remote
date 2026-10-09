@@ -40,11 +40,13 @@ test('home paths hide usernames in tool labels, details and project locations', 
     await expect(label).toHaveText(text);
     await expect(label).toHaveAttribute('title', text);
   }
+  await page.locator('.tool-activity > summary').click();
   const external = page.locator('[data-tool-id="external"]');
   await external.locator('summary').click();
   await expect(external.locator('.tool-input')).toContainText('"path":"~/.pi/agent/skills/SKILL.md"');
   await expect(external.locator('.tool-output')).toHaveText('Loaded ~/.pi/agent/skills/SKILL.md');
   const shell = page.locator('[data-tool-id="shell"]');
-  await expect(shell.locator('.tool-preview-text')).toHaveText('~\n~/.agents\n/var/log/system.log');
+  await shell.locator('summary').click();
+  await expect(shell.locator('.tool-output')).toHaveText('~\n~/.agents\n/var/log/system.log');
   await expect(page.locator('#transcript')).not.toContainText(/local-user|linux-user/);
 });
