@@ -91,7 +91,7 @@ test('compact composer keeps controls on one row across draft, working and offli
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
   await expect(page.locator('#send')).toBeDisabled();
   await expect(page.locator('#commands')).toBeDisabled();
-  await expect(page.locator('#reasoning')).toBeDisabled();
+  await expect(page.locator('#reasoning-control')).toBeDisabled();
   await expect(page.locator('#composer-hint')).toBeVisible();
   await page.setViewportSize({ width: 320, height: 568 });
   expect((await page.locator('#send').boundingBox()).x + 44).toBeLessThanOrEqual(312);

@@ -21,7 +21,7 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await page.keyboard.press('Enter');
   await expect(page.locator('#project')).toBeVisible();
   await expect(page.locator('#project')).toHaveText('/projects/Project Alpha');
-  await expect(page.locator('#composer select:not(#reasoning)')).toHaveCount(0);
+  await expect(page.locator('#composer select')).toHaveCount(0);
   await expect(page.locator('#transcript')).toContainText('Working on Project Alpha');
   await page.locator('#prompt').fill('draft for alpha');
   await page.locator('#back').click();
@@ -185,7 +185,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await page.getByRole('button', { name: /Streaming tools/ }).click();
   await expect(page.locator('.tool')).toHaveCount(4);
   await expect(page.locator('#model')).toHaveText('o3');
-  await expect(page.getByRole('combobox', { name: 'Reasoning effort' })).toHaveValue('high');
+  await expect(page.getByRole('button', { name: 'Reasoning effort' })).toHaveText('High');
   await expect(page.locator('[data-tool-id="safe"] .tool-context')).toHaveText('<img onerror=window.injected=true>:1-3');
   await expect(page.locator('#transcript img')).toHaveCount(0);
   const shell = page.locator('[data-tool-id="shell"]');
@@ -196,7 +196,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
   await expect(shell.locator('.tool-status')).toHaveText('error');
   await expect(page.locator('#model')).toHaveText('claude-sonnet-4-5');
-  await expect(page.getByRole('combobox', { name: 'Reasoning effort' })).toHaveValue('off');
+  await expect(page.getByRole('button', { name: 'Reasoning effort' })).toHaveText('Off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(shell.locator('.tool-preview')).toContainText('Output shortened for mobile.');
   await shell.locator('summary').click();
@@ -231,7 +231,7 @@ test('desktop Enter sends, Shift+Enter adds a line and Alt+Enter queues a follow
     await expect(prompt).toHaveValue('');
     await expect.poll(() => commands.length).toBe(2);
     expect(commands).toEqual([{ type: 'prompt', text: 'first line\n' }, { type: 'followUp', text: 'next turn' }]);
-    await expect(page.locator('#composer select:not(#reasoning)')).toHaveCount(0);
+    await expect(page.locator('#composer select')).toHaveCount(0);
     await prompt.fill('normal message');
     await page.locator('#send').click();
     await expect(prompt).toHaveValue('');

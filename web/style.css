@@ -184,7 +184,7 @@ pre.message-text { white-space: pre-wrap; }
 /* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
 .attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 16px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
-.composer:has(.model-picker:not([hidden])) textarea { max-height: 44px; }
+.composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
 /* The focus border replaces the browser's transient gray tap overlay. */
 .composer textarea { -webkit-tap-highlight-color: transparent; }
 .composer textarea:focus { outline: 0; }
@@ -211,15 +211,13 @@ pre.message-text { white-space: pre-wrap; }
 #image-files:disabled { cursor: default; }
 .composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 24px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
-.composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 24px; }
+.composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 24px; -webkit-tap-highlight-color: transparent; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
 #reasoning-control { display: inline-flex; align-items: center; color: var(--muted); text-transform: capitalize; }
 #reasoning-value { overflow: hidden; text-overflow: ellipsis; }
 #reasoning-control:not(:first-child) { padding-left: 6px; }
 /* Inset focus rings keep adjacent settings from overlapping. */
-.composer-settings .setting-control:focus-visible, #reasoning-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
-#reasoning-control:has(select:disabled) { opacity: .45; }
-#reasoning { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
+.composer-settings .setting-control:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 #resume { align-self: flex-start; padding-inline: 10px; }
 #composer-hint, #composer-send-status { margin: 0; padding: 4px 10px; }
 .dialog { display: flex; flex-direction: column; width: calc(100% - 48px); max-width: var(--content-width); min-height: 0; max-height: min(32rem, calc(var(--viewport-height, 100dvh) * .55)); margin: 0 auto 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -242,22 +240,23 @@ pre.message-text { white-space: pre-wrap; }
 .dialog-error { color: var(--error); }
 .usage-summary, .usage-summary .message-text { font: inherit; }
 .usage-summary { font-size: 16px; line-height: 1.65; }
-.model-picker { display: flex; flex-direction: column; max-height: min(24rem, var(--model-menu-height, 50dvh)); }
-.model-search-row { display: flex; align-items: center; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-#model-cancel { display: grid; place-items: center; width: 44px; flex-shrink: 0; padding: 0; color: var(--muted); }
+.settings-picker { display: flex; flex-direction: column; max-height: min(24rem, var(--picker-menu-height, 50dvh)); }
+.picker-header { display: flex; align-items: center; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+#picker-title { flex: 1; margin: 0; padding: 10px 12px; font-size: 14px; font-weight: 500; }
+#picker-cancel { display: grid; place-items: center; width: 44px; flex-shrink: 0; padding: 0; color: var(--muted); }
 #model-search { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; font-size: 16px; }
-#model-options { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+#picker-options { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 .model-group h3 { color: var(--muted); font-size: 12px; font-weight: 500; margin: 8px 12px 4px; }
-.model-option { display: flex; align-items: center; gap: 12px; }
-.model-option:focus-visible { outline-offset: -2px; }
-.model-option[aria-pressed=true] { background: var(--selection); }
-.model-option[aria-pressed=true] span { color: var(--text); }
-.model-option-label { min-width: 0; flex: 1; }
-.model-option strong { color: var(--text); }
-.model-option .model-current { flex-shrink: 0; color: var(--text); }
-.model-picker footer { padding: 8px 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
-#model-help { margin: 0; overflow-wrap: anywhere; }
-#model-help.model-error { color: var(--error); }
+.picker-option { display: flex; align-items: center; gap: 12px; }
+.picker-option:focus-visible { outline-offset: -2px; }
+.picker-option[aria-pressed=true] { background: var(--selection); }
+.picker-option[aria-pressed=true] span { color: var(--text); }
+.picker-option-label { min-width: 0; flex: 1; }
+.picker-option strong { color: var(--text); }
+.picker-option .picker-current { flex-shrink: 0; color: var(--text); }
+.settings-picker footer { padding: 8px 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
+#picker-help { margin: 0; overflow-wrap: anywhere; }
+#picker-help.picker-error { color: var(--error); }
 #model-retry { padding-left: 0; }
 .mobile-only { display: none; }
 @media (hover: hover) {

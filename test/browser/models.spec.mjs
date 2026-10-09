@@ -44,10 +44,10 @@ test('/model switches only the selected session without sending a prompt', async
   expect(Math.abs(menuBounds.width - composerBounds.width)).toBeLessThanOrEqual(2);
   expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
-  await expect(picker.locator('.model-option')).toHaveCount(1);
-  await expect(picker.locator('.model-option')).toContainText('GPT-5.4');
+  await expect(picker.locator('.picker-option')).toHaveCount(1);
+  await expect(picker.locator('.picker-option')).toContainText('GPT-5.4');
   await page.getByRole('searchbox', { name: 'Search models' }).fill('not-a-model');
-  await expect(page.locator('#model-help')).toContainText('No matching models');
+  await expect(page.locator('#picker-help')).toContainText('No matching models');
   await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(picker).toBeHidden();
@@ -66,7 +66,7 @@ test('/model switches only the selected session without sending a prompt', async
   expect(commands).toHaveLength(2);
   await expect(prompt).toHaveValue('Keep this draft');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
-  await expect(page.locator('#model-help')).toContainText('authentication');
+  await expect(page.locator('#picker-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
   await expect(page.locator('#model')).toHaveText('first');
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -108,32 +108,32 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
     await expect.poll(() => requests.length).toBe(count);
   };
   await open(1);
-  await expect(page.locator('#model-help')).toHaveText('Loading available models…');
+  await expect(page.locator('#picker-help')).toHaveText('Loading available models…');
   await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   client.send(JSON.stringify({ type: 'response', id: requests[0].id, ok: true, value: { models: [{ provider: 'stale', id: 'ignored' }] } }));
-  await expect(page.locator('#model-picker')).toBeHidden();
+  await expect(page.locator('#settings-picker')).toBeHidden();
   await open(2);
   client.send(JSON.stringify({ type: 'response', id: requests[1].id, ok: true, value: { models: [] } }));
-  await expect(page.locator('#model-help')).toContainText('No models available');
-  await expect(page.locator('.model-option')).toHaveCount(0);
+  await expect(page.locator('#picker-help')).toContainText('No models available');
+  await expect(page.locator('.picker-option')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   await open(3);
   client.send(JSON.stringify({ type: 'response', id: requests[2].id, ok: false, error: 'Pi disconnected' }));
-  await expect(page.locator('#model-help')).toHaveText('Pi disconnected');
+  await expect(page.locator('#picker-help')).toHaveText('Pi disconnected');
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect.poll(() => requests.length).toBe(4);
   client.send(JSON.stringify({ type: 'response', id: requests[3].id, ok: true, value: { current: 'test/current', models: [
     { provider: 'test', id: 'current', name: 'Current model' },
     ...Array.from({ length: 40 }, (_, i) => ({ provider: 'test', id: `model-${i}`, name: `Model ${i}` }))
   ] } }));
-  await expect(page.locator('.model-option')).toHaveCount(41);
+  await expect(page.locator('.picker-option')).toHaveCount(41);
   await page.setViewportSize({ width: 390, height: 350 });
   await expect.poll(async () => {
-    const bounds = await page.locator('#model-picker').boundingBox();
+    const bounds = await page.locator('#settings-picker').boundingBox();
     return bounds.y + bounds.height;
   }).toBeLessThanOrEqual(350);
-  expect((await page.locator('#model-picker').boundingBox()).y).toBeGreaterThanOrEqual(0);
-  expect(await page.locator('#model-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect((await page.locator('#settings-picker').boundingBox()).y).toBeGreaterThanOrEqual(0);
+  expect(await page.locator('#picker-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await page.getByRole('button', { name: /Current model/ }).click();
-  await expect(page.locator('#model-picker')).toBeHidden();
+  await expect(page.locator('#settings-picker')).toBeHidden();
 });
