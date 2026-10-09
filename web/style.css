@@ -164,6 +164,8 @@ pre.message-text { white-space: pre-wrap; }
 .tool-activity > summary::after { content: ''; width: 8px; height: 8px; margin: 0 4px 0 auto; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
 .tool-activity[open] > summary::after { transform: rotate(135deg); }
 .tool-activity-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-activity-text { display: flex; flex-direction: column; min-width: 0; }
+.tool-activity-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--mono); }
 .tool-activity-error, .tool-activity-working, .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
 .tool-activity-error { color: var(--error); }
 .tool-activity-working { color: var(--accent); }

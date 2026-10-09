@@ -543,7 +543,7 @@ function renderConversation(state) {
       node.append(summary); fragment.append(node);
       activity = { node, summary, tools: [] }; activityGroups.push(activity);
     }
-    activity.tools.push({ name: toolName, status });
+    const entry = { name: toolName, status }; activity.tools.push(entry);
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
     let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
@@ -557,6 +557,7 @@ function renderConversation(state) {
       }
     }
     context = displayPaths(context);
+    entry.line = (toolName === 'bash' ? '$' : toolName) + (context ? ' ' + context : '');
     const summary = el('summary'), heading = el('span', undefined, 'tool-heading');
     heading.append(el('strong', toolName === 'bash' ? '$' : toolName));
     if (toolName === 'bash') heading.append(el('span', 'bash', 'sr-only'));
@@ -627,7 +628,11 @@ function renderConversation(state) {
       // Negative delay keeps the breathing phase continuous when the row re-renders.
       label.classList.add('tool-activity-live'); label.style.animationDelay = `-${Date.now() % 2400}ms`;
     }
-    group.summary.append(label);
+    const running = group.tools.findLast(tool => tool.status === 'working');
+    if (running) {
+      const text = el('span', undefined, 'tool-activity-text'), line = el('span', running.line, 'tool-activity-line');
+      line.title = running.line; text.append(label, line); group.summary.append(text);
+    } else group.summary.append(label);
     for (const [status, text] of [['error', 'failed'], ['working', 'running'], ['pending', 'pending']]) {
       const count = group.tools.filter(tool => tool.status === status).length;
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
