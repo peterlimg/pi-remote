@@ -233,7 +233,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
-  clearTimeout(searchTimer); $('search').value = ''; listLimit = 20; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
+  clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -1006,6 +1006,13 @@ $('search').addEventListener('input', () => {
   listLoading = true; listError = ''; renderPagination(); $('sessions').scrollTop = 0;
   searchTimer = setTimeout(loadList, 250);
 });
+function closeSearch() {
+  if ($('search').value) { $('search').value = ''; $('search').dispatchEvent(new Event('input')); }
+  $('search-bar').classList.remove('open');
+}
+$('search-open').addEventListener('click', () => { $('search-bar').classList.add('open'); $('search').focus(); });
+$('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
+$('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
 $('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
 window.addEventListener('popstate', () => { closePicker(); $('app').classList.remove('viewing'); });

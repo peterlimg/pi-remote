@@ -69,6 +69,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session')).toHaveCount(40);
   publish(); // Live updates keep the grown list.
   await expect(page.locator('.session')).toHaveCount(40);
+  await page.getByRole('button', { name: 'Search sessions' }).click();
   await page.locator('#search').fill('session 672');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('session 672');
@@ -78,7 +79,9 @@ test('same-project sessions show their tasks, previews, status and activity with
   await page.locator('#search').fill('no such task');
   await expect(page.locator('#list-empty')).toHaveText('No matching sessions. Try another task or project.');
   failList = true;
-  await page.locator('#search').fill('');
+  await page.getByRole('button', { name: 'Close search' }).click(); // Closing clears the filter.
+  await expect(page.locator('#search')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Search sessions' })).toBeFocused();
   await expect(page.locator('#list-page')).toHaveText('Could not load sessions. Try again.');
   failList = false;
   await page.getByRole('button', { name: 'Try again', exact: true }).click();

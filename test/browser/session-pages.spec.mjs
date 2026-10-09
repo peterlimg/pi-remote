@@ -16,6 +16,7 @@ test('a relay-first upgrade still pages and searches an older host catalog', asy
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
   await expect(page.locator('.session').last()).toContainText('Task 39');
+  await page.getByRole('button', { name: 'Search sessions' }).click();
   await page.locator('#search').fill('Task 614');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('Task 614');
@@ -76,6 +77,7 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   expect(requests.filter(packet => packet.limit > 60)).toHaveLength(0); // Stops at the end.
 
   hold = true;
+  await page.getByRole('button', { name: 'Search sessions' }).click();
   await page.locator('#search').fill('Task 44');
   await expect.poll(() => replies.length).toBe(1);
   const beforeTyping = requests.length;

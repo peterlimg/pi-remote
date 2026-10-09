@@ -189,7 +189,7 @@ test('zoom keeps session navigation and composer controls inside the visible vie
   for (const scale of [1.07, 2, 1]) {
     await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: scale });
     await page.evaluate(() => document.getElementById('sidebar').scrollTo(0, 0));
-    await fits(['#app', '#search', '#logout']);
+    await fits(['#app', '#search-open', '#logout']);
     await page.locator('.session').first().click();
     await page.locator('#prompt').fill('A draft keeps both Send and Abort available');
     await expect(page.locator('#send')).toBeVisible();
