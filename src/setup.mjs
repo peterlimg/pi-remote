@@ -242,10 +242,14 @@ export async function progress(ui, title, task, hint = '') {
     const finish = value => { if (!finished) { finished = true; done(value); } };
     task(controller.signal).then(() => finish({}), error => finish({ error }));
     return {
+      // Centered, so the full-screen cover does not read as a mostly empty page.
       render: width => {
-        const rows = Math.max(2, tui.terminal.rows), lines = [...wrap(title, width).map(theme.bold),
-          ...wrap((hint + ' Esc cancels.').trim(), width).map(text => theme.fg('muted', text))].slice(0, rows);
-        return [...lines, ...Array(rows - lines.length).fill('')];
+        const rows = Math.max(2, tui.terminal.rows);
+        const center = style => text => ' '.repeat(Math.max(0, Math.floor((width - text.length) / 2))) + style(text);
+        const body = [...wrap(title, width).map(center(theme.bold)), '',
+          ...wrap((hint + ' Esc cancels.').trim(), width).map(center(text => theme.fg('muted', text)))].slice(0, rows);
+        const top = Math.floor((rows - body.length) / 2);
+        return [...Array(top).fill(''), ...body, ...Array(rows - top - body.length).fill('')];
       },
       invalidate() {},
       handleInput(data) {
