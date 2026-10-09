@@ -16,7 +16,7 @@ import { e2eKey } from '../src/e2e.mjs';
 import { socket, until } from './helpers.mjs';
 import { sessionKey, acquireLock } from '../src/locks.mjs';
 import { restartAndResume } from '../scripts/restart-and-resume.mjs';
-import { fullScreen } from '../src/setup.mjs';
+import { fullScreen, phoneLogin } from '../src/setup.mjs';
 
 async function environment(t) {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-control-'));
@@ -351,6 +351,10 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   };
   let address, verified = false, checks = 0, tunnel = false;
   const waits = []; // Progress screens, to check their hints.
+  // The network-backed check is tested with real sockets in setup.test.mjs.
+  const verify = phoneLogin.verify;
+  phoneLogin.verify = async () => { checks++; if (!verified) throw new Error('Phone login failed'); };
+  t.after(() => { phoneLogin.verify = verify; });
   const guides = [];
   const ctx = { mode: 'tui', cwd: dir,
     sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
@@ -358,6 +362,9 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
       notify: (text, type) => notices.push({ text, type }), setStatus: (_key, text) => statuses.push(text),
       select: async () => assert.fail('Relay setup must not ask users to choose a transport'),
       input: async () => assert.fail('The relay address is entered in the guide'),
+      // Progress is a widget above the composer; record each one shown.
+      setWidget: (_key, factory) => { if (factory) waits.push(factory(undefined, { fg: (_color, text) => text, bold: text => text }).render(120).join(' ')); },
+      onTerminalInput: () => () => {},
       custom: async (factory, options) => {
         let closed = false, result, resolve;
         const finished = new Promise(r => { resolve = r; });
@@ -365,11 +372,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
           { matches: (key, name) => key === name.replace('tui.select.', '') },
           value => { closed = true; result = value; resolve(value); });
         const lines = component.render(120);
-        // Progress takes the editor's place; other screens never draw a box over the conversation.
-        assert.equal(options, /^(Starting|Checking|Creating|Installing) /.test(lines[0]) ? undefined : fullScreen);
-        // The network-backed check is tested with real sockets in setup.test.mjs.
-        if (lines[0].includes('Checking phone login')) { waits.push(lines.join(' ')); component.dispose(); checks++; return verified && {}; }
-        if (/^(Starting|Checking) Pi Remote|^Creating your tunnel/.test(lines[0])) { waits.push(lines.join(' ')); return finished; }
+        assert.equal(options, fullScreen); // Never a box over the middle of the conversation.
         if (lines[0].includes('Connect your phone')) { component.handleInput(tunnel ? 'confirm' : 'r'); return result; }
         if (lines[0].includes('Deploy your relay')) {
           // Walk every step, so the guide shows both tokens before pasting an address or cancelling.
@@ -402,6 +405,8 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   await run(''); // An unverified relay must not reveal a login QR.
   assert.equal(screens.length, 0);
   assert.equal(checks, 1);
+  assert.match(notices.at(-1).text, /Phone login failed/);
+  notices.length = 0;
   verified = true;
   await run('');
   assert.equal(guides.length, 2);

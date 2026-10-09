@@ -230,30 +230,31 @@ export function verifyRelay(config, signal = AbortSignal.timeout(90000)) {
 // Pi's default overlay is a box over the middle of the conversation; cover the whole terminal instead.
 export const fullScreen = { overlay: true, overlayOptions: { width: '100%', maxHeight: '100%', margin: 0 } };
 
-// Run a slow task in the editor's place, keeping the conversation visible and Esc available.
-// True when the task finishes, false when Esc cancels it; the task's error is rethrown.
 // Only a relay sleeps; a tunnel reaches this computer directly.
 export const wakeHint = config => config.relayUrl ? 'A sleeping Render service can take a minute.' : '';
 
+// Run a slow task with its status in a widget above the composer, which stays visible. Esc, raw or
+// in the kitty keyboard protocol, cancels it. True when the task finishes, false when cancelled;
+// the task's error is rethrown.
 export async function progress(ui, title, task, hint = '') {
-  const result = await ui.custom((tui, theme = plain, keys, done) => {
-    const controller = new AbortController();
-    let finished = false;
-    const finish = value => { if (!finished) { finished = true; done(value); } };
-    task(controller.signal).then(() => finish({}), error => finish({ error }));
-    return {
-      render: width => [...wrap(title, width).map(theme.bold),
-        ...wrap((hint + ' Esc cancels.').trim(), width).map(text => theme.fg('muted', text))],
-      invalidate() {},
-      handleInput(data) {
-        if (keys.matches(data, 'tui.select.cancel') || data === '\u0003') { finish(false); controller.abort(); }
-      },
-      dispose() { finished = true; controller.abort(); }
-    };
+  const controller = new AbortController(), key = 'pi-remote-progress';
+  let cancel;
+  const cancelled = new Promise(resolve => { cancel = resolve; });
+  ui.setWidget(key, (_tui, theme = plain) => ({
+    render: width => [...wrap(title, width).map(theme.bold),
+      ...wrap((hint + ' Esc cancels.').trim(), width).map(text => theme.fg('muted', text))],
+    invalidate() {}
+  }));
+  const unsubscribe = ui.onTerminalInput(data => {
+    if (data !== '\x1b' && data !== '\x1b[27u') return undefined;
+    cancel(false);
+    return { consume: true };
   });
-  if (result?.error) throw result.error;
-  return !!result;
+  try { return await Promise.race([task(controller.signal).then(() => true), cancelled]); }
+  finally { controller.abort(); unsubscribe(); ui.setWidget(key, undefined); }
 }
 
+// `phoneLogin.verify` is replaceable so the extension flow test can stand in for the network.
+export const phoneLogin = { verify: verifyRelay };
 export const checkRelay = (ui, config) => progress(ui, 'Checking phone login...',
-  signal => verifyRelay(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])), wakeHint(config));
+  signal => phoneLogin.verify(config, AbortSignal.any([signal, AbortSignal.timeout(90000)])), wakeHint(config));

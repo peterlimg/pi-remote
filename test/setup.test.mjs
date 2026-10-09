@@ -85,12 +85,12 @@ test('relay verification waits for a real host and rejects a wrong phone token',
   disconnect = connectRelay(service, publicUrl.replace('http:', 'ws:'), config.relayToken, { key: e2eKey(config), allowInsecure: true });
   await pending;
   assert.equal(verified, true);
-  const ui = { custom: factory => new Promise(resolve => {
-    const component = factory({ terminal: { rows: 6 } }, undefined, keys, value => { component.dispose(); resolve(value); });
-    const lines = component.render(80);
+  const ui = { onTerminalInput: () => () => {}, setWidget(_key, factory) {
+    if (!factory) return;
+    const lines = factory().render(80);
     assert.match(lines.join(''), /Checking phone login/);
-    assert.equal(lines.length, 2); // A compact block in the editor's place, not a full-screen cover.
-  }) };
+    assert.equal(lines.length, 2); // A compact widget above the composer.
+  } };
   assert.equal(await checkRelay(ui, options), true);
   await assert.rejects(checkRelay(ui, { ...options, clientToken: 'wrong' }), /client token/);
   await until(() => service.listenerCount('list') === 0);
@@ -114,12 +114,12 @@ test('a silent verification is bounded and cancellation closes its socket', asyn
   await rejected;
   await until(() => wss.clients.size === 0);
 
-  const ui = { custom: factory => new Promise(resolve => {
-    const component = factory({ terminal: { rows: 6 } }, undefined, keys, resolve);
-    assert.match(component.render(80).join(''), /Checking phone login/);
-    component.handleInput('cancel');
-    component.dispose();
-  }) };
+  let input;
+  const ui = { onTerminalInput: handler => { input = handler; return () => {}; }, setWidget(_key, factory) {
+    if (!factory) return;
+    assert.match(factory().render(80).join(''), /Checking phone login/);
+    setImmediate(() => assert.deepEqual(input('\x1b'), { consume: true }));
+  } };
   assert.equal(await checkRelay(ui, options), false);
   await until(() => wss.clients.size === 0);
 });
