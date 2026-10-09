@@ -622,6 +622,10 @@ function renderConversation(state) {
       return `${index ? verb[0].toLowerCase() + verb.slice(1) : verb} ${count} ${count === 1 ? noun : plural || noun + 's'}`;
     });
     const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
+    if (group.tools.some(tool => ['working', 'pending'].includes(tool.status))) {
+      // Negative delay keeps the breathing phase continuous when the row re-renders.
+      label.classList.add('tool-activity-live'); label.style.animationDelay = `-${Date.now() % 2400}ms`;
+    }
     group.summary.append(label);
     for (const [status, text] of [['error', 'failed'], ['working', 'running'], ['pending', 'pending']]) {
       const count = group.tools.filter(tool => tool.status === status).length;
