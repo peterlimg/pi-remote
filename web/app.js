@@ -303,8 +303,9 @@ function renderPagination() {
   $('sessions').setAttribute('aria-busy', String(listLoading));
   $('sessions').inert = listLoading;
   $('list-retry').hidden = !listError; $('list-retry').disabled = !connected || listLoading;
-  $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' :
-    listMatched ? `${sessions.length} of ${listMatched}` : '0 sessions';
+  // Scrolling loads more by itself; the line only speaks up while loading or after a failure.
+  $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' : '';
+  $('list-page').parentElement.hidden = !listError && !listLoading;
   $('list-empty').hidden = listLoading || !!listError || sessions.length > 0;
 }
 // Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
