@@ -216,7 +216,8 @@ pre.message-text { white-space: pre-wrap; }
 #reasoning-control { display: inline-flex; align-items: center; color: var(--muted); text-transform: capitalize; }
 #reasoning-value { overflow: hidden; text-overflow: ellipsis; }
 #reasoning-control:not(:first-child) { padding-left: 6px; }
-#reasoning-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Inset focus rings keep adjacent settings from overlapping. */
+.composer-settings .setting-control:focus-visible, #reasoning-control:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
 #reasoning-control:has(select:disabled) { opacity: .45; }
 #reasoning { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
 #resume { align-self: flex-start; padding-inline: 10px; }

@@ -33,6 +33,18 @@ test('reasoning changes preserve drafts, show applied levels and stay scoped to 
   await page.locator('#prompt').fill('Keep this draft');
   await expect(page.locator('#model')).toHaveText('claude-sonnet-4-6');
   await expect(effort).toHaveValue('high');
+  // Focus rings must stay inside each half of the shared settings pill.
+  await page.keyboard.press('Tab');
+  for (const id of ['reasoning', 'model']) {
+    const control = page.locator(`#${id === 'reasoning' ? 'reasoning-control' : id}`);
+    await page.locator(`#${id}`).focus();
+    await expect(control).toHaveCSS('outline-style', 'solid');
+    const outset = await control.evaluate(node => {
+      const style = getComputedStyle(node);
+      return parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    });
+    expect(outset).toBeLessThanOrEqual(0);
+  }
   await effort.selectOption('max');
   await expect(effort).toBeDisabled();
   await expect.poll(() => commands.length).toBe(1);
