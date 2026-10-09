@@ -274,11 +274,11 @@ pre.message-text { white-space: pre-wrap; }
 .picker-option-label { min-width: 0; flex: 1; }
 .picker-option strong { color: var(--text); }
 .picker-option .picker-current { flex-shrink: 0; color: var(--text); }
-.settings-picker footer { padding: 8px 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
-.settings-picker footer:has(#picker-help:empty) { display: none; }
+.settings-picker footer { flex-shrink: 0; }
 #picker-help { margin: 0; overflow-wrap: anywhere; }
+#picker-help:not(:empty) { padding: 8px 12px; border-top: 1px solid var(--line); }
 #picker-help.picker-error { color: var(--error); }
-#model-retry { padding-left: 0; }
+#model-retry { margin: 0 12px 8px; padding-left: 0; }
 .mobile-only { display: none; }
 @media (hover: hover) {
   button:not(:disabled):hover { filter: brightness(.92); }

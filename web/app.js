@@ -795,9 +795,7 @@ function renderModels() {
       const key = `${model.provider}/${model.id}`, current = key === picker.current;
       const button = el('button', undefined, 'command-option picker-option'); button.type = 'button';
       button.setAttribute('aria-pressed', String(current));
-      const label = el('span', undefined, 'picker-option-label');
-      label.append(el('strong', model.name || model.id), el('span', model.id));
-      button.append(label);
+      button.append(el('strong', model.name || model.id, 'picker-option-label'));
       if (current) button.append(el('span', 'Current', 'picker-current'));
       button.disabled = !!picker.busy;
       button.addEventListener('click', () => chooseModel(picker, key));
