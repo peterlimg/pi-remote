@@ -1,17 +1,57 @@
 import { diffState } from '../web/protocol.js';
 import { parseObject, send, protectSocket } from './config.mjs';
 
+// Scrolling phones keep the top `limit` rows. They get only rows that changed since the
+// last send, so a live update costs one row however far the list was scrolled.
+export function sessionWindow(service) {
+  let view;
+  const changes = () => {
+    const { matches, total } = service.matches(view.query);
+    const rows = matches.slice(0, view.limit), changed = [];
+    for (const row of rows) {
+      const json = JSON.stringify(row);
+      if (view.sent.get(row.id) !== json) { view.sent.set(row.id, json); changed.push(row); }
+    }
+    const keep = new Set(rows.map(row => row.id)), removed = [...view.sent.keys()].filter(id => !keep.has(id));
+    for (const id of removed) view.sent.delete(id);
+    const meta = { total, matched: matches.length, limit: view.limit, query: view.query, warnings: service.warnings, allowResume: service.allowResume };
+    const unchanged = !changed.length && !removed.length && JSON.stringify(meta) === view.meta;
+    view.meta = JSON.stringify(meta);
+    return { changes: changed, removed, ...meta, unchanged };
+  };
+  return {
+    get active() { return view !== undefined; },
+    request({ limit, query = '' }) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
+      const reset = view?.query !== query;
+      if (reset) view = { query, sent: new Map() };
+      view.limit = limit;
+      const { unchanged, ...value } = changes();
+      return { reset, ...value };
+    },
+    // Undefined when the phone already has everything.
+    update() { const { unchanged, ...value } = changes(); return unchanged ? undefined : value; }
+  };
+}
+
 export function attachClient(socket, service) {
   let selected, previous;
   let version = 0, listOptions = {};
   const list = options => {
     const page = service.list(options);
-    listOptions = { offset: page.offset, limit: page.limit, query: page.query };
+    listOptions = { offset: page.offset, query: page.query };
     return page;
   };
+  const scroll = sessionWindow(service);
   let busy = 0, closed = false, listTimer, stateTimer;
   const onList = () => {
-    if (!listTimer) listTimer = setTimeout(() => { listTimer = undefined; if (!closed) send(socket, { type: 'sessions', ...list(listOptions) }); }, 150);
+    if (!listTimer) listTimer = setTimeout(() => {
+      listTimer = undefined;
+      if (closed) return;
+      if (!scroll.active) { send(socket, { type: 'sessions', ...list(listOptions) }); return; }
+      const update = scroll.update();
+      if (update) send(socket, { type: 'sessions', ...update });
+    }, 150);
   };
   const onState = id => {
     if (selected === id && !stateTimer) stateTimer = setTimeout(() => {
@@ -38,7 +78,7 @@ export function attachClient(socket, service) {
       try {
         let value;
         if (message.op === 'ping') value = { pong: true };
-        else if (message.op === 'list') value = list(message);
+        else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);
           selected = message.sessionId; version = 0; previous = structuredClone(state);

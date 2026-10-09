@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
+import { sessionWindow } from '../../src/client-channel.mjs';
 
 test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }) => {
   let client;
@@ -14,21 +15,24 @@ test('same-project sessions show their tasks, previews, status and activity with
     ...Array.from({ length: 672 }, (_, i) => ({ id: 'saved-' + i, title: 'Pi · Rill', cwd: '/projects/Rill', status: 'saved', updatedAt: now - i * 3600000,
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
-  const service = { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true };
-  let options = {}, failList = false;
+  const service = Object.assign(Object.create(SessionService.prototype),
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true });
+  let scroll, failList = false;
   const requests = [];
-  const list = () => SessionService.prototype.list.call(service, options);
-  const publish = () => client.send(JSON.stringify({ type: 'sessions', ...list() }));
+  // Mirrors the host channel: whole pages until the phone scrolls or searches, then diffs.
+  const publish = () => {
+    const update = scroll.active ? scroll.update() : service.list();
+    if (update) client.send(JSON.stringify({ type: 'sessions', ...update }));
+  };
   await page.routeWebSocket('**/ws', ws => {
-    client = ws;
+    client = ws; scroll = sessionWindow(service);
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
-      if (packet.type === 'auth') { options = {}; ws.send(JSON.stringify({ type: 'ready' })); publish(); }
+      if (packet.type === 'auth') { ws.send(JSON.stringify({ type: 'ready' })); publish(); }
       else if (packet.op === 'list') {
         requests.push(packet);
         if (failList) { ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: false, error: 'List unavailable' })); return; }
-        options = packet;
-        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: list() }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: scroll.request(packet) }));
       } else if (packet.op === 'watch') {
         ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 1, state: states.find(s => s.id === packet.sessionId) }));
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));

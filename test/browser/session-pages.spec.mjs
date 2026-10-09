@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
+import { sessionWindow } from '../../src/client-channel.mjs';
 
 test('a relay-first upgrade still pages and searches an older host catalog', async ({ page }) => {
   await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
@@ -24,20 +25,21 @@ test('a relay-first upgrade still pages and searches an older host catalog', asy
 test('search ignores stale replies, debounces typing, and restores its scroll window after reconnect', async ({ page }) => {
   const states = Array.from({ length: 45 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/projects/app',
     status: 'saved', updatedAt: 45 - i, messages: [] }));
-  const service = { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true };
+  const service = Object.assign(Object.create(SessionService.prototype),
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true });
   states[0].status = 'idle'; service.live.set('0', { state: states[0], socket: {} });
-  let client, hold = false;
+  let client, scroll, hold = false;
   const requests = [], replies = [];
   await page.routeWebSocket('**/ws', ws => {
-    client = ws;
+    client = ws; scroll = sessionWindow(service);
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
       if (packet.type === 'auth') {
         ws.send(JSON.stringify({ type: 'ready' }));
-        ws.send(JSON.stringify({ type: 'sessions', ...SessionService.prototype.list.call(service) }));
+        ws.send(JSON.stringify({ type: 'sessions', ...service.list() }));
       } else if (packet.op === 'list') {
         requests.push(packet);
-        const response = JSON.stringify({ type: 'response', id: packet.id, ok: true, value: SessionService.prototype.list.call(service, packet) });
+        const response = JSON.stringify({ type: 'response', id: packet.id, ok: true, value: scroll.request(packet) });
         const reply = () => ws.send(response);
         if (hold) replies.push(reply); else reply();
       } else if (packet.op === 'watch') {
@@ -63,6 +65,13 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(45);
   await expect(page.locator('#list-page')).toHaveText('45 of 45');
+  // A live update carries just the changed row, even deep in the list.
+  states[44].title = 'Renamed last task';
+  const update = scroll.update();
+  expect(update.changes.map(row => row.id)).toEqual(['44']);
+  client.send(JSON.stringify({ type: 'sessions', ...update }));
+  await expect(page.locator('.session').last()).toContainText('Renamed last task');
+  await expect(page.locator('.session')).toHaveCount(45);
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   expect(requests.filter(packet => packet.limit > 60)).toHaveLength(0); // Stops at the end.
 
@@ -75,11 +84,11 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   await expect.poll(() => replies.length).toBe(2);
   expect(requests.length - beforeTyping).toBe(1);
   expect(requests.at(-1)).toMatchObject({ query: 'task 43', limit: 20 });
-  replies[1]();
+  // Replies arrive in request order; the superseded one must not stick.
+  replies[0](); replies[1]();
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('Task 43');
-  replies[0]();
-  client.send(JSON.stringify({ type: 'sessions', ...SessionService.prototype.list.call(service, { query: 'task 44' }) }));
+  client.send(JSON.stringify({ type: 'sessions', ...service.list({ query: 'task 44' }) }));
   await expect(page.locator('.session')).toContainText('Task 43');
   hold = false;
   client.close({ code: 1012, reason: 'Reconnect search' });

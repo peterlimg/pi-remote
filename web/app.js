@@ -196,6 +196,8 @@ function connect() {
         versions.set(selected, packet.version); cache.set(selected, state); renderConversation(state);
       } catch { request('watch', { sessionId: selected }).catch(e => notice(e.message)); }
     } else if (packet.type === 'response') {
+      // List diffs apply here, in arrival order with pushes, even if the caller gave up waiting.
+      if (packet.ok && packet.value?.changes) receiveList(packet.value);
       const item = pending.get(packet.id);
       if (!item) return;
       clearTimeout(item.timer); pending.delete(packet.id);
@@ -247,22 +249,33 @@ function age(date) {
   if (minutes < 10080) return Math.floor(minutes / 1440) + 'd';
   return shortDate.format(date);
 }
+const isOnline = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
+// Must match the host's order so merged rows land where the host expects.
+const listOrder = (a, b) => Number(isOnline(b)) - Number(isOnline(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
     legacyList = packet;
-    const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
     const matches = packet.sessions.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(searchQuery))
-      .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt);
-    packet = { ...packet, sessions: matches.slice(0, listLimit), total: packet.sessions.length, matched: matches.length,
-      query: searchQuery, limit: listLimit };
+      .sort(listOrder);
+    packet = { ...packet, sessions: matches.slice(0, listLimit), total: packet.sessions.length, matched: matches.length, query: searchQuery };
   }
-  // Older hosts omit `limit` and always answer with 20; loadMore stops there.
-  if ((packet.query ?? '') !== searchQuery || (packet.limit ?? listLimit) !== listLimit) return;
+  let rows;
+  if (packet.changes) {
+    // Host diffs build on each other, so every one applies in arrival order, even for a superseded search.
+    const byId = new Map(packet.reset ? [] : sessions.map(item => [item.id, item]));
+    for (const id of packet.removed) byId.delete(id);
+    for (const item of packet.changes) byId.set(item.id, item);
+    rows = [...byId.values()].sort(listOrder);
+  } else {
+    // Whole pages: the first push after connecting, and hosts that predate scroll windows (always 20 rows).
+    if ((packet.query ?? '') !== searchQuery) return;
+    rows = packet.sessions; listLoading = false; listError = '';
+  }
   const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
-  sessions = packet.sessions; allowResume = packet.allowResume === true;
+  sessions = rows; allowResume = packet.allowResume === true;
   listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
-  listLoading = false; listError = ''; showApp();
+  showApp();
   for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt) unread.add(item.id);
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
   renderList(); updateControls();
@@ -277,7 +290,10 @@ async function loadList() {
   listLoading = true; listError = ''; renderPagination();
   try {
     const page = legacyList || await request('list', { limit: listLimit, query: searchQuery });
-    if (generation === listRequest) receiveList(page);
+    const current = generation === listRequest;
+    if (current) { listLoading = false; listError = ''; }
+    if (current && !page.changes) receiveList(page);
+    else if (current) renderPagination();
   } catch (e) {
     if (generation !== listRequest) return;
     listLoading = false; listError = e.message; renderPagination();
@@ -303,10 +319,9 @@ function renderList() {
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
-  const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
   for (const [label, items] of [
-    ['Online', matches.filter(online)],
-    ['Saved & offline', matches.filter(item => !online(item))]
+    ['Online', matches.filter(isOnline)],
+    ['Saved & offline', matches.filter(item => !isOnline(item))]
   ]) {
     if (!items.length) continue;
     const group = el('section', undefined, 'session-group');

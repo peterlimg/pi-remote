@@ -91,11 +91,24 @@ test('session pages and search stay bounded on initial load, updates and reconne
   host.service.emit('list');
   const update = await until(() => client.messages.find(x => x.type === 'sessions' && x.offset === 20));
   assert.deepEqual(update.sessions, second.sessions);
+  // Scroll windows send only rows the phone does not already have.
   const window = (await client.request('list', { limit: 40 })).value;
-  assert.equal(window.sessions.length, 40); assert.equal(window.limit, 40);
+  assert.equal(window.reset, true); assert.equal(window.changes.length, 40); assert.equal(window.matched, 675);
+  const more = (await client.request('list', { limit: 60 })).value;
+  assert.equal(more.reset, false); assert.deepEqual(more.removed, []);
+  assert.deepEqual(more.changes.map(x => x.id), Array.from({ length: 20 }, (_, i) => String(637 - i)));
+  const pushes = () => client.messages.filter(x => x.type === 'sessions' && x.changes);
+  host.service.catalog.get('650').title = 'Renamed';
   host.service.emit('list');
-  const grown = await until(() => client.messages.find(x => x.type === 'sessions' && x.limit === 40));
-  assert.deepEqual(grown.sessions, window.sessions);
+  await until(() => pushes().length === 1);
+  assert.deepEqual(pushes()[0].changes.map(x => x.title), ['Renamed']); assert.deepEqual(pushes()[0].removed, []);
+  host.service.emit('list');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(pushes().length, 1); // Nothing changed, nothing sent.
+  host.service.catalog.get('651').updatedAt = -1; // Sinks out of the window; the next row moves in.
+  host.service.emit('list');
+  await until(() => pushes().length === 2);
+  assert.deepEqual(pushes()[1].removed, ['651']); assert.deepEqual(pushes()[1].changes.map(x => x.id), ['617']);
   const search = (await client.request('list', { query: ' NEEDLE ' })).value;
   assert.equal(search.total, 675); assert.equal(search.matched, 1);
   assert.deepEqual(search.sessions.map(x => x.id), ['674']);
@@ -108,7 +121,7 @@ test('session pages and search stay bounded on initial load, updates and reconne
   const clamped = (await client.request('list', { offset: 660 })).value;
   assert.equal(clamped.offset, 640); assert.equal(clamped.requestOffset, 660);
   assert.equal(clamped.sessions.length, 10);
-  for (const options of [{ offset: -1 }, { offset: 1.5 }, { offset: '20' }, { limit: 0 }, { limit: '40' }, { query: {} }, { query: 'a'.repeat(501) }]) {
+  for (const options of [{ offset: -1 }, { offset: 1.5 }, { offset: '20' }, { limit: 0 }, { limit: '40' }, { limit: 20, query: {} }, { query: {} }, { query: 'a'.repeat(501) }]) {
     assert.equal((await client.request('list', options)).ok, false);
   }
   const reconnected = await connect();
