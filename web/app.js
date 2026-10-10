@@ -452,8 +452,8 @@ async function selectSession(id) {
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
 function clearThreadImages(keep = new Set()) {
-  $('image-viewer').close();
   for (const [id, image] of threadImages) if (!keep.has(id)) {
+    if (image.url && $('image-viewer').querySelector('img').src === image.url) $('image-viewer').close();
     imageObserver.unobserve(image.node);
     clearTimeout(image.retryTimer);
     if (image.url) URL.revokeObjectURL(image.url);

@@ -52,6 +52,10 @@ test('thread images load lazily, survive updates, open full size and retry failu
   await page.keyboard.press('Escape');
   await expect(viewer).toBeHidden();
   await page.locator('.message.user .thread-images a').first().click();
+  const streamed = [...state.messages, cleanMessage({ role: 'assistant', content: 'Streaming a new reply.' }, 'streamed')];
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state: { ...state, status: 'working', messages: streamed } }));
+  await expect(page.locator('#transcript')).toContainText('Streaming a new reply.');
+  await expect(viewer).toBeVisible(); // New AI output must not dismiss the image.
   await viewer.getByRole('button', { name: 'Close image' }).click();
   await expect(viewer).toBeHidden();
   await page.locator('.tool-activity > summary').click();
