@@ -94,6 +94,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon { display: grid; place-items: center; height: 24px; color: var(--muted); }
 .session-icon[data-status=waiting] { color: var(--warning); }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
+.session-icon:is([data-status=idle], [data-status=working]) { color: var(--accent); }
+.session-icon:is([data-status=idle], [data-status=working]) circle { fill: currentColor; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
 .session-top { align-items: flex-start; }
