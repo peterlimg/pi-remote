@@ -56,7 +56,8 @@ window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
 fitViewport();
 const versions = new Map();
-const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
+let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
+const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
 const threadImages = new Map(), usageSummaries = new Map();
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
@@ -244,7 +245,8 @@ function logout() {
   for (const draft of submissions.values()) releaseImages(draft.attachments);
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
-  drafts.clear(); cache.clear(); unread.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  localStorage.removeItem('pi-remote-seen'); seen = {};
+  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -285,11 +287,10 @@ function receiveList(packet) {
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
-  const before = new Map(sessions.map(x => [x.id, x.updatedAt]));
   sessions = rows; allowResume = packet.allowResume === true;
   listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
   showApp();
-  for (const item of sessions) if (item.id !== selected && before.has(item.id) && before.get(item.id) !== item.updatedAt && item.previewRole !== 'user') unread.add(item.id);
+  markSeen();
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
   renderList(); updateControls();
   const warnings = packet.warnings || [];
@@ -350,7 +351,7 @@ function renderList() {
       const top = el('div', undefined, 'session-top');
       const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
       top.append(title);
-      if (unread.has(item.id)) top.append(Object.assign(el('span', undefined, 'unread-dot'), { title: 'New reply' }));
+      if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) top.append(Object.assign(el('span', undefined, 'unread-dot'), { title: 'New reply' }));
       if (item.status === 'working') top.append(el('span', undefined, 'connection-spinner session-spinner'));
       body.append(top);
       if (item.preview && item.preview !== item.title) {
@@ -396,11 +397,23 @@ function renderProject(cwd = '') {
   $('project-name').textContent = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
   $('project-name').hidden = !cwd;
 }
+// Read state lives per device: the last activity time of each session as of when its thread was on screen.
+// Sessions never seen before start as read so a fresh device doesn't light up the whole history.
+function markSeen() {
+  const reading = document.visibilityState === 'visible' && document.querySelector('main').getClientRects().length > 0;
+  let changed = false;
+  for (const item of sessions) {
+    if ((item.id in seen && !(reading && item.id === selected)) || seen[item.id] === item.updatedAt) continue;
+    seen[item.id] = item.updatedAt; changed = true;
+  }
+  if (changed) localStorage.setItem('pi-remote-seen', JSON.stringify(seen));
+}
+document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
   if (selected !== id) clearThreadImages();
-  selected = id; selectedSummary = sessions.find(item => item.id === id); unread.delete(id); $('prompt').value = drafts.get(id) || '';
+  selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
@@ -410,7 +423,7 @@ async function selectSession(id) {
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!history.state?.session) history.pushState({ session: true }, '');
-  $('app').classList.add('viewing'); renderList(); notice('');
+  $('app').classList.add('viewing'); markSeen(); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
