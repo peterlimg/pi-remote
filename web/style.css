@@ -112,9 +112,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }
-aside footer:has(#diagnostics[hidden]) { display: none; }
-aside footer { border-top: 1px solid var(--line); padding: 12px 8px 0; margin-top: 8px; font-size: 12px; color: var(--muted); }
-#diagnostics { margin-top: 8px; color: var(--warning); }
+#diagnostics { margin: 0 8px 8px; font-size: 12px; color: var(--warning); }
 #diagnostics summary { min-height: 44px; padding: 10px 0; }
 #warnings { max-height: 20dvh; overflow: auto; padding-left: 18px; overflow-wrap: anywhere; margin: 0; }
 #warnings li { margin-bottom: 8px; }
