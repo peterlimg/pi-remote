@@ -420,6 +420,12 @@ function markSeen() {
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
   closePicker();
+  // iOS slides in a screenshot of the list, taken at pushState, on edge-swipe back, however old.
+  // Paint the list empty first so that screenshot can't show stale rows.
+  if (!history.state?.session && matchMedia('(max-width: 700px)').matches) {
+    $('sessions').replaceChildren();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
   if (selected) drafts.set(selected, $('prompt').value);
   if (selected !== id) clearThreadImages();
   selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
