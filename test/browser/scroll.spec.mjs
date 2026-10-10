@@ -33,6 +33,10 @@ test('the bottom button returns to the latest message and resumes following repl
   await expect(transcript).toContainText('Thread history');
   await expect.poll(gap).toBeLessThan(1);
   await expect(button).toBeHidden();
+  state.status = 'working'; snapshot();
+  await expect(page.locator('#agent-activity')).toBeVisible();
+  await expect.poll(gap).toBeLessThan(1);
+  state.status = 'idle'; snapshot();
   for (const [size, theme, name] of [
     [{ width: 390, height: 844 }, 'light', 'mobile'],
     [{ width: 1280, height: 900 }, 'dark', 'desktop']

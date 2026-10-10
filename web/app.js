@@ -9,9 +9,18 @@ function atThreadBottom() {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
 }
 function updateScrollButton() { $('scroll-bottom').hidden = atThreadBottom(); }
-$('transcript').addEventListener('scroll', updateScrollButton, { passive: true });
+// Shrinking the transcript (activity row, taller composer) keeps scrollTop, hiding the last message.
+let pinnedToBottom = true;
+$('transcript').addEventListener('scroll', () => {
+  const box = $('transcript');
+  pinnedToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 2;
+  updateScrollButton();
+}, { passive: true });
 $('transcript').addEventListener('toggle', updateScrollButton, true);
-new ResizeObserver(updateScrollButton).observe($('transcript'));
+new ResizeObserver(() => {
+  if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
+  updateScrollButton();
+}).observe($('transcript'));
 $('scroll-bottom').addEventListener('click', () => {
   $('transcript').scrollTop = $('transcript').scrollHeight;
   $('transcript').focus({ preventScroll: true });
