@@ -44,8 +44,10 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await expect(connecting).toBeVisible();
   await expect(connecting).toHaveText('Connecting');
   await expect(page.locator('#composer-hint')).toBeHidden();
+  // Connecting replaces the settings pill in the toolbar instead of sitting on the draft.
   const row = await connecting.boundingBox(), prompt = await page.locator('#prompt').boundingBox();
-  expect(row.y + row.height).toBeLessThanOrEqual(prompt.y);
+  expect(row.y).toBeGreaterThanOrEqual(prompt.y + prompt.height);
+  await expect(page.locator('.composer-settings')).toBeHidden();
   await page.clock.runFor(1100);
   await expect.poll(() => channels.length).toBe(2);
   channels[1].send(JSON.stringify({ type: 'notice', error: 'Computer is offline' }));

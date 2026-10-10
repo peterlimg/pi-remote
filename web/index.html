@@ -62,7 +62,6 @@
       <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span>Pondering…</span></div>
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
       <form id="composer" class="composer" hidden>
-        <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span>Connecting</div>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
         <section id="settings-picker" class="command-menu settings-picker" aria-label="Choose a model" hidden>
           <div class="picker-header">
@@ -84,6 +83,7 @@
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
           <label id="attach" class="quiet" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images" accept="image/jpeg,image/png,image/gif,image/webp" multiple></label>
+          <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span>Connecting</div>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="settings-picker" hidden></button>
             <button id="reasoning-control" class="setting-control" type="button" aria-label="Reasoning effort" title="Change reasoning effort" aria-expanded="false" aria-controls="settings-picker" hidden><span id="reasoning-value"></span></button>
