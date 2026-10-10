@@ -132,6 +132,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
 #transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; overscroll-behavior: contain; }
+#transcript:focus-visible { outline: none; }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
 #transcript::before, #transcript::after { content: ''; display: block; height: var(--transcript-gap); }
 .message, .tool, #transcript > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
