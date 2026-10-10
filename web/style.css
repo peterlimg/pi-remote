@@ -160,7 +160,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-activity { max-width: var(--content-width); margin: 0 auto 18px; color: var(--muted); }
 .tool-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; }
 .tool-activity > summary::-webkit-details-marker { display: none; }
-.tool-activity > summary::after { content: ''; width: 8px; height: 8px; margin: 0 4px 0 auto; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
+.tool-activity > summary::after { content: ''; width: 8px; height: 8px; margin: 0 4px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
 .tool-activity[open] > summary::after { transform: rotate(135deg); }
 .tool-activity-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-activity-text { display: flex; flex-direction: column; min-width: 0; }
