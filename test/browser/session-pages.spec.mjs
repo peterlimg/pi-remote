@@ -20,7 +20,6 @@ test('a relay-first upgrade still pages and searches an older host catalog', asy
   await page.locator('#search').fill('Task 614');
   await expect(page.locator('.session')).toHaveCount(1);
   await expect(page.locator('.session')).toContainText('Task 614');
-  await expect(page.locator('#count')).toHaveText('1 / 615');
 });
 
 test('search ignores stale replies, debounces typing, and restores its scroll window after reconnect', async ({ page }) => {
@@ -95,6 +94,5 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   hold = false;
   client.close({ code: 1012, reason: 'Reconnect search' });
   await expect.poll(() => requests.filter(packet => packet.query === 'task 43').length).toBe(2);
-  await expect(page.locator('#count')).toHaveText('1 / 45');
   await expect(page.locator('.session')).toContainText('Task 43');
 });

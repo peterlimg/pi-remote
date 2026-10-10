@@ -76,7 +76,7 @@ const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
-let listLimit = 20, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
@@ -258,7 +258,7 @@ function logout() {
   clearThreadImages();
   localStorage.removeItem('pi-remote-seen'); seen = {};
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
-  clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listTotal = 0; listMatched = 0; listLoading = true; listError = '';
+  clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -299,7 +299,7 @@ function receiveList(packet) {
     rows = packet.sessions; listLoading = false; listError = '';
   }
   sessions = rows; allowResume = packet.allowResume === true;
-  listTotal = packet.total ?? sessions.length; listMatched = packet.matched ?? sessions.length;
+  listMatched = packet.matched ?? sessions.length;
   showApp();
   markSeen();
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
@@ -337,7 +337,6 @@ function loadMore() {
 }
 function renderList() {
   const matches = sessions;
-  $('count').textContent = searchQuery ? `${listMatched} / ${listTotal}` : String(listTotal);
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();

@@ -47,7 +47,8 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session')).toHaveCount(20);
   await expect(page.locator('#list-page')).toBeHidden();
   expect(requests).toHaveLength(0); // No eager fetch of the remaining pages.
-  await expect(page.locator('#count')).toHaveText('675');
+  await expect(page.locator('.brand h2')).toHaveText('Sessions');
+  await expect(page.locator('.brand .badge')).toHaveCount(0);
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
   const login = online.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
@@ -75,7 +76,6 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session')).toContainText('session 672');
   await page.locator('#search').fill('authentication');
   await expect(page.locator('.session')).toHaveCount(1);
-  await expect(page.locator('#count')).toHaveText('1 / 675');
   await page.locator('#search').fill('no such task');
   await expect(page.locator('#list-empty')).toHaveText('No matching sessions. Try another task or project.');
   failList = true;

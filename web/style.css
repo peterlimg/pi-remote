@@ -68,7 +68,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
 .shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
-.brand h2 { display: flex; align-items: baseline; gap: 8px; font-size: 16px; font-weight: 600; margin: 0; }
+.brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { margin-left: auto; font-size: 12px; }
 #connection { margin: 0 8px 8px; font-size: 12px; color: var(--warning); }
 .badge { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
