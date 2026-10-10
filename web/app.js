@@ -453,6 +453,7 @@ async function selectSession(id) {
   try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
 }
 function clearThreadImages(keep = new Set()) {
+  $('image-viewer').close();
   for (const [id, image] of threadImages) if (!keep.has(id)) {
     imageObserver.unobserve(image.node);
     clearTimeout(image.retryTimer);
@@ -463,8 +464,12 @@ function clearThreadImages(keep = new Set()) {
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);
   const link = el('a'), preview = el('img');
-  link.href = image.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+  link.href = image.url;
   link.setAttribute('aria-label', 'Open image');
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    $('image-viewer').querySelector('img').src = image.url; $('image-viewer').showModal();
+  });
   preview.src = image.url; preview.alt = 'Attached image';
   preview.onerror = () => {
     URL.revokeObjectURL(image.url); image.url = undefined;
@@ -930,6 +935,8 @@ $('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
 $('picker-cancel').addEventListener('click', () => closePicker(true));
+// Any tap on the sheet or its backdrop dismisses it; Escape is native.
+$('image-viewer').addEventListener('click', () => $('image-viewer').close());
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {
