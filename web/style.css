@@ -265,10 +265,10 @@ pre.message-text { white-space: pre-wrap; }
 .dialog footer .secondary { margin-left: auto; }
 .dialog footer .hint { width: 100%; margin: 0; overflow-wrap: anywhere; }
 .dialog-error { color: var(--error); }
-.image-viewer { width: 100%; max-width: var(--content-width); max-height: calc(var(--viewport-height, 100dvh) - 48px); margin: auto auto 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); border: 0; border-radius: 16px 16px 0 0; background: #111; }
+.image-viewer { width: 100%; max-width: var(--content-width); max-height: calc(var(--viewport-height, 100dvh) - 48px); margin: auto auto 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); border: 0; border-radius: 16px 16px 0 0; background: color-mix(in srgb, var(--panel) 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
 .image-viewer[open] { display: flex; animation: sheet-up .2s ease-out; }
 .image-viewer:focus-visible { outline: none; }
-.image-viewer::backdrop { background: rgb(0 0 0 / .6); }
+.image-viewer::backdrop { background: rgb(0 0 0 / .4); }
 .image-viewer button { position: absolute; top: 16px; right: 16px; }
 .image-viewer img { display: block; min-height: 0; max-width: 100%; max-height: calc(var(--viewport-height, 100dvh) - 64px); margin: 0 auto; border-radius: 8px; object-fit: contain; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
