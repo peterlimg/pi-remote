@@ -229,6 +229,11 @@ test('actual extension registers, reattaches after host restart and releases own
   host.service.live.get(id).state.supportsImages = true;
   assert.equal((await client.request('command', { sessionId: id, command: imageCommand })).value.ok, true);
   assert.deepEqual(prompts.at(-1), { text: [{ type: 'text', text: 'Look here' }, ...images], options: { deliverAs: 'steer', expandPromptTemplates: true } });
+  const { uploadId } = (await client.request('upload', { image: images[0] })).value;
+  const staged = { ...imageCommand, images: [{ type: 'image', uploadId }] };
+  assert.equal((await client.request('command', { sessionId: id, command: staged })).value.ok, true);
+  assert.deepEqual(prompts.at(-1).text, [{ type: 'text', text: 'Look here' }, ...images]);
+  assert.match((await client.request('command', { sessionId: id, command: staged })).error, /expired/);
   assert.equal((await host.service.command(id, randomUUID(), { ...imageCommand, type: 'followUp', text: '' })).ok, true);
   assert.deepEqual(prompts.at(-1), { text: images, options: { deliverAs: 'followUp', expandPromptTemplates: true } });
   await emit('message_start', { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: [{ type: 'text', text: 'streamed' }] } });

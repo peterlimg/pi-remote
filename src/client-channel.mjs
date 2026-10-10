@@ -1,4 +1,6 @@
 import { diffState } from '../web/protocol.js';
+import { randomUUID } from 'node:crypto';
+import { validateImages, MAX_IMAGES, MAX_IMAGE_BYTES } from '../web/images.js';
 import { parseObject, send, protectSocket } from './config.mjs';
 
 // Scrolling phones keep the top `limit` rows. They get only rows that changed since the
@@ -44,6 +46,9 @@ export function attachClient(socket, service) {
   };
   const scroll = sessionWindow(service);
   let busy = 0, closed = false, listTimer, stateTimer;
+  // Images staged before send live only as long as this socket; the phone falls back to inline data.
+  const uploads = new Map();
+  let uploadBytes = 0;
   const onList = () => {
     if (!listTimer) listTimer = setTimeout(() => {
       listTimer = undefined;
@@ -68,7 +73,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -85,6 +90,13 @@ export function attachClient(socket, service) {
           send(socket, { type: 'snapshot', sessionId: selected, version, state }); value = { watching: selected };
         } else if (message.op === 'image') {
           value = service.getImage(message.sessionId, message.imageId);
+        } else if (message.op === 'upload') {
+          const [image] = validateImages([message.image]);
+          // ponytail: removed drafts stay staged until the socket closes; the cap bounds that leak.
+          if (uploads.size >= MAX_IMAGES * 2 || uploadBytes + image.data.length > MAX_IMAGE_BYTES * 3) throw new Error('Too many staged images');
+          const uploadId = randomUUID();
+          uploads.set(uploadId, image); uploadBytes += image.data.length;
+          value = { uploadId };
         } else if (message.op === 'models') {
           value = await service.getModels(message.sessionId);
         } else if (message.op === 'commands') {
@@ -92,7 +104,17 @@ export function attachClient(socket, service) {
         } else if (message.op === 'commandResult') {
           value = await service.journal.result(message.sessionId, message.requestId);
         } else if (message.op === 'command') {
-          value = await service.command(message.sessionId, message.id, message.command);
+          const images = message.command?.images?.map?.(image => {
+            if (typeof image?.uploadId !== 'string') return image;
+            const staged = uploads.get(image.uploadId);
+            if (!staged) throw new Error('Image upload expired. Attach it again.');
+            return staged;
+          });
+          value = await service.command(message.sessionId, message.id, images ? { ...message.command, images } : message.command);
+          for (const image of message.command?.images || []) {
+            const staged = uploads.get(image?.uploadId);
+            if (staged) { uploads.delete(image.uploadId); uploadBytes -= staged.data.length; }
+          }
         } else if (message.op === 'new') {
           value = await service.newSession(message.sessionId, message.id);
         } else if (message.op === 'resume') {

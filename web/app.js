@@ -47,7 +47,7 @@ fitViewport();
 const versions = new Map();
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), unread = new Set(), pending = new Map();
 const threadImages = new Map(), usageSummaries = new Map();
-let imageQueue = Promise.resolve();
+let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) {
     imageObserver.unobserve(entry.target);
@@ -60,7 +60,7 @@ let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, settingsPicker, supportsImages = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listTotal = 0, listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -109,7 +109,7 @@ function connection(text) { $('connection').textContent = text; $('connection').
 function disconnect() {
   closePicker();
   listRequest++; legacyList = undefined;
-  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsCommandResults = false; allowResume = false;
+  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -161,6 +161,7 @@ function connect() {
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
       supportsImages = packet.supportsImages === true;
+      supportsUploads = packet.supportsUploads === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
@@ -1095,6 +1096,27 @@ $('prompt').addEventListener('keydown', event => {
     sendMessage(event.altKey ? 'followUp' : 'prompt');
   }
 });
+function readImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ type: 'image', mimeType: file.type, data: reader.result.slice(reader.result.indexOf(',') + 1) });
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}. Remove it and attach it again.`));
+    reader.readAsDataURL(file);
+  });
+}
+// Stage each image on the host as soon as it is attached, so Send only carries an ID.
+function uploadImage(image) {
+  if (!supportsUploads) return;
+  const ws = socket;
+  image.uploading = true;
+  image.upload = uploadQueue = uploadQueue.then(async () => {
+    try {
+      const { uploadId } = await request('upload', { image: await readImage(image.file) });
+      if (socket === ws) image.staged = { uploadId, socket: ws };
+    } catch {} // Send falls back to inline data.
+    finally { image.uploading = false; if (imageDrafts.get(selected)?.includes(image)) renderImages(); }
+  });
+}
 function releaseImages(images) {
   for (const image of images) URL.revokeObjectURL(image.url);
 }
@@ -1111,7 +1133,10 @@ function renderImages() {
       URL.revokeObjectURL(image.url);
       imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus();
     });
-    item.append(preview, remove); return item;
+    item.classList.toggle('uploading', !!image.uploading);
+    item.append(preview);
+    if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
+    item.append(remove); return item;
   }));
   updateControls();
 }
@@ -1155,7 +1180,9 @@ $('image-files').addEventListener('change', () => {
     images.reduce((sum, image) => sum + image.file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
     notice(IMAGE_LIMIT); return;
   }
-  imageDrafts.set(selected, [...images, ...files.map(file => ({ file, url: URL.createObjectURL(file) }))]);
+  const added = files.map(file => ({ file, url: URL.createObjectURL(file) }));
+  for (const image of added) uploadImage(image);
+  imageDrafts.set(selected, [...images, ...added]);
   notice(''); renderImages();
 });
 $('composer').addEventListener('submit', event => {
@@ -1180,12 +1207,9 @@ async function sendMessage(type = 'prompt') {
   }
   let restored = false;
   try {
-    const images = await Promise.all(attachments.map(({ file }) => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ type: 'image', mimeType: file.type, data: reader.result.slice(reader.result.indexOf(',') + 1) });
-      reader.onerror = () => reject(new Error(`Could not read ${file.name}. Remove it and attach it again.`));
-      reader.readAsDataURL(file);
-    })));
+    await Promise.all(attachments.map(image => image.upload));
+    const images = await Promise.all(attachments.map(image => image.staged?.socket === socket
+      ? { type: 'image', uploadId: image.staged.uploadId } : readImage(image.file)));
     // Signing out while files are being read must not send them through a later login.
     if (sending.get(id) !== outgoing) return;
     let created;

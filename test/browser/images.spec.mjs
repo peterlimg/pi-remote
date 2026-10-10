@@ -206,3 +206,35 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#attachments img')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+test('attached images upload before send and send by ID', async ({ page }) => {
+  const state = { id: 'staged', title: 'Staged upload', cwd: '/project', status: 'idle', messages: [] };
+  const commands = [];
+  let uploaded;
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready', supportsImages: true, supportsUploads: true }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+    } else if (packet.op === 'watch') {
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 0, state }));
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+    } else if (packet.op === 'upload') {
+      expect(packet.image).toEqual({ type: 'image', mimeType: 'image/png', data: png.toString('base64') });
+      uploaded = () => ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { uploadId: 'up-1' } }));
+    } else if (packet.op === 'command') {
+      commands.push(packet.command);
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { ok: true } }));
+    } else ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+  }));
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Staged upload/ }).click();
+  await page.locator('#image-files').setInputFiles(file);
+  await expect(page.getByLabel('Uploading')).toBeVisible();
+  await expect.poll(() => !!uploaded).toBe(true);
+  uploaded();
+  await expect(page.getByLabel('Uploading')).toHaveCount(0);
+  await page.locator('#prompt').fill('Look');
+  await page.locator('#send').click();
+  await expect.poll(() => commands.length).toBe(1);
+  expect(commands[0].images).toEqual([{ type: 'image', uploadId: 'up-1' }]);
+});
