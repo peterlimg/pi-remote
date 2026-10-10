@@ -257,3 +257,38 @@ test('the app follows keyboard viewport changes without resizing the document', 
   await expect(page.locator('#login')).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.body).position)).toBe('static');
 });
+test('sending an image keeps the thread bottom visible once Pi starts working', async ({ page }) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
+  const state = { id: 'send', title: 'Long thread', cwd: '/project', status: 'idle', messages: [
+    { id: 'history', role: 'assistant', text: 'Thread history\n\n'.repeat(60) }
+  ] };
+  let client, version = 0;
+  const snapshot = () => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws;
+    ws.onMessage(raw => {
+      const p = JSON.parse(raw);
+      if (p.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+        return;
+      }
+      if (p.op === 'watch') snapshot();
+      ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true, value: p.op === 'command' ? { ok: true } : [] }));
+      if (p.op === 'command') setTimeout(() => {
+        state.messages.push({ id: 'sent', role: 'user', text: 'testing', images: [{ id: 'a'.repeat(64), mimeType: 'image/png' }] }); snapshot();
+        setTimeout(() => { state.status = 'working'; snapshot(); }, 50);
+      }, 50);
+    });
+  });
+  await page.goto(login);
+  await page.getByRole('button', { name: /Long thread/ }).click();
+  const transcript = page.locator('#transcript');
+  const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
+  await expect.poll(gap).toBeLessThan(1);
+  await page.locator('#image-files').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: png });
+  await page.locator('#prompt').fill('testing');
+  await page.locator('#send').click();
+  await expect(page.locator('#agent-activity')).toBeVisible();
+  await expect.poll(gap).toBeLessThan(1);
+});
