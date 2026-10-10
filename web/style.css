@@ -3,7 +3,7 @@
   --bg: #fafaf8;
   --panel: #f2f3f0;
   --composer-bg: #fff;
-  --text: #272d2b;
+  --text: #141816;
   --muted: #626c66;
   --line: #daddd7;
   --accent: #35675c;
@@ -139,7 +139,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .message.user .thread-images { justify-content: flex-end; }
 .message.user .thread-image { width: 96px; height: 96px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
 .delivery-status { color: var(--muted); font-size: 12px; }
-.message-text { font: 16px/1.65 var(--sans); overflow-wrap: anywhere; margin: 0; }
+.message-text { font: 17px/1.65 var(--sans); overflow-wrap: anywhere; margin: 0; }
 pre.message-text { white-space: pre-wrap; }
 .message-text > :first-child { margin-top: 0; }
 .message-text > :last-child { margin-bottom: 0; }
