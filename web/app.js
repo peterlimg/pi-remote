@@ -936,6 +936,27 @@ $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 
 $('picker-cancel').addEventListener('click', () => closePicker(true));
 // Any tap on the sheet or its backdrop dismisses it; Escape is native.
 $('image-viewer').addEventListener('click', () => $('image-viewer').close());
+{
+  const sheet = $('image-viewer');
+  let startY, dy = 0;
+  sheet.addEventListener('touchstart', event => { startY = event.touches.length === 1 ? event.touches[0].clientY : undefined; dy = 0; }, { passive: true });
+  sheet.addEventListener('touchmove', event => {
+    if (startY === undefined) return;
+    event.preventDefault();
+    dy = Math.max(0, event.touches[0].clientY - startY);
+    sheet.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
+  const release = () => {
+    if (startY === undefined) return;
+    startY = undefined;
+    const close = dy > sheet.offsetHeight / 4;
+    sheet.style.transition = 'transform .2s ease-out';
+    sheet.style.transform = close ? 'translateY(100%)' : '';
+    setTimeout(() => { sheet.style.transition = sheet.style.transform = ''; if (close) sheet.close(); }, 200);
+  };
+  sheet.addEventListener('touchend', release);
+  sheet.addEventListener('touchcancel', release);
+}
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {

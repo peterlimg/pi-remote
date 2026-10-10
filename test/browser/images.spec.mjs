@@ -58,6 +58,14 @@ test('thread images load lazily, survive updates, open full size and retry failu
   await expect(viewer).toBeVisible(); // New AI output must not dismiss the image.
   await viewer.getByRole('button', { name: 'Close image' }).click();
   await expect(viewer).toBeHidden();
+  await page.locator('.message.user .thread-images a').first().click();
+  await viewer.evaluate(sheet => {
+    const touch = y => [new Touch({ identifier: 1, target: sheet, clientX: 10, clientY: y })];
+    sheet.dispatchEvent(new TouchEvent('touchstart', { touches: touch(0), bubbles: true }));
+    sheet.dispatchEvent(new TouchEvent('touchmove', { touches: touch(innerHeight), bubbles: true, cancelable: true }));
+    sheet.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
+  });
+  await expect(viewer).toBeHidden(); // Pulling the sheet down dismisses it.
   await page.locator('.tool-activity > summary').click();
   await page.locator('.tool summary').click();
   const toolImage = page.locator('.tool .thread-images img');
