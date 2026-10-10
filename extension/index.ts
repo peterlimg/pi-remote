@@ -18,6 +18,7 @@ export default function remoteExtension(pi: any) {
   let retry: any, flush: any, generation = 0, stopped = true, enabled = false;
   let journal: any;
   const instanceId = randomUUID();
+  let controlling = false;
   const resetHistory = () => {
     if (!state || !ctx) return;
     const entries = ctx.sessionManager.getBranch().filter((x: any) => x.type === 'message');
@@ -153,12 +154,15 @@ export default function remoteExtension(pi: any) {
   for (const name of ['agent_start', 'agent_end', 'message_start', 'message_update', 'message_end',
     'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'ui_prompt_start', 'ui_prompt_end', 'agent_settled',
     'model_select', 'thinking_level_select']) {
-    pi.on(name, (event: any) => { if (state) { applyEvent(state, event); publish(); } });
+    pi.on(name, (event: any) => {
+      // Pi Remote's own QR and setup screens ask nothing of the phone; don't flag them as needing input.
+      if (!state || (controlling && event.type === 'ui_prompt_start')) return;
+      applyEvent(state, event); publish();
+    });
   }
   for (const name of ['session_compact', 'session_tree']) {
     pi.on(name, () => { resetHistory(); publish(); });
   }
-  let controlling = false;
   const control = async (args: string, context: any) => {
     if (controlling) { context.ui.notify('Pi Remote is already opening. Close its screen first.', 'info'); return; }
     controlling = true;
