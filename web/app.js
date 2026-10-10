@@ -293,10 +293,6 @@ function receiveList(packet) {
   markSeen();
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
   renderList(); updateControls();
-  const warnings = packet.warnings || [];
-  $('diagnostics').hidden = !warnings.length;
-  $('warnings-summary').textContent = `${warnings.length} scan ${warnings.length === 1 ? 'warning' : 'warnings'}`;
-  $('warnings').replaceChildren(...warnings.map(text => el('li', text)));
 }
 async function loadList() {
   clearTimeout(searchTimer);

@@ -6,9 +6,6 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('#connection')).toContainText('Computer connected');
   await expect(page.locator('#sessions .session')).toHaveCount(2);
-  await expect(page.locator('#diagnostics')).toBeVisible();
-  await expect(page.locator('#warnings-summary')).toHaveText('20 scan warnings');
-  await expect(page.locator('#warnings')).toBeHidden();
   await expect(page.locator('#notice')).toBeHidden();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#title')).toHaveText('Project Alpha');
@@ -34,7 +31,6 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await page.locator('#send').click();
   await expect(page.locator('#transcript')).toContainText('instruction for beta');
   await page.locator('#back').click();
-  await expect(page.locator('#diagnostics')).toBeHidden();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#prompt')).toHaveValue('draft for alpha');
   // Edge-swipe back is browser history: it returns to the list and stays in the app.

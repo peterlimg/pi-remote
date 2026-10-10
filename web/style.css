@@ -107,10 +107,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }
-#diagnostics { margin: 0 8px 8px; font-size: 12px; color: var(--warning); }
-#diagnostics summary { min-height: 44px; padding: 10px 0; }
-#warnings { max-height: 20dvh; overflow: auto; padding-left: 18px; overflow-wrap: anywhere; margin: 0; }
-#warnings li { margin-bottom: 8px; }
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .conversation-heading { grid-column: 2; min-width: 0; text-align: center; }
