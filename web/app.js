@@ -467,7 +467,7 @@ function showThreadImage(image, blob) {
   link.setAttribute('aria-label', 'Open image');
   link.addEventListener('click', event => {
     event.preventDefault();
-    $('image-viewer').querySelector('img').src = image.url; $('image-viewer').showModal();
+    $('image-viewer').querySelector('img').src = image.url; $('image-viewer').showModal(); $('image-viewer').focus();
   });
   preview.src = image.url; preview.alt = 'Attached image';
   preview.onerror = () => {

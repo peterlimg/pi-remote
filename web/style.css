@@ -268,7 +268,8 @@ pre.message-text { white-space: pre-wrap; }
 .image-viewer { width: 100%; max-width: var(--content-width); max-height: calc(var(--viewport-height, 100dvh) - 48px); margin: auto auto 0; padding: 0 12px max(12px, env(safe-area-inset-bottom)); border: 0; border-radius: 16px 16px 0 0; background: var(--panel); color: var(--text); }
 .image-viewer[open] { display: flex; flex-direction: column; animation: sheet-up .2s ease-out; }
 .image-viewer::backdrop { background: rgb(0 0 0 / .5); }
-.image-viewer button { align-self: flex-end; display: grid; place-items: center; width: 44px; padding: 0; color: var(--muted); }
+.image-viewer:focus-visible { outline: none; }
+.image-viewer button { align-self: flex-end; margin: 12px 0 8px; }
 .image-viewer img { display: block; min-height: 0; max-width: 100%; max-height: calc(var(--viewport-height, 100dvh) - 104px); margin: 0 auto; object-fit: contain; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { .image-viewer[open] { animation: none; } }
