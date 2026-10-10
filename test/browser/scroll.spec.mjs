@@ -163,55 +163,16 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   await expect.poll(height).toBe(compact);
 });
 
-test('zoom keeps session navigation and composer controls inside the visible viewport', async ({ page }) => {
-  const state = { id: 'zoom', title: 'A long conversation title that must leave room for navigation',
-    cwd: '/projects/pi-remote', status: 'working', model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium',
-    messages: [{ id: 'reply', role: 'assistant', text: 'A reply that should wrap instead of being cut off. '.repeat(40) }] };
-  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
-    const packet = JSON.parse(raw);
-    if (packet.type === 'auth') {
-      ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
-      ws.send(JSON.stringify({ type: 'sessions', sessions: Array.from({ length: 21 }, (_, i) => ({ ...state, id: String(i) })) }));
-    } else {
-      if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 1, state }));
-      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
-    }
-  }));
+test('pinch zoom stays locked at 1x', async ({ page }) => {
   await page.goto(login);
-  await expect(page.locator('.session')).toHaveCount(20);
   const cdp = await page.context().newCDPSession(page);
-  const fits = async selectors => {
-    await expect.poll(() => page.evaluate(selectors => {
-      const v = visualViewport;
-      return selectors.filter(selector => {
-        const r = document.querySelector(selector).getBoundingClientRect();
-        return r.left < v.offsetLeft - 1 || r.right > v.offsetLeft + v.width + 1
-          || r.top < v.offsetTop - 1 || r.bottom > v.offsetTop + v.height + 1;
-      });
-    }, selectors)).toEqual([]);
-  };
-  for (const scale of [1.07, 2, 1]) {
-    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: scale });
-    await page.evaluate(() => document.getElementById('sidebar').scrollTo(0, 0));
-    await fits(['#app', '#search-open', '#logout']);
-    await page.locator('.session').first().click();
-    await page.locator('#prompt').fill('A draft keeps both Send and Abort available');
-    await expect(page.locator('#send')).toBeVisible();
-    const controls = ['#app', '#back', '.session-info summary', '#transcript', '#composer', '#attach', '#model', '#reasoning-control', '#commands', '#send', '#abort'];
-    await fits(controls);
-    await page.locator('#prompt').fill('');
-    await page.getByRole('button', { name: 'Open slash commands' }).tap();
-    await expect(page.locator('#prompt')).toHaveValue('/');
-    await fits(controls);
-    await page.locator('#prompt').press('Escape');
-    await page.locator('.session-info summary').click();
-    await fits(['#project']);
-    await page.locator('.session-info summary').click();
-    expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-    // Preserve browser magnification rather than silently resetting or disabling zoom.
-    expect(await page.evaluate(() => visualViewport.scale)).toBeCloseTo(scale, 2);
-    await page.locator('#back').click();
-  }
+  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+  await expect.poll(() => page.evaluate(() => visualViewport.scale)).toBe(1);
+  expect(await page.evaluate(() => {
+    const event = new Event('gesturestart', { cancelable: true });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
 });
 
 test('the app follows keyboard viewport changes without resizing the document', async ({ page }) => {

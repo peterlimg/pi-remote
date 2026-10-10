@@ -54,6 +54,8 @@ function fitViewport() {
 window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
+// iOS Safari ignores user-scalable=no; its pinch arrives as gesture events.
+for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, event => event.preventDefault(), { passive: false });
 fitViewport();
 const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
