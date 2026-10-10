@@ -23,7 +23,7 @@ test('unread dots mark agent replies since the thread was last on screen and sur
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   const session = page.locator('.session');
-  const dot = session.locator('.unread-dot');
+  const dot = session.locator('.session-icon[data-unread]');
   await expect(session).toHaveCount(1);
   await expect(dot).toHaveCount(0); // First sight counts as read.
 
