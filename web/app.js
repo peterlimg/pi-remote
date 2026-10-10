@@ -72,6 +72,7 @@ let socket, selected, sessions = [], connected = false, manualClose = false, rec
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
+const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -420,12 +421,6 @@ function markSeen() {
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
   closePicker();
-  // iOS slides in a screenshot of the list, taken at pushState, on edge-swipe back, however old.
-  // Paint the list empty first so that screenshot can't show stale rows.
-  if (!history.state?.session && matchMedia('(max-width: 700px)').matches) {
-    $('sessions').replaceChildren();
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  }
   if (selected) drafts.set(selected, $('prompt').value);
   if (selected !== id) clearThreadImages();
   selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
@@ -437,7 +432,7 @@ async function selectSession(id) {
   document.querySelector('.session-info').open = false;
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
-  if (!history.state?.session) history.pushState({ session: true }, '');
+  if (!ownSwipe && !history.state?.session) history.pushState({ session: true }, '');
   $('app').classList.add('viewing'); markSeen(); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
@@ -1085,6 +1080,44 @@ $('search').addEventListener('keydown', event => { if (event.key === 'Escape') {
 $('list-retry').addEventListener('click', loadList);
 $('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
 window.addEventListener('popstate', () => { closePicker(); $('app').classList.remove('viewing'); });
+// iOS home-screen apps have no Back button, and their history edge-swipe slides in a screenshot taken when the
+// thread opened, so the list visibly changes once the swipe lands. There, drag the thread off the live list instead.
+if (ownSwipe) {
+  const app = $('app'), main = document.querySelector('main');
+  let startX, startY, dx, tracking = false;
+  main.addEventListener('touchstart', event => {
+    const touch = event.touches[0];
+    tracking = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing');
+    startX = touch.clientX; startY = touch.clientY; dx = 0;
+  }, { passive: true });
+  main.addEventListener('touchmove', event => {
+    if (!tracking) return;
+    const touch = event.touches[0];
+    dx = Math.max(0, touch.clientX - startX);
+    if (!app.classList.contains('swiping')) {
+      if (dx < 8) { if (Math.abs(touch.clientY - startY) > 8) tracking = false; return; }
+      app.classList.add('swiping');
+    }
+    event.preventDefault();
+    main.style.transform = `translateX(${dx}px)`;
+  }, { passive: false });
+  const release = () => {
+    if (!tracking) return;
+    tracking = false;
+    if (!app.classList.contains('swiping')) return;
+    // ponytail: distance-only threshold; add flick velocity if short fast swipes feel ignored.
+    const back = dx > main.offsetWidth / 3;
+    main.style.transition = 'transform .2s ease-out';
+    main.style.transform = back ? 'translateX(100%)' : '';
+    setTimeout(() => {
+      main.style.transition = main.style.transform = '';
+      app.classList.remove('swiping');
+      if (back) { closePicker(); app.classList.remove('viewing'); }
+    }, 200);
+  };
+  main.addEventListener('touchend', release);
+  main.addEventListener('touchcancel', release);
+}
 $('prompt').addEventListener('input', () => {
   closePicker(); resizePrompt();
   if (selected) drafts.set(selected, $('prompt').value);

@@ -253,3 +253,26 @@ test('desktop Enter sends, Shift+Enter adds a line and Alt+Enter queues a follow
     expect(commands.at(-1)).toEqual({ type: 'prompt', text: 'normal message' });
   } finally { await context.close(); }
 });
+
+test('home-screen edge swipe drags the thread off the live list without a history entry', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(page.locator('#prompt')).toBeVisible();
+  expect(await page.evaluate(() => history.state)).toBeNull();
+  const swipe = to => page.evaluate(to => {
+    const main = document.querySelector('main');
+    const touch = x => [new Touch({ identifier: 1, target: main, clientX: x, clientY: 300 })];
+    const fire = (type, x) => main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : touch(x), changedTouches: touch(x) }));
+    fire('touchstart', 5); fire('touchmove', 20); fire('touchmove', to);
+    const listShown = getComputedStyle(document.querySelector('aside')).visibility;
+    fire('touchend', to);
+    return listShown;
+  }, to);
+  expect(await swipe(60)).toBe('visible');
+  await page.waitForTimeout(300);
+  await expect(page.locator('#prompt')).toBeVisible();
+  await swipe(300);
+  await expect(page.getByRole('button', { name: /Project Beta/ })).toBeVisible();
+  await expect(page.locator('#prompt')).toBeHidden();
+});

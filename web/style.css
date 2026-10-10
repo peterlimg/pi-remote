@@ -299,8 +299,12 @@ pre.message-text { white-space: pre-wrap; }
   /* One page scroll on phones: the list grows instead of scrolling inside a box. */
   #sessions { overflow: visible; flex: none; }
   .shell main { display: none; }
-  .shell.viewing aside { display: none; }
-  .shell.viewing main { display: flex; padding-top: env(safe-area-inset-top); }
+  /* The list stays laid out under the thread so a swipe back reveals it live, scroll position intact. */
+  .shell > aside, .shell > main { grid-area: 1 / 1; }
+  .shell.viewing aside { visibility: hidden; }
+  .shell.viewing.swiping aside { visibility: visible; }
+  .shell.viewing main { display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
+  .shell.swiping main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .mobile-only { display: block; }
   .conversation-header { padding: 4px 8px; }
   #transcript { --transcript-gap: 20px; padding-inline: 16px; }
