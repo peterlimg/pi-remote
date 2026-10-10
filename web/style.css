@@ -90,7 +90,12 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #list-retry { width: 100%; }
 .session-group h3 { display: flex; gap: 8px; align-items: baseline; margin: 16px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .session-group + .session-group { margin-top: 16px; }
-.session { display: block; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
+.session { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
+.session-icon { display: grid; place-items: center; height: 24px; margin-top: 2px; color: var(--muted); }
+.session-icon[data-status=waiting] { color: var(--warning); }
+.session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
+.session-icon:is([data-status=idle], [data-status=working]) { color: #0a84ff; }
+.session-icon:is([data-status=idle], [data-status=working]) circle { fill: currentColor; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
 .session-top { align-items: flex-start; }

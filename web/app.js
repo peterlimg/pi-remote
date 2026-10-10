@@ -343,6 +343,7 @@ function renderList() {
     for (const item of items.sort((a, b) => b.updatedAt - a.updatedAt)) {
       const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
+      button.append(statusIcon(item.status));
       const body = el('div', undefined, 'session-body');
       const top = el('div', undefined, 'session-top');
       const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
@@ -384,6 +385,15 @@ function renderList() {
   if (current) $('title').textContent = current.title;
 }
 // Hand for "needs you", a plain ring otherwise; working rows show a spinner at the right.
+function statusIcon(status) {
+  const icon = el('span', undefined, 'session-icon');
+  icon.dataset.status = status;
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = status === 'waiting'
+    ? '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>';
+  return icon;
+}
 function displayPaths(text) {
   return text.replace(/(^|[\s"'`=:(])\/(?:Users|home)\/[^/\s"'`:]+/g, '$1~');
 }
