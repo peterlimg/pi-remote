@@ -343,12 +343,13 @@ function renderList() {
     for (const item of items.sort((a, b) => b.updatedAt - a.updatedAt)) {
       const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
-      button.append(statusIcon(item.status));
+      const icon = statusIcon(item.status);
+      if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
+      button.append(icon);
       const body = el('div', undefined, 'session-body');
       const top = el('div', undefined, 'session-top');
       const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
       top.append(title);
-      if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) top.append(Object.assign(el('span', undefined, 'unread-dot'), { title: 'New reply' }));
       if (item.status === 'working') top.append(el('span', undefined, 'connection-spinner session-spinner'));
       body.append(top);
       if (item.preview && item.preview !== item.title) {
@@ -384,7 +385,7 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
-// Hand for "needs you", a plain ring otherwise; working rows show a spinner at the right.
+// Hand for "needs you", a ring otherwise (filled blue when unread); working rows show a spinner at the right.
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
   icon.dataset.status = status;

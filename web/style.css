@@ -94,16 +94,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon { display: grid; place-items: center; height: 24px; margin-top: 2px; color: var(--muted); }
 .session-icon[data-status=waiting] { color: var(--warning); }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
-.session-icon:is([data-status=idle], [data-status=working]) { color: #0a84ff; }
-.session-icon:is([data-status=idle], [data-status=working]) circle { fill: currentColor; }
+.session-icon[data-unread] { color: #0a84ff; opacity: 1; }
+.session-icon[data-unread] circle { fill: currentColor; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
 .session-top { align-items: flex-start; }
 .session strong.untitled { color: var(--muted); font-weight: 400; }
 .session strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; font-weight: 500; }
-.unread-dot { width: 10px; height: 10px; margin: 7px 0 0 auto; flex-shrink: 0; border-radius: 50%; background: #0a84ff; }
 .session-spinner { width: 14px; height: 14px; margin: 4px 0 0 auto; border-width: 1.5px; animation-duration: 1.2s; }
-.unread-dot + .session-spinner { margin-left: 0; }
 .session-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .session-meta { margin-top: 2px; gap: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .session-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
