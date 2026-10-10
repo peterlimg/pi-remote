@@ -189,11 +189,7 @@ function connect() {
       }
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
       clearInterval(heartbeatTimer);
-      heartbeatTimer = setInterval(() => {
-        if (socket !== ws || connectionTimer) return;
-        connectionTimer = setTimeout(reconnect, 10000);
-        transmit(ws, { op: 'ping', id: crypto.randomUUID() });
-      }, 20000);
+      heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       if (listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
         request('watch', { sessionId: selected }).catch(e => notice(e.message));
@@ -233,10 +229,22 @@ function connect() {
   });
   ws.addEventListener('error', () => { if (socket === ws) reconnect(); });
 }
+// Any reply clears the timer; silence means a half-open socket.
+function probe() {
+  if (connectionTimer) return;
+  connectionTimer = setTimeout(reconnect, 10000);
+  transmit(socket, { op: 'ping', id: crypto.randomUUID() });
+}
 // Mobile browsers suspend sockets and timers in the background. Start fresh on return.
 function reconnectNow() { if (token && !manualClose) { retry = 0; connect(); } }
 window.addEventListener('online', reconnectNow);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reconnectNow(); });
+// iOS also hides the page for a moment during edge-swipe back; a brief hide only checks the socket,
+// so returning to the list doesn't flash Connecting….
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  if (connected && Date.now() - hiddenAt < 5000) probe(); else reconnectNow();
+});
 window.addEventListener('storage', event => {
   if (event.storageArea === localStorage && (event.key === 'pi-remote-token' || event.key === null) && !event.newValue) logout();
 });

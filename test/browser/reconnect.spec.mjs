@@ -122,7 +122,20 @@ test('a half-open connection is detected by heartbeat and resumes on network or 
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect.poll(() => channels.length).toBe(3);
   await expect(page.locator('#connection')).toHaveText('Computer connected');
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  // A brief hide, like iOS edge-swipe back, keeps the live socket and only pings it.
+  const setVisibility = state => page.evaluate(state => {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await setVisibility('hidden');
+  await page.clock.runFor(1000);
+  await setVisibility('visible');
+  await expect.poll(() => pings).toBe(2);
+  expect(channels).toHaveLength(3);
+  await expect(page.locator('#connection')).toBeHidden();
+  await setVisibility('hidden');
+  await page.clock.runFor(6000);
+  await setVisibility('visible');
   await expect.poll(() => channels.length).toBe(4);
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   await expect(page.locator('#prompt')).toHaveValue('Keep my draft');
