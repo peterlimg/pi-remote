@@ -146,6 +146,8 @@ test('session summaries distinguish unnamed work without sending full conversati
   assert.equal(summary(state).previewRole, 'user');
   assert.equal(summary(state).preview, 'Now check logout');
   assert.equal(summary({ ...state, messages: [] }).preview, '');
+  const md = { role: 'assistant', text: '## Done\n**[Open the dashboard](https://x.y/z)** and run `npm test`:\n- one' };
+  assert.equal(summary({ ...state, messages: [md] }).preview, 'Done Open the dashboard and run npm test: one');
   assert.equal(state.title, 'Pi · Rill');
 });
 

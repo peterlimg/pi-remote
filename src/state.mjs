@@ -50,7 +50,12 @@ export function applyEvent(state, event) {
 export function summary(state) {
   const { messages = [], tools, file, ...meta } = state;
   const excerpt = text => {
-    const line = (text || '').replace(/\s+/g, ' ').trim();
+    const line = (text || '')
+      .replace(/```[^\n]*\n?/g, '')
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
+      .replace(/(\*\*|__|\*|_|~~|`)(\S(?:.*?\S)?)\1/g, '$2')
+      .replace(/\s+/g, ' ').trim();
     return line.length > 160 ? line.slice(0, 159) + '…' : line;
   };
   const latest = messages.findLast(message => ['user', 'assistant'].includes(message.role) && message.text?.trim());
