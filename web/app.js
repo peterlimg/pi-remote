@@ -1157,12 +1157,7 @@ function renderProjects(focusPin) {
   const matches = projectList.filter(project => displayPaths(project.cwd).toLowerCase().includes(query));
   const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
   const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
-  // A fresh folder leads the list as an action; searching is only about existing projects.
-  const fresh = el('button', undefined, 'project-option project-new');
-  fresh.type = 'button';
-  fresh.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6m-3-3h6"/></svg>New folder';
-  fresh.addEventListener('click', () => startInProject());
-  $('project-options').replaceChildren(...query ? [] : [fresh], ...[...pinned, ...recent].map(project => {
+  $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
     const cwd = displayPaths(project.cwd), name = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, isPinned = pinnedProjects.includes(project.cwd);
     const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
     button.type = 'button'; button.title = cwd;
@@ -1198,7 +1193,7 @@ async function openProjects() {
 }
 // Without a project, the host starts the session in a new folder it creates.
 async function startInProject(project) {
-  const buttons = $('project-picker').querySelectorAll('.project-option, .project-pin');
+  const buttons = $('project-picker').querySelectorAll('.project-option, .project-pin, #new-project');
   for (const button of buttons) button.disabled = true;
   $('project-status').textContent = 'Starting session…';
   try {
@@ -1213,6 +1208,7 @@ async function startInProject(project) {
   }
 }
 $('new-session').addEventListener('click', () => { haptic(); openProjects(); });
+$('new-project').addEventListener('click', () => startInProject());
 $('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
