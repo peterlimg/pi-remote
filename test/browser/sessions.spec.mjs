@@ -139,6 +139,7 @@ test('new session button lists recent projects and opens a fresh session there',
   await picker.getByRole('button', { name: 'Pin e' }).tap();
   await expect(picker.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
   await expect(picker.getByRole('button', { name: 'Pin e' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.getByRole('button', { name: 'Pin e' })).not.toBeFocused();
   await picker.getByRole('button', { name: 'Close' }).tap();
   await page.getByRole('button', { name: 'New session' }).tap();
   await expect(picker.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);

@@ -1165,11 +1165,12 @@ function renderProjects(focusPin) {
     button.addEventListener('click', () => startInProject(project));
     pin.type = 'button'; pin.dataset.cwd = project.cwd; pin.setAttribute('aria-pressed', String(isPinned));
     pin.setAttribute('aria-label', 'Pin ' + name); pin.title = isPinned ? 'Unpin' : 'Pin to top';
-    pin.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l-1 6 4 4v2h-5v6l-1 1-1-1v-6H6v-2l4-4-1-6Z"/></svg>';
-    pin.addEventListener('click', () => {
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
+    pin.addEventListener('click', event => {
       pinnedProjects = isPinned ? pinnedProjects.filter(cwd => cwd !== project.cwd) : [...pinnedProjects, project.cwd];
       localStorage.setItem('pi-remote-pins', JSON.stringify(pinnedProjects));
-      renderProjects(project.cwd);
+      // Keep keyboard focus on the re-rendered pin; a tap would otherwise get a focus ring.
+      renderProjects(event.detail === 0 ? project.cwd : undefined);
     });
     row.append(button, pin);
     return row;
