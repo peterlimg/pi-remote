@@ -103,7 +103,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
-test('new session button lists most-used projects and opens a fresh session there', async ({ page }) => {
+test('new session button lists recent projects and opens a fresh session there', async ({ page }) => {
   const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
   const operations = [];
   await page.routeWebSocket('**/ws', ws => {
@@ -114,7 +114,7 @@ test('new session button lists most-used projects and opens a fresh session ther
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
       } else if (packet.op === 'projects') {
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true,
-          value: [{ cwd: '/Users/me/beta', sessionId: 'old', count: 3 }, { cwd: '/Users/me/alpha', sessionId: 'a', count: 1 }] }));
+          value: [{ cwd: '/Users/me/beta', sessionId: 'old' }, { cwd: '/Users/me/alpha', sessionId: 'a' }] }));
       } else if (packet.op === 'new') {
         operations.push(packet);
         states.push({ id: 'fresh', title: 'Untitled session', cwd: '/Users/me/beta', status: 'idle', messages: [] });

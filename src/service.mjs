@@ -71,14 +71,11 @@ export class SessionService extends EventEmitter {
       .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     return { matches, total: all.size };
   }
-  // Projects by session count. Each names its newest session (online first) as the source for `new`.
+  // Projects in list order: running first, then most recently used. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) {
-      const project = projects.get(item.cwd);
-      if (project) project.count++; else projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id, count: 1 });
-    }
-    return [...projects.values()].sort((a, b) => b.count - a.count).slice(0, 50);
+    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
+    return [...projects.values()].slice(0, 50);
   }
   read(id) {
     if (this.live.has(id)) {

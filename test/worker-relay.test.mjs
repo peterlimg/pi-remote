@@ -177,7 +177,7 @@ test('new session from a saved project leaves the source saved; disabled resume 
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
   t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
   const sourceId = sessionKey(file);
-  assert.deepEqual(service.projects(), [{ cwd: dir, sessionId: sourceId, count: 1 }]);
+  assert.deepEqual(service.projects(), [{ cwd: dir, sessionId: sourceId }]);
   service.allowResume = false;
   assert.match((await service.newSession(sourceId, randomUUID())).error, /disabled locally/);
   service.allowResume = true;

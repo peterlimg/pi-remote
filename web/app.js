@@ -1135,7 +1135,7 @@ $('search-close').addEventListener('click', () => { closeSearch(); $('search-ope
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
-// Most-used projects come first; the host counts sessions per working directory.
+// Recently used projects come first, in the host's session list order.
 async function openProjects() {
   const dialog = $('project-picker');
   $('project-options').replaceChildren(); $('project-status').textContent = 'Loading projects…';
