@@ -73,6 +73,7 @@ test('the session list hides Connecting during a quick reconnect and shows it on
   await page.goto(url);
   const banner = page.locator('#connection');
   await expect(page.getByRole('button', { name: /Reconnect test/ })).toBeVisible();
+  const listTop = (await page.locator('#sessions').boundingBox()).y;
   channels[0].close({ code: 1012, reason: 'Computer disconnected' });
   await page.clock.runFor(1100);
   await expect.poll(() => channels.length).toBe(2);
@@ -80,6 +81,8 @@ test('the session list hides Connecting during a quick reconnect and shows it on
   await page.clock.runFor(1000);
   await expect(banner).toHaveText('Connecting…');
   await expect(banner).toBeVisible();
+  // The banner shares the header row, so the list never moves.
+  expect((await page.locator('#sessions').boundingBox()).y).toBe(listTop);
   channels[1].send(JSON.stringify({ type: 'ready' }));
   await expect(banner).toBeHidden();
 });

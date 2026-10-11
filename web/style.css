@@ -70,7 +70,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { margin-left: auto; font-size: 12px; }
-#connection { margin: 0 8px 8px; font-size: 12px; color: var(--warning); }
+/* Status sits in the header row, so it never pushes the list down. */
+#connection { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+#connection[hidden] { display: none; }
+#connection::before { content: ''; width: 10px; height: 10px; flex-shrink: 0; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 .badge { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
 /* Search floats at the bottom of the list: a round button that opens into a field. */
 .search-bar { position: sticky; bottom: 0; display: flex; margin-top: auto; gap: 8px; padding: 8px 8px 4px; pointer-events: none; }
@@ -214,7 +217,7 @@ pre.message-text { white-space: pre-wrap; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 .tool-activity-live { animation: activity-breathe 2.4s ease-in-out infinite; }
 @keyframes activity-breathe { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .connection-spinner, .activity-dots, .tool-activity-live { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .activity-dots, .tool-activity-live { animation: none; } }
 #scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--composer-bg); color: var(--text); box-shadow: 0 4px 12px #00000014; }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; background: var(--composer-bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px #0000001a; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
