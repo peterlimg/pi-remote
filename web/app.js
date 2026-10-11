@@ -1164,6 +1164,7 @@ if (ownSwipe) {
     if (!app.classList.contains('swiping')) return;
     // ponytail: distance-only threshold; add flick velocity if short fast swipes feel ignored.
     const back = dx > main.offsetWidth / 3;
+    if (back) haptic();
     main.style.transition = 'transform .2s ease-out';
     main.style.transform = back ? 'translateX(100%)' : '';
     setTimeout(() => {
