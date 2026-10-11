@@ -114,7 +114,7 @@ test('new session button lists recent projects and opens a fresh session there',
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
       } else if (packet.op === 'projects') {
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true,
-          value: [{ cwd: '/Users/me/beta', sessionId: 'old' }, { cwd: '/Users/me/alpha', sessionId: 'a' }] }));
+          value: ['beta', 'alpha', 'c', 'd', 'e', 'f', 'g'].map((name, i) => ({ cwd: '/Users/me/' + name, sessionId: i ? name : 'old' })) }));
       } else if (packet.op === 'new') {
         operations.push(packet);
         states.push({ id: 'fresh', title: 'Untitled session', cwd: '/Users/me/beta', status: 'idle', messages: [] });
@@ -129,9 +129,15 @@ test('new session button lists recent projects and opens a fresh session there',
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: 'New session' }).tap();
   const picker = page.getByRole('dialog', { name: 'New session in…' });
-  await expect(picker.locator('.project-option-name')).toHaveText(['beta', 'alpha']);
+  await expect(picker.locator('.project-option-name')).toHaveText(['beta', 'alpha', 'c', 'd', 'e']);
   await expect(picker.locator('.project-option-path').first()).toHaveText('~/beta');
-  await picker.getByRole('button', { name: /beta/ }).tap();
+  await picker.getByRole('button', { name: 'Pin e' }).tap();
+  await expect(picker.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd']);
+  await expect(picker.getByRole('button', { name: 'Pin e' })).toHaveAttribute('aria-pressed', 'true');
+  await picker.getByRole('button', { name: 'Close' }).tap();
+  await page.getByRole('button', { name: 'New session' }).tap();
+  await expect(picker.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd']);
+  await picker.locator('.project-option', { hasText: 'beta' }).tap();
   await expect(picker).toBeHidden();
   await expect(page.locator('#title')).toHaveText('Untitled session');
   expect(operations.map(x => x.sessionId)).toEqual(['old']);

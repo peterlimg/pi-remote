@@ -75,7 +75,7 @@ export class SessionService extends EventEmitter {
   projects() {
     const projects = new Map();
     for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
-    return [...projects.values()].slice(0, 50);
+    return [...projects.values()];
   }
   read(id) {
     if (this.live.has(id)) {

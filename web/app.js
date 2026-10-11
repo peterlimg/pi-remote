@@ -265,7 +265,7 @@ function logout() {
   for (const draft of submissions.values()) releaseImages(draft.attachments);
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
-  localStorage.removeItem('pi-remote-seen'); seen = {};
+  localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
@@ -1135,21 +1135,38 @@ $('search-close').addEventListener('click', () => { closeSearch(); $('search-ope
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
-// Recently used projects come first, in the host's session list order.
+// Pinned projects stay on top; recent ones fill the rest of the first five. The host sends them most recent first.
+let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
+function renderProjects(focusPin) {
+  const pinned = projectList.filter(project => pinnedProjects.includes(project.cwd));
+  const recent = projectList.filter(project => !pinnedProjects.includes(project.cwd)).slice(0, Math.max(0, 5 - pinned.length));
+  $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
+    const cwd = displayPaths(project.cwd), name = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, isPinned = pinnedProjects.includes(project.cwd);
+    const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
+    button.type = 'button'; button.title = cwd;
+    button.append(el('span', name, 'project-option-name'), el('span', cwd, 'project-option-path'));
+    button.addEventListener('click', () => startInProject(project));
+    pin.type = 'button'; pin.dataset.cwd = project.cwd; pin.setAttribute('aria-pressed', String(isPinned));
+    pin.setAttribute('aria-label', 'Pin ' + name); pin.title = isPinned ? 'Unpin' : 'Pin to top';
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l-1 6 4 4v2h-5v6l-1 1-1-1v-6H6v-2l4-4-1-6Z"/></svg>';
+    pin.addEventListener('click', () => {
+      pinnedProjects = isPinned ? pinnedProjects.filter(cwd => cwd !== project.cwd) : [...pinnedProjects, project.cwd];
+      localStorage.setItem('pi-remote-pins', JSON.stringify(pinnedProjects));
+      renderProjects(project.cwd);
+    });
+    row.append(button, pin);
+    return row;
+  }));
+  if (focusPin) [...$('project-options').querySelectorAll('.project-pin')].find(pin => pin.dataset.cwd === focusPin)?.focus();
+}
 async function openProjects() {
   const dialog = $('project-picker');
-  $('project-options').replaceChildren(); $('project-status').textContent = 'Loading projects…';
+  projectList = []; renderProjects(); $('project-status').textContent = 'Loading projects…';
   dialog.showModal();
   try {
     const projects = await request('projects');
     if (!dialog.open) return;
-    $('project-options').replaceChildren(...projects.map(project => {
-      const cwd = displayPaths(project.cwd), button = el('button', undefined, 'project-option');
-      button.type = 'button'; button.title = cwd;
-      button.append(el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'project-option-name'), el('span', cwd, 'project-option-path'));
-      button.addEventListener('click', () => startInProject(project));
-      return button;
-    }));
+    projectList = projects; renderProjects();
     $('project-status').textContent = projects.length ? '' : 'No projects yet. Start Pi in a project on your computer first.';
   } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
 }

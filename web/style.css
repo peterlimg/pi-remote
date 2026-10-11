@@ -93,6 +93,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #project-status { margin: 0 20px 12px; }
 #project-status:empty { display: none; }
 #project-options { overflow-y: auto; overscroll-behavior: contain; padding: 0 8px; }
+.project-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; }
+.project-pin { display: grid; place-items: center; width: 44px; padding: 0; background: transparent; color: var(--muted); }
+.project-pin[aria-pressed="true"] { color: var(--accent); }
+.project-pin[aria-pressed="true"] svg { fill: currentColor; }
 .project-option { display: grid; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 10px 12px; border-radius: 8px; font-weight: 400; }
 .project-option:hover:not(:disabled) { background: var(--panel); }
 .project-option-name { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
