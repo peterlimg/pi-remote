@@ -73,7 +73,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsProjects: true }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -84,6 +84,7 @@ export function attachClient(socket, service) {
         let value;
         if (message.op === 'ping') value = { pong: true };
         else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
+        else if (message.op === 'projects') value = service.projects();
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);
           selected = message.sessionId; version = 0; previous = structuredClone(state);

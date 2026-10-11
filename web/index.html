@@ -43,6 +43,15 @@
     <button type="button" class="search-round" aria-label="Close image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
     <img alt="Attached image">
   </dialog>
+  <dialog id="project-picker" class="project-picker" aria-labelledby="project-picker-title">
+    <header><h2 id="project-picker-title">New session</h2><button id="project-close" type="button" class="quiet" aria-label="Close project picker"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+    <p class="hint">Choose an existing project to start a fresh conversation.</p>
+    <label class="sr-only" for="project-search">Search projects</label>
+    <input id="project-search" type="search" placeholder="Search projects" autocomplete="off">
+    <div id="project-options" aria-label="Projects"></div>
+    <p id="project-status" class="hint" role="status"></p>
+    <button id="project-retry" type="button" class="secondary" hidden>Try again</button>
+  </dialog>
   <div id="app" class="shell" hidden>
     <aside id="sidebar">
       <header class="brand"><h2>Sessions</h2><button id="logout" class="quiet">Sign out</button></header>
@@ -57,6 +66,7 @@
         <button id="search-open" type="button" class="search-round" aria-label="Search sessions" title="Search sessions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
         <label class="search-field"><span class="sr-only">Search sessions</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Filter sessions" maxlength="500"></label>
         <button id="search-close" type="button" class="search-round" aria-label="Close search" title="Close search"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+        <button id="new-session" type="button" aria-haspopup="dialog" aria-controls="project-picker" disabled><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</button>
       </div>
     </aside>
     <main>
