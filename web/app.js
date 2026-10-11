@@ -412,7 +412,7 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = current.title;
 }
-// Hand for "needs you", a ring otherwise (filled blue when unread).
+// Hand for "needs you", a ring otherwise (filled blue when unread, spinning while working).
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
   icon.dataset.status = status;

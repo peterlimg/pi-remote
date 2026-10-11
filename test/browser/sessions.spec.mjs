@@ -53,6 +53,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   const login = online.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
+  await expect(login.locator('.session-icon svg')).toHaveCSS('animation-name', 'connection-spin');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.locator('.session').first().locator('.session-preview')).toHaveCount(0);

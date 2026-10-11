@@ -131,6 +131,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
 .session-icon[data-unread] circle { fill: currentColor; }
+/* Working: the ring opens a gap and spins. */
+.session-icon[data-status=working] svg { animation: connection-spin 1.2s linear infinite; }
+.session-icon[data-status=working] circle { fill: none; stroke-dasharray: 36 14; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
 .session-top { align-items: flex-start; }
@@ -224,7 +227,7 @@ pre.message-text { white-space: pre-wrap; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 .tool-activity-live { animation: activity-breathe 2.4s ease-in-out infinite; }
 @keyframes activity-breathe { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .activity-dots, .tool-activity-live { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .session-icon svg, .activity-dots, .tool-activity-live { animation: none; } }
 #scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--composer-bg); color: var(--text); box-shadow: 0 4px 12px #00000014; }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; background: var(--composer-bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px #0000001a; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
