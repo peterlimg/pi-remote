@@ -1167,6 +1167,7 @@ function renderProjects(focusPin) {
     pin.setAttribute('aria-label', 'Pin ' + name); pin.title = isPinned ? 'Unpin' : 'Pin to top';
     pin.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
     pin.addEventListener('click', event => {
+      haptic();
       pinnedProjects = isPinned ? pinnedProjects.filter(cwd => cwd !== project.cwd) : [...pinnedProjects, project.cwd];
       localStorage.setItem('pi-remote-pins', JSON.stringify(pinnedProjects));
       // Keep keyboard focus on the re-rendered pin; a tap would otherwise get a focus ring.
