@@ -1144,7 +1144,7 @@ function closeSearch() {
   $('search-bar').classList.remove('open');
 }
 // The bar already rides above the keyboard; iOS's reveal scroll would expose the theme colour under the page.
-$('search-open').addEventListener('click', () => { $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
+$('search-open').addEventListener('click', () => { haptic(); $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
 $('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
 // An empty search folds back into its button once you leave it; a live filter stays visible.
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
@@ -1205,7 +1205,7 @@ async function startInProject(project) {
     $('project-status').textContent = e.message;
   }
 }
-$('new-session').addEventListener('click', openProjects);
+$('new-session').addEventListener('click', () => { haptic(); openProjects(); });
 $('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
