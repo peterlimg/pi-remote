@@ -40,7 +40,8 @@
 ::selection { background: var(--selection); color: var(--text); }
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
-:root.keyboard-open { --safe-bottom: 0px; }
+/* iOS shows its keyboard for any focused text field; viewport sizes differ between Safari and home-screen apps. */
+:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
 button, input, textarea, select { font: inherit; }

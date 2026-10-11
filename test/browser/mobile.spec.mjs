@@ -277,17 +277,16 @@ test('home-screen edge swipe drags the thread off the live list without a histor
   await expect(page.locator('#prompt')).toBeHidden();
 });
 
-test('an open keyboard drops the home-indicator inset so bottom controls sit on it', async ({ page }) => {
+test('a focused text field drops the home-indicator inset so bottom controls sit on the keyboard', async ({ page }) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('#sessions .session')).toHaveCount(2);
-  const setKeyboard = height => page.evaluate(height => {
-    Object.defineProperty(visualViewport, 'height', { value: height, configurable: true });
-    visualViewport.dispatchEvent(new Event('resize'));
-  }, height);
-  const root = page.locator('html');
-  await setKeyboard(await page.evaluate(() => innerHeight - 300));
-  await expect(root).toHaveClass(/keyboard-open/);
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').trim())).toBe('0px');
-  await setKeyboard(await page.evaluate(() => innerHeight));
-  await expect(root).not.toHaveClass(/keyboard-open/);
+  // Chromium has no home indicator; stand in an iPhone's 34px inset.
+  await page.evaluate(() => { const sheet = document.styleSheets[0]; sheet.insertRule(':root { --safe-bottom: 34px; }', sheet.cssRules.length); });
+  const padding = () => page.locator('aside').evaluate(el => getComputedStyle(el).paddingBottom);
+  expect(await padding()).toBe('34px');
+  await page.locator('#search-open').click();
+  await expect(page.locator('#search')).toBeFocused();
+  expect(await padding()).toBe('12px');
+  await page.locator('#search').blur();
+  expect(await padding()).toBe('34px');
 });

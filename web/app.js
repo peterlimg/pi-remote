@@ -50,8 +50,6 @@ function fitViewport() {
   document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
   document.documentElement.style.setProperty('--viewport-left', `${viewport?.offsetLeft ?? 0}px`);
   document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
-  // The layout viewport keeps its height under the keyboard; zoom shrinks the visual one too, so undo scale.
-  document.documentElement.classList.toggle('keyboard-open', !!viewport && innerHeight - viewport.height * viewport.scale > 100);
 }
 window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
