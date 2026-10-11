@@ -61,6 +61,10 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   const staticPage = await fetch('http://127.0.0.1:' + port + '/');
   assert.equal(staticPage.status, 200);
   assert.match(staticPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(staticPage.headers.get('content-encoding'), 'gzip');
+  assert.match(await staticPage.text(), /<title>Pi Remote<\/title>/);
+  const cached = await fetch('http://127.0.0.1:' + port + '/', { headers: { 'If-None-Match': staticPage.headers.get('etag') } });
+  assert.equal(cached.status, 304);
 });
 
 test('session pages and search stay bounded on initial load, updates and reconnect', async t => {

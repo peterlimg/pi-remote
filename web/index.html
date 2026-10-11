@@ -10,6 +10,11 @@
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
+  <!-- app.js imports these; fetching them alongside it saves a round trip through the tunnel. -->
+  <link rel="modulepreload" href="/protocol.js">
+  <link rel="modulepreload" href="/images.js">
+  <link rel="modulepreload" href="/markdown-it.mjs">
+  <link rel="modulepreload" href="/e2e.js">
 </head>
 <body>
   <section id="boot" class="boot" aria-labelledby="boot-title">
