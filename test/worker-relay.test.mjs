@@ -146,7 +146,6 @@ test('remote /new creates an independent session in the same working directory',
   const oldId = sessionKey(file), requestId = randomUUID();
   const lock = acquireLock(join(dir, 'locks'), oldId, { file, instanceId: 'live' });
   t.after(async () => { await service.close(); lock.release(); rmSync(dir, { recursive: true, force: true }); });
-  service.allowResume = false;
   assert.equal((await service.newSession(oldId, randomUUID())).ok, false);
   service.register({ readyState: 1, close() {} }, { id: oldId, file, cwd: dir, instanceId: 'live', status: 'idle', title: 'Old task', messages: [] }, lock.owner);
   const created = await service.newSession(oldId, requestId);

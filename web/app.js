@@ -76,7 +76,6 @@ const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
-let projects = [], projectsLoading = false, projectCreating = false, projectRequest = 0, supportsProjects = false;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -134,7 +133,7 @@ function connection(text) { $('connection').textContent = text; $('connection').
 function disconnect() {
   closePicker();
   listRequest++; legacyList = undefined;
-  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsCommandResults = false; allowResume = false; supportsProjects = false;
+  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -187,7 +186,6 @@ function connect() {
     if (packet.type === 'ready') {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
-      supportsProjects = packet.supportsProjects === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
@@ -261,7 +259,6 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   manualClose = true; disconnect();
-  $('project-picker').close(); projects = []; projectRequest++;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
@@ -332,63 +329,6 @@ async function loadList() {
     listLoading = false; listError = e.message; renderPagination();
   }
 }
-function updateProjectControls() {
-  $('new-session').disabled = !connected || !supportsProjects || projectCreating;
-  $('new-session').title = connected && !supportsProjects ? 'Restart Pi Remote on your computer to start sessions here.' : '';
-  $('project-close').disabled = projectCreating;
-  $('project-search').disabled = projectCreating;
-  $('project-retry').disabled = !connected || projectsLoading;
-  for (const button of $('project-options').querySelectorAll('button')) button.disabled = !connected || projectCreating;
-}
-function renderProjects() {
-  const query = $('project-search').value.trim().toLowerCase();
-  const matches = projects.filter(project => project.cwd.toLowerCase().includes(query));
-  const fragment = document.createDocumentFragment();
-  for (const [index, project] of matches.entries()) {
-    if (!query && (index === 0 || index === 3)) fragment.append(el('h3', index === 0 ? 'Most used' : 'Other projects'));
-    const button = el('button', undefined, 'project-option'); button.type = 'button';
-    button.append(el('strong', project.cwd.split(/[\\/]/).filter(Boolean).at(-1) || project.cwd), el('span', displayPaths(project.cwd)));
-    button.addEventListener('click', () => createProjectSession(project));
-    fragment.append(button);
-  }
-  $('project-options').replaceChildren(fragment);
-  $('project-status').textContent = matches.length ? '' : query ? 'No matching projects.' : 'No projects yet. Start Pi in a project on your computer first.';
-  updateProjectControls();
-}
-async function loadProjects() {
-  const generation = ++projectRequest;
-  projectsLoading = true; projects = []; $('project-options').replaceChildren();
-  $('project-status').textContent = 'Loading projects…'; $('project-retry').hidden = true;
-  updateProjectControls();
-  try {
-    const result = await request('projects');
-    if (generation !== projectRequest) return;
-    projects = result; renderProjects();
-  } catch (error) {
-    if (generation !== projectRequest) return;
-    $('project-status').textContent = error.message; $('project-retry').hidden = false;
-  } finally {
-    if (generation === projectRequest) { projectsLoading = false; updateProjectControls(); }
-  }
-}
-async function createProjectSession(project) {
-  if (projectCreating || !connected) return;
-  projectCreating = true; updateProjectControls();
-  $('project-status').textContent = 'Starting session…';
-  try {
-    const created = await request('new', { sessionId: project.sessionId });
-    $('project-picker').close();
-    await selectSession(created.sessionId);
-  } catch (error) { $('project-status').textContent = error.message; }
-  finally { projectCreating = false; updateProjectControls(); }
-}
-$('new-session').addEventListener('click', () => {
-  $('project-search').value = ''; $('project-picker').showModal(); loadProjects();
-});
-$('project-close').addEventListener('click', () => $('project-picker').close());
-$('project-picker').addEventListener('cancel', event => { if (projectCreating) event.preventDefault(); });
-$('project-search').addEventListener('input', () => { if (!projectsLoading) renderProjects(); });
-$('project-retry').addEventListener('click', loadProjects);
 function renderPagination() {
   $('sessions').setAttribute('aria-busy', String(listLoading));
   $('sessions').inert = listLoading;
@@ -771,7 +711,6 @@ function renderConversation(state) {
   updateScrollButton();
 }
 function updateControls() {
-  updateProjectControls();
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const working = state && ['working', 'waiting'].includes(state.status);

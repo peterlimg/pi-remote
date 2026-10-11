@@ -82,29 +82,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #search { flex: 1; min-width: 0; font-size: 16px; border: 0; background: transparent; padding: 6px 12px 6px 0; }
 #search:focus-visible { outline: none; }
 .search-field:focus-within { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.search-bar:not(.open) :is(.search-field, #search-close), .search-bar.open :is(#search-open, #new-session) { display: none; }
-#new-session { display: flex; align-items: center; justify-content: center; gap: 8px; margin-left: auto; min-height: 50px; padding-inline: 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 500; }
-#new-session:hover:not(:disabled) { opacity: .85; }
-.project-picker { width: min(480px, calc(100% - 24px)); max-height: calc(var(--viewport-height, 100dvh) - 32px); padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); color: var(--text); }
-.project-picker::backdrop { background: rgb(0 0 0 / .35); }
-.project-picker header { display: flex; align-items: center; gap: 12px; }
-.project-picker h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 600; }
-#project-close { display: grid; place-items: center; width: 44px; padding: 0; }
-.project-picker > .hint { margin: 8px 0 16px; }
-#project-search { width: 100%; font-size: 16px; }
-#project-options { margin-top: 16px; }
-#project-options h3 { margin: 20px 8px 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
-#project-options h3:first-child { margin-top: 0; }
-.project-option { display: block; width: 100%; padding: 12px 8px; text-align: left; background: transparent; color: var(--text); }
-.project-option:hover:not(:disabled) { background: var(--user); }
-.project-option strong, .project-option span { display: block; overflow-wrap: anywhere; }
-.project-option strong { font-size: 16px; font-weight: 500; }
-.project-option span { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
-#project-status { margin-bottom: 0; }
-#project-status:empty { display: none; }
-@media (max-width: 700px) {
-  .project-picker { margin: auto auto max(12px, env(safe-area-inset-bottom)); }
-}
+.search-bar:not(.open) :is(.search-field, #search-close), .search-bar.open #search-open { display: none; }
 #sessions { overflow: auto; flex: 1; min-height: 0; }
 #list-empty { padding: 8px; }
 .list-pagination { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; margin-top: 8px; }

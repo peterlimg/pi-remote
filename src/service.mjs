@@ -71,23 +71,6 @@ export class SessionService extends EventEmitter {
       .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     return { matches, total: all.size };
   }
-  projects() {
-    const projects = new Map();
-    // Count each session once across disk and live state, independent of the phone's list window.
-    for (const session of this.matches().matches) {
-      if (!session.cwd) continue;
-      const live = this.live.get(session.id);
-      if (!this.allowResume && !live?.socket && !live?.worker) continue;
-      const project = projects.get(session.cwd);
-      if (project) {
-        project.count++;
-        if (session.updatedAt > project.updatedAt) {
-          project.updatedAt = session.updatedAt; project.sessionId = session.id;
-        }
-      } else projects.set(session.cwd, { cwd: session.cwd, sessionId: session.id, count: 1, updatedAt: session.updatedAt });
-    }
-    return [...projects.values()].sort((a, b) => b.count - a.count || b.updatedAt - a.updatedAt || a.cwd.localeCompare(b.cwd));
-  }
   read(id) {
     if (this.live.has(id)) {
       const state = this.live.get(id).state;
@@ -213,10 +196,9 @@ export class SessionService extends EventEmitter {
     requestKey(requestId);
     return this.journal.execute(id, requestId, { type: 'new' }, async () => {
       if (this.stopping) throw new Error('Pi Remote is stopping');
-      if (!this.allowResume && !this.live.get(id)?.socket && !this.live.get(id)?.worker) throw new Error('Starting sessions from saved projects is disabled locally.');
+      if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) throw new Error('Session is not connected. Resume a saved session first.');
       const source = this.read(id);
       if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
-      if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory is no longer available');
       const sessionDir = dirname(source.file);
       const worker = new RpcWorker(undefined, source.cwd, { ...this.workerOptions, sessionDir });
       let lock;
