@@ -165,7 +165,8 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
 #transcript::before, #transcript::after { content: ''; display: block; height: var(--transcript-gap); }
 .message, .tool, #transcript > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
-.tool, #transcript > .hint { font-family: var(--mono); }
+.tool { font-family: var(--mono); }
+#transcript > .hint { font: 17px/1.65 var(--sans); }
 .message.user { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .message.user .message-text { max-width: 85%; padding: 12px 16px; border-radius: 20px; background: var(--user); line-height: 1.5; white-space: pre-wrap; }
 .message.user .thread-images { justify-content: flex-end; }
