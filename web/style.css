@@ -209,7 +209,7 @@ pre.message-text { white-space: pre-wrap; }
 .attachment .connection-spinner { position: absolute; top: 28px; left: 28px; width: 24px; height: 24px; border-color: #fff; border-right-color: transparent; }
 /* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
 .attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
-.composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 16px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
+.composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 17px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
 /* The focus border replaces the browser's transient gray tap overlay. */
 .composer textarea { -webkit-tap-highlight-color: transparent; }
