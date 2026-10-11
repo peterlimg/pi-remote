@@ -1172,7 +1172,8 @@ function renderProjects(focusPin) {
 async function openProjects() {
   const dialog = $('project-picker');
   projectList = []; $('project-search').value = ''; renderProjects(); $('project-status').textContent = 'Loading projects…';
-  dialog.showModal();
+  // Focus the sheet, not its close button, so Safari draws no focus ring on open.
+  dialog.showModal(); dialog.focus();
   try {
     const projects = await request('projects');
     if (!dialog.open) return;

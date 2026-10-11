@@ -87,7 +87,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 /* The dialog spans the visible viewport, so the sheet rides above the keyboard; taps on its transparent area close it. */
 .project-picker { inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); }
 .project-picker[open] { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
-.project-sheet { display: flex; flex-direction: column; width: 100%; max-width: var(--content-width); max-height: 80%; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: var(--bg); animation: sheet-up .2s ease-out; }
+/* A fixed height keeps the sheet from jumping between loading and loaded. */
+.project-sheet { display: flex; flex-direction: column; width: 100%; max-width: var(--content-width); height: min(80%, 40rem); padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: var(--bg); animation: sheet-up .2s ease-out; }
+.project-picker:focus-visible { outline: none; }
 .project-picker::backdrop { background: rgb(0 0 0 / .4); }
 .project-picker header { display: flex; align-items: center; padding: 8px 8px 8px 20px; }
 .project-picker h2 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; }
@@ -95,7 +97,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #project-status { margin: 0 20px 12px; }
 .project-search { flex: none; margin: 0 16px 12px; border: 0; background: var(--user); box-shadow: none; }
 #project-status:empty { display: none; }
-#project-options { min-height: 0; max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px; }
+#project-options { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px; }
 .project-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; }
 .project-pin { display: grid; place-items: center; width: 44px; padding: 0; background: transparent; color: var(--muted); }
 .project-pin[aria-pressed="true"] { color: var(--accent); }
