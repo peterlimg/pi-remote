@@ -1,11 +1,14 @@
+import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
 import { cleanMessage, textContent } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
 const running = new WeakMap();
+// Reconnecting is not activity: keep the session file's time so the phone's unread marks survive host restarts.
+const lastWrite = file => { try { return statSync(file).mtimeMs; } catch { return Date.now(); } };
 export function initialState(meta, messages = []) {
-  return { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: Date.now() };
+  return { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: meta.file ? lastWrite(meta.file) : Date.now() };
 }
 export function applyEvent(state, event) {
   if (event.type === 'extension_ui_request') {

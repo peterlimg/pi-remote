@@ -225,3 +225,11 @@ test('authentication and origins fail closed', () => {
   assert.equal(originAllowed('https://evil.example', ['https://remote.example']), false);
   assert.equal(originAllowed(undefined, ['https://remote.example']), false);
 });
+
+test('initial state keeps the session file time so reconnects do not look unread', async () => {
+  const { mkdtempSync, writeFileSync, utimesSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const file = (await import('node:path')).join(mkdtempSync(tmpdir() + '/pi-state-'), 's.jsonl');
+  writeFileSync(file, ''); utimesSync(file, 1000, 1000);
+  assert.equal(initialState({ id: 'a', file }).updatedAt, 1000000);
+});
