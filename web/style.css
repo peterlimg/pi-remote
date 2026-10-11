@@ -1,5 +1,7 @@
 :root {
   color-scheme: light dark;
+  /* Home-screen apps keep the home-indicator inset while the keyboard covers it. */
+  --safe-bottom: env(safe-area-inset-bottom);
   --bg: #fafaf8;
   --panel: #f2f3f0;
   --composer-bg: #fff;
@@ -38,6 +40,7 @@
 ::selection { background: var(--selection); color: var(--text); }
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
+:root.keyboard-open { --safe-bottom: 0px; }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
 button, input, textarea, select { font: inherit; }
@@ -53,7 +56,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .quiet, .secondary { color: var(--accent); background: transparent; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
-.boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
+.boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
 .boot h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
@@ -91,7 +94,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .project-picker { inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); }
 .project-picker[open] { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 /* A fixed height keeps the sheet from jumping between loading and loaded. */
-.project-sheet { display: flex; flex-direction: column; width: 100%; max-width: var(--content-width); height: min(80%, 40rem); padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: var(--bg); animation: sheet-up .2s ease-out; }
+.project-sheet { display: flex; flex-direction: column; width: 100%; max-width: var(--content-width); height: min(80%, 40rem); padding-bottom: max(8px, var(--safe-bottom)); border-radius: 16px 16px 0 0; background: var(--bg); animation: sheet-up .2s ease-out; }
 .project-picker:focus-visible { outline: none; }
 .project-picker::backdrop { background: rgb(0 0 0 / .4); }
 .project-picker header { display: flex; align-items: center; padding: 8px 8px 8px 20px; }
@@ -207,7 +210,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, env(safe-area-inset-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
+.composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
 #agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
@@ -289,12 +292,12 @@ pre.message-text { white-space: pre-wrap; }
 .dialog footer .secondary { margin-left: auto; }
 .dialog footer .hint { width: 100%; margin: 0; overflow-wrap: anywhere; }
 .dialog-error { color: var(--error); }
-.image-viewer { width: 100%; max-width: var(--content-width); max-height: none; margin: auto auto 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); border: 0; border-radius: 16px 16px 0 0; background: color-mix(in srgb, var(--panel) 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
+.image-viewer { width: 100%; max-width: var(--content-width); max-height: none; margin: auto auto 0; padding: 8px 8px max(8px, var(--safe-bottom)); border: 0; border-radius: 16px 16px 0 0; background: color-mix(in srgb, var(--panel) 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
 .image-viewer[open] { display: flex; flex-direction: column; animation: sheet-up .2s ease-out; }
 .image-viewer:focus-visible { outline: none; }
 .image-viewer::backdrop { background: rgb(0 0 0 / .4); }
 .image-viewer button { align-self: flex-end; width: 36px; min-height: 36px; margin-bottom: 8px; }
-.image-viewer img { display: block; max-width: 100%; max-height: calc(var(--viewport-height, 100dvh) * .9 - 52px - max(8px, env(safe-area-inset-bottom))); margin: 0 auto; border-radius: 8px; }
+.image-viewer img { display: block; max-width: 100%; max-height: calc(var(--viewport-height, 100dvh) * .9 - 52px - max(8px, var(--safe-bottom))); margin: 0 auto; border-radius: 8px; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { :is(.image-viewer[open], .project-sheet) { animation: none; } }
 .usage-summary, .usage-summary .message-text { font: inherit; }
@@ -328,7 +331,7 @@ pre.message-text { white-space: pre-wrap; }
 }
 @media (max-width: 700px) {
   .shell { grid-template-columns: 1fr; }
-  .shell aside { border: 0; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+  .shell aside { border: 0; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
   /* One page scroll on phones: the list grows instead of scrolling inside a box. */
   #sessions { overflow: visible; flex: none; }
   .shell main { display: none; }

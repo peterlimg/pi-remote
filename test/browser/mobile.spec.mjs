@@ -276,3 +276,18 @@ test('home-screen edge swipe drags the thread off the live list without a histor
   await expect(page.getByRole('button', { name: /Project Beta/ })).toBeVisible();
   await expect(page.locator('#prompt')).toBeHidden();
 });
+
+test('an open keyboard drops the home-indicator inset so bottom controls sit on it', async ({ page }) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session')).toHaveCount(2);
+  const setKeyboard = height => page.evaluate(height => {
+    Object.defineProperty(visualViewport, 'height', { value: height, configurable: true });
+    visualViewport.dispatchEvent(new Event('resize'));
+  }, height);
+  const root = page.locator('html');
+  await setKeyboard(await page.evaluate(() => innerHeight - 300));
+  await expect(root).toHaveClass(/keyboard-open/);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').trim())).toBe('0px');
+  await setKeyboard(await page.evaluate(() => innerHeight));
+  await expect(root).not.toHaveClass(/keyboard-open/);
+});
