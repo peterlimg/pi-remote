@@ -10,7 +10,9 @@ const files = new Map([
   ['/markdown-it.mjs', ['../node_modules/markdown-it/dist/browser/markdown-it.esm.min.mjs', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
-  ['/icon.svg', ['icon.svg', 'image/svg+xml']]
+  ['/icon.svg', ['icon.svg', 'image/svg+xml']],
+  // iOS home screen ignores SVG icons and the manifest's icons; it reads only this PNG.
+  ['/apple-touch-icon.png', ['apple-touch-icon.png', 'image/png']]
 ]);
 // The fixed list is the only thing a relay can request from the computer.
 export const assetPath = req => {
