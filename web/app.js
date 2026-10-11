@@ -1401,6 +1401,8 @@ async function sendMessage(type = 'prompt') {
   // The editor owns the next draft; retain this submission until delivery is confirmed.
   drafts.set(id, ''); imageDrafts.delete(id);
   $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
+  // On touch screens a sent message closes the keyboard to reveal the conversation; desktops keep typing.
+  if (matchMedia('(hover: none)').matches) $('prompt').blur();
   if (attachments.length) {
     renderConversation(cache.get(id));
     $('transcript').scrollTop = $('transcript').scrollHeight;
