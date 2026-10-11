@@ -20,6 +20,8 @@ export class SessionService extends EventEmitter {
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
     this.restoreIds = new Set(); this.restoreWarnings = [];
     this.journal = new CommandJournal(join(dir, 'commands'));
+    // Blank sessions each get a folder here; the phone labels them by session title instead of folder name.
+    mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -74,7 +76,7 @@ export class SessionService extends EventEmitter {
   // Projects in list order: running first, then most recently used. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
+    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id, title: item.title });
     return [...projects.values()];
   }
   read(id) {
@@ -212,16 +214,15 @@ export class SessionService extends EventEmitter {
       return this.startFresh(source.cwd, dirname(source.file));
     });
   }
-  // A session in a fresh folder under the data dir, named by local time (`2026-10-11-1432`, then `-2`…).
+  // A blank session: a fresh folder under the data dir, named by local time (`2026-10-11-1432`, then `-2`…).
   async newProject(requestId) {
     requestKey(requestId);
     return this.journal.execute('new-project', requestId, { type: 'newProject' }, async () => {
       if (this.stopping) throw new Error('Pi Remote is stopping');
       if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
       if (!this.roots.length) throw new Error('No session directory is configured');
-      const parent = join(this.dir, 'projects'), now = new Date(), pad = n => String(n).padStart(2, '0');
+      const parent = this.blankDir, now = new Date(), pad = n => String(n).padStart(2, '0');
       const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-      mkdirSync(parent, { recursive: true, mode: 0o700 });
       let cwd;
       for (let n = 1; !cwd; n++) {
         const candidate = join(parent, n === 1 ? name : `${name}-${n}`);

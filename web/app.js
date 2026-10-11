@@ -75,7 +75,7 @@ let key = localStorage.getItem('pi-remote-key') || '';
 const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -194,6 +194,7 @@ function connect() {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
       supportsCommandResults = packet.supportsCommandResults === true;
+      blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
         item.recovering = false;
@@ -388,9 +389,8 @@ function renderList() {
         status.dataset.status = item.status;
         meta.append(status);
       }
-      const cwd = displayPaths(item.cwd);
-      const project = el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'session-project');
-      project.title = cwd;
+      const project = el('span', projectName(item.cwd), 'session-project');
+      project.title = displayPaths(item.cwd);
       meta.append(project);
       const date = new Date(item.updatedAt);
       if (Number.isFinite(date.getTime())) {
@@ -424,10 +424,16 @@ function statusIcon(status) {
 function displayPaths(text) {
   return text.replace(/(^|[\s"'`=:(])\/(?:Users|home)\/[^/\s"'`:]+/g, '$1~');
 }
-function renderProject(cwd = '') {
+// Blank sessions live in dated folders the host creates; their folder name means nothing to the user.
+const isBlank = cwd => !!blankDir && !!cwd?.startsWith(blankDir + (blankDir.includes('\\') ? '\\' : '/'));
+function projectName(cwd) {
+  if (isBlank(cwd)) return 'Blank';
   cwd = displayPaths(cwd);
-  $('project').textContent = cwd;
-  $('project-name').textContent = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
+  return cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
+}
+function renderProject(cwd = '') {
+  $('project').textContent = displayPaths(cwd);
+  $('project-name').textContent = projectName(cwd);
   $('project-name').hidden = !cwd;
 }
 // Read state lives per device: the last activity time of each session as of when its thread was on screen.
@@ -1154,14 +1160,18 @@ $('list-retry').addEventListener('click', loadList);
 let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
 function renderProjects(focusPin) {
   const query = $('project-search').value.trim().toLowerCase();
-  const matches = projectList.filter(project => displayPaths(project.cwd).toLowerCase().includes(query));
+  const matches = projectList.filter(project => [displayPaths(project.cwd), isBlank(project.cwd) ? project.title : ''].join(' ').toLowerCase().includes(query));
   const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
   const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
   $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
-    const cwd = displayPaths(project.cwd), name = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, isPinned = pinnedProjects.includes(project.cwd);
+    const cwd = displayPaths(project.cwd), isPinned = pinnedProjects.includes(project.cwd);
+    // A blank folder is known by its session's title and the day it was made (its name starts YYYY-MM-DD).
+    const [y, m, d] = isBlank(project.cwd) ? project.cwd.split(/[\\/]/).at(-1).split('-').map(Number) : [];
+    const name = y ? project.title || 'Untitled session' : projectName(project.cwd);
+    const detail = y ? 'Blank · ' + new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : cwd;
     const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
     button.type = 'button'; button.title = cwd;
-    button.append(el('span', name, 'project-option-name'), el('span', cwd, 'project-option-path'));
+    button.append(el('span', name, 'project-option-name'), el('span', detail, 'project-option-path'));
     button.addEventListener('click', () => startInProject(project));
     pin.type = 'button'; pin.dataset.cwd = project.cwd; pin.setAttribute('aria-pressed', String(isPinned));
     pin.setAttribute('aria-label', 'Pin ' + name); pin.title = isPinned ? 'Unpin' : 'Pin to top';

@@ -103,23 +103,25 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
-test('new session button lists recent projects and opens a fresh session there or in a new folder', async ({ page }) => {
+test('new session button lists recent projects, labels blank ones by title and starts sessions in either', async ({ page }) => {
   const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
   const operations = [];
   await page.routeWebSocket('**/ws', ws => {
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
       if (packet.type === 'auth') {
-        ws.send(JSON.stringify({ type: 'ready' }));
+        ws.send(JSON.stringify({ type: 'ready', blankDir: '/Users/me/.pi/remote/projects' }));
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
       } else if (packet.op === 'projects') {
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true,
-          value: ['beta', 'alpha', 'c', 'd', 'e', 'f', 'g'].map((name, i) => ({ cwd: '/Users/me/' + name, sessionId: i ? name : 'old' })) }));
+          value: [...['beta', 'alpha', 'c', 'd', 'e', 'f', 'g'].map((name, i) => ({ cwd: '/Users/me/' + name, sessionId: i ? name : 'old' })),
+            { cwd: '/Users/me/.pi/remote/projects/2026-10-11-2133', sessionId: 'blank', title: 'Plan trip' }] }));
       } else if (packet.op === 'new' || packet.op === 'newProject') {
         operations.push(packet);
-        states.push({ id: 'fresh', title: 'Untitled session', cwd: '/Users/me/beta', status: 'idle', messages: [] });
+        const cwd = packet.op === 'new' ? '/Users/me/beta' : '/Users/me/.pi/remote/projects/2026-10-12-0900';
+        states.push({ id: 'fresh' + operations.length, title: 'Untitled session', cwd, status: 'idle', messages: [] });
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
-        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { ok: true, value: { sessionId: 'fresh' } } }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { ok: true, value: { sessionId: 'fresh' + operations.length } } }));
       } else if (packet.op === 'watch') {
         ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0, state: states.find(x => x.id === packet.sessionId) }));
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
@@ -129,20 +131,22 @@ test('new session button lists recent projects and opens a fresh session there o
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: 'New session' }).tap();
   const picker = page.getByRole('dialog', { name: 'New session in…' }), options = picker.locator('#project-options');
-  await expect(options.locator('.project-option-name')).toHaveText(['beta', 'alpha', 'c', 'd', 'e', 'f', 'g']);
+  await expect(options.locator('.project-option-name')).toHaveText(['beta', 'alpha', 'c', 'd', 'e', 'f', 'g', 'Plan trip']);
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('G');
   await expect(options.locator('.project-option-name')).toHaveText(['g']);
+  await picker.getByRole('searchbox', { name: 'Search projects' }).fill('trip');
+  await expect(options.locator('.project-option-path')).toHaveText([/^Blank · (11 Oct|Oct 11)$/]);
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('zzz');
   await expect(picker.locator('#project-status')).toHaveText('No matching projects');
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('');
   await expect(options.locator('.project-option-path').first()).toHaveText('~/beta');
   await picker.getByRole('button', { name: 'Pin e' }).tap();
-  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
+  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g', 'Plan trip']);
   await expect(picker.getByRole('button', { name: 'Pin e' })).toHaveAttribute('aria-pressed', 'true');
   await expect(picker.getByRole('button', { name: 'Pin e' })).not.toBeFocused();
   await picker.getByRole('button', { name: 'Close' }).tap();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
+  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g', 'Plan trip']);
   await page.locator('#project-picker-title').evaluate(node => {
     const touch = y => [new Touch({ identifier: 1, target: node, clientX: 100, clientY: y })];
     for (const [type, y] of [['touchstart', 400], ['touchmove', 700]]) node.dispatchEvent(new TouchEvent(type, { touches: touch(y), bubbles: true, cancelable: true }));
@@ -156,10 +160,11 @@ test('new session button lists recent projects and opens a fresh session there o
   expect(operations.map(x => x.sessionId)).toEqual(['old']);
   await page.locator('#back').click();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await picker.getByRole('button', { name: 'New folder' }).tap();
+  await picker.getByRole('button', { name: 'Blank session' }).tap();
   await expect(picker).toBeHidden();
   expect(operations.map(x => x.op)).toEqual(['new', 'newProject']);
+  await expect(page.locator('#project-name')).toHaveText('Blank');
   await page.locator('#back').click();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await expect(picker.getByRole('button', { name: 'New folder' })).toBeEnabled();
+  await expect(picker.getByRole('button', { name: 'Blank session' })).toBeEnabled();
 });
