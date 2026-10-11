@@ -36,7 +36,7 @@
 }
 * { box-sizing: border-box; scrollbar-color: var(--line) var(--bg); scrollbar-width: thin; }
 ::selection { background: var(--selection); color: var(--text); }
-html { touch-action: pan-x pan-y; }
+html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
@@ -212,7 +212,6 @@ pre.message-text { white-space: pre-wrap; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 17px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
 /* The focus border replaces the browser's transient gray tap overlay. */
-.composer textarea { -webkit-tap-highlight-color: transparent; }
 .composer textarea:focus { outline: 0; }
 .composer:focus-within { border-color: var(--accent); }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -237,7 +236,7 @@ pre.message-text { white-space: pre-wrap; }
 #image-files:disabled { cursor: default; }
 .composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 22px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
-.composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; -webkit-tap-highlight-color: transparent; }
+.composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
 #reasoning-control { display: inline-flex; align-items: center; color: var(--muted); text-transform: capitalize; }
 #reasoning-value { overflow: hidden; text-overflow: ellipsis; }
