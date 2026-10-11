@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('focusing the message field has no tap overlay and keeps the composer focus border', async ({ page }) => {
+test('focusing the message field has no tap overlay or border change', async ({ page }) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const prompt = page.locator('#prompt'), composer = page.locator('#composer');
@@ -14,7 +14,7 @@ test('focusing the message field has no tap overlay and keeps the composer focus
     await prompt.tap();
     await expect(prompt).toBeFocused();
     await expect(composer).toHaveCSS('background-color', background);
-    await expect(composer).not.toHaveCSS('border-color', border);
+    await expect(composer).toHaveCSS('border-color', border);
     await expect(prompt).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   }
 });

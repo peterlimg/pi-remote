@@ -211,9 +211,7 @@ pre.message-text { white-space: pre-wrap; }
 .attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 17px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
-/* The focus border replaces the browser's transient gray tap overlay. */
 .composer textarea:focus { outline: 0; }
-.composer:focus-within { border-color: var(--accent); }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #fast-mode { flex-shrink: 0; color: var(--accent); }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
