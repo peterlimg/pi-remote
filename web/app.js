@@ -680,7 +680,6 @@ function renderConversation(state) {
       fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
-    if (message.truncated) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
   }
   if (usagePosition === messages.length) { activity = undefined; fragment.append(renderUsage(usage)); }
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
