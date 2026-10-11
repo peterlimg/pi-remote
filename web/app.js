@@ -258,7 +258,7 @@ window.addEventListener('storage', event => {
   if (event.storageArea === localStorage && (event.key === 'pi-remote-token' || event.key === null) && !event.newValue) logout();
 });
 function logout() {
-  manualClose = true; disconnect();
+  manualClose = true; disconnect(); $('project-picker').close();
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
@@ -1135,6 +1135,41 @@ $('search-close').addEventListener('click', () => { closeSearch(); $('search-ope
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
+// Most-used projects come first; the host counts sessions per working directory.
+async function openProjects() {
+  const dialog = $('project-picker');
+  $('project-options').replaceChildren(); $('project-status').textContent = 'Loading projects…';
+  dialog.showModal();
+  try {
+    const projects = await request('projects');
+    if (!dialog.open) return;
+    $('project-options').replaceChildren(...projects.map(project => {
+      const cwd = displayPaths(project.cwd), button = el('button', undefined, 'project-option');
+      button.type = 'button'; button.title = cwd;
+      button.append(el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'project-option-name'), el('span', cwd, 'project-option-path'));
+      button.addEventListener('click', () => startInProject(project));
+      return button;
+    }));
+    $('project-status').textContent = projects.length ? '' : 'No projects yet. Start Pi in a project on your computer first.';
+  } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
+}
+async function startInProject(project) {
+  const buttons = $('project-options').querySelectorAll('button');
+  for (const button of buttons) button.disabled = true;
+  $('project-status').textContent = 'Starting session…';
+  try {
+    const created = await request('new', { sessionId: project.sessionId });
+    if (!$('project-picker').open) return;
+    $('project-picker').close();
+    await selectSession(created.sessionId);
+  } catch (e) {
+    for (const button of buttons) button.disabled = false;
+    $('project-status').textContent = e.message;
+  }
+}
+$('new-session').addEventListener('click', openProjects);
+$('project-close').addEventListener('click', () => $('project-picker').close());
+$('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
 $('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
 window.addEventListener('popstate', () => { closePicker(); $('app').classList.remove('viewing'); });
 // iOS home-screen apps have no Back button, and their history edge-swipe slides in a screenshot taken when the

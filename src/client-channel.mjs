@@ -83,6 +83,7 @@ export function attachClient(socket, service) {
       try {
         let value;
         if (message.op === 'ping') value = { pong: true };
+        else if (message.op === 'projects') value = service.projects();
         else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
         else if (message.op === 'watch') {
           const state = service.read(message.sessionId);

@@ -71,6 +71,15 @@ export class SessionService extends EventEmitter {
       .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     return { matches, total: all.size };
   }
+  // Projects by session count. Each names its newest session (online first) as the source for `new`.
+  projects() {
+    const projects = new Map();
+    for (const item of this.matches().matches) {
+      const project = projects.get(item.cwd);
+      if (project) project.count++; else projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id, count: 1 });
+    }
+    return [...projects.values()].sort((a, b) => b.count - a.count).slice(0, 50);
+  }
   read(id) {
     if (this.live.has(id)) {
       const state = this.live.get(id).state;
@@ -196,9 +205,13 @@ export class SessionService extends EventEmitter {
     requestKey(requestId);
     return this.journal.execute(id, requestId, { type: 'new' }, async () => {
       if (this.stopping) throw new Error('Pi Remote is stopping');
-      if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) throw new Error('Session is not connected. Resume a saved session first.');
       const source = this.read(id);
       if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
+      // A saved source starts a host-owned worker, the same as resuming it would.
+      if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) {
+        if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
+        if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory no longer exists');
+      }
       const sessionDir = dirname(source.file);
       const worker = new RpcWorker(undefined, source.cwd, { ...this.workerOptions, sessionDir });
       let lock;

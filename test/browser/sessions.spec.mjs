@@ -102,3 +102,37 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session').first().locator('.session-state')).toHaveCount(0);
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });
+
+test('new session button lists most-used projects and opens a fresh session there', async ({ page }) => {
+  const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
+  const operations = [];
+  await page.routeWebSocket('**/ws', ws => {
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready' }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+      } else if (packet.op === 'projects') {
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true,
+          value: [{ cwd: '/Users/me/beta', sessionId: 'old', count: 3 }, { cwd: '/Users/me/alpha', sessionId: 'a', count: 1 }] }));
+      } else if (packet.op === 'new') {
+        operations.push(packet);
+        states.push({ id: 'fresh', title: 'Untitled session', cwd: '/Users/me/beta', status: 'idle', messages: [] });
+        ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: { ok: true, value: { sessionId: 'fresh' } } }));
+      } else if (packet.op === 'watch') {
+        ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0, state: states.find(x => x.id === packet.sessionId) }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+      }
+    });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: 'New session' }).tap();
+  const picker = page.getByRole('dialog', { name: 'New session in…' });
+  await expect(picker.locator('.project-option-name')).toHaveText(['beta', 'alpha']);
+  await expect(picker.locator('.project-option-path').first()).toHaveText('~/beta');
+  await picker.getByRole('button', { name: /beta/ }).tap();
+  await expect(picker).toBeHidden();
+  await expect(page.locator('#title')).toHaveText('Untitled session');
+  expect(operations.map(x => x.sessionId)).toEqual(['old']);
+});

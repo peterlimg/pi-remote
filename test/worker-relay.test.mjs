@@ -146,7 +146,6 @@ test('remote /new creates an independent session in the same working directory',
   const oldId = sessionKey(file), requestId = randomUUID();
   const lock = acquireLock(join(dir, 'locks'), oldId, { file, instanceId: 'live' });
   t.after(async () => { await service.close(); lock.release(); rmSync(dir, { recursive: true, force: true }); });
-  assert.equal((await service.newSession(oldId, randomUUID())).ok, false);
   service.register({ readyState: 1, close() {} }, { id: oldId, file, cwd: dir, instanceId: 'live', status: 'idle', title: 'Old task', messages: [] }, lock.owner);
   const created = await service.newSession(oldId, requestId);
   assert.equal(created.ok, true);
@@ -170,6 +169,22 @@ test('remote /new creates an independent session in the same working directory',
   assert.deepEqual(service.read(oldId).messages, []);
   await service.live.get(id).worker.close();
   await until(() => service.list().sessions.some(x => x.id === id && x.status === 'saved'));
+});
+test('new session from a saved project leaves the source saved; disabled resume refuses it', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-project-')), file = join(dir, 'saved.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  const service = new SessionService({ dir, roots: [dir],
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
+  t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
+  const sourceId = sessionKey(file);
+  assert.deepEqual(service.projects(), [{ cwd: dir, sessionId: sourceId, count: 1 }]);
+  service.allowResume = false;
+  assert.match((await service.newSession(sourceId, randomUUID())).error, /disabled locally/);
+  service.allowResume = true;
+  const created = await service.newSession(sourceId, randomUUID());
+  assert.equal(service.read(created.value.sessionId).cwd, dir);
+  assert.equal(service.live.has(sourceId), false);
+  await service.live.get(created.value.sessionId).worker.close();
 });
 test('relay carries browser requests and closes channels when the computer disconnects', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-relay-'));
