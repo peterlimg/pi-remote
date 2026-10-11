@@ -75,7 +75,7 @@ let key = localStorage.getItem('pi-remote-key') || '';
 const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -114,8 +114,8 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    const lookup = supportsCommandResults && ['command', 'new', 'resume', 'answer'].includes(op)
-      ? { op: 'commandResult', id, sessionId: extra.sessionId, requestId: id } : undefined;
+    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer'].includes(op)
+      ? { op: 'commandResult', id, sessionId: op === 'newProject' ? 'new-project' : extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
     transmit(socket, { op, id, ...extra });
   });
@@ -194,6 +194,7 @@ function connect() {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
       supportsCommandResults = packet.supportsCommandResults === true;
+      blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
         item.recovering = false;
@@ -388,10 +389,11 @@ function renderList() {
         status.dataset.status = item.status;
         meta.append(status);
       }
-      const cwd = displayPaths(item.cwd);
-      const project = el('span', cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, 'session-project');
-      project.title = cwd;
-      meta.append(project);
+      if (!isBlank(item.cwd)) {
+        const project = el('span', projectName(item.cwd), 'session-project');
+        project.title = displayPaths(item.cwd);
+        meta.append(project);
+      }
       const date = new Date(item.updatedAt);
       if (Number.isFinite(date.getTime())) {
         const time = el('time', age(date), 'session-time');
@@ -424,11 +426,18 @@ function statusIcon(status) {
 function displayPaths(text) {
   return text.replace(/(^|[\s"'`=:(])\/(?:Users|home)\/[^/\s"'`:]+/g, '$1~');
 }
-function renderProject(cwd = '') {
+// Sessions started without a project live in dated folders the host creates. Like a chat outside
+// any project, they carry no project label; their title is their identity.
+const isBlank = cwd => !!blankDir && !!cwd?.startsWith(blankDir + (blankDir.includes('\\') ? '\\' : '/'));
+function projectName(cwd) {
+  if (isBlank(cwd)) return '';
   cwd = displayPaths(cwd);
-  $('project').textContent = cwd;
-  $('project-name').textContent = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
-  $('project-name').hidden = !cwd;
+  return cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
+}
+function renderProject(cwd = '') {
+  $('project').textContent = displayPaths(cwd);
+  $('project-name').textContent = projectName(cwd);
+  $('project-name').hidden = !$('project-name').textContent;
 }
 // Read state lives per device: the last activity time of each session as of when its thread was on screen.
 // Sessions never seen before start as read so a fresh device doesn't light up the whole history.
@@ -1154,11 +1163,11 @@ $('list-retry').addEventListener('click', loadList);
 let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
 function renderProjects(focusPin) {
   const query = $('project-search').value.trim().toLowerCase();
-  const matches = projectList.filter(project => displayPaths(project.cwd).toLowerCase().includes(query));
+  const matches = projectList.filter(project => !isBlank(project.cwd) && displayPaths(project.cwd).toLowerCase().includes(query));
   const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
   const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
   $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
-    const cwd = displayPaths(project.cwd), name = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, isPinned = pinnedProjects.includes(project.cwd);
+    const cwd = displayPaths(project.cwd), name = projectName(project.cwd), isPinned = pinnedProjects.includes(project.cwd);
     const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
     button.type = 'button'; button.title = cwd;
     button.append(el('span', name, 'project-option-name'), el('span', cwd, 'project-option-path'));
@@ -1188,24 +1197,27 @@ async function openProjects() {
     const projects = await request('projects');
     if (!dialog.open) return;
     projectList = projects; renderProjects();
-    if (!projects.length) $('project-status').textContent = 'No projects yet. Start Pi in a project on your computer first.';
+    if (!projects.length) $('project-status').textContent = 'No projects yet.';
   } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
 }
+// Without a project, the host starts the session in a new folder it creates.
 async function startInProject(project) {
-  const buttons = $('project-options').querySelectorAll('button');
+  const buttons = $('project-picker').querySelectorAll('.project-option, .project-pin, #new-project');
   for (const button of buttons) button.disabled = true;
   $('project-status').textContent = 'Starting session…';
   try {
-    const created = await request('new', { sessionId: project.sessionId });
+    const created = project ? await request('new', { sessionId: project.sessionId }) : await request('newProject');
     if (!$('project-picker').open) return;
     $('project-picker').close();
     await selectSession(created.sessionId);
   } catch (e) {
-    for (const button of buttons) button.disabled = false;
     $('project-status').textContent = e.message;
+  } finally {
+    for (const button of buttons) button.disabled = false;
   }
 }
 $('new-session').addEventListener('click', () => { haptic(); openProjects(); });
+$('new-project').addEventListener('click', () => startInProject());
 $('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });

@@ -73,7 +73,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -118,6 +118,8 @@ export function attachClient(socket, service) {
           }
         } else if (message.op === 'new') {
           value = await service.newSession(message.sessionId, message.id);
+        } else if (message.op === 'newProject') {
+          value = await service.newProject(message.id);
         } else if (message.op === 'resume') {
           value = await service.resume(message.sessionId, message.id);
         } else if (message.op === 'answer') {

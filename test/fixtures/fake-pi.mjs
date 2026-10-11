@@ -1,11 +1,13 @@
 import { JsonLines } from '../../src/rpc.mjs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 const out = value => process.stdout.write(JSON.stringify(value) + '\n');
 const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
+// Like Pi, create a new session's folder at startup and its file on the first prompt.
+if (fresh) mkdirSync(dir, { recursive: true });
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false;
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
