@@ -164,6 +164,7 @@ test('late discovery cannot replace another session menu; loading and failure st
   await page.getByRole('button', { name: /Alpha/ }).click();
   await page.locator('#prompt').fill('/');
   await expect(page.locator('#command-help')).toHaveText('Loading commands…');
+  await expect(page.locator('#command-help')).toHaveCSS('border-top-width', '0px');
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Beta/ }).click();
   await page.locator('#prompt').fill('/');
