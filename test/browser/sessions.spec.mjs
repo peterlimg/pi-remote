@@ -156,10 +156,10 @@ test('new session button lists recent projects and opens a fresh session there o
   expect(operations.map(x => x.sessionId)).toEqual(['old']);
   await page.locator('#back').click();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await picker.getByRole('button', { name: /New folder/ }).tap();
+  await picker.getByRole('button', { name: 'New folder' }).tap();
   await expect(picker).toBeHidden();
   expect(operations.map(x => x.op)).toEqual(['new', 'newProject']);
   await page.locator('#back').click();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await expect(picker.getByRole('button', { name: /New folder/ })).toBeEnabled();
+  await expect(picker.getByRole('button', { name: 'New folder' })).toBeEnabled();
 });

@@ -114,6 +114,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .project-pin[aria-pressed="true"] svg { fill: currentColor; }
 .project-option { display: grid; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 10px 12px; border-radius: 8px; font-weight: 400; }
 .project-option:hover:not(:disabled) { background: var(--panel); }
+.project-new { display: flex; align-items: center; gap: 12px; color: var(--accent); font-size: 16px; font-weight: 500; }
 .project-option-name { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-option-path { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #sessions { overflow: auto; flex: 1; min-height: 0; }
