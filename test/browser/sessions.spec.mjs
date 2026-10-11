@@ -78,6 +78,8 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session')).toHaveCount(1);
   await page.locator('#search').fill('no such task');
   await expect(page.locator('#list-empty')).toHaveText('No matching sessions. Try another task or project.');
+  const bar = await page.locator('#search-bar').boundingBox(); // An empty list must not pull search up to the top.
+  expect(bar.y + bar.height).toBeGreaterThan(page.viewportSize().height - 24);
   failList = true;
   await page.getByRole('button', { name: 'Close search' }).click(); // Closing clears the filter.
   await expect(page.locator('#search')).toBeHidden();
