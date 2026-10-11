@@ -460,15 +460,16 @@ function clearThreadImages(keep = new Set()) {
     threadImages.delete(id);
   }
 }
+function openImage(event) {
+  event.preventDefault();
+  $('image-viewer').querySelector('img').src = event.currentTarget.href; $('image-viewer').showModal(); $('image-viewer').focus();
+}
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);
   const link = el('a'), preview = el('img');
   link.href = image.url;
   link.setAttribute('aria-label', 'Open image');
-  link.addEventListener('click', event => {
-    event.preventDefault();
-    $('image-viewer').querySelector('img').src = image.url; $('image-viewer').showModal(); $('image-viewer').focus();
-  });
+  link.addEventListener('click', openImage);
   preview.src = image.url; preview.alt = 'Attached image';
   preview.onerror = () => {
     URL.revokeObjectURL(image.url); image.url = undefined;
@@ -1231,7 +1232,9 @@ function renderImages() {
       imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus();
     });
     item.classList.toggle('uploading', !!image.uploading);
-    item.append(preview);
+    const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
+    link.addEventListener('click', openImage);
+    link.append(preview); item.append(link);
     if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
     item.append(remove); return item;
   }));

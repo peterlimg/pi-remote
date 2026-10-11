@@ -169,6 +169,10 @@ test('image picker previews, removes and preserves session drafts until acknowle
     expect(target.y + target.height).toBeLessThanOrEqual(preview.y + preview.height);
   };
   await checkRemoveOverlay();
+  await page.getByRole('link', { name: `Open ${file.name}` }).tap();
+  await expect(page.locator('#image-viewer img')).toBeVisible();
+  await page.getByRole('button', { name: 'Close image' }).tap();
+  await expect(page.locator('#image-viewer')).toBeHidden();
   await page.getByRole('button', { name: `Remove ${file.name}` }).tap();
   await expect(page.getByLabel('Attach images', { exact: true })).toBeFocused();
   await expect(page.locator('#attachments')).toBeHidden();
