@@ -129,7 +129,14 @@ function transmit(ws, value) {
 function loginFailed(text) { $('login-error').textContent = text; $('login-error').hidden = false; logout(); }
 // The first connection keeps the boot screen until sessions arrive, so the app never flashes empty.
 function showApp() { $('boot').hidden = true; $('app').hidden = false; }
-function connection(text) { $('connection').textContent = text; $('connection').hidden = connected; updateControls(); renderPagination(); }
+// Routine reconnects (foreground return, network change) finish in a moment; only a lasting outage shows the banner.
+let bannerTimer;
+function connection(text) {
+  $('connection').textContent = text;
+  if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
+  else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
+  updateControls(); renderPagination();
+}
 function disconnect() {
   closePicker();
   listRequest++; legacyList = undefined;

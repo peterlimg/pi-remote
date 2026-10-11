@@ -62,6 +62,28 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await expect(page.locator('#notice')).toHaveText('An unrelated warning');
 });
 
+test('the session list hides Connecting during a quick reconnect and shows it once the outage lasts', async ({ page }) => {
+  await freezeTime(page);
+  const channels = [];
+  await page.routeWebSocket('**/ws', ws => {
+    channels.push(ws);
+    const attempt = channels.length;
+    ws.onMessage(raw => { if (attempt === 1) answer(ws, JSON.parse(raw)); });
+  });
+  await page.goto(url);
+  const banner = page.locator('#connection');
+  await expect(page.getByRole('button', { name: /Reconnect test/ })).toBeVisible();
+  channels[0].close({ code: 1012, reason: 'Computer disconnected' });
+  await page.clock.runFor(1100);
+  await expect.poll(() => channels.length).toBe(2);
+  await expect(banner).toBeHidden();
+  await page.clock.runFor(1000);
+  await expect(banner).toHaveText('Connecting…');
+  await expect(banner).toBeVisible();
+  channels[1].send(JSON.stringify({ type: 'ready' }));
+  await expect(banner).toBeHidden();
+});
+
 test('a silent reconnect times out, preserves drafts, and re-watches without replaying a command', async ({ page }) => {
   await freezeTime(page);
   const channels = [], commands = [], watches = [];
