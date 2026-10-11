@@ -1382,6 +1382,9 @@ $('image-files').addEventListener('change', () => {
   imageDrafts.set(selected, [...images, ...added]);
   notice(''); renderImages();
 });
+// Composer buttons never take focus from the editor. On iOS a blur starts closing the keyboard and the
+// shell fills the screen at once, so the composer drops away before the tap lands and the tap is lost.
+$('composer').addEventListener('mousedown', event => { if (event.target.closest('button')) event.preventDefault(); });
 $('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
