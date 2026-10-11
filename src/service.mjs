@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, isInside, readSession, readSessionImage } from './catalog.mjs';
@@ -209,24 +209,45 @@ export class SessionService extends EventEmitter {
         if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
         if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory no longer exists');
       }
-      const sessionDir = dirname(source.file);
-      const worker = new RpcWorker(undefined, source.cwd, { ...this.workerOptions, sessionDir });
-      let lock;
-      try {
-        const info = await worker.request('get_state');
-        if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
-        const path = canonical(info.sessionFile);
-        if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
-        const nextId = sessionKey(path);
-        lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
-        if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-        const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd: source.cwd, piSessionId: info.sessionId,
-          model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, thinkingLevel: info.thinkingLevel }) };
-        item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
-        this.trackWorker(nextId, item, true);
-        return { sessionId: nextId };
-      } catch (e) { await worker.close(); lock?.release(); throw e; }
+      return this.startFresh(source.cwd, dirname(source.file));
     });
+  }
+  // A session in a fresh folder under the data dir, named by local time (`2026-10-11-1432`, then `-2`…).
+  async newProject(requestId) {
+    requestKey(requestId);
+    return this.journal.execute('new-project', requestId, { type: 'newProject' }, async () => {
+      if (this.stopping) throw new Error('Pi Remote is stopping');
+      if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
+      if (!this.roots.length) throw new Error('No session directory is configured');
+      const parent = join(this.dir, 'projects'), now = new Date(), pad = n => String(n).padStart(2, '0');
+      const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      mkdirSync(parent, { recursive: true, mode: 0o700 });
+      let cwd;
+      for (let n = 1; !cwd; n++) {
+        const candidate = join(parent, n === 1 ? name : `${name}-${n}`);
+        try { mkdirSync(candidate); cwd = candidate; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+      }
+      // Pi's own naming for a working directory's session folder.
+      return this.startFresh(cwd, join(this.roots[0], '--' + cwd.replace(/^[\\/]/, '').replace(/[\\/:]/g, '-') + '--'));
+    });
+  }
+  async startFresh(cwd, sessionDir) {
+    const worker = new RpcWorker(undefined, cwd, { ...this.workerOptions, sessionDir });
+    let lock;
+    try {
+      const info = await worker.request('get_state');
+      if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
+      const path = canonical(info.sessionFile);
+      if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
+      const nextId = sessionKey(path);
+      lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
+      if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
+      const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
+        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, thinkingLevel: info.thinkingLevel }) };
+      item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
+      this.trackWorker(nextId, item, true);
+      return { sessionId: nextId };
+    } catch (e) { await worker.close(); lock?.release(); throw e; }
   }
   async resume(id, requestId) {
     requestKey(requestId);

@@ -114,8 +114,8 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    const lookup = supportsCommandResults && ['command', 'new', 'resume', 'answer'].includes(op)
-      ? { op: 'commandResult', id, sessionId: extra.sessionId, requestId: id } : undefined;
+    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer'].includes(op)
+      ? { op: 'commandResult', id, sessionId: op === 'newProject' ? 'new-project' : extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
     transmit(socket, { op, id, ...extra });
   });
@@ -1188,24 +1188,27 @@ async function openProjects() {
     const projects = await request('projects');
     if (!dialog.open) return;
     projectList = projects; renderProjects();
-    if (!projects.length) $('project-status').textContent = 'No projects yet. Start Pi in a project on your computer first.';
+    if (!projects.length) $('project-status').textContent = 'No projects yet.';
   } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
 }
+// Without a project, the host starts the session in a new folder it creates.
 async function startInProject(project) {
-  const buttons = $('project-options').querySelectorAll('button');
+  const buttons = $('project-picker').querySelectorAll('.project-option, .project-pin');
   for (const button of buttons) button.disabled = true;
   $('project-status').textContent = 'Starting session…';
   try {
-    const created = await request('new', { sessionId: project.sessionId });
+    const created = project ? await request('new', { sessionId: project.sessionId }) : await request('newProject');
     if (!$('project-picker').open) return;
     $('project-picker').close();
     await selectSession(created.sessionId);
   } catch (e) {
-    for (const button of buttons) button.disabled = false;
     $('project-status').textContent = e.message;
+  } finally {
+    for (const button of buttons) button.disabled = false;
   }
 }
 $('new-session').addEventListener('click', () => { haptic(); openProjects(); });
+$('new-project').addEventListener('click', () => startInProject());
 $('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });

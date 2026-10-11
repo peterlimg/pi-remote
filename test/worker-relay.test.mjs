@@ -186,6 +186,20 @@ test('new session from a saved project leaves the source saved; disabled resume 
   assert.equal(service.live.has(sourceId), false);
   await service.live.get(created.value.sessionId).worker.close();
 });
+test('new folder session creates a fresh dated folder per request and retries idempotently', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-folder-'));
+  const service = new SessionService({ dir, roots: [join(dir, 'sessions')],
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
+  t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
+  const requestId = randomUUID();
+  const first = await service.newProject(requestId), second = await service.newProject(randomUUID());
+  assert.equal((await service.newProject(requestId)).value.sessionId, first.value.sessionId);
+  const [a, b] = [first, second].map(x => service.read(x.value.sessionId).cwd);
+  assert.match(a, /[\\/]projects[\\/]\d{4}-\d\d-\d\d-\d{4}(-2)?$/);
+  assert.notEqual(a, b);
+  assert.ok(statSync(a).isDirectory() && statSync(b).isDirectory());
+  for (const x of [first, second]) await service.live.get(x.value.sessionId).worker.close();
+});
 test('relay carries browser requests and closes channels when the computer disconnects', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-relay-'));
   const service = new SessionService({ dir, roots: [] });
