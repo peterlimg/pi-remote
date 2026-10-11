@@ -91,6 +91,13 @@ if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeIte
 sessionStorage.removeItem('pi-remote-token');
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
 const COPIED_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
+// iOS Safari has no navigator.vibrate; toggling a hidden switch input (iOS 18+) plays a system haptic.
+function haptic() {
+  if (navigator.vibrate?.(10)) return;
+  const label = document.createElement('label'); label.hidden = true;
+  const input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('switch', '');
+  label.append(input); document.body.append(label); label.click(); label.remove();
+}
 const el = (tag, text, className) => {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -645,6 +652,7 @@ function renderConversation(state) {
         copy.setAttribute('aria-label', 'Copy message'); copy.title = 'Copy message';
         copy.innerHTML = COPY_ICON;
         copy.addEventListener('click', async () => {
+          haptic();
           try { await navigator.clipboard.writeText(message.text); } catch { return; }
           copy.innerHTML = COPIED_ICON; copy.setAttribute('aria-label', 'Copied');
           setTimeout(() => { copy.innerHTML = COPY_ICON; copy.setAttribute('aria-label', 'Copy message'); }, 1500);
