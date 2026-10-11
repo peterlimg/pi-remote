@@ -1227,9 +1227,10 @@ function renderImages() {
     const remove = el('button'); remove.type = 'button';
     remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
     remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
-    remove.addEventListener('click', () => {
+    remove.addEventListener('click', event => {
       URL.revokeObjectURL(image.url);
-      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus();
+      // WebKit rings every scripted focus; only keyboard removal (detail 0) should show it.
+      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus({ focusVisible: !event.detail });
     });
     item.classList.toggle('uploading', !!image.uploading);
     const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
