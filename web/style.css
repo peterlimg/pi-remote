@@ -166,9 +166,8 @@ pre.message-text { white-space: pre-wrap; }
 .tool-activity-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-activity-text { display: flex; flex-direction: column; min-width: 0; }
 .tool-activity-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--mono); }
-.tool-activity-error, .tool-activity-working, .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
+.tool-activity-error, .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
 .tool-activity-error { color: var(--error); }
-.tool-activity-working { color: var(--accent); }
 .tool { font-size: 13px; color: var(--muted); background: var(--panel); margin-bottom: 8px; }
 .tool summary { min-height: 44px; padding: 12px; }
 .tool-heading { display: inline-flex; align-items: baseline; gap: 8px; width: calc(100% - 1.5em); vertical-align: top; }

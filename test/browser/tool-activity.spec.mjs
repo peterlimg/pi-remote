@@ -30,7 +30,7 @@ test('activity groups follow message boundaries, count each call once and keep d
   await expect(group.locator('.tool')).toHaveCount(4);
   await expect(group.locator('.tool-activity-label')).toHaveText('Running 3 commands, read 1 file');
   await expect(group.locator('.tool-activity-error')).toHaveText('1 failed');
-  await expect(group.locator('.tool-activity-working')).toHaveText('1 running');
+  await expect(group.locator('.tool-activity-working')).toHaveCount(0);
   await expect(group.locator('.tool-context').first()).toBeHidden();
   await page.setViewportSize({ width: 320, height: 740 });
   expect((await summary.boundingBox()).height).toBeGreaterThanOrEqual(44);

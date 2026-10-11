@@ -199,7 +199,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   const shell = page.locator('[data-tool-id="shell"]');
   await expect(shell.locator('.tool-status')).toHaveText('working');
   const group = page.locator('.tool-activity');
-  await expect(group.locator('.tool-activity-working')).toHaveText('1 running');
+  await expect(group.locator('.tool-activity-working')).toHaveCount(0);
   await expect(shell).toBeHidden();
   state.messages.push({ id: 'failed', role: 'toolResult', toolCallId: 'shell', text: 'Tests failed', isError: true, truncated: true });
   state.model = 'anthropic/claude-sonnet-4-5'; state.thinkingLevel = 'off';
