@@ -1135,11 +1135,13 @@ $('search-close').addEventListener('click', () => { closeSearch(); $('search-ope
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
-// Pinned projects stay on top; recent ones fill the rest of the first five. The host sends them most recent first.
+// Pinned projects stay on top, then the rest most recent first (the host's order). The sheet fits about five; scroll or search for more.
 let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
 function renderProjects(focusPin) {
-  const pinned = projectList.filter(project => pinnedProjects.includes(project.cwd));
-  const recent = projectList.filter(project => !pinnedProjects.includes(project.cwd)).slice(0, Math.max(0, 5 - pinned.length));
+  const query = $('project-search').value.trim().toLowerCase();
+  const matches = projectList.filter(project => displayPaths(project.cwd).toLowerCase().includes(query));
+  const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
+  const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
   $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
     const cwd = displayPaths(project.cwd), name = cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd, isPinned = pinnedProjects.includes(project.cwd);
     const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
@@ -1157,17 +1159,18 @@ function renderProjects(focusPin) {
     row.append(button, pin);
     return row;
   }));
+  if (projectList.length) $('project-status').textContent = matches.length ? '' : 'No matching projects';
   if (focusPin) [...$('project-options').querySelectorAll('.project-pin')].find(pin => pin.dataset.cwd === focusPin)?.focus();
 }
 async function openProjects() {
   const dialog = $('project-picker');
-  projectList = []; renderProjects(); $('project-status').textContent = 'Loading projects…';
+  projectList = []; $('project-search').value = ''; renderProjects(); $('project-status').textContent = 'Loading projects…';
   dialog.showModal();
   try {
     const projects = await request('projects');
     if (!dialog.open) return;
     projectList = projects; renderProjects();
-    $('project-status').textContent = projects.length ? '' : 'No projects yet. Start Pi in a project on your computer first.';
+    if (!projects.length) $('project-status').textContent = 'No projects yet. Start Pi in a project on your computer first.';
   } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
 }
 async function startInProject(project) {
@@ -1185,6 +1188,7 @@ async function startInProject(project) {
   }
 }
 $('new-session').addEventListener('click', openProjects);
+$('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
 $('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
