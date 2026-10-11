@@ -142,6 +142,13 @@ test('new session button lists recent projects and opens a fresh session there',
   await picker.getByRole('button', { name: 'Close' }).tap();
   await page.getByRole('button', { name: 'New session' }).tap();
   await expect(picker.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
+  await page.locator('#project-picker-title').evaluate(node => {
+    const touch = y => [new Touch({ identifier: 1, target: node, clientX: 100, clientY: y })];
+    for (const [type, y] of [['touchstart', 400], ['touchmove', 700]]) node.dispatchEvent(new TouchEvent(type, { touches: touch(y), bubbles: true, cancelable: true }));
+    node.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true, cancelable: true }));
+  });
+  await expect(picker).toBeHidden();
+  await page.getByRole('button', { name: 'New session' }).tap();
   await picker.locator('.project-option', { hasText: 'beta' }).tap();
   await expect(picker).toBeHidden();
   await expect(page.locator('#title')).toHaveText('Untitled session');

@@ -958,14 +958,19 @@ $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 
 $('picker-cancel').addEventListener('click', () => closePicker(true));
 // Any tap on the sheet or its backdrop dismisses it; Escape is native.
 $('image-viewer').addEventListener('click', () => $('image-viewer').close());
-{
-  const sheet = $('image-viewer');
-  let startY, dy = 0;
-  sheet.addEventListener('touchstart', event => { startY = event.touches.length === 1 ? event.touches[0].clientY : undefined; dy = 0; }, { passive: true });
+// Pull a bottom sheet down to dismiss it. A drag inside a scrolled list scrolls it instead.
+function dragToClose(sheet, dialog = sheet, list) {
+  let startY, fromList, dy = 0;
+  sheet.addEventListener('touchstart', event => {
+    fromList = !!list?.contains(event.target);
+    startY = event.touches.length === 1 && !(fromList && list.scrollTop > 0) ? event.touches[0].clientY : undefined; dy = 0;
+  }, { passive: true });
   sheet.addEventListener('touchmove', event => {
     if (startY === undefined) return;
+    const delta = event.touches[0].clientY - startY;
+    if (fromList && delta < 0 && !dy) { startY = undefined; return; }
     event.preventDefault();
-    dy = Math.max(0, event.touches[0].clientY - startY);
+    dy = Math.max(0, delta);
     sheet.style.transform = `translateY(${dy}px)`;
   }, { passive: false });
   const release = () => {
@@ -974,11 +979,13 @@ $('image-viewer').addEventListener('click', () => $('image-viewer').close());
     const close = dy > sheet.offsetHeight / 4;
     sheet.style.transition = 'transform .2s ease-out';
     sheet.style.transform = close ? 'translateY(100%)' : '';
-    setTimeout(() => { sheet.style.transition = sheet.style.transform = ''; if (close) sheet.close(); }, 200);
+    setTimeout(() => { sheet.style.transition = sheet.style.transform = ''; if (close) dialog.close(); }, 200);
   };
   sheet.addEventListener('touchend', release);
   sheet.addEventListener('touchcancel', release);
 }
+dragToClose($('image-viewer'));
+dragToClose(document.querySelector('.project-sheet'), $('project-picker'), $('project-options'));
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {

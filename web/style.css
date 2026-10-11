@@ -91,9 +91,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .project-picker::backdrop { background: rgb(0 0 0 / .4); }
 .project-picker header { display: flex; align-items: center; padding: 8px 8px 8px 20px; }
 .project-picker h2 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; }
-.project-picker .search-round { box-shadow: none; }
+.project-picker .search-round { border: 0; background: transparent; box-shadow: none; color: var(--muted); }
 #project-status { margin: 0 20px 12px; }
-.project-search { flex: none; margin: 0 16px 12px; box-shadow: none; }
+.project-search { flex: none; margin: 0 16px 12px; border: 0; background: var(--user); box-shadow: none; }
 #project-status:empty { display: none; }
 #project-options { min-height: 0; max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px; }
 .project-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; }
