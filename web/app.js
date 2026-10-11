@@ -389,9 +389,11 @@ function renderList() {
         status.dataset.status = item.status;
         meta.append(status);
       }
-      const project = el('span', projectName(item.cwd), 'session-project');
-      project.title = displayPaths(item.cwd);
-      meta.append(project);
+      if (!isBlank(item.cwd)) {
+        const project = el('span', projectName(item.cwd), 'session-project');
+        project.title = displayPaths(item.cwd);
+        meta.append(project);
+      }
       const date = new Date(item.updatedAt);
       if (Number.isFinite(date.getTime())) {
         const time = el('time', age(date), 'session-time');
@@ -424,17 +426,18 @@ function statusIcon(status) {
 function displayPaths(text) {
   return text.replace(/(^|[\s"'`=:(])\/(?:Users|home)\/[^/\s"'`:]+/g, '$1~');
 }
-// Blank sessions live in dated folders the host creates; their folder name means nothing to the user.
+// Sessions started without a project live in dated folders the host creates. Like a chat outside
+// any project, they carry no project label; their title is their identity.
 const isBlank = cwd => !!blankDir && !!cwd?.startsWith(blankDir + (blankDir.includes('\\') ? '\\' : '/'));
 function projectName(cwd) {
-  if (isBlank(cwd)) return 'Blank';
+  if (isBlank(cwd)) return '';
   cwd = displayPaths(cwd);
   return cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
 }
 function renderProject(cwd = '') {
   $('project').textContent = displayPaths(cwd);
   $('project-name').textContent = projectName(cwd);
-  $('project-name').hidden = !cwd;
+  $('project-name').hidden = !$('project-name').textContent;
 }
 // Read state lives per device: the last activity time of each session as of when its thread was on screen.
 // Sessions never seen before start as read so a fresh device doesn't light up the whole history.
@@ -1160,18 +1163,14 @@ $('list-retry').addEventListener('click', loadList);
 let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
 function renderProjects(focusPin) {
   const query = $('project-search').value.trim().toLowerCase();
-  const matches = projectList.filter(project => [displayPaths(project.cwd), isBlank(project.cwd) ? project.title : ''].join(' ').toLowerCase().includes(query));
+  const matches = projectList.filter(project => !isBlank(project.cwd) && displayPaths(project.cwd).toLowerCase().includes(query));
   const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
   const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
   $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
-    const cwd = displayPaths(project.cwd), isPinned = pinnedProjects.includes(project.cwd);
-    // A blank folder is known by its session's title and the day it was made (its name starts YYYY-MM-DD).
-    const [y, m, d] = isBlank(project.cwd) ? project.cwd.split(/[\\/]/).at(-1).split('-').map(Number) : [];
-    const name = y ? project.title || 'Untitled session' : projectName(project.cwd);
-    const detail = y ? 'Blank · ' + new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : cwd;
+    const cwd = displayPaths(project.cwd), name = projectName(project.cwd), isPinned = pinnedProjects.includes(project.cwd);
     const row = el('div', undefined, 'project-row'), button = el('button', undefined, 'project-option'), pin = el('button', undefined, 'project-pin');
     button.type = 'button'; button.title = cwd;
-    button.append(el('span', name, 'project-option-name'), el('span', detail, 'project-option-path'));
+    button.append(el('span', name, 'project-option-name'), el('span', cwd, 'project-option-path'));
     button.addEventListener('click', () => startInProject(project));
     pin.type = 'button'; pin.dataset.cwd = project.cwd; pin.setAttribute('aria-pressed', String(isPinned));
     pin.setAttribute('aria-label', 'Pin ' + name); pin.title = isPinned ? 'Unpin' : 'Pin to top';

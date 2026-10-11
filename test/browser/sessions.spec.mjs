@@ -103,7 +103,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
-test('new session button lists recent projects, labels blank ones by title and starts sessions in either', async ({ page }) => {
+test('new session button lists recent projects, hides projectless folders and starts sessions in either', async ({ page }) => {
   const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
   const operations = [];
   await page.routeWebSocket('**/ws', ws => {
@@ -115,7 +115,7 @@ test('new session button lists recent projects, labels blank ones by title and s
       } else if (packet.op === 'projects') {
         ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true,
           value: [...['beta', 'alpha', 'c', 'd', 'e', 'f', 'g'].map((name, i) => ({ cwd: '/Users/me/' + name, sessionId: i ? name : 'old' })),
-            { cwd: '/Users/me/.pi/remote/projects/2026-10-11-2133', sessionId: 'blank', title: 'Plan trip' }] }));
+            { cwd: '/Users/me/.pi/remote/projects/2026-10-11-2133', sessionId: 'blank' }] }));
       } else if (packet.op === 'new' || packet.op === 'newProject') {
         operations.push(packet);
         const cwd = packet.op === 'new' ? '/Users/me/beta' : '/Users/me/.pi/remote/projects/2026-10-12-0900';
@@ -131,22 +131,20 @@ test('new session button lists recent projects, labels blank ones by title and s
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: 'New session' }).tap();
   const picker = page.getByRole('dialog', { name: 'New session in…' }), options = picker.locator('#project-options');
-  await expect(options.locator('.project-option-name')).toHaveText(['beta', 'alpha', 'c', 'd', 'e', 'f', 'g', 'Plan trip']);
+  await expect(options.locator('.project-option-name')).toHaveText(['beta', 'alpha', 'c', 'd', 'e', 'f', 'g']);
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('G');
   await expect(options.locator('.project-option-name')).toHaveText(['g']);
-  await picker.getByRole('searchbox', { name: 'Search projects' }).fill('trip');
-  await expect(options.locator('.project-option-path')).toHaveText([/^Blank · (11 Oct|Oct 11)$/]);
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('zzz');
   await expect(picker.locator('#project-status')).toHaveText('No matching projects');
   await picker.getByRole('searchbox', { name: 'Search projects' }).fill('');
   await expect(options.locator('.project-option-path').first()).toHaveText('~/beta');
   await picker.getByRole('button', { name: 'Pin e' }).tap();
-  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g', 'Plan trip']);
+  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
   await expect(picker.getByRole('button', { name: 'Pin e' })).toHaveAttribute('aria-pressed', 'true');
   await expect(picker.getByRole('button', { name: 'Pin e' })).not.toBeFocused();
   await picker.getByRole('button', { name: 'Close' }).tap();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g', 'Plan trip']);
+  await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
   await page.locator('#project-picker-title').evaluate(node => {
     const touch = y => [new Touch({ identifier: 1, target: node, clientX: 100, clientY: y })];
     for (const [type, y] of [['touchstart', 400], ['touchmove', 700]]) node.dispatchEvent(new TouchEvent(type, { touches: touch(y), bubbles: true, cancelable: true }));
@@ -160,11 +158,12 @@ test('new session button lists recent projects, labels blank ones by title and s
   expect(operations.map(x => x.sessionId)).toEqual(['old']);
   await page.locator('#back').click();
   await page.getByRole('button', { name: 'New session' }).tap();
-  await picker.getByRole('button', { name: 'Blank session' }).tap();
+  await picker.getByRole('button', { name: 'Start without a project' }).tap();
   await expect(picker).toBeHidden();
   expect(operations.map(x => x.op)).toEqual(['new', 'newProject']);
-  await expect(page.locator('#project-name')).toHaveText('Blank');
+  await expect(page.locator('#project-name')).toBeHidden();
   await page.locator('#back').click();
+  await expect(page.locator('.session', { hasText: 'Untitled session' }).last().locator('.session-project')).toHaveCount(0);
   await page.getByRole('button', { name: 'New session' }).tap();
-  await expect(picker.getByRole('button', { name: 'Blank session' })).toBeEnabled();
+  await expect(picker.getByRole('button', { name: 'Start without a project' })).toBeEnabled();
 });

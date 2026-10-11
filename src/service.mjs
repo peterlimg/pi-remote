@@ -20,7 +20,7 @@ export class SessionService extends EventEmitter {
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
     this.restoreIds = new Set(); this.restoreWarnings = [];
     this.journal = new CommandJournal(join(dir, 'commands'));
-    // Blank sessions each get a folder here; the phone labels them by session title instead of folder name.
+    // Sessions started without a project each get a folder here; the phone hides these folders' names.
     mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
     this.scan();
     this.setMaxListeners(50);
@@ -76,7 +76,7 @@ export class SessionService extends EventEmitter {
   // Projects in list order: running first, then most recently used. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id, title: item.title });
+    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
     return [...projects.values()];
   }
   read(id) {
