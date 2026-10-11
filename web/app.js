@@ -709,7 +709,7 @@ function renderConversation(state) {
       const text = el('span', undefined, 'tool-activity-text'), line = el('span', running.line, 'tool-activity-line');
       line.title = running.line; text.append(label, line); group.summary.append(text);
     } else group.summary.append(label);
-    for (const [status, text] of [['error', 'failed'], ['pending', 'pending']]) {
+    for (const [status, text] of [['pending', 'pending']]) {
       const count = group.tools.filter(tool => tool.status === status).length;
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }

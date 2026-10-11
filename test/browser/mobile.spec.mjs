@@ -213,8 +213,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await expect(page.locator('#model')).toHaveText('claude-sonnet-4-5');
   await expect(page.getByRole('button', { name: 'Reasoning effort' })).toHaveText('Off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(group.locator('.tool-activity-error')).toHaveText('1 failed');
-  await expect(group.locator('.tool-activity-error')).toBeVisible();
+  await expect(group.locator('.tool-activity-error')).toHaveCount(0);
   await expect(shell).toBeHidden();
   await group.locator(':scope > summary').click();
   await shell.locator('summary').click();
