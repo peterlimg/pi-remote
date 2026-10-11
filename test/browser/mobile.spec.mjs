@@ -28,8 +28,10 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await expect(page.locator('#project')).toBeHidden();
   await expect(page.locator('#prompt')).toHaveValue('');
   await page.locator('#prompt').fill('instruction for beta');
-  await page.locator('#send').click();
+  // A tap on send keeps the editor focused: on iOS a blur closes the keyboard and drops the composer before the tap lands.
+  await page.locator('#send').tap();
   await expect(page.locator('#transcript')).toContainText('instruction for beta');
+  await expect(page.locator('#prompt')).toBeFocused();
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#prompt')).toHaveValue('draft for alpha');
