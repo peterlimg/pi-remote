@@ -204,7 +204,8 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(175);
   expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
-  await page.locator('#send').click();
+  // An iOS tap leaves focus, and so the keyboard, on the editor; a desktop mousedown would blur it.
+  await page.locator('#send').dispatchEvent('click');
   await expect(page.locator('#prompt')).toHaveValue('');
   await page.evaluate(() => window.changeViewport({ width: 195, height: 175, offsetLeft: 25, offsetTop: 90, scale: 2 }));
   expect(await page.locator('#app').boundingBox()).toEqual({ x: 25, y: 90, width: 195, height: 175 });

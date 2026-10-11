@@ -2,6 +2,9 @@
   color-scheme: light dark;
   /* Home-screen apps keep the home-indicator inset while the keyboard covers it. */
   --safe-bottom: env(safe-area-inset-bottom);
+  /* iOS reports the keyboard's height change only once its slide ends; with no text field focused it is
+     closing, so fill the screen now instead of hovering the bottom controls mid-screen. */
+  --shell-height: calc(100dvh / var(--viewport-scale, 1));
   --bg: #fafaf8;
   --panel: #f2f3f0;
   --composer-bg: #fff;
@@ -41,7 +44,7 @@
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 /* iOS shows its keyboard for any focused text field; viewport sizes differ between Safari and home-screen apps. */
-:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; }
+:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; --shell-height: var(--viewport-height, 100dvh); }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
 button, input, textarea, select { font: inherit; }
@@ -69,7 +72,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .login form { display: grid; gap: 12px; margin: 28px 0 20px; }
 .login input { font-size: 16px; }
 .login-error { padding: 16px; color: var(--error); text-align: center; }
-.shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--viewport-height, 100dvh); overflow: hidden; }
+.shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
 .shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }

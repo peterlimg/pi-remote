@@ -287,6 +287,15 @@ test('a focused text field drops the home-indicator inset so bottom controls sit
   await page.locator('#search-open').click();
   await expect(page.locator('#search')).toBeFocused();
   expect(await padding()).toBe('12px');
+  // A closing keyboard: the shell fills the screen before iOS reports the taller viewport.
+  const height = () => page.locator('.shell').evaluate(el => el.getBoundingClientRect().height);
+  const full = await page.evaluate(() => innerHeight);
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', { value: innerHeight - 300, configurable: true });
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  expect(await height()).toBe(full - 300);
   await page.locator('#search').blur();
   expect(await padding()).toBe('34px');
+  expect(await height()).toBe(full);
 });
