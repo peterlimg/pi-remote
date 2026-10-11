@@ -1143,7 +1143,8 @@ function closeSearch() {
   if ($('search').value) { $('search').value = ''; $('search').dispatchEvent(new Event('input')); }
   $('search-bar').classList.remove('open');
 }
-$('search-open').addEventListener('click', () => { $('search-bar').classList.add('open'); $('search').focus(); });
+// The bar already rides above the keyboard; iOS's reveal scroll would expose the theme colour under the page.
+$('search-open').addEventListener('click', () => { $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
 $('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
 // An empty search folds back into its button once you leave it; a live filter stays visible.
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
