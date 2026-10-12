@@ -104,6 +104,25 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
+test('closing search clears the filter before the keyboard moves the close button', async ({ page }) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Search sessions', exact: true }).tap();
+  await page.getByRole('searchbox', { name: 'Search sessions' }).fill('Alpha');
+  await expect(page.locator('#sessions .session')).toHaveCount(1);
+  // Emulate the iOS keyboard viewport; blurring the field restores the full shell height.
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', { value: innerHeight - 300, configurable: true });
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await page.getByRole('button', { name: 'Close search' }).tap();
+  await expect(page.locator('#search')).toHaveValue('');
+  await expect(page.locator('#search')).toBeHidden();
+  await expect(page.locator('#sessions .session')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Search sessions', exact: true }).tap();
+  await expect(page.locator('#search')).toHaveValue('');
+});
+
 test('new session button lists recent projects, hides projectless folders and starts sessions in either', async ({ page }) => {
   const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
   const operations = [];

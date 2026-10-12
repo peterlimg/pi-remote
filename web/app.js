@@ -1166,6 +1166,8 @@ function closeSearch() {
 }
 // The bar already rides above the keyboard; iOS's reveal scroll would expose the theme colour under the page.
 $('search-open').addEventListener('click', () => { haptic(); $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
+// Keep the keyboard open until the click lands, or blur moves the close button out from under the tap.
+$('search-close').addEventListener('mousedown', event => event.preventDefault());
 $('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
 // An empty search folds back into its button once you leave it; a live filter stays visible.
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
