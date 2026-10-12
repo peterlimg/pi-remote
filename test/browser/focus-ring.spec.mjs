@@ -5,6 +5,31 @@ test.use({ browserName: 'webkit' });
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 const file = { name: 'screenshot.png', mimeType: 'image/png', buffer: png };
 
+test('closing search by tap leaves no focus ring but keyboard dismissal restores it', async ({ page }) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session')).toHaveCount(2);
+  const open = page.getByRole('button', { name: 'Search sessions', exact: true });
+  const search = page.locator('#search');
+  const close = page.getByRole('button', { name: 'Close search' });
+  const ring = () => open.evaluate(button => button.matches(':focus-visible'));
+  await open.tap();
+  await search.fill('Alpha');
+  await close.tap();
+  await expect(search).toBeHidden();
+  await expect(search).toHaveValue('');
+  expect(await ring()).toBe(false);
+  await open.tap();
+  await search.fill('Beta');
+  await close.focus();
+  await page.keyboard.press('Enter');
+  await expect(open).toBeFocused();
+  expect(await ring()).toBe(true);
+  await open.press('Enter');
+  await search.press('Escape');
+  await expect(open).toBeFocused();
+  expect(await ring()).toBe(true);
+});
+
 test('removing an attachment by tap leaves no focus ring on the attach button', async ({ page }) => {
   const state = { id: 'Alpha', title: 'Alpha', cwd: '/project', status: 'idle', messages: [] };
   await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {

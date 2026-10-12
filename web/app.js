@@ -1168,7 +1168,7 @@ function closeSearch() {
 $('search-open').addEventListener('click', () => { haptic(); $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
 // Keep the keyboard open until the click lands, or blur moves the close button out from under the tap.
 $('search-close').addEventListener('mousedown', event => event.preventDefault());
-$('search-close').addEventListener('click', () => { closeSearch(); $('search-open').focus(); });
+$('search-close').addEventListener('click', event => { closeSearch(); $('search-open').focus({ focusVisible: !event.detail }); });
 // An empty search folds back into its button once you leave it; a live filter stays visible.
 $('search').addEventListener('blur', event => { if (!$('search').value && event.relatedTarget !== $('search-close')) closeSearch(); });
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
