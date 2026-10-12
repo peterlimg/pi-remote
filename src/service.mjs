@@ -276,7 +276,12 @@ export class SessionService extends EventEmitter {
     try {
       const rpcState = await worker.request('get_state');
       const history = await worker.request('get_messages');
-      item.state.messages = (history?.messages || []).filter(shown).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
+      const fromExtensions = new Set(actual.messages.filter(m => m.source).map(m => m.timestamp));
+      item.state.messages = (history?.messages || []).filter(shown).slice(-100).map((m, index) => {
+        const message = cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || ''));
+        if (m.role === 'user' && fromExtensions.has(m.timestamp)) message.source = 'extension';
+        return message;
+      });
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
       item.agentActive = !!rpcState?.isStreaming;

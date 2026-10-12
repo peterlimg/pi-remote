@@ -36,6 +36,23 @@ function imageReference(part) {
 }
 // Extensions post `display: false` custom messages for the model only; Pi's terminal hides them too.
 export const shown = message => message.role !== 'custom' || !!message.display;
+// Pi stores prompts extensions send as plain user messages; Pi Remote's extension records their text.
+export const EXTENSION_INPUT = 'pi-remote-extension-input';
+export function takeText(pending, text) {
+  const index = pending.indexOf(text);
+  if (index >= 0) pending.splice(index, 1);
+  return index >= 0;
+}
+export function branchMessages(branch, key) {
+  const pending = [];
+  return branch.flatMap(entry => {
+    if (entry.type === 'custom' && entry.customType === EXTENSION_INPUT) pending.push(entry.data?.text);
+    if (entry.type !== 'message') return [];
+    const item = cleanMessage(entry.message, key(entry));
+    if (item.role === 'user' && takeText(pending, item.text)) item.source = 'extension';
+    return [item];
+  });
+}
 export function cleanMessage(message, key) {
   const content = Array.isArray(message.content) ? message.content : undefined;
   const images = new Map();
@@ -97,7 +114,7 @@ export function readSessionImage(file, imageId) {
 }
 export function readSession(file) {
   const { info, entries, header, branch } = readBranch(file);
-  const allMessages = branch.filter(x => x.type === 'message').map(x => cleanMessage(x.message, x.id));
+  const allMessages = branchMessages(branch, x => x.id);
   const modelEntry = branch.findLast(x => x.type === 'model_change' || (x.type === 'message' && x.message?.role === 'assistant' && x.message.provider && x.message.model));
   const model = modelEntry?.type === 'model_change' ? `${modelEntry.provider}/${modelEntry.modelId}` :
     modelEntry ? `${modelEntry.message.provider}/${modelEntry.message.model}` : undefined;

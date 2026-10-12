@@ -60,6 +60,21 @@ test('custom messages Pi hides stay out of the transcript', () => {
   for (const display of [false, true]) applyEvent(state, { type: 'message_end', message: { role: 'custom', customType: 'notify', content: 'shown ' + display, display, timestamp: +display } });
   assert.deepEqual(state.messages.map(x => x.text), ['shown true']);
 });
+test('prompts sent by extensions are tagged live and in saved history', t => {
+  const state = initialState({}), user = (text, timestamp) => ({ type: 'message_end', message: { role: 'user', content: text, timestamp } });
+  applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'pi-remote-extension-input', statusText: 'wake' });
+  applyEvent(state, { type: 'extension_ui_request', method: 'setStatus', statusKey: 'pi-remote-extension-input' });
+  for (const [text, timestamp] of [['wake', 1], ['wake', 2]]) applyEvent(state, user(text, timestamp));
+  assert.deepEqual(state.messages.map(x => x.source), ['extension', undefined]);
+  const dir = temp(t), file = join(dir, 's.jsonl');
+  writeFileSync(file, [
+    { type: 'session', id: 's', cwd: dir },
+    { type: 'custom', id: 'note', parentId: null, customType: 'pi-remote-extension-input', data: { text: 'wake' } },
+    { type: 'message', id: 'a', parentId: 'note', message: { role: 'user', content: 'wake' } },
+    { type: 'message', id: 'b', parentId: 'a', message: { role: 'user', content: 'wake' } }
+  ].map(x => JSON.stringify(x)).join('\n') + '\n');
+  assert.deepEqual(readSession(file).messages.map(x => x.source), ['extension', undefined]);
+});
 test('a terminal dialog returns to the status it interrupted', () => {
   const state = initialState({});
   for (const type of ['ui_prompt_start', 'ui_prompt_end']) applyEvent(state, { type });

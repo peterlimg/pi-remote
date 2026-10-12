@@ -1,10 +1,16 @@
 import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
-import { cleanMessage, shown, textContent } from './catalog.mjs';
+import { cleanMessage, shown, textContent, takeText, EXTENSION_INPUT } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
 const running = new WeakMap();
+// Prompts extensions sent whose user message has not arrived yet, also off the wire.
+const extensionInputs = new WeakMap();
+export function noteExtensionInput(state, text) {
+  if (!extensionInputs.has(state)) extensionInputs.set(state, []);
+  extensionInputs.get(state).push(text);
+}
 // Reconnecting is not activity: keep the session file's time so the phone's unread marks survive host restarts.
 const lastWrite = file => { try { return statSync(file).mtimeMs; } catch { return Date.now(); } };
 export function initialState(meta, messages = []) {
@@ -18,6 +24,7 @@ export function applyEvent(state, event) {
       state.fastMode = /^codex fast(?:\s|$)/u.test(stripVTControlCharacters(event.statusText || ''));
       state.revision++;
     }
+    if (event.method === 'setStatus' && event.statusKey === EXTENSION_INPUT && event.statusText) noteExtensionInput(state, event.statusText);
     return state;
   }
   state.updatedAt = Date.now(); state.revision++;
@@ -35,6 +42,7 @@ export function applyEvent(state, event) {
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');
     const item = cleanMessage(m, key);
     let index = state.messages.findIndex(x => x.id === key);
+    if (index >= 0 ? state.messages[index].source : m.role === 'user' && takeText(extensionInputs.get(state) || [], item.text)) item.source = 'extension';
     if (index < 0) {
       state.messages.push(item);
       if (state.messages.length > 100) { state.messages.shift(); state.historyTruncated = true; }

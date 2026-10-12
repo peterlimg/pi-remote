@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
-import { cleanMessage } from '../src/catalog.mjs';
-import { initialState, applyEvent } from '../src/state.mjs';
+import { branchMessages, EXTENSION_INPUT } from '../src/catalog.mjs';
+import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
@@ -21,12 +21,11 @@ export default function remoteExtension(pi: any) {
   let controlling = false;
   const resetHistory = () => {
     if (!state || !ctx) return;
-    const entries = ctx.sessionManager.getBranch().filter((x: any) => x.type === 'message');
-    const firstRequest = entries.find((x: any) => x.message.role === 'user');
-    state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [cleanMessage(firstRequest.message, firstRequest.id)] : []);
-    state.messages = entries.slice(-100).map((x: any) => cleanMessage(x.message,
-      x.message.role + ':' + (x.message.timestamp ?? x.id) + ':' + (x.message.toolCallId || '')));
-    state.historyTruncated = entries.length > 100;
+    const messages = branchMessages(ctx.sessionManager.getBranch(), (x: any) => x.message.role + ':' + (x.message.timestamp ?? x.id) + ':' + (x.message.toolCallId || ''));
+    const firstRequest = messages.find((x: any) => x.role === 'user');
+    state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [firstRequest] : []);
+    state.messages = messages.slice(-100);
+    state.historyTruncated = messages.length > 100;
     state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
     state.thinkingLevel = pi.getThinkingLevel?.() ?? ctx.thinkingLevel;
     state.revision++;
@@ -39,6 +38,15 @@ export default function remoteExtension(pi: any) {
   };
   registerSessionTitles(pi, (title: string) => {
     if (state) { state.title = title; state.revision++; publish(); }
+  });
+  // Only the input event tells an extension's prompt from the user's; record it for saved history.
+  pi.on('input', (event: any, context: any) => {
+    if (event.source !== 'extension') return;
+    pi.appendEntry(EXTENSION_INPUT, { text: event.text });
+    // A host worker has no bridge socket; RPC status updates are its channel to the host.
+    if (process.env.PI_REMOTE_WORKER === '1') {
+      context.ui.setStatus(EXTENSION_INPUT, event.text); context.ui.setStatus(EXTENSION_INPUT, undefined);
+    } else if (state) noteExtensionInput(state, event.text);
   });
   if (process.env.PI_REMOTE_WORKER === '1') return;
   const connect = (epoch: number) => {

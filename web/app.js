@@ -650,6 +650,17 @@ function renderConversation(state) {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
       continue;
     }
+    // Extensions prompt the agent as the user (e.g. a subagent wake); show one quiet line, not a bubble.
+    if (message.source === 'extension') {
+      activity = undefined;
+      const node = el('details', undefined, 'tool-activity'), summary = el('summary');
+      node.dataset.disclosureId = 'prompt:' + message.id;
+      node.open = expanded.get(node.dataset.disclosureId) ?? false;
+      summary.append(el('span', 'Prompted by an extension', 'tool-activity-label'));
+      node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
+      fragment.append(node);
+      continue;
+    }
     if (message.text || message.images?.length || message.role === 'user') {
       activity = undefined;
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));

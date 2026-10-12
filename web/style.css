@@ -203,6 +203,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-activity-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-activity-text { display: flex; flex-direction: column; min-width: 0; }
 .tool-activity-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--mono); }
+.extension-prompt { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
 .tool { font-size: 13px; color: var(--muted); background: var(--panel); margin-bottom: 8px; }
 .tool summary { min-height: 44px; padding: 12px; }
