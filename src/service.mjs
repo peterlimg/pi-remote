@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { discover, cleanMessage, isInside, readSession, readSessionImage } from './catalog.mjs';
+import { discover, cleanMessage, shown, isInside, readSession, readSessionImage } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
@@ -276,7 +276,7 @@ export class SessionService extends EventEmitter {
     try {
       const rpcState = await worker.request('get_state');
       const history = await worker.request('get_messages');
-      item.state.messages = (history?.messages || []).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
+      item.state.messages = (history?.messages || []).filter(shown).slice(-100).map((m, index) => cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || '')));
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
       item.agentActive = !!rpcState?.isStreaming;

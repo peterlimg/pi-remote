@@ -55,6 +55,11 @@ test('composer metadata follows live model and reasoning changes and saved branc
   assert.equal(readSession(file).model, 'openai/o3');
   assert.equal(readSession(file).thinkingLevel, 'high');
 });
+test('custom messages Pi hides stay out of the transcript', () => {
+  const state = initialState({});
+  for (const display of [false, true]) applyEvent(state, { type: 'message_end', message: { role: 'custom', customType: 'notify', content: 'shown ' + display, display, timestamp: +display } });
+  assert.deepEqual(state.messages.map(x => x.text), ['shown true']);
+});
 test('a terminal dialog returns to the status it interrupted', () => {
   const state = initialState({});
   for (const type of ['ui_prompt_start', 'ui_prompt_end']) applyEvent(state, { type });

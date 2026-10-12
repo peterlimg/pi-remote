@@ -34,6 +34,8 @@ function imageReference(part) {
     return { id: createHash('sha256').update(part.mimeType).update(part.data).digest('hex'), mimeType: part.mimeType };
   } catch { return undefined; }
 }
+// Extensions post `display: false` custom messages for the model only; Pi's terminal hides them too.
+export const shown = message => message.role !== 'custom' || !!message.display;
 export function cleanMessage(message, key) {
   const content = Array.isArray(message.content) ? message.content : undefined;
   const images = new Map();

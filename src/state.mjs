@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
-import { cleanMessage, textContent } from './catalog.mjs';
+import { cleanMessage, shown, textContent } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
@@ -30,7 +30,7 @@ export function applyEvent(state, event) {
   if (event.type === 'agent_end' || event.type === 'agent_settled') { running.delete(state); state.status = 'idle'; }
   if (event.type === 'ui_prompt_start') state.status = 'waiting';
   if (event.type === 'ui_prompt_end') state.status = running.get(state) ? 'working' : 'idle';
-  if (['message_start', 'message_update', 'message_end'].includes(event.type) && event.message) {
+  if (['message_start', 'message_update', 'message_end'].includes(event.type) && event.message && shown(event.message)) {
     const m = event.message;
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');
     const item = cleanMessage(m, key);
