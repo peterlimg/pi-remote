@@ -109,7 +109,9 @@ export function attachClient(socket, service) {
         } else if (message.op === 'videoChunk') {
           value = videos.chunk(message);
         } else if (message.op === 'videoFinish') {
-          value = videos.finish(message.uploadId);
+          const { path } = videos.finish(message.uploadId);
+          const { poster } = await readVideo(service.dir, path);
+          value = { path, poster };
         } else if (message.op === 'videoDiscard') {
           videos.discard(message.uploadId);
         } else if (message.op === 'models') {

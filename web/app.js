@@ -1546,8 +1546,12 @@ async function stageVideo(image) {
       updateVideoProgress(image);
     }
     check();
-    const { path } = await request('videoFinish', { uploadId });
+    const { path, poster } = await request('videoFinish', { uploadId });
     check(); image.staged.path = path;
+    if (poster && !image.poster) {
+      const [thumbnail] = validateImages([poster]);
+      image.poster = URL.createObjectURL(new Blob([Uint8Array.from(atob(thumbnail.data), c => c.charCodeAt(0))], { type: thumbnail.mimeType }));
+    }
     return image.staged;
   } catch (error) {
     discardVideo(image); image.staged = undefined; image.error = error.message;
@@ -1567,20 +1571,6 @@ function releaseImages(images) {
     discardVideo(image);
   }
 }
-function captureVideoPoster(image, preview) {
-  if (image.poster || image.released || !preview.videoWidth) return;
-  const canvas = document.createElement('canvas'), scale = Math.min(1, 320 / Math.max(preview.videoWidth, preview.videoHeight));
-  canvas.width = Math.max(1, Math.round(preview.videoWidth * scale));
-  canvas.height = Math.max(1, Math.round(preview.videoHeight * scale));
-  try {
-    canvas.getContext('2d').drawImage(preview, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(blob => {
-      if (!blob || image.released || image.poster) return;
-      image.poster = URL.createObjectURL(blob);
-      image.preview.poster = image.poster;
-    }, 'image/jpeg', .8);
-  } catch {} // Keep the native video frame if thumbnail capture is unavailable.
-}
 function updateVideoProgress(image) {
   if (!image.progressNode) return;
   image.progressNode.setAttribute('aria-valuenow', image.progress);
@@ -1592,14 +1582,16 @@ function renderImages() {
   $('attachments').replaceChildren(...images.map(image => {
     const item = el('div', undefined, 'attachment'), preview = el(image.video ? 'video' : 'img');
     if (image.video) {
-      item.classList.add('video-attachment'); image.preview = preview;
-      preview.controls = true; preview.playsInline = true; preview.preload = 'auto';
+      item.classList.add('video-attachment');
+      preview.controls = true; preview.playsInline = true; preview.preload = 'none';
       if (image.poster) preview.poster = image.poster;
       preview.setAttribute('aria-label', image.file.name);
-      preview.addEventListener('loadeddata', () => captureVideoPoster(image, preview), { once: true });
-      preview.addEventListener('error', () => preview.replaceWith(el('div', 'Preview unavailable', 'video-preview-unavailable')));
-      // Safari needs a seek to paint a local video's first frame without playing it.
-      preview.src = image.url + '#t=0.001';
+      preview.addEventListener('error', () => {
+        if (!image.poster) { preview.replaceWith(el('div', 'Preview unavailable', 'video-preview-unavailable')); return; }
+        const thumbnail = el('img'); thumbnail.src = image.poster; thumbnail.alt = 'Video preview';
+        preview.replaceWith(thumbnail);
+      });
+      preview.src = image.url;
     } else { preview.src = image.url; preview.alt = image.file.name; }
     const remove = el('button'); remove.type = 'button';
     remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';

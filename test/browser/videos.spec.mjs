@@ -22,7 +22,6 @@ test('video picker previews, removes and sends original bytes through the real h
   await input.click(); await (await picker).setFiles(file);
   const video = page.locator('#attachments video');
   await expect(video).toBeVisible();
-  await expect.poll(() => video.evaluate(node => node.videoWidth)).toBe(160);
   await expect(video).toHaveCSS('width', '80px');
   await expect(video).toHaveCSS('height', '80px');
   await expect(video).toHaveAttribute('poster', /^blob:/);
@@ -102,7 +101,7 @@ test('video picker previews, removes and sends original bytes through the real h
   expect(errors).toEqual([]);
 });
 
-test('unsupported previews still upload originals, and removal cancels an in-flight upload', async ({ page }) => {
+test('video uploads stay cancellable before the thumbnail is ready', async ({ page }) => {
   const state = { id: 'cancel', title: 'Video cancellation', cwd: '/project', status: 'idle', messages: [] };
   const packets = [];
   let client, chunkReply;
@@ -127,7 +126,8 @@ test('unsupported previews still upload originals, and removal cancels an in-fli
   await expect(page.locator('#attachments')).toBeHidden();
   client.send(JSON.stringify({ type: 'ready', supportsVideos: true }));
   await page.locator('#image-files').setInputFiles(unsupported);
-  await expect(page.locator('.video-preview-unavailable')).toHaveText('Preview unavailable');
+  await expect(page.locator('#attachments video')).toBeVisible();
+  await expect(page.locator('#attachments video')).toHaveAttribute('preload', 'none');
   await expect.poll(() => !!chunkReply).toBe(true);
   const progress = page.getByRole('progressbar', { name: 'Uploading recording.mov' });
   await expect(progress).toBeVisible();
