@@ -2,6 +2,8 @@
 
 Checked October 13, 2026 against Anthropic's live documentation, installed Pi 1.1.0, and this repository.
 
+For the SDK interfaces, ownership diagram, and Pi provider design, see the [integration blueprint](claude-agent-sdk-integration.md).
+
 ## What changed
 
 Anthropic's [Help Center article](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan) says:
