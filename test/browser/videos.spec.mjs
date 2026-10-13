@@ -23,6 +23,9 @@ test('video picker previews, removes and sends original bytes through the real h
   const video = page.locator('#attachments video');
   await expect(video).toBeVisible();
   await expect.poll(() => video.evaluate(node => node.videoWidth)).toBe(160);
+  await expect(video).toHaveCSS('width', '80px');
+  await expect(video).toHaveCSS('height', '80px');
+  await expect(video).toHaveAttribute('poster', /^blob:/);
   await expect(page.locator('.video-attachment')).not.toHaveClass(/uploading/);
   await expect(page.locator('.video-attachment')).toHaveText('');
   const finishedPath = () => {

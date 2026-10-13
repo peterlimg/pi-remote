@@ -1562,8 +1562,24 @@ function discardVideo(image) {
 }
 function releaseImages(images) {
   for (const image of images) {
-    image.released = true; URL.revokeObjectURL(image.url); discardVideo(image);
+    image.released = true; URL.revokeObjectURL(image.url);
+    if (image.poster) URL.revokeObjectURL(image.poster);
+    discardVideo(image);
   }
+}
+function captureVideoPoster(image, preview) {
+  if (image.poster || image.released || !preview.videoWidth) return;
+  const canvas = document.createElement('canvas'), scale = Math.min(1, 320 / Math.max(preview.videoWidth, preview.videoHeight));
+  canvas.width = Math.max(1, Math.round(preview.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(preview.videoHeight * scale));
+  try {
+    canvas.getContext('2d').drawImage(preview, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      if (!blob || image.released || image.poster) return;
+      image.poster = URL.createObjectURL(blob);
+      image.preview.poster = image.poster;
+    }, 'image/jpeg', .8);
+  } catch {} // Keep the native video frame if thumbnail capture is unavailable.
 }
 function updateVideoProgress(image) {
   if (!image.progressNode) return;
@@ -1575,13 +1591,16 @@ function renderImages() {
   $('attachments').hidden = !images.length;
   $('attachments').replaceChildren(...images.map(image => {
     const item = el('div', undefined, 'attachment'), preview = el(image.video ? 'video' : 'img');
-    preview.src = image.url;
     if (image.video) {
-      item.classList.add('video-attachment');
-      preview.controls = true; preview.playsInline = true; preview.preload = 'metadata';
+      item.classList.add('video-attachment'); image.preview = preview;
+      preview.controls = true; preview.playsInline = true; preview.preload = 'auto';
+      if (image.poster) preview.poster = image.poster;
       preview.setAttribute('aria-label', image.file.name);
+      preview.addEventListener('loadeddata', () => captureVideoPoster(image, preview), { once: true });
       preview.addEventListener('error', () => preview.replaceWith(el('div', 'Preview unavailable', 'video-preview-unavailable')));
-    } else preview.alt = image.file.name;
+      // Safari needs a seek to paint a local video's first frame without playing it.
+      preview.src = image.url + '#t=0.001';
+    } else { preview.src = image.url; preview.alt = image.file.name; }
     const remove = el('button'); remove.type = 'button';
     remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
     remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
