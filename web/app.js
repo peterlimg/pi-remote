@@ -1592,10 +1592,9 @@ function renderImages() {
     });
     item.classList.toggle('uploading', !!image.uploading);
     if (image.video) {
-      const name = el('span', image.file.name); name.title = image.file.name;
-      const status = el('span', image.error ? 'Upload failed. Send to retry.' : 'Original file');
-      status.setAttribute('role', 'status'); status.hidden = !!image.uploading;
-      item.append(preview, name, status);
+      const status = el('span', image.error ? 'Upload failed. Send to retry.' : '');
+      status.setAttribute('role', 'status'); status.hidden = !image.error;
+      item.append(preview, status);
       image.progressNode = undefined;
       if (image.uploading) {
         const ring = el('div', undefined, 'video-upload-progress');

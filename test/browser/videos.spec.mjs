@@ -23,7 +23,8 @@ test('video picker previews, removes and sends original bytes through the real h
   const video = page.locator('#attachments video');
   await expect(video).toBeVisible();
   await expect.poll(() => video.evaluate(node => node.videoWidth)).toBe(160);
-  await expect(page.locator('#attachments [role=status]')).toHaveText('Original file');
+  await expect(page.locator('.video-attachment')).not.toHaveClass(/uploading/);
+  await expect(page.locator('.video-attachment')).toHaveText('');
   const finishedPath = () => {
     const finish = packets.findLast(packet => packet.op === 'videoFinish');
     return responses.find(packet => packet.id === finish?.id && packet.ok)?.value.path;
@@ -35,7 +36,8 @@ test('video picker previews, removes and sends original bytes through the real h
   await expect(page.locator('#attachments')).toBeHidden();
   await expect.poll(() => { try { readFileSync(removedPath); return false; } catch { return true; } }).toBe(true);
   await input.setInputFiles(file);
-  await expect(page.locator('#attachments [role=status]')).toHaveText('Original file');
+  await expect(page.locator('.video-attachment')).not.toHaveClass(/uploading/);
+  await expect(page.locator('.video-attachment')).toHaveText('');
   await page.locator('#prompt').fill('Inspect the original recording');
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
