@@ -124,9 +124,13 @@ test('unsupported previews still upload originals, and removal cancels an in-fli
   await page.locator('#image-files').setInputFiles(unsupported);
   await expect(page.locator('.video-preview-unavailable')).toHaveText('Preview unavailable');
   await expect.poll(() => !!chunkReply).toBe(true);
-  await expect(page.locator('.video-attachment .connection-spinner')).toBeVisible();
-  await expect(page.locator('.video-attachment .connection-spinner')).toHaveCSS('animation-name', 'connection-spin');
-  await expect(page.locator('.video-attachment [role=status]')).toContainText('Uploading');
+  const progress = page.getByRole('progressbar', { name: 'Uploading recording.mov' });
+  await expect(progress).toBeVisible();
+  await expect(progress).toHaveCSS('width', '56px');
+  await expect(progress).toHaveAttribute('aria-valuenow', '0');
+  await expect(progress.locator('.video-upload-arc')).toHaveAttribute('stroke-dashoffset', '100');
+  await expect(progress).toHaveText('');
+  await expect(page.locator('.video-attachment [role=status]')).toBeHidden();
   await page.getByRole('button', { name: 'Remove recording.mov' }).click();
   await expect(page.locator('#attachments')).toBeHidden();
   await expect.poll(() => packets.some(packet => packet.op === 'videoDiscard')).toBe(true);

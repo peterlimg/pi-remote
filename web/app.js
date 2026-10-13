@@ -1531,7 +1531,7 @@ async function stageVideo(image) {
   check();
   if (!supportsVideos) throw new Error('Restart Pi Remote on your computer to enable video uploads.');
   if (image.staged?.socket === ws && image.staged.path) return image.staged;
-  image.uploading = true; image.error = '';
+  image.uploading = true; image.error = ''; image.progress = 0;
   if (imageDrafts.get(selected)?.includes(image)) renderImages();
   try {
     const { name, type, size } = image.file;
@@ -1543,7 +1543,7 @@ async function stageVideo(image) {
       check();
       await request('videoChunk', { uploadId, offset, data });
       image.progress = Math.round(Math.min(offset + VIDEO_CHUNK_BYTES, size) / size * 100);
-      if (image.progressNode) image.progressNode.textContent = `Uploading ${image.progress}%`;
+      updateVideoProgress(image);
     }
     check();
     const { path } = await request('videoFinish', { uploadId });
@@ -1564,6 +1564,11 @@ function releaseImages(images) {
   for (const image of images) {
     image.released = true; URL.revokeObjectURL(image.url); discardVideo(image);
   }
+}
+function updateVideoProgress(image) {
+  if (!image.progressNode) return;
+  image.progressNode.setAttribute('aria-valuenow', image.progress);
+  image.progressNode.querySelector('.video-upload-arc').setAttribute('stroke-dashoffset', 100 - image.progress);
 }
 function renderImages() {
   const images = imageDrafts.get(selected) || [];
@@ -1588,15 +1593,23 @@ function renderImages() {
     item.classList.toggle('uploading', !!image.uploading);
     if (image.video) {
       const name = el('span', image.file.name); name.title = image.file.name;
-      image.progressNode = el('span', image.error ? 'Upload failed. Send to retry.' : image.uploading ? `Uploading ${image.progress || 0}%` : 'Original file');
-      image.progressNode.setAttribute('role', 'status');
-      item.append(preview, name, image.progressNode);
+      const status = el('span', image.error ? 'Upload failed. Send to retry.' : 'Original file');
+      status.setAttribute('role', 'status'); status.hidden = !!image.uploading;
+      item.append(preview, name, status);
+      image.progressNode = undefined;
+      if (image.uploading) {
+        const ring = el('div', undefined, 'video-upload-progress');
+        ring.setAttribute('role', 'progressbar'); ring.setAttribute('aria-label', `Uploading ${image.file.name}`);
+        ring.setAttribute('aria-valuemin', '0'); ring.setAttribute('aria-valuemax', '100');
+        ring.innerHTML = '<svg viewBox="0 0 56 56" aria-hidden="true"><circle class="video-upload-track" cx="28" cy="28" r="22"/><circle class="video-upload-arc" cx="28" cy="28" r="22" pathLength="100" stroke-dasharray="100"/></svg>';
+        image.progressNode = ring; updateVideoProgress(image); item.append(ring);
+      }
     } else {
       const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
       link.addEventListener('click', openImage);
       link.append(preview); item.append(link);
     }
-    if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
+    if (image.uploading && !image.video) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
     item.append(remove); return item;
   }));
   updateControls();

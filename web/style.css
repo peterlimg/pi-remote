@@ -274,7 +274,11 @@ pre.message-text { white-space: pre-wrap; }
 .video-preview-unavailable { display: grid; place-items: center; font-size: 12px; }
 .video-attachment > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 2px 4px; }
 .attachment .connection-spinner { position: absolute; top: 28px; left: 28px; width: 24px; height: 24px; border-color: #fff; border-right-color: transparent; }
-.video-attachment .connection-spinner { top: 43px; left: 78px; pointer-events: none; }
+.video-upload-progress { position: absolute; top: 27px; left: 62px; width: 56px; height: 56px; border-radius: 50%; background: #171717b3; color: #fff; pointer-events: none; }
+.video-upload-progress svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.video-upload-progress circle { fill: none; stroke: currentColor; stroke-width: 4; }
+.video-upload-track { opacity: .3; }
+.video-upload-arc { stroke-linecap: round; }
 /* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
 .attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 17px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
