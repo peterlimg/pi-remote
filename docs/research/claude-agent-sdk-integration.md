@@ -15,7 +15,7 @@ sequenceDiagram
     Pi->>Bridge: streamSimple(model, transcript, options)
     Bridge->>SDK: query(user input, SDK options)
     SDK-->>Bridge: assistant tool_use
-    Note over SDK,Bridge: SDK MCP handler waits; it executes nothing
+    Note over SDK,Bridge: SDK MCP handler waits and executes nothing
     Bridge-->>Pi: toolCall, stopReason = toolUse
     Pi->>Tools: Validate, authorize, execute
     Tools-->>Pi: Tool result or denial
