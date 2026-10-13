@@ -8,6 +8,7 @@ import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until } from './helpers.mjs';
+import { VIDEO_CHUNK_BYTES, videoMessage } from '../web/videos.js';
 
 test('two live sessions stay independent; history, ownership, dedup and disconnect work', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-host-'));
@@ -248,6 +249,19 @@ test('actual extension registers, reattaches after host restart and releases own
   assert.match((await client.request('command', { sessionId: id, command: staged })).error, /expired/);
   assert.equal((await host.service.command(id, randomUUID(), { ...imageCommand, type: 'followUp', text: '' })).ok, true);
   assert.deepEqual(prompts.at(-1), { text: images, options: { deliverAs: 'followUp', expandPromptTemplates: true } });
+  const original = Buffer.alloc(VIDEO_CHUNK_BYTES * 2 + 7, 123);
+  const video = (await client.request('videoStart', { file: { name: 'screen recording.mov', type: 'video/quicktime', size: original.length } })).value;
+  for (let offset = 0; offset < original.length; offset += VIDEO_CHUNK_BYTES) {
+    assert.equal((await client.request('videoChunk', { uploadId: video.uploadId, offset,
+      data: original.subarray(offset, offset + VIDEO_CHUNK_BYTES).toString('base64') })).ok, true);
+  }
+  const { path: videoPath } = (await client.request('videoFinish', video)).value;
+  assert.deepEqual(readFileSync(videoPath), original);
+  const videoCommand = { type: 'prompt', text: '', videos: [video.uploadId] };
+  assert.equal((await client.request('command', { sessionId: id, command: videoCommand })).value.ok, true);
+  assert.deepEqual(prompts.at(-1), { text: videoMessage('', [videoPath]), options: { deliverAs: 'steer', expandPromptTemplates: true } });
+  await client.request('videoDiscard', video);
+  assert.deepEqual(readFileSync(videoPath), original, 'sent original is retained');
   await emit('message_start', { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: [{ type: 'text', text: 'streamed' }] } });
   await until(() => host.service.read(id).messages.some(x => x.text === 'streamed'));
   sessionName = undefined;
@@ -262,6 +276,7 @@ test('actual extension registers, reattaches after host restart and releases own
   await host.close();
   host = await startHost({ dir, config, roots: [] });
   await until(() => host.service.live.has(id));
+  assert.deepEqual(readFileSync(videoPath), original, 'video survives host restart');
   assert.equal(host.service.live.get(id).worker, undefined, 'A terminal keeps ownership across host restarts');
   assert.equal(host.service.read(id).supportsImages, true);
   assert.equal((await host.service.command(id, randomUUID(), imageCommand)).ok, true);

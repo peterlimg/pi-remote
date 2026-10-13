@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { connectRelay } from '../src/relay.mjs';
 import { e2eKey } from '../src/e2e.mjs';
@@ -12,6 +15,8 @@ test('a relay cannot read or drive the host without the phone key', async t => {
   const http = createServer(), wss = new WebSocketServer({ server: http });
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
   const service = new EventEmitter();
+  service.dir = mkdtempSync(join(tmpdir(), 'pi-remote-sealed-'));
+  t.after(() => rmSync(service.dir, { recursive: true, force: true }));
   service.list = () => ({ sessions: [{ id: 'secret-session' }], offset: 0, total: 1 });
   const key = e2eKey({ bridgeToken: 'b'.repeat(40), clientToken: 'c'.repeat(40) });
   const connection = new Promise(resolve => wss.once('connection', resolve));
@@ -51,6 +56,22 @@ test('a relay cannot read or drive the host without the phone key', async t => {
   deliver('phone', ping);
   await until(() => frames('phone').length >= 4);
   assert.deepEqual(JSON.parse(await phone.open(frames('phone')[3])).value, { pong: true });
+
+  let nextFrame = 4;
+  const request = async (op, extra) => {
+    deliver('phone', await phone.seal(JSON.stringify({ op, id: op, ...extra })));
+    await until(() => frames('phone').length > nextFrame);
+    const result = JSON.parse(await phone.open(frames('phone')[nextFrame++]));
+    assert.equal(result.ok, true); return result.value;
+  };
+  const original = Buffer.alloc(256 * 1024, 42);
+  const { uploadId } = await request('videoStart', { file: { name: 'recording.mov', type: 'video/quicktime', size: original.length } });
+  await request('videoChunk', { uploadId, offset: 0, data: original.toString('base64') });
+  const { path } = await request('videoFinish', { uploadId });
+  assert.deepEqual(readFileSync(path), original);
+  assert.ok(frames('phone').slice(4).every(frame => !frame.includes(path)));
+  await request('videoDiscard', { uploadId });
+  assert.throws(() => readFileSync(path), /ENOENT/);
 
   // A replayed frame is rejected: its counter has already been used.
   deliver('phone', ping);

@@ -2,6 +2,7 @@ import { diffState } from '../web/protocol.js';
 import { randomUUID } from 'node:crypto';
 import { validateImages, MAX_IMAGES, MAX_IMAGE_BYTES } from '../web/images.js';
 import { parseObject, send, protectSocket } from './config.mjs';
+import { VideoUploads } from './videos.mjs';
 
 // Scrolling phones keep the top `limit` rows. They get only rows that changed since the
 // last send, so a live update costs one row however far the list was scrolled.
@@ -47,7 +48,7 @@ export function attachClient(socket, service) {
   const scroll = sessionWindow(service);
   let busy = 0, closed = false, listTimer, stateTimer;
   // Images staged before send live only as long as this socket; the phone falls back to inline data.
-  const uploads = new Map();
+  const uploads = new Map(), videos = new VideoUploads(service.dir);
   let uploadBytes = 0;
   const onList = () => {
     if (!listTimer) listTimer = setTimeout(() => {
@@ -73,7 +74,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -98,6 +99,14 @@ export function attachClient(socket, service) {
           const uploadId = randomUUID();
           uploads.set(uploadId, image); uploadBytes += image.data.length;
           value = { uploadId };
+        } else if (message.op === 'videoStart') {
+          value = videos.start(message.file);
+        } else if (message.op === 'videoChunk') {
+          value = videos.chunk(message);
+        } else if (message.op === 'videoFinish') {
+          value = videos.finish(message.uploadId);
+        } else if (message.op === 'videoDiscard') {
+          videos.discard(message.uploadId);
         } else if (message.op === 'models') {
           value = await service.getModels(message.sessionId);
         } else if (message.op === 'commands') {
@@ -111,7 +120,7 @@ export function attachClient(socket, service) {
             if (!staged) throw new Error('Image upload expired. Attach it again.');
             return staged;
           });
-          value = await service.command(message.sessionId, message.id, images ? { ...message.command, images } : message.command);
+          value = await service.command(message.sessionId, message.id, videos.command(images ? { ...message.command, images } : message.command));
           for (const image of message.command?.images || []) {
             const staged = uploads.get(image?.uploadId);
             if (staged) { uploads.delete(image.uploadId); uploadBytes -= staged.data.length; }
@@ -131,6 +140,7 @@ export function attachClient(socket, service) {
   });
   socket.once('close', () => {
     closed = true; clearTimeout(listTimer); clearTimeout(stateTimer);
+    videos.close();
     service.off('list', onList); service.off('state', onState);
   });
 }

@@ -1,5 +1,6 @@
 import { patchState, loadedSkill, sessionTitle, taskText } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
+import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
@@ -76,7 +77,7 @@ let key = localStorage.getItem('pi-remote-key') || '';
 const ownSwipe = navigator.standalone === true;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -141,7 +142,7 @@ function connection(text) {
 function disconnect() {
   closePicker();
   listRequest++; legacyList = undefined;
-  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsCommandResults = false; allowResume = false;
+  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -194,6 +195,7 @@ function connect() {
     if (packet.type === 'ready') {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
+      supportsVideos = packet.supportsVideos === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -633,13 +635,15 @@ function renderConversation(state) {
   const matched = [];
   for (const outgoing of submissions.values()) {
     if (outgoing.sessionId !== selected) continue;
+    const images = outgoing.attachments.filter(item => !item.video);
+    const text = outgoing.sentText ?? videoMessage(outgoing.text, outgoing.attachments.filter(item => item.video).map(item => item.file.name));
     const index = messages.findIndex(message => message.role === 'user' && !outgoing.knownIds.has(message.id) &&
-      !localImages.has(message.id) && userMessageText(message).trim() === outgoing.text.trim() &&
-      (message.images?.length || 0) === outgoing.attachments.length);
-    const message = index < 0 ? { id: outgoing.key, role: 'user', text: outgoing.text,
-      images: outgoing.attachments.map(({ file }) => ({ id: 'local', mimeType: file.type })),
+      !localImages.has(message.id) && userMessageText(message).trim() === text.trim() &&
+      (message.images?.length || 0) === images.length);
+    const message = index < 0 ? { id: outgoing.key, role: 'user', text,
+      images: images.map(({ file }) => ({ id: 'local', mimeType: file.type })),
       delivery: outgoing.accepted ? 'Sent. Waiting for Pi…' : 'Sending…' } : messages[index];
-    localImages.set(message.id, outgoing.attachments);
+    localImages.set(message.id, images);
     if (index < 0) messages.push(message);
     else matched.push({ outgoing, messageId: message.id });
   }
@@ -809,7 +813,8 @@ function updateControls() {
   const hasDraft = !!$('prompt').value.trim() || !!imageDrafts.get(selected)?.length;
   const outgoing = sending.get(selected), imageCount = outgoing?.attachments.length || 0;
   $('composer-send-status').hidden = !outgoing;
-  $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${imageCount === 1 ? 'image' : 'images'}…` : 'Sending…';
+  const noun = outgoing?.attachments.some(item => item.video) ? 'attachment' : 'image';
+  $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${noun}${imageCount === 1 ? '' : 's'}…` : 'Sending…';
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
@@ -1401,28 +1406,80 @@ function uploadImage(image) {
     finally { image.uploading = false; if (imageDrafts.get(selected)?.includes(image)) renderImages(); }
   });
 }
+async function stageVideo(image) {
+  const ws = socket;
+  const check = () => {
+    if (image.released || socket !== ws || !connected) throw new Error('Video upload interrupted. Send again to retry.');
+  };
+  check();
+  if (!supportsVideos) throw new Error('Restart Pi Remote on your computer to enable video uploads.');
+  if (image.staged?.socket === ws && image.staged.path) return image.staged;
+  image.uploading = true; image.error = '';
+  if (imageDrafts.get(selected)?.includes(image)) renderImages();
+  try {
+    const { name, type, size } = image.file;
+    const { uploadId } = await request('videoStart', { file: { name, type, size } });
+    image.staged = { uploadId, socket: ws };
+    for (let offset = 0; offset < size; offset += VIDEO_CHUNK_BYTES) {
+      check();
+      const { data } = await readImage(image.file.slice(offset, offset + VIDEO_CHUNK_BYTES));
+      check();
+      await request('videoChunk', { uploadId, offset, data });
+      image.progress = Math.round(Math.min(offset + VIDEO_CHUNK_BYTES, size) / size * 100);
+      if (image.progressNode) image.progressNode.textContent = `Uploading ${image.progress}%`;
+    }
+    check();
+    const { path } = await request('videoFinish', { uploadId });
+    check(); image.staged.path = path;
+    return image.staged;
+  } catch (error) {
+    discardVideo(image); image.staged = undefined; image.error = error.message;
+    throw error;
+  } finally {
+    image.uploading = false;
+    if (imageDrafts.get(selected)?.includes(image)) renderImages();
+  }
+}
+function discardVideo(image) {
+  if (image.video && image.staged?.socket === socket) request('videoDiscard', { uploadId: image.staged.uploadId }).catch(() => {});
+}
 function releaseImages(images) {
-  for (const image of images) URL.revokeObjectURL(image.url);
+  for (const image of images) {
+    image.released = true; URL.revokeObjectURL(image.url); discardVideo(image);
+  }
 }
 function renderImages() {
   const images = imageDrafts.get(selected) || [];
   $('attachments').hidden = !images.length;
   $('attachments').replaceChildren(...images.map(image => {
-    const item = el('div', undefined, 'attachment'), preview = el('img');
-    preview.src = image.url; preview.alt = image.file.name;
+    const item = el('div', undefined, 'attachment'), preview = el(image.video ? 'video' : 'img');
+    preview.src = image.url;
+    if (image.video) {
+      item.classList.add('video-attachment');
+      preview.controls = true; preview.playsInline = true; preview.preload = 'metadata';
+      preview.setAttribute('aria-label', image.file.name);
+      preview.addEventListener('error', () => preview.replaceWith(el('div', 'Preview unavailable', 'video-preview-unavailable')));
+    } else preview.alt = image.file.name;
     const remove = el('button'); remove.type = 'button';
     remove.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
     remove.setAttribute('aria-label', `Remove ${image.file.name}`); remove.disabled = sending.has(selected);
     remove.addEventListener('click', event => {
-      URL.revokeObjectURL(image.url);
+      releaseImages([image]);
       // WebKit rings every scripted focus; only keyboard removal (detail 0) should show it.
       imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus({ focusVisible: !event.detail });
     });
     item.classList.toggle('uploading', !!image.uploading);
-    const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
-    link.addEventListener('click', openImage);
-    link.append(preview); item.append(link);
-    if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
+    if (image.video) {
+      const name = el('span', image.file.name); name.title = image.file.name;
+      image.progressNode = el('span', image.error ? 'Upload failed. Send to retry.' : image.uploading ? `Uploading ${image.progress || 0}%` : 'Original file');
+      image.progressNode.setAttribute('role', 'status');
+      item.append(preview, name, image.progressNode);
+    } else {
+      const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
+      link.addEventListener('click', openImage);
+      link.append(preview); item.append(link);
+      if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
+    }
     item.append(remove); return item;
   }));
   updateControls();
@@ -1463,12 +1520,17 @@ $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';
   if (!selected || sending.has(selected) || !files.length) return;
-  if (images.length + files.length > MAX_IMAGES || files.some(file => !IMAGE_TYPES.includes(file.type) || !file.size) ||
-    images.reduce((sum, image) => sum + image.file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
-    notice(IMAGE_LIMIT); return;
+  const allFiles = [...images.map(image => image.file), ...files];
+  if (allFiles.length > MAX_IMAGES || files.some(file => !file.size || (isVideo(file) ? file.size > MAX_VIDEO_BYTES : !IMAGE_TYPES.includes(file.type))) ||
+    allFiles.filter(file => !isVideo(file)).reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
+    notice(allFiles.some(isVideo) ? VIDEO_LIMIT : IMAGE_LIMIT); return;
   }
-  const added = files.map(file => ({ file, url: URL.createObjectURL(file) }));
-  for (const image of added) uploadImage(image);
+  if (files.some(isVideo) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
+  const added = files.map(file => ({ file, video: isVideo(file), url: URL.createObjectURL(file) }));
+  for (const image of added) {
+    if (image.video) image.upload = uploadQueue = uploadQueue.then(() => stageVideo(image)).catch(() => {});
+    else uploadImage(image);
+  }
   imageDrafts.set(selected, [...images, ...added]);
   notice(''); renderImages();
 });
@@ -1482,8 +1544,9 @@ $('composer').addEventListener('submit', event => {
 async function sendMessage(type = 'prompt') {
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
-  if (attachments.length && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
-  if (attachments.length && text.trim().startsWith('/')) { notice('Send images with a message, not a slash command.'); return; }
+  if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
+  if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
+  if (attachments.length && text.trim().startsWith('/')) { notice('Send attachments with a message, not a slash command.'); return; }
   const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,
     knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
   sending.set(id, outgoing);
@@ -1500,8 +1563,13 @@ async function sendMessage(type = 'prompt') {
   let restored = false;
   try {
     await Promise.all(attachments.map(image => image.upload));
-    const images = await Promise.all(attachments.map(image => image.staged?.socket === socket
+    if (sending.get(id) !== outgoing) return;
+    const videos = [];
+    for (const image of attachments.filter(item => item.video)) videos.push(await stageVideo(image));
+    const images = await Promise.all(attachments.filter(item => !item.video).map(image => image.staged?.socket === socket
       ? { type: 'image', uploadId: image.staged.uploadId } : readImage(image.file)));
+    outgoing.sentText = videoMessage(text, videos.map(video => video.path));
+    if (selected === id && videos.length) renderConversation(cache.get(id));
     // Signing out while files are being read must not send them through a later login.
     if (sending.get(id) !== outgoing) return;
     let created;
@@ -1510,7 +1578,7 @@ async function sendMessage(type = 'prompt') {
       const key = text.trim().slice(6).trim();
       if (key) await switchModel(id, key);
       else openModels(id);
-    } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}) } });
+    } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}), ...(videos.length ? { videos: videos.map(video => video.uploadId) } : {}) } });
     if (sending.get(id) !== outgoing) return;
     outgoing.accepted = true;
     if (created && selected === id) await selectSession(created.sessionId);

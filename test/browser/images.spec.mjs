@@ -94,7 +94,7 @@ test('image picker waits for keyboard dismissal before Safari captures its ancho
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  const prompt = page.locator('#prompt'), input = page.getByLabel('Attach images', { exact: true });
+  const prompt = page.locator('#prompt'), input = page.getByLabel('Attach images and videos', { exact: true });
   const pickers = [];
   page.on('filechooser', picker => pickers.push(picker));
   await prompt.fill('Keep this draft');
@@ -152,7 +152,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Alpha/ }).click();
   const picker = page.waitForEvent('filechooser');
-  await page.getByLabel('Attach images', { exact: true }).click();
+  await page.getByLabel('Attach images and videos', { exact: true }).click();
   await (await picker).setFiles(file);
   await expect(page.getByRole('img', { name: file.name })).toBeVisible();
   await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
@@ -174,7 +174,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.getByRole('button', { name: 'Close image' }).tap();
   await expect(page.locator('#image-viewer')).toBeHidden();
   await page.getByRole('button', { name: `Remove ${file.name}` }).tap();
-  await expect(page.getByLabel('Attach images', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('Attach images and videos', { exact: true })).toBeFocused();
   await expect(page.locator('#attachments')).toBeHidden();
   await page.locator('#image-files').setInputFiles(file);
   await page.locator('#prompt').fill('What is in this image?');
@@ -192,7 +192,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#attachments img')).toHaveCount(1);
   await page.locator('#send').click();
   await expect.poll(() => commands.length).toBe(1);
-  await expect(page.getByLabel('Attach images', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Attach images and videos', { exact: true })).toBeDisabled();
   finish(false, 'Upload rejected');
   await expect(page.locator('#notice')).toHaveText('Upload rejected');
   await expect(page.locator('#attachments img')).toHaveCount(1);

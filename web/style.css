@@ -263,6 +263,10 @@ pre.message-text { white-space: pre-wrap; }
 .attachment { position: relative; flex-shrink: 0; }
 .attachment img { display: block; width: 80px; height: 80px; object-fit: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
 .attachment.uploading img { filter: brightness(.6); }
+.video-attachment { width: 180px; }
+.video-attachment video, .video-preview-unavailable { display: block; width: 180px; height: 110px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.video-preview-unavailable { display: grid; place-items: center; font-size: 12px; }
+.video-attachment > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 2px 4px; }
 .attachment .connection-spinner { position: absolute; top: 28px; left: 28px; width: 24px; height: 24px; border-color: #fff; border-right-color: transparent; }
 /* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
 .attachment button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }

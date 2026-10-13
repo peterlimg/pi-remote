@@ -6,6 +6,7 @@ const files = new Map([
   ['/protocol.js', ['protocol.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/images.js', ['images.js', 'text/javascript; charset=utf-8']],
+  ['/videos.js', ['videos.js', 'text/javascript; charset=utf-8']],
   ['/e2e.js', ['e2e.js', 'text/javascript; charset=utf-8']],
   ['/markdown-it.mjs', ['../node_modules/markdown-it/dist/browser/markdown-it.esm.min.mjs', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
@@ -26,7 +27,7 @@ export function serveStatic(req, res, body) {
   res.setHeader('Referrer-Policy', 'no-referrer');
   // The tunnel adds a slow round trip per request: revalidate (304) instead of re-downloading.
   res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; media-src blob:; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   const path = (req.url || '/').split('?')[0];
   if (path === '/health' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
   if (!assetPath(req)) { res.writeHead(404); res.end('Not found'); return; }

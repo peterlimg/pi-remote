@@ -27,7 +27,7 @@ The executable smoke proof covers manual login, reopen, and sign out only. The r
 - [Access](access.md): token entry, QR-link entry, reopen, sign out, invalid credentials.
 - [Sessions](sessions.md): mobile/desktop selection, search, task previews, diagnostics, pagination and resume boundaries.
 - [Conversation](conversation.md): Markdown, tool details, project details, navigation, scrolling.
-- [Messages](messages.md): send, drafts, desktop shortcuts, abort, image attachment and acknowledgement boundaries.
+- [Messages](messages.md): send, drafts, desktop shortcuts, abort, image/video attachments and acknowledgement boundaries.
 - [Commands](commands.md): discovery, touch/keyboard completion, session-specific commands, `/new`, model and reasoning boundaries.
 
 ## Not yet mapped in detail

@@ -117,10 +117,10 @@
           <p id="command-help" class="hint" role="status"></p>
         </div>
         <p id="composer-send-status" class="hint" role="status" hidden></p>
-        <div id="attachments" class="attachments" aria-label="Attached images" hidden></div>
+        <div id="attachments" class="attachments" aria-label="Attached images and videos" hidden></div>
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
-          <label id="attach" class="quiet" title="Attach images. Up to 4 images, 2 MB total."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images" accept="image/jpeg,image/png,image/gif,image/webp" multiple></label>
+          <label id="attach" class="quiet" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images and videos" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple></label>
           <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span>Connecting</div>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="settings-picker" hidden></button>
