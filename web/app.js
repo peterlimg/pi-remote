@@ -275,6 +275,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
+  $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
@@ -430,22 +431,47 @@ function sessionTypeIcon(item) {
   if (type === 'review') icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="3"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="19" r="3"/><path d="M6 8v8M18 16V9a4 4 0 0 0-4-4h-1m2-2-2 2 2 2"/></svg>';
   return icon;
 }
-function saveSessionIcon() {
+function renderSessionIconChoice() {
+  const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
+  $('session-icon-current').textContent = type === 'custom' ? choice.icon : { auto: 'Automatic', review: 'PR review', none: 'None' }[type];
+  for (const button of $('session-icon-options').children) button.setAttribute('aria-pressed', String(button.dataset.iconType === type));
+  for (const button of $('session-emoji-options').children) button.setAttribute('aria-pressed', String(type === 'custom' && button.dataset.emoji === choice.icon));
+  $('session-emoji-other').textContent = type === 'custom' ? `${choice.icon}  Other emoji…` : 'Other emoji…';
+}
+function saveSessionIcon(type, icon = '') {
   if (!selected) return;
-  const type = $('session-icon-choice').value;
-  const icon = [...new Intl.Segmenter().segment($('session-custom-icon').value.trim())][0]?.segment || '';
-  $('session-custom-icon').value = icon;
-  $('session-custom-icon-label').hidden = type !== 'custom';
   if (type === 'auto') sessionIcons.delete(selected);
   else sessionIcons.set(selected, { type, icon });
   localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
-  renderList();
+  renderSessionIconChoice(); renderList();
 }
-$('session-icon-choice').addEventListener('change', () => {
-  saveSessionIcon();
-  if ($('session-icon-choice').value === 'custom') $('session-custom-icon').focus();
+for (const button of $('session-icon-options').children) button.addEventListener('click', () => saveSessionIcon(button.dataset.iconType));
+for (const [emoji, name] of [['🔎', 'Research'], ['🐛', 'Bug'], ['🛠️', 'Tools'], ['💡', 'Idea'], ['📝', 'Notes'], ['⭐', 'Star']]) {
+  const button = el('button', emoji);
+  button.type = 'button'; button.dataset.emoji = emoji; button.setAttribute('aria-label', name);
+  button.addEventListener('click', () => saveSessionIcon('custom', emoji));
+  $('session-emoji-options').append(button);
+}
+$('session-icon-open').addEventListener('click', () => {
+  document.querySelector('.session-info').open = false;
+  $('session-emoji-form').hidden = true; $('session-emoji-other').setAttribute('aria-expanded', 'false');
+  renderSessionIconChoice();
+  $('session-icon-picker').showModal(); $('session-icon-picker').focus();
 });
-$('session-custom-icon').addEventListener('input', saveSessionIcon);
+$('session-icon-done').addEventListener('click', () => $('session-icon-picker').close());
+$('session-icon-picker').addEventListener('click', event => { if (event.target === $('session-icon-picker')) $('session-icon-picker').close(); });
+$('session-icon-picker').addEventListener('close', () => document.querySelector('.session-info summary').focus({ preventScroll: true }));
+$('session-emoji-other').addEventListener('click', () => {
+  $('session-emoji-form').hidden = false; $('session-emoji-other').setAttribute('aria-expanded', 'true');
+  $('session-custom-icon').value = sessionIcons.get(selected)?.icon || '';
+  $('session-custom-icon').focus(); $('session-custom-icon').select();
+});
+$('session-emoji-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const icon = [...new Intl.Segmenter().segment($('session-custom-icon').value.trim())][0]?.segment;
+  if (!icon) return;
+  saveSessionIcon('custom', icon); $('session-icon-picker').close();
+});
 // Hand for "needs you", a ring otherwise (filled blue when unread, spinning while working).
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
@@ -497,10 +523,8 @@ async function selectSession(id) {
   $('transcript').replaceChildren();
   updateScrollButton();
   document.querySelector('.session-info').open = false;
-  const iconChoice = sessionIcons.get(id);
-  $('session-icon-choice').value = iconChoice?.type || 'auto';
-  $('session-custom-icon').value = iconChoice?.icon || '';
-  $('session-custom-icon-label').hidden = iconChoice?.type !== 'custom';
+  $('session-icon-picker').close();
+  renderSessionIconChoice();
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!ownSwipe && !history.state?.session) history.pushState({ session: true }, '');
