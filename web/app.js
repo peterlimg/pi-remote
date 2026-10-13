@@ -59,6 +59,7 @@ for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(
 fitViewport();
 const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
+const sessionIcons = new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons') || '[]'));
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
 const threadImages = new Map(), usageSummaries = new Map();
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
@@ -274,6 +275,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
+  localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
@@ -372,7 +374,11 @@ function renderList() {
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
       const icon = statusIcon(item.status);
       if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
-      button.append(icon);
+      const indicators = el('span', undefined, 'session-indicators');
+      indicators.append(icon);
+      const typeIcon = sessionTypeIcon(item);
+      if (typeIcon) indicators.append(typeIcon);
+      button.append(indicators);
       const body = el('div', undefined, 'session-body');
       const top = el('div', undefined, 'session-top');
       const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
@@ -413,6 +419,33 @@ function renderList() {
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
 }
+function sessionTypeIcon(item) {
+  const choice = sessionIcons.get(item.id);
+  const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');
+  if (type === 'none' || (type === 'custom' && !choice.icon)) return;
+  const icon = el('span', type === 'custom' ? choice.icon : undefined, 'session-type-icon');
+  icon.setAttribute('role', 'img');
+  icon.setAttribute('aria-label', type === 'custom' ? `Session icon: ${choice.icon}` : 'PR review');
+  icon.title = icon.getAttribute('aria-label');
+  if (type === 'review') icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="3"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="19" r="3"/><path d="M6 8v8M18 16V9a4 4 0 0 0-4-4h-1m2-2-2 2 2 2"/></svg>';
+  return icon;
+}
+function saveSessionIcon() {
+  if (!selected) return;
+  const type = $('session-icon-choice').value;
+  const icon = [...new Intl.Segmenter().segment($('session-custom-icon').value.trim())][0]?.segment || '';
+  $('session-custom-icon').value = icon;
+  $('session-custom-icon-label').hidden = type !== 'custom';
+  if (type === 'auto') sessionIcons.delete(selected);
+  else sessionIcons.set(selected, { type, icon });
+  localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
+  renderList();
+}
+$('session-icon-choice').addEventListener('change', () => {
+  saveSessionIcon();
+  if ($('session-icon-choice').value === 'custom') $('session-custom-icon').focus();
+});
+$('session-custom-icon').addEventListener('input', saveSessionIcon);
 // Hand for "needs you", a ring otherwise (filled blue when unread, spinning while working).
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
@@ -464,6 +497,10 @@ async function selectSession(id) {
   $('transcript').replaceChildren();
   updateScrollButton();
   document.querySelector('.session-info').open = false;
+  const iconChoice = sessionIcons.get(id);
+  $('session-icon-choice').value = iconChoice?.type || 'auto';
+  $('session-custom-icon').value = iconChoice?.icon || '';
+  $('session-custom-icon-label').hidden = iconChoice?.type !== 'custom';
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!ownSwipe && !history.state?.session) history.pushState({ session: true }, '');
