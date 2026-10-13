@@ -1,0 +1,334 @@
+[
+  {
+    "name": "text-and-stream",
+    "events": {
+      "system": 2,
+      "rate_limit_event": 1,
+      "stream_event": 6,
+      "assistant": 1,
+      "result": 1
+    },
+    "deltas": 1,
+    "toolCalls": [],
+    "toolResults": 0,
+    "text": "ACK",
+    "sessionId": "4b082bde-5857-4858-a4d0-d2357f8f576c",
+    "model": "claude-haiku-5-5",
+    "apiKeySource": "none",
+    "tools": [],
+    "result": "success",
+    "resultText": "ACK",
+    "turns": 1,
+    "estimatedCostUsd": 0.0002695,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 665,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 5,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 665,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 5,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 665,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 665
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "durationMs": 4649
+  },
+  {
+    "name": "resume",
+    "events": {
+      "system": 2,
+      "stream_event": 10,
+      "assistant": 1,
+      "rate_limit_event": 1,
+      "result": 1
+    },
+    "deltas": 5,
+    "toolCalls": [],
+    "toolResults": 0,
+    "text": "MEMORY_75538bb7-70c8-4939-88da-ff8b2836d4ee",
+    "sessionId": "4b082bde-5857-4858-a4d0-d2357f8f576c",
+    "model": "claude-haiku-5-5",
+    "apiKeySource": "none",
+    "tools": [],
+    "result": "success",
+    "resultText": "MEMORY_75538bb7-70c8-4939-88da-ff8b2836d4ee",
+    "turns": 1,
+    "estimatedCostUsd": 0.0004343,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 738,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 34,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 738,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 34,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 738,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 738
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "durationMs": 4081
+  },
+  {
+    "name": "tool-maxTurns-3",
+    "events": {
+      "system": 3,
+      "rate_limit_event": 1,
+      "stream_event": 17,
+      "assistant": 2,
+      "user": 1,
+      "result": 1
+    },
+    "deltas": 7,
+    "toolCalls": [
+      {
+        "name": "mcp__probe__probe",
+        "id": "toolu_01FjCzFEvFDMKCfzNM4TNgWx",
+        "input": {
+          "label": "test"
+        }
+      }
+    ],
+    "toolResults": 1,
+    "text": "TOOL_8ebe8201-3384-4dfe-923f-bcf575af1e15",
+    "sessionId": "b3b38cf1-d14b-4010-8d34-2daf08c47e2c",
+    "model": "claude-haiku-5-5",
+    "apiKeySource": "none",
+    "tools": [
+      "mcp__probe__probe"
+    ],
+    "result": "success",
+    "resultText": "TOOL_8ebe8201-3384-4dfe-923f-bcf575af1e15",
+    "turns": 2,
+    "estimatedCostUsd": 0.00022202000000000002,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 145,
+      "cache_read_input_tokens": 2262,
+      "output_tokens": 86,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 145,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 33,
+          "cache_read_input_tokens": 1131,
+          "cache_creation_input_tokens": 145,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 145
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "durationMs": 5302,
+    "executions": 1
+  },
+  {
+    "name": "tool-maxTurns-1",
+    "events": {
+      "system": 2,
+      "stream_event": 8,
+      "rate_limit_event": 1,
+      "assistant": 1,
+      "user": 1,
+      "result": 1
+    },
+    "deltas": 3,
+    "toolCalls": [
+      {
+        "name": "mcp__probe__probe",
+        "id": "toolu_01CWLuc8cYuPR7KPfmoitjDw",
+        "input": {
+          "label": "test"
+        }
+      }
+    ],
+    "toolResults": 1,
+    "text": "",
+    "sessionId": "36765060-d915-499d-978e-d16eaeeb44fd",
+    "model": "claude-haiku-5-5",
+    "apiKeySource": "none",
+    "tools": [
+      "mcp__probe__probe"
+    ],
+    "result": "error_max_turns",
+    "turns": 2,
+    "estimatedCostUsd": 0.00016551,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 1131,
+      "output_tokens": 53,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 53,
+          "cache_read_input_tokens": 1131,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "errors": [
+      "Reached maximum number of turns (1)"
+    ],
+    "error": {
+      "name": "Error",
+      "message": "Claude Code returned an error result: Reached maximum number of turns (1)"
+    },
+    "durationMs": 4765,
+    "executions": 1
+  },
+  {
+    "name": "abort-during-tool",
+    "events": {
+      "system": 5,
+      "stream_event": 31,
+      "rate_limit_event": 1,
+      "assistant": 3,
+      "user": 1,
+      "result": 1
+    },
+    "deltas": 19,
+    "toolCalls": [
+      {
+        "name": "mcp__probe__probe",
+        "id": "toolu_01NrvmrSuWbNrAdhq8PA8VuQ",
+        "input": {
+          "label": "test"
+        }
+      }
+    ],
+    "toolResults": 1,
+    "text": "The probe call was interrupted and returned no token. I was asked to call the tool only once, so I haven't retried.",
+    "sessionId": "db95ebbe-5005-4015-b86a-f19a1eb5637d",
+    "model": "claude-haiku-5-5",
+    "apiKeySource": "none",
+    "tools": [
+      "mcp__probe__probe"
+    ],
+    "result": "success",
+    "resultText": "The probe call was interrupted and returned no token. I was asked to call the tool only once, so I haven't retried.",
+    "turns": 2,
+    "estimatedCostUsd": 0.00025718000000000003,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 2428,
+      "output_tokens": 211,
+      "output_tokens_details": {
+        "thinking_tokens": 121
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 158,
+          "cache_read_input_tokens": 1297,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "error": {
+      "name": "Error",
+      "message": "Claude Code process aborted by user"
+    },
+    "durationMs": 4559,
+    "toolCancellation": "cooperative handler observed the shared abort signal",
+    "finalResultBeforeAbortError": "success"
+  }
+]

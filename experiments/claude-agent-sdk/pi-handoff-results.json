@@ -1,0 +1,391 @@
+[
+  {
+    "scenario": "allow",
+    "providerCalls": 2,
+    "sdkHandlers": 1,
+    "piExecutions": 1,
+    "piPreflights": 1,
+    "sdkReadsAfterAbort": 0,
+    "piEvents": [
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_end",
+      "message_start",
+      "message_end",
+      "turn_end",
+      "turn_start",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "agent_end"
+    ],
+    "sdkEvents": [
+      "system",
+      "rate_limit_event",
+      "assistant",
+      "user",
+      "assistant",
+      "result"
+    ],
+    "returnedToolError": false,
+    "estimatedCostUsd": 0.00022594,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Call probe exactly once with label \"test\". Then reply with only its returned token, or DENIED if denied."
+          }
+        ],
+        "timestamp": 1791869698861
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869698862,
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "toolu_01UGYtyAxg2e4sryxcvQj5vD",
+            "name": "probe",
+            "arguments": {
+              "label": "test"
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "durationMs": 2698,
+        "thinkingLevel": "off"
+      },
+      {
+        "role": "toolResult",
+        "toolCallId": "toolu_01UGYtyAxg2e4sryxcvQj5vD",
+        "toolName": "probe",
+        "content": [
+          {
+            "type": "text",
+            "text": "PI_TOOL_43efd6c2-fda7-4109-890b-ea8fba0a7b5f"
+          }
+        ],
+        "isError": false,
+        "durationMs": 0,
+        "timestamp": 1791869701563
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869701563,
+        "content": [
+          {
+            "type": "text",
+            "text": "PI_TOOL_43efd6c2-fda7-4109-890b-ea8fba0a7b5f"
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "durationMs": 888,
+        "thinkingLevel": "off"
+      }
+    ],
+    "durationMs": 3592,
+    "pass": true
+  },
+  {
+    "scenario": "deny",
+    "providerCalls": 2,
+    "sdkHandlers": 1,
+    "piExecutions": 0,
+    "piPreflights": 1,
+    "sdkReadsAfterAbort": 0,
+    "piEvents": [
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_end",
+      "message_start",
+      "message_end",
+      "turn_end",
+      "turn_start",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_update",
+      "message_end",
+      "turn_end",
+      "agent_end"
+    ],
+    "sdkEvents": [
+      "system",
+      "rate_limit_event",
+      "assistant",
+      "user",
+      "assistant",
+      "result"
+    ],
+    "returnedToolError": true,
+    "estimatedCostUsd": 0.00018067999999999998,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Call probe exactly once with label \"test\". Then reply with only its returned token, or DENIED if denied."
+          }
+        ],
+        "timestamp": 1791869702455
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869702455,
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "toolu_01Nd2h1DqzohkRy9UQsCTmcL",
+            "name": "probe",
+            "arguments": {
+              "label": "test"
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "durationMs": 2623,
+        "thinkingLevel": "off"
+      },
+      {
+        "role": "toolResult",
+        "toolCallId": "toolu_01Nd2h1DqzohkRy9UQsCTmcL",
+        "toolName": "probe",
+        "content": [
+          {
+            "type": "text",
+            "text": "Denied by Pi test policy."
+          }
+        ],
+        "details": {},
+        "isError": true,
+        "timestamp": 1791869705078
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869705079,
+        "content": [
+          {
+            "type": "text",
+            "text": "DENIED"
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "durationMs": 930,
+        "thinkingLevel": "off"
+      }
+    ],
+    "durationMs": 3555,
+    "pass": true
+  },
+  {
+    "scenario": "abort",
+    "providerCalls": 2,
+    "sdkHandlers": 1,
+    "piExecutions": 1,
+    "piPreflights": 1,
+    "sdkReadsAfterAbort": 0,
+    "piEvents": [
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_update",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_end",
+      "message_start",
+      "message_end",
+      "turn_end",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "turn_end",
+      "agent_end"
+    ],
+    "sdkEvents": [
+      "system",
+      "rate_limit_event",
+      "assistant"
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Call probe exactly once with label \"test\". Then reply with only its returned token, or DENIED if denied."
+          }
+        ],
+        "timestamp": 1791869706010
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869706011,
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "toolu_01EY9sqmDAA2phHBwFv17RHd",
+            "name": "probe",
+            "arguments": {
+              "label": "test"
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "durationMs": 2658,
+        "thinkingLevel": "off"
+      },
+      {
+        "role": "toolResult",
+        "toolCallId": "toolu_01EY9sqmDAA2phHBwFv17RHd",
+        "toolName": "probe",
+        "content": [
+          {
+            "type": "text",
+            "text": "The operation was aborted"
+          }
+        ],
+        "details": {},
+        "isError": true,
+        "durationMs": 52,
+        "timestamp": 1791869708720
+      },
+      {
+        "role": "assistant",
+        "provider": "sdk-experiment",
+        "api": "sdk-experiment",
+        "model": "claude-haiku-5-5",
+        "timestamp": 1791869708720,
+        "content": [],
+        "stopReason": "aborted",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "errorMessage": "This operation was aborted",
+        "durationMs": 0,
+        "thinkingLevel": "off"
+      }
+    ],
+    "durationMs": 2710,
+    "abortSettleMs": 0,
+    "pass": true
+  }
+]
