@@ -56,12 +56,14 @@ The SDK supports custom MCP tools through `createSdkMcpServer()`, permission cal
 
 ### Require an SDK entry in `/model`
 
-A custom provider registered through `pi.registerProvider()` is the right Pi entry point, but the adapter needs a feasibility prototype before implementation:
+A custom provider registered through `pi.registerProvider()` is the right Pi entry point. The live experiment below proved a single-tool handoff through Pi's actual agent loop, including Pi permission denial and cooperative cancellation. That makes the adapter technically plausible without replacing Pi's tools.
 
-1. Prove a tool call can be handed to Pi, executed exactly once, and returned to the SDK without either agent loop advancing incorrectly.
-2. Prove Pi history can be restored after restart, branch changes, compaction, and switching away from and back to this provider. An SDK session ID alone is not sufficient.
-3. Map text, thinking, images, tool arguments/results, usage, failures, and cancellation to Pi's stream contract. Account for the SDK's own retries and compaction.
-4. Ensure authentication works in terminal and RPC workers without exposing credentials to the mobile browser.
+Remaining requirements:
+
+1. Prove Pi history can be restored after restart, branch changes, compaction, and switching away from and back to this provider. An SDK session ID alone is not sufficient.
+2. Extend the single-call bridge to parallel tools, concurrent sessions, and recovery without duplicate execution.
+3. Map partial text, thinking, images, usage, failures, and request instrumentation to Pi's stream contract. Account for the SDK's own retries and compaction.
+4. Verify authentication in terminal and RPC workers without exposing credentials to the mobile browser.
 
 Do not assume `maxTurns: 1` turns the SDK into a stateless completion API. The [TypeScript reference](https://code.claude.com/docs/en/agent-sdk/typescript) defines it as a limit on agentic turns, not an external tool-execution contract.
 
@@ -75,6 +77,33 @@ A correctly registered Pi provider should need no model-picker redesign:
 
 Authentication remains on the local host. Mobile model discovery and selection would still need verification in both bridge and RPC modes.
 
+## Live experiment results
+
+On October 13, 2026, tested Agent SDK 0.3.296 with Claude Code 2.1.296 and Pi agent-core/AI 1.1.0. The SDK's `haiku` alias resolved to `claude-haiku-5-5`. Experiments used synthetic prompts and one in-memory tool in a temporary directory, with built-in tools and project/user settings disabled. Pi configuration was unchanged.
+
+| Experiment | Observed result |
+| --- | --- |
+| Existing Claude login, no Anthropic API key | Requests succeeded using the local first-party Team login; SDK reported `apiKeySource: none` |
+| Partial streaming | Received content deltas and the expected exact response |
+| SDK session resume | A new query recovered a random marker from the preceding query's saved history |
+| SDK MCP tool | Handler executed once and Claude returned its random token |
+| `maxTurns: 1` | Tool still executed once, then SDK returned `error_max_turns` |
+| Pi-owned execution | Real Pi `Agent` ran one preflight and one tool execution across two provider calls; Claude returned Pi's token |
+| Pi permission denial | Pi blocked execution, returned the denied result to the SDK, and Claude answered DENIED |
+| Pi cancellation | Explicit SDK close plus an early abort-signal check produced an empty aborted Pi response, with no subsequent SDK reads |
+
+The handoff works by making the SDK's MCP handler wait rather than execute the tool:
+
+```text
+SDK tool_use -> Pi toolCall -> Pi validation / permissions / execution
+                           -> Pi toolResult -> resolve waiting MCP handler
+                                            -> SDK final answer
+```
+
+Direct SDK cancellation was surprising: aborting during the cooperative tool handler still produced an assistant reply and a success result before throwing ordinary `Error: Claude Code process aborted by user`. This happened twice. A provider must not treat that success result as overriding a user's cancellation. Closing the SDK and checking an already-aborted Pi signal before consuming more SDK events avoided showing that reply in the bridge experiment.
+
+All three final Pi bridge scenarios passed. Reproducible scripts, pinned dependencies, synthetic transcripts, and detailed limitations are archived on the [experiment branch](https://github.com/peterlimg/pi-remote/tree/328a4fe/experiments/claude-agent-sdk), not installed as a production provider.
+
 ## Verification boundary
 
-This investigation inspected documentation and source only. It did not install the Agent SDK, authenticate an account, spend credits, or run a live SDK/model bridge. Before shipping an adapter, test one tool round trip, abort during a tool, resume and branch changes, cross-provider handoff, and mobile discovery/selection. Subscription-login approval remains unresolved by the conflicting public documentation.
+The experiment validates one live query and one synthetic tool, not a general SDK provider. It did not test transcript replay into a restarted bridge, Pi branch/compaction mapping, model switching, parallel tools, images, mobile model discovery, or real shell/file side effects. The bridge buffers complete assistant messages and zeroes Pi-side usage; partial event mapping and billing accounting remain unimplemented. SDK resume succeeded separately, but does not establish compatibility with Pi history. Reported authentication success does not establish product approval or verify which billing balance was charged. Subscription-login approval remains unresolved by the conflicting public documentation.
