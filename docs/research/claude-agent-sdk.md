@@ -58,7 +58,7 @@ Amp normal mode: Amp UI / services -> Amp agent -> model
 Amp Claude mode: Amp UI / services -> Claude Agent SDK -> Claude
 ```
 
-This is an external-agent mode, not a claim that Amp feeds subscription tokens into its ordinary model provider. The public docs establish that architecture and behavior, but do not expose Amp's internal adapter implementation.
+This is an external-agent mode, not a claim that Amp feeds subscription tokens into its ordinary model provider. The public docs establish that architecture. A later [static inspection with REA and bun-unpacker](amp-sdk-static-analysis.md) recovered the SDK relay from Amp's published executable. It confirms waiting MCP handlers, tool-result correlation through `extra._meta["claudecode/toolUseId"]`, SDK resume options, and reconnect checkpoints. These are observations of shipped code, not live Amp tests.
 
 For Pi Remote, following Amp means adding a distinct SDK-backed session runtime, preserving the remote UI but mapping SDK sessions, events, permissions, and cancellation. That differs from the Pi-provider experiment below, which retains Pi's agent loop. The experiment is still technically promising, but Amp is not evidence that Pi-style history restoration or that specific tool-handoff technique is solved. Keep SDK-native sessions separate initially rather than promise arbitrary mid-session switching.
 

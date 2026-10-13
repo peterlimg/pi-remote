@@ -129,6 +129,8 @@ streamSimple(model, transcript, options)
 
 Real implementation must handle a complete assistant tool-call batch, not just stop on its first tool block. Multiple same-name calls with identical arguments require reliable correlation to their SDK and Pi call IDs. The shipped MCP handler's `extra` argument is typed `unknown`; do not assume it contains a documented Anthropic tool-use ID. The single-call experiment avoids that unresolved mapping problem.
 
+[Static inspection of Amp's shipped adapter](amp-sdk-static-analysis.md) found that it reads `extra._meta["claudecode/toolUseId"]` and rejects calls without a string ID. This gives us a concrete candidate to test with the pinned SDK, including parallel identical calls. It is not yet a verified Pi mapping or an established public SDK contract.
+
 A streaming-input query can span user turns. A `result` then ends the current run, not necessarily the lifetime of the input generator. The earlier experiment used string input and one live query; persistent streaming input is documented but not verified by that experiment.
 
 ## Extension and authentication boundary
