@@ -639,12 +639,15 @@ function clearThreadVideos(keep = new Set()) {
     threadVideos.delete(path);
   }
 }
-function showThreadVideo(video, file) {
+function showThreadVideo(video, file, poster) {
   video.url = URL.createObjectURL(file);
+  // The conversation owns its thumbnail URL; sending releases the composer's URL.
+  if (poster) video.posterURL = URL.createObjectURL(poster);
   const player = el('video'); video.player = player;
-  player.controls = true; player.playsInline = true; player.preload = 'metadata';
-  player.setAttribute('aria-label', video.name); player.src = video.url;
+  player.controls = true; player.playsInline = true; player.preload = 'none';
+  player.setAttribute('aria-label', video.name);
   if (video.posterURL) player.poster = video.posterURL;
+  player.src = video.url;
   player.addEventListener('error', () => {
     if (threadVideos.get(video.path) !== video) return;
     const download = el('a', 'Download original'); download.href = video.url; download.download = video.name;
@@ -700,9 +703,9 @@ async function playThreadVideo(video) {
   } finally { video.loading = false; video.button.disabled = false; }
 }
 function appendThreadVideos(parent, message, attachments, keep) {
-  const sources = attachments?.length ? attachments.map(item => ({ path: item.staged?.path || item.url, file: item.file }))
+  const sources = attachments?.length ? attachments.map(item => ({ path: item.staged?.path || item.url, file: item.file, poster: item.posterBlob }))
     : splitVideoMessage(userMessageText(message)).paths.map(path => ({ path }));
-  for (const { path, file } of sources) {
+  for (const { path, file, poster } of sources) {
     keep.add(path);
     let video = threadVideos.get(path);
     if (!video) {
@@ -711,7 +714,7 @@ function appendThreadVideos(parent, message, attachments, keep) {
       video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected };
       threadVideos.set(path, video);
       button.addEventListener('click', () => playThreadVideo(video));
-      if (file) showThreadVideo(video, file);
+      if (file) showThreadVideo(video, file, poster);
       else videoObserver.observe(node);
     }
     parent.append(video.node);
@@ -1550,7 +1553,8 @@ async function stageVideo(image) {
     check(); image.staged.path = path;
     if (poster && !image.poster) {
       const [thumbnail] = validateImages([poster]);
-      image.poster = URL.createObjectURL(new Blob([Uint8Array.from(atob(thumbnail.data), c => c.charCodeAt(0))], { type: thumbnail.mimeType }));
+      image.posterBlob = new Blob([Uint8Array.from(atob(thumbnail.data), c => c.charCodeAt(0))], { type: thumbnail.mimeType });
+      image.poster = URL.createObjectURL(image.posterBlob);
     }
     return image.staged;
   } catch (error) {

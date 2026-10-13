@@ -49,6 +49,7 @@ test('video picker previews, removes and sends original bytes through the real h
   await expect(video).toBeVisible();
   await expect(page.locator('#prompt')).toHaveValue('Inspect the original recording');
   await page.screenshot({ path: info.outputPath('video-draft.png'), fullPage: true });
+  const draftPoster = await video.getAttribute('poster');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.locator('#attachments')).toBeHidden();
   await expect.poll(() => packets.filter(packet => packet.op === 'command').length).toBe(1);
@@ -58,7 +59,10 @@ test('video picker previews, removes and sends original bytes through the real h
   await expect.poll(() => responses.find(packet => packet.id === command.id)?.value.ok).toBe(true);
   const path = finishedPath();
   await expect(page.locator('#transcript')).not.toContainText(path);
-  await expect(page.locator('.message.user .thread-video video')).toHaveCount(1);
+  const sentVideo = page.locator('.message.user .thread-video video');
+  await expect(sentVideo).toHaveCount(1);
+  await expect(sentVideo).toHaveAttribute('poster', /^blob:/);
+  await expect(sentVideo).not.toHaveAttribute('poster', draftPoster);
   await expect(page.locator('#transcript')).not.toContainText('Sent. Waiting for Pi');
   expect(readFileSync(path)).toEqual(original);
   await page.reload();
