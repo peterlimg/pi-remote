@@ -1,12 +1,5 @@
-const unnamed = title => !title || title === 'Untitled session' || title.startsWith('Pi · ');
-
-// A stable fallback until Pi can name the task. Never turn a follow-up into its identity.
-export function sessionTitle(title, messages = []) {
-  if (!unnamed(title)) return title;
-  const text = messages.find(message => message.role === 'user' && message.text?.trim())?.text;
-  const line = (text || '').replace(/\s+/g, ' ').trim();
-  return line ? (line.length > 80 ? line.slice(0, 79) + '…' : line) : title || 'Untitled session';
-}
+import { unnamed, taskText } from '../web/protocol.js';
+export { sessionTitle } from '../web/protocol.js';
 
 export function registerSessionTitles(pi, onTitle = (_title) => {}) {
   let controller, attempted = false;
@@ -18,6 +11,7 @@ export function registerSessionTitles(pi, onTitle = (_title) => {}) {
       .map(entry => entry.message).filter(message => ['user', 'assistant'].includes(message.role))
       .map(message => ({ role: message.role, text: typeof message.content === 'string' ? message.content :
         (message.content || []).filter(part => part.type === 'text').map(part => part.text).join('\n') }))
+      .map(message => ({ ...message, text: taskText(message) }))
       .filter(message => message.text.trim()).slice(0, 4);
     if (!messages.some(message => message.role === 'user')) return;
     attempted = true;

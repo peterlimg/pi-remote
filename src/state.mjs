@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
 import { cleanMessage, shown, textContent, takeText, EXTENSION_INPUT } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
+import { taskText } from '../web/protocol.js';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
 const running = new WeakMap();
@@ -71,5 +72,5 @@ export function summary(state) {
   };
   const latest = messages.findLast(message => ['user', 'assistant'].includes(message.role) && message.text?.trim());
   return { ...meta, title: sessionTitle(meta.title, messages),
-    preview: excerpt(latest?.text), previewRole: latest?.role };
+    preview: excerpt(taskText(latest)), previewRole: latest?.role };
 }

@@ -1,3 +1,35 @@
+export function loadedSkill(message) {
+  if (message?.role !== 'user') return;
+  const text = message.text || '';
+  const header = text.match(/^<skill name="([^"]+)" location="[^"]+">\r?\n/);
+  if (!header) return;
+  const end = text.indexOf('\n</skill>', header[0].length);
+  // The mobile history limit can cut off a long skill before its closing tag.
+  if (end < 0 && !message.truncated) return;
+  return { name: header[1], text: end < 0 ? '' : text.slice(end + '\n</skill>'.length).trim() };
+}
+
+export function taskText(message) {
+  const skill = loadedSkill(message);
+  if (skill) return skill.text || 'Skill: ' + skill.name;
+  const name = message?.role === 'user' && message.truncated && rawSkillName(message.text);
+  return name ? 'Skill: ' + name : message?.text || '';
+}
+
+const rawSkillName = title => title?.match(/^<skill name="([^"]+)"/)?.[1];
+export const unnamed = title => !title || title === 'Untitled session' || title.startsWith('Pi · ') || !!rawSkillName(title);
+
+// A stable fallback until Pi can name the task. Never turn a follow-up into its identity.
+export function sessionTitle(title, messages = []) {
+  if (!unnamed(title)) return title;
+  const skillName = rawSkillName(title);
+  const first = messages.find(message => message.role === 'user' && message.text?.trim());
+  // Old bridges can keep sending a raw fallback after the original request leaves the last 100 messages.
+  const text = skillName ? messages.map(loadedSkill).find(skill => skill?.name === skillName)?.text || 'Skill: ' + skillName : taskText(first);
+  const line = text.replace(/\s+/g, ' ').trim();
+  return line ? (line.length > 80 ? line.slice(0, 79) + '…' : line) : title || 'Untitled session';
+}
+
 export function diffState(previous, next) {
   const before = new Map((previous.messages || []).map(x => [x.id, JSON.stringify(x)]));
   const messages = next.messages || [];

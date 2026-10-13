@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, appendFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { registerSessionTitles } from '../src/session-title.mjs';
-import { readSession } from '../src/catalog.mjs';
+import { registerSessionTitles, sessionTitle } from '../src/session-title.mjs';
+import { readSession, cleanMessage } from '../src/catalog.mjs';
 import { summary, initialState, applyEvent } from '../src/state.mjs';
 import { until } from './helpers.mjs';
 
@@ -100,6 +100,44 @@ test('invalid output, provider failure and older Pi keep browsing usable without
   delete app.ctx.modelRegistry.streamSimple;
   app.emit('session_start');
   assert.equal(app.calls.length, 0);
+});
+
+const skillPrompt = (request = '', body = 'Private skill instructions') =>
+  `<skill name="code-review" location="/private/skills/code-review/SKILL.md">\n${body}\n</skill>\n\n${request}`;
+
+test('skill titles and previews use the request for live, saved and old bridge sessions', t => {
+  const text = skillPrompt('Review PR #26');
+  const app = setup(t);
+  app.entries[1].message.content = text;
+  writeFileSync(app.file, app.entries.slice(0, 2).map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  const saved = readSession(app.file);
+  assert.equal(saved.title, 'Review PR #26');
+  assert.equal(summary(saved).preview, 'Review PR #26');
+  const state = initialState({});
+  applyEvent(state, { type: 'message_end', message: { role: 'user', content: text, timestamp: 1 } });
+  assert.equal(state.title, 'Review PR #26');
+  const oldTitle = text.replace(/\s+/g, ' ').slice(0, 79) + '…';
+  assert.equal(summary({ ...state, title: oldTitle }).title, 'Review PR #26');
+  assert.equal(sessionTitle('My review', state.messages), 'My review');
+  const followup = cleanMessage({ role: 'user', content: 'yes, push it' }, 'followup');
+  assert.equal(sessionTitle(oldTitle, [followup]), 'Skill: code-review');
+  for (const content of [skillPrompt(), skillPrompt('', 'Private skill instructions\n'.repeat(1500))]) {
+    const message = cleanMessage({ role: 'user', content }, 'skill');
+    const result = summary(initialState({}, [message]));
+    assert.equal(result.title, 'Skill: code-review');
+    assert.equal(result.preview, 'Skill: code-review');
+    assert.equal(message.text, content.slice(0, 24000));
+  }
+});
+
+test('model naming strips skill instructions before shortening the input', async t => {
+  const app = setup(t);
+  app.entries[1].message.content = skillPrompt('Review PR #26', 'Private skill instructions\n'.repeat(1500));
+  app.emit('session_start');
+  await until(() => app.published.length);
+  const input = JSON.parse(app.calls[0].context.messages[1].content);
+  assert.deepEqual(input[0], { role: 'user', text: 'Review PR #26' });
+  assert.ok(!JSON.stringify(input).includes('Private skill instructions'));
 });
 
 test('fallback task titles stay tied to the original request after follow-ups and history trimming', () => {

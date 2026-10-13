@@ -1,4 +1,4 @@
-import { patchState } from './protocol.js';
+import { patchState, loadedSkill, sessionTitle, taskText } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
@@ -375,11 +375,12 @@ function renderList() {
       button.append(icon);
       const body = el('div', undefined, 'session-body');
       const top = el('div', undefined, 'session-top');
-      const title = el('strong', item.title, item.title === 'Untitled session' ? 'untitled' : undefined); title.title = item.title;
+      const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
+      const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
       top.append(title);
       body.append(top);
       if (item.preview && item.preview !== item.title) {
-        body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(item.preview), 'session-preview'));
+        body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
       }
       const meta = el('div', undefined, 'session-meta');
       // Ready and Saved are the resting states; only label what needs attention.
@@ -410,7 +411,7 @@ function renderList() {
   const last = [...$('sessions').querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
-  if (current) $('title').textContent = current.title;
+  if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
 }
 // Hand for "needs you", a ring otherwise (filled blue when unread, spinning while working).
 function statusIcon(status) {
@@ -470,7 +471,7 @@ async function selectSession(id) {
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
-    $('title').textContent = sessions.find(x => x.id === id)?.title || 'Loading…';
+    $('title').textContent = sessionTitle(sessions.find(x => x.id === id)?.title || 'Loading…');
     $('transcript').replaceChildren(); $('transcript').hidden = false; $('empty').hidden = true;
     $('composer').hidden = false; updateControls();
   }
@@ -506,16 +507,6 @@ function showThreadImage(image, blob) {
 function userMessageText(message) {
   // Pi adds these coordinate hints for the model, not for the conversation UI.
   return message.images?.length ? (message.text || '').replace(/^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]\s*$/gm, '').trim() : message.text || '';
-}
-function loadedSkill(message) {
-  if (message.role !== 'user') return;
-  const text = userMessageText(message);
-  const header = text.match(/^<skill name="([^"]+)" location="[^"]+">\r?\n/);
-  if (!header) return;
-  const end = text.indexOf('\n</skill>', header[0].length);
-  // The mobile history limit can cut off a long skill before its closing tag.
-  if (end < 0 && !message.truncated) return;
-  return { name: header[1], text: end < 0 ? '' : text.slice(end + '\n</skill>'.length).trim() };
 }
 function loadThreadImage(image) {
   if (!image || image.loading || image.url) return;
@@ -569,7 +560,7 @@ function appendThreadImages(parent, message, attachments) {
   parent.append(gallery);
 }
 function renderConversation(state) {
-  $('title').textContent = sessions.find(item => item.id === selected)?.title || state.title;
+  $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
@@ -671,7 +662,7 @@ function renderConversation(state) {
       fragment.append(node);
       continue;
     }
-    const skill = loadedSkill(message);
+    const skill = loadedSkill({ ...message, text: userMessageText(message) });
     if (message.text || message.images?.length || message.role === 'user') {
       activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));

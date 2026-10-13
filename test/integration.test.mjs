@@ -32,6 +32,14 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   assert.equal((await client.request('watch', { sessionId: agents[0].id })).ok, true);
   assert.equal((await client.request('watch', { sessionId: agents[1].id })).ok, true);
   assert.equal(host.service.read(agents[0].id).status, 'working');
+  const skill = '<skill name="code-review" location="/skills/SKILL.md">\nPrivate instructions\n</skill>\n\nReview PR #26';
+  agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: { ...host.service.read(agents[0].id),
+    title: skill.replace(/\s+/g, ' ').slice(0, 79) + '…', messages: [{ id: 'skill', role: 'user', text: skill }], revision: 1 } }));
+  await until(() => host.service.read(agents[0].id).revision === 1);
+  assert.equal(host.service.read(agents[0].id).title, 'Review PR #26');
+  const listed = (await client.request('list')).value.sessions.find(item => item.id === agents[0].id);
+  assert.equal(listed.title, 'Review PR #26');
+  assert.equal(listed.preview, 'Review PR #26');
   const requestId = randomUUID();
   const packet = { op: 'command', id: requestId, sessionId: agents[1].id, command: { type: 'prompt', text: 'hello B' } };
   client.ws.send(JSON.stringify(packet));

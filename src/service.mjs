@@ -4,6 +4,7 @@ import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, shown, isInside, readSession, readSessionImage } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
+import { sessionTitle } from './session-title.mjs';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
@@ -81,7 +82,8 @@ export class SessionService extends EventEmitter {
   }
   read(id) {
     if (this.live.has(id)) {
-      const state = this.live.get(id).state;
+      const live = this.live.get(id).state;
+      const state = { ...live, title: sessionTitle(live.title, live.messages) };
       // Already-running terminals may still send the old text-only message format.
       if (!state.messages?.some(message => !message.images && message.text?.includes('[image]'))) return state;
       try {
