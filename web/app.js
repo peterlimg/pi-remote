@@ -507,6 +507,16 @@ function userMessageText(message) {
   // Pi adds these coordinate hints for the model, not for the conversation UI.
   return message.images?.length ? (message.text || '').replace(/^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]\s*$/gm, '').trim() : message.text || '';
 }
+function loadedSkill(message) {
+  if (message.role !== 'user') return;
+  const text = userMessageText(message);
+  const header = text.match(/^<skill name="([^"]+)" location="[^"]+">\r?\n/);
+  if (!header) return;
+  const end = text.indexOf('\n</skill>', header[0].length);
+  // The mobile history limit can cut off a long skill before its closing tag.
+  if (end < 0 && !message.truncated) return;
+  return { name: header[1], text: end < 0 ? '' : text.slice(end + '\n</skill>'.length).trim() };
+}
 function loadThreadImage(image) {
   if (!image || image.loading || image.url) return;
   image.loading = true;
@@ -661,12 +671,14 @@ function renderConversation(state) {
       fragment.append(node);
       continue;
     }
+    const skill = loadedSkill(message);
     if (message.text || message.images?.length || message.role === 'user') {
       activity = undefined;
+      if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el('div', undefined, 'message-text');
-      if (message.role === 'user') body.textContent = userMessageText(message) || (message.images?.length ? '' : '(empty message)');
+      if (message.role === 'user') body.textContent = skill ? skill.text : userMessageText(message) || (message.images?.length ? '' : '(empty message)');
       else {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
         body.innerHTML = markdown.render(message.text || '');
@@ -688,10 +700,10 @@ function renderConversation(state) {
         article.append(copy);
       }
       if (message.delivery) article.append(el('small', message.delivery, 'delivery-status'));
-      fragment.append(article);
+      if (article.childNodes.length) fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
-    if (message.truncated) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
+    if (message.truncated && (!skill || skill.text)) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
   }
   if (usagePosition === messages.length) { activity = undefined; fragment.append(renderUsage(usage)); }
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
