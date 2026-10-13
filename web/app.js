@@ -75,6 +75,7 @@ let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('p
 let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const ownSwipe = navigator.standalone === true;
+let swipeTimer, trackingSwipe = false;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -515,6 +516,7 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
+  resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
   if (selected !== id) clearThreadImages();
@@ -1304,46 +1306,58 @@ $('new-project').addEventListener('click', () => startInProject());
 $('project-search').addEventListener('input', () => renderProjects());
 $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
-$('back').addEventListener('click', () => history.state?.session ? history.back() : $('app').classList.remove('viewing'));
-window.addEventListener('popstate', () => { closePicker(); $('app').classList.remove('viewing'); });
+function resetSwipe() {
+  clearTimeout(swipeTimer);
+  trackingSwipe = false;
+  const main = document.querySelector('main');
+  main.style.transition = main.style.transform = '';
+  $('app').classList.remove('swiping');
+}
+$('back').addEventListener('click', () => {
+  resetSwipe();
+  if (history.state?.session) history.back();
+  else $('app').classList.remove('viewing');
+});
+window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app').classList.remove('viewing'); });
 // iOS home-screen apps have no Back button, and their history edge-swipe slides in a screenshot taken when the
 // thread opened, so the list visibly changes once the swipe lands. There, drag the thread off the live list instead.
 if (ownSwipe) {
   const app = $('app'), main = document.querySelector('main');
-  let startX, startY, dx, tracking = false;
+  let startX, startY, dx;
   main.addEventListener('touchstart', event => {
+    resetSwipe();
     const touch = event.touches[0];
-    tracking = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing');
+    trackingSwipe = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing');
     startX = touch.clientX; startY = touch.clientY; dx = 0;
   }, { passive: true });
   main.addEventListener('touchmove', event => {
-    if (!tracking) return;
+    if (!trackingSwipe) return;
     const touch = event.touches[0];
     dx = Math.max(0, touch.clientX - startX);
     if (!app.classList.contains('swiping')) {
-      if (dx < 8) { if (Math.abs(touch.clientY - startY) > 8) tracking = false; return; }
+      if (dx < 8) { if (Math.abs(touch.clientY - startY) > 8) resetSwipe(); return; }
       app.classList.add('swiping');
     }
     event.preventDefault();
     main.style.transform = `translateX(${dx}px)`;
   }, { passive: false });
   const release = () => {
-    if (!tracking) return;
-    tracking = false;
+    if (!trackingSwipe) return;
+    trackingSwipe = false;
     if (!app.classList.contains('swiping')) return;
     // ponytail: distance-only threshold; add flick velocity if short fast swipes feel ignored.
     const back = dx > main.offsetWidth / 3;
     if (back) haptic();
     main.style.transition = 'transform .2s ease-out';
     main.style.transform = back ? 'translateX(100%)' : '';
-    setTimeout(() => {
-      main.style.transition = main.style.transform = '';
-      app.classList.remove('swiping');
+    swipeTimer = setTimeout(() => {
+      resetSwipe();
       if (back) { closePicker(); app.classList.remove('viewing'); }
     }, 200);
   };
   main.addEventListener('touchend', release);
-  main.addEventListener('touchcancel', release);
+  main.addEventListener('touchcancel', resetSwipe);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) resetSwipe(); });
 }
 $('prompt').addEventListener('input', () => {
   closePicker(); resizePrompt();
