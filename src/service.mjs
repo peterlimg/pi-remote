@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { discover, cleanMessage, shown, isInside, readSession, readSessionImage } from './catalog.mjs';
+import { discover, isInside, readSession, readSessionImage } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
@@ -277,13 +277,10 @@ export class SessionService extends EventEmitter {
     this.trackWorker(id, item);
     try {
       const rpcState = await worker.request('get_state');
-      const history = await worker.request('get_messages');
-      const fromExtensions = new Set(actual.messages.filter(m => m.source).map(m => m.timestamp));
-      item.state.messages = (history?.messages || []).filter(shown).slice(-100).map((m, index) => {
-        const message = cleanMessage(m, m.role + ':' + (m.timestamp ?? index) + ':' + (m.toolCallId || ''));
-        if (m.role === 'user' && fromExtensions.has(m.timestamp)) message.source = 'extension';
-        return message;
-      });
+      // The saved branch already has image references; get_messages duplicates all base64 over RPC.
+      const history = readSession(actual.file);
+      item.state.messages = history.messages;
+      item.state.historyTruncated = history.historyTruncated;
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
       item.agentActive = !!rpcState?.isStreaming;

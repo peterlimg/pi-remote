@@ -15,7 +15,10 @@ import { diffState, patchState } from '../web/protocol.js';
 
 test('saved session resume is allowed by default, rejects existing owners, runs a worker and answers dialogs', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-worker-')), file = join(dir, 'saved.jsonl');
-  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  writeFileSync(file, [
+    { type: 'session', id: 'saved', cwd: dir },
+    { type: 'message', id: 'prompt', parentId: null, message: { role: 'user', timestamp: 1, content: 'saved prompt' } }
+  ].map(entry => JSON.stringify(entry)).join('\n') + '\n');
   const id = sessionKey(file);
   const service = new SessionService({ dir, roots: [dir],
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
@@ -66,6 +69,35 @@ test('saved session resume is allowed by default, rejects existing owners, runs 
   assert.equal(answer.ok, true);
   await until(() => service.read(id).messages.some(x => x.text === 'dialog answered'));
 });
+test('resume reads large saved branches without an RPC history copy and keeps lazy images and custom messages', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-large-history-')), file = join(dir, 'saved.jsonl');
+  const image = { type: 'image', mimeType: 'image/png', data: 'a'.repeat(2 * 1024 * 1024) };
+  const customImage = { type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' };
+  const entries = [{ type: 'session', id: 'large', cwd: dir }];
+  for (let i = 0; i < 5; i++) entries.push({ type: 'message', id: String(i), parentId: i ? String(i - 1) : null,
+    message: { role: 'user', content: [{ type: 'text', text: 'preview ' + i }, image], timestamp: i } });
+  entries.push({ type: 'message', id: 'abandoned', parentId: '0', message: { role: 'assistant', content: 'wrong branch' } },
+    { type: 'custom_message', id: 'hidden', parentId: '4', display: false, content: 'private model context' },
+    { type: 'custom_message', id: 'visible', parentId: 'hidden', display: true, timestamp: new Date().toISOString(), content: [{ type: 'text', text: 'visible extension message' }, customImage] });
+  const saved = entries.map(entry => JSON.stringify(entry)).join('\n') + '\n';
+  writeFileSync(file, saved);
+  assert.ok(Buffer.byteLength(saved) > 8 * 1024 * 1024);
+  const service = new SessionService({ dir, roots: [dir],
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } });
+  t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
+  const id = sessionKey(file);
+  const result = await service.resume(id, randomUUID()); // The fixture deliberately rejects get_messages.
+  assert.equal(result.ok, true, result.error);
+  const state = service.read(id);
+  assert.equal(state.status, 'idle');
+  assert.deepEqual(state.messages.map(message => message.text), ['preview 0', 'preview 1', 'preview 2', 'preview 3', 'preview 4', 'visible extension message']);
+  for (const message of state.messages) assert.deepEqual(service.getImage(id, message.images[0].id), message.role === 'custom' ? customImage : image);
+  assert.ok(JSON.stringify(state).length < 10000);
+  assert.equal(readFileSync(file, 'utf8'), saved, 'resuming must not alter or strip saved images');
+  assert.equal((await service.command(id, randomUUID(), { type: 'prompt', text: 'continue after large history' })).ok, true);
+  await until(() => service.read(id).messages.some(message => message.text === 'reply: continue after large history'));
+});
+
 test('host restart restores every managed session with phone prompts, images and dialogs', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-restore-'));
   const config = loadConfig(dir);

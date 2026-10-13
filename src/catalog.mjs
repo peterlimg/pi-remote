@@ -47,8 +47,10 @@ export function branchMessages(branch, key) {
   const pending = [];
   return branch.flatMap(entry => {
     if (entry.type === 'custom' && entry.customType === EXTENSION_INPUT) pending.push(entry.data?.text);
-    if (entry.type !== 'message') return [];
-    const item = cleanMessage(entry.message, key(entry));
+    const message = entry.type === 'custom_message' ? { role: 'custom', content: entry.content, display: entry.display,
+      timestamp: Date.parse(entry.timestamp) } : entry.type === 'message' ? entry.message : undefined;
+    if (!message || !shown(message)) return [];
+    const item = cleanMessage(message, key({ ...entry, message }));
     if (item.role === 'user' && takeText(pending, item.text)) item.source = 'extension';
     return [item];
   });
@@ -105,8 +107,9 @@ export function readSessionImage(file, imageId) {
   if (typeof imageId !== 'string' || !/^[a-f0-9]{64}$/.test(imageId)) throw new Error('Invalid image ID');
   const { branch } = readBranch(file);
   for (const entry of branch) {
-    if (entry.type !== 'message' || !Array.isArray(entry.message?.content)) continue;
-    for (const part of entry.message.content) {
+    const content = entry.type === 'custom_message' && entry.display ? entry.content : entry.type === 'message' && shown(entry.message) ? entry.message?.content : undefined;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
       if (part.type === 'image' && imageReference(part)?.id === imageId) return validateImages([part])[0];
     }
   }

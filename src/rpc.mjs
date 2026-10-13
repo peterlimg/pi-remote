@@ -3,6 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { modelList } from './commands.mjs';
+import { RpcEvents } from './rpc-events.mjs';
 
 export class JsonLines {
   constructor(onValue, max = 8 * 1024 * 1024) { this.decoder = new StringDecoder('utf8'); this.buffer = ''; this.onValue = onValue; this.max = max; }
@@ -25,18 +26,23 @@ export class RpcWorker extends EventEmitter {
       { cwd, env: { ...process.env, PI_REMOTE_WORKER: '1' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
     this.exited = new Promise(resolve => this.process.once('close', resolve));
     this.process.stdin.on('error', () => {});
-    const parser = new JsonLines(value => {
+    const parser = new RpcEvents(value => {
       if (value.type === 'response' && this.pending.has(value.id)) {
         const item = this.pending.get(value.id); this.pending.delete(value.id); clearTimeout(item.timer);
         if (value.success) item.resolve(value.data); else item.reject(new Error(value.error || 'Pi command failed'));
       } else this.emit('event', value);
     });
-    this.process.stdout.on('data', chunk => { try { parser.push(chunk); } catch (e) { this.fail(e); this.process.kill(); } });
+    const stop = error => {
+      if (this.failure) return;
+      this.failure = error; this.fail(error); void this.close();
+    };
+    this.process.stdout.on('data', chunk => { if (!this.failure) try { parser.push(chunk); } catch (error) { stop(error); } });
+    this.process.stdout.on('end', () => { if (!this.failure) try { parser.end(); } catch (error) { stop(error); } });
     this.process.stderr.on('data', data => { this.stderr = (this.stderr + data.toString()).slice(-2000); });
-    this.process.on('error', error => this.fail(error));
-    this.process.on('close', () => {
+    this.process.on('error', stop);
+    this.process.on('close', (code, signal) => {
       this.closed = true;
-      this.fail(new Error('Pi worker exited' + (this.stderr ? ': ' + this.stderr : '')));
+      if (!this.failure) this.fail(new Error(`Pi worker exited (${signal || 'code ' + code})` + (this.stderr ? ': ' + this.stderr : '')));
       this.emit('exit');
     });
   }
@@ -47,6 +53,7 @@ export class RpcWorker extends EventEmitter {
   }
   request(type, data = {}, { background = false } = {}) {
     if (this.closed) return Promise.reject(new Error('Pi worker is closed'));
+    if (this.failure) return Promise.reject(this.failure);
     const id = randomUUID();
     return new Promise((resolve, reject) => {
       const timer = background ? undefined : setTimeout(() => { this.pending.delete(id); reject(new Error('Pi response timed out; delivery may have occurred')); }, 30000);

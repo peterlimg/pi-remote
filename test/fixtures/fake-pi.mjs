@@ -34,13 +34,12 @@ const parser = new JsonLines(command => {
     model = next; data = model;
   }
   if (command.type === 'set_thinking_level') thinkingLevel = command.level === 'max' ? 'high' : command.level;
-  if (command.type === 'get_messages') data = { messages: fresh ? [] : [{ role: 'user', timestamp: 1, content: 'saved prompt' }] };
   if (command.type === 'get_commands') data = { commands: [{ name: 'review', description: 'Review changes', source: 'extension', path: '/private/review.ts' },
     ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, source: 'extension' }))] };
   if (command.message?.startsWith('/review') && command.type !== 'prompt') {
     out({ id: command.id, type: 'response', success: false, error: 'Extension commands require prompt' }); return;
   }
-  if (!['get_state', 'get_messages', 'get_commands', 'get_available_models', 'set_model', 'set_thinking_level', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
+  if (!['get_state', 'get_commands', 'get_available_models', 'set_model', 'set_thinking_level', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
     out({ id: command.id, type: 'response', success: false, error: 'Unknown fake command' }); return;
   }
   // Pi acknowledges extension commands only after their handler returns.
