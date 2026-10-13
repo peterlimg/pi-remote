@@ -221,6 +221,7 @@ pre.message-text { white-space: pre-wrap; }
 .video-play-icon { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
 .video-play-icon svg { width: 52px; height: 52px; padding: 10px; border-radius: 50%; background: #171717; }
 .thread-video > p, .thread-video > a { display: block; margin: 12px; font-size: 13px; }
+.thread-video > a { min-height: 44px; padding: 12px 0; overflow-wrap: anywhere; }
 .tool-activity { max-width: var(--content-width); margin: 0 auto 18px; color: var(--muted); }
 .tool-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; }
 .tool-activity > summary::-webkit-details-marker { display: none; }

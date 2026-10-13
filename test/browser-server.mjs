@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until } from './helpers.mjs';
 import { cleanMessage } from '../src/catalog.mjs';
+import { videoMessage } from '../web/videos.js';
 const dir = mkdtempSync(join(tmpdir(), 'pi-remote-browser-'));
 const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345', bridgeToken: 'browser-test-bridge-token-only-1234567890' };
 const scanRoot = join(dir, 'saved'); mkdirSync(scanRoot);
@@ -56,6 +57,11 @@ for (const title of ['Project Alpha', 'Project Beta']) {
       return;
     }
     state.messages.push({ id: randomUUID(), role: 'user', text: packet.command.text || 'aborted' });
+    if (packet.command.text === 'Send the edited video') {
+      const folder = join(dir, 'videos', randomUUID()); mkdirSync(folder, { recursive: true, mode: 0o700 });
+      const path = join(folder, 'edited.webm'); copyFileSync(new URL('./fixtures/video.webm', import.meta.url), path);
+      state.messages.push({ id: randomUUID(), role: 'assistant', text: videoMessage('Here is your edited video.', [path], 'assistant') });
+    }
     state.revision++; state.updatedAt = Date.now(); state.status = 'idle';
     rmSync(scanRoot, { recursive: true, force: true }); host.service.scan();
     agent.ws.send(JSON.stringify({ type: 'snapshot', state }));

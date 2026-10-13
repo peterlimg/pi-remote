@@ -22,6 +22,7 @@ test('video picker previews, removes and sends original bytes through the real h
   await input.click(); await (await picker).setFiles(file);
   const video = page.locator('#attachments video');
   await expect(video).toBeVisible();
+  await expect(video).toHaveAttribute('preload', 'none');
   await expect(video).toHaveCSS('width', '80px');
   await expect(video).toHaveCSS('height', '80px');
   await expect(video).toHaveAttribute('poster', /^blob:/);
@@ -105,6 +106,44 @@ test('video picker previews, removes and sends original bytes through the real h
   expect(errors).toEqual([]);
 });
 
+test('agent-generated videos play and download through the real host', async ({ page }, info) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/#token=' + token);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.locator('#prompt').fill('Send the edited video');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  const message = page.locator('.message.assistant').filter({ hasText: 'Here is your edited video.' }).last();
+  await expect(message).not.toContainText('Generated video files');
+  await expect(message).not.toContainText('/videos/');
+  const play = message.getByRole('button', { name: 'Play edited.webm', exact: true });
+  await play.scrollIntoViewIfNeeded();
+  await expect(play.locator('img')).toBeVisible();
+  await play.click();
+  const player = message.locator('video');
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  const link = message.getByRole('link', { name: 'Download edited.webm', exact: true });
+  await expect(link).toHaveAttribute('href', /^blob:/);
+  await expect(link).toHaveAttribute('download', 'edited.webm');
+  const downloadEvent = page.waitForEvent('download');
+  await link.click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('edited.webm');
+  expect(readFileSync(await download.path())).toEqual(original);
+  expect(await link.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: info.outputPath('generated-video-mobile.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('generated-video-desktop.png'), fullPage: true });
+  await player.dispatchEvent('error');
+  await expect(message).toContainText('This browser cannot play this video.');
+  await expect(link).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(play).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('video uploads stay cancellable before the thumbnail is ready', async ({ page }) => {
   const state = { id: 'cancel', title: 'Video cancellation', cwd: '/project', status: 'idle', messages: [] };
   const packets = [];
@@ -130,8 +169,8 @@ test('video uploads stay cancellable before the thumbnail is ready', async ({ pa
   await expect(page.locator('#attachments')).toBeHidden();
   client.send(JSON.stringify({ type: 'ready', supportsVideos: true }));
   await page.locator('#image-files').setInputFiles(unsupported);
-  await expect(page.locator('#attachments video')).toBeVisible();
-  await expect(page.locator('#attachments video')).toHaveAttribute('preload', 'none');
+  // Unsupported bytes may replace the video with a fallback before the upload completes.
+  await expect(page.locator('#attachments .video-attachment')).toBeVisible();
   await expect.poll(() => !!chunkReply).toBe(true);
   const progress = page.getByRole('progressbar', { name: 'Uploading recording.mov' });
   await expect(progress).toBeVisible();

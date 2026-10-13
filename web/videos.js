@@ -7,17 +7,23 @@ export function isVideo(file) {
     (!file.type && /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(file.name));
 }
 
-const VIDEO_HEADER = 'Attached video files (originals on this computer):\n';
-export function videoMessage(text, paths) {
-  return paths.length ? [text, VIDEO_HEADER + paths.map(path => JSON.stringify(path)).join('\n')]
+const VIDEO_HEADERS = {
+  user: 'Attached video files (originals on this computer):\n',
+  assistant: 'Generated video files (on this computer):\n'
+};
+export function videoMessage(text, paths, role = 'user') {
+  if (!Object.hasOwn(VIDEO_HEADERS, role)) throw new Error('Invalid video message role');
+  return paths.length ? [text, VIDEO_HEADERS[role] + paths.map(path => JSON.stringify(path)).join('\n')]
     .filter(Boolean).join('\n\n') : text;
 }
 
-export function splitVideoMessage(text = '') {
-  const unchanged = { text, paths: [] }, index = text.lastIndexOf(VIDEO_HEADER);
+export function splitVideoMessage(text = '', role = 'user') {
+  const unchanged = { text, paths: [] };
+  if (!Object.hasOwn(VIDEO_HEADERS, role)) return unchanged;
+  const header = VIDEO_HEADERS[role], index = text.lastIndexOf(header);
   if (index < 0 || (index > 0 && !text.slice(0, index).endsWith('\n\n'))) return unchanged;
   try {
-    const paths = text.slice(index + VIDEO_HEADER.length).trimEnd().split('\n').map(line => JSON.parse(line));
+    const paths = text.slice(index + header.length).trimEnd().split('\n').map(line => JSON.parse(line));
     if (!paths.length || paths.length > 4 || paths.some(path => typeof path !== 'string' ||
       !/^\/[^\r\n]*\/videos\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/[a-zA-Z0-9._-]{1,180}$/.test(path))) return unchanged;
     return { text: text.slice(0, index).trimEnd(), paths };

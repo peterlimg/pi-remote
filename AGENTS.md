@@ -9,3 +9,5 @@ After each completed fix or change, run only the tests and checks covering the a
 Do not wait for CI or Render after pushing. Report the push and local validation, and leave CI and deployment running in the background. Do not claim deployment is live unless confirmed. If host-side code changed, restart the local Pi Remote host when safe and verify it reconnects. Report any known deployment blocker rather than claiming success.
 
 Keep unrelated work out of the commit unless explicitly authorized.
+
+For generated-video delivery to the phone, follow `docs/generated-videos.md`. A Markdown link to a local file is not a download.

@@ -101,8 +101,8 @@ export function attachClient(socket, service) {
           uploads.set(uploadId, image); uploadBytes += image.data.length;
           value = { uploadId };
         } else if (message.op === 'videoRead') {
-          if (message.sessionId !== selected || !previous?.messages?.some(item => item.role === 'user' &&
-            splitVideoMessage(item.text).paths.includes(message.path))) throw new Error('Video is not attached to this conversation');
+          if (message.sessionId !== selected || !previous?.messages?.some(item => ['user', 'assistant'].includes(item.role) &&
+            splitVideoMessage(item.text, item.role).paths.includes(message.path))) throw new Error('Video is not attached to this conversation');
           value = await readVideo(service.dir, message.path, message.offset);
         } else if (message.op === 'videoStart') {
           value = videos.start(message.file);

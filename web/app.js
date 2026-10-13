@@ -648,12 +648,13 @@ function showThreadVideo(video, file, poster) {
   player.setAttribute('aria-label', video.name);
   if (video.posterURL) player.poster = video.posterURL;
   player.src = video.url;
+  const download = el('a', 'Download video'); download.href = video.url; download.download = video.name;
+  download.setAttribute('aria-label', `Download ${video.name}`);
   player.addEventListener('error', () => {
     if (threadVideos.get(video.path) !== video) return;
-    const download = el('a', 'Download original'); download.href = video.url; download.download = video.name;
     video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);
   });
-  video.node.replaceChildren(player);
+  video.node.replaceChildren(player, download);
 }
 async function loadVideoPreview(video) {
   if (!video || video.loading || video.info || video.url) return;
@@ -704,7 +705,7 @@ async function playThreadVideo(video) {
 }
 function appendThreadVideos(parent, message, attachments, keep) {
   const sources = attachments?.length ? attachments.map(item => ({ path: item.staged?.path || item.url, file: item.file, poster: item.posterBlob }))
-    : splitVideoMessage(userMessageText(message)).paths.map(path => ({ path }));
+    : splitVideoMessage(userMessageText(message), message.role).paths.map(path => ({ path }));
   for (const { path, file, poster } of sources) {
     keep.add(path);
     let video = threadVideos.get(path);
@@ -840,7 +841,7 @@ function renderConversation(state) {
       }
       else {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
-        body.innerHTML = markdown.render(message.text || '');
+        body.innerHTML = markdown.render(splitVideoMessage(message.text || '', message.role).text);
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
       }
       if (message.role === 'user') {
@@ -849,6 +850,7 @@ function renderConversation(state) {
       }
       if (body.textContent) article.append(body);
       if (message.role !== 'user') appendThreadImages(article, message);
+      if (message.role === 'assistant') appendThreadVideos(article, message, undefined, keepVideos);
       if (message.role === 'assistant' && message.text) {
         const copy = el('button', undefined, 'quiet copy-message'); copy.type = 'button';
         copy.setAttribute('aria-label', 'Copy message'); copy.title = 'Copy message';
