@@ -125,22 +125,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #list-retry { width: 100%; }
 .session-group h3 { display: flex; gap: 8px; align-items: baseline; margin: 16px 10px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .session-group + .session-group { margin-top: 16px; }
-.session-group summary { min-height: 44px; padding: 10px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.session-group summary .badge { margin-left: 8px; }
-#session-action-status { margin: 8px 10px 0; }
-#session-action-status:empty { display: none; }
-.session-row { position: relative; overflow: hidden; border-radius: 8px; }
-.session-face { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 44px; background: var(--panel); touch-action: pan-y; transition: transform .18s ease-out; }
-.session-face:has(.active) { background: var(--user); }
-.session-more { align-self: start; display: grid; place-items: center; width: 44px; margin-top: 10px; padding: 0; background: transparent; color: var(--muted); }
-.session-actions { position: absolute; inset: 0 0 0 auto; display: flex; width: 216px; background: var(--user); }
-.session-actions button { flex: 1; min-width: 0; padding: 8px 4px; border-radius: 0; background: transparent; color: var(--accent); font-size: 13px; }
-.session-actions button[data-action=delete] { color: var(--error); }
-.session-row.actions-open .session-face { transform: translateX(-216px); }
-.session-row.dragging .session-face { transition: none; }
-.session-row :focus-visible { outline-offset: -3px; }
-@media (hover: hover) { .session-more:hover, .session-actions button:hover { background: var(--selection); } }
-@media (prefers-reduced-motion: reduce) { .session-face { transition: none; } }
 .session { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
 .session-icon { display: grid; place-items: center; height: 26px; margin-top: 2px; color: var(--muted); }
 .session-icon[data-status=waiting] { color: var(--warning); }

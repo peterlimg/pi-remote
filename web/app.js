@@ -68,8 +68,6 @@ const imageObserver = new IntersectionObserver(entries => {
     loadThreadImage(threadImages.get(entry.target.dataset.imageKey));
   }
 }, { root: $('transcript'), rootMargin: '160px' });
-let hiddenSessions = [], hiddenOpen = false, openSessionActions, supportsSessionActions = false;
-let sessionGesture = false, listRenderPending = false;
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let key = localStorage.getItem('pi-remote-key') || '';
@@ -116,7 +114,7 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer', 'sessionAction'].includes(op)
+    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer'].includes(op)
       ? { op: 'commandResult', id, sessionId: op === 'newProject' ? 'new-project' : extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
     transmit(socket, { op, id, ...extra });
@@ -195,7 +193,6 @@ function connect() {
     if (packet.type === 'ready') {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
-      supportsSessionActions = packet.supportsSessionActions === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -277,8 +274,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages();
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
-  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = []; hiddenSessions = []; hiddenOpen = false; openSessionActions = undefined;
-  sessionGesture = false; listRenderPending = false; $('session-action-status').textContent = '';
+  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -298,7 +294,7 @@ function age(date) {
 }
 const isOnline = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
 // Must match the host's order so merged rows land where the host expects.
-const listOrder = (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Number(isOnline(b)) - Number(isOnline(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+const listOrder = (a, b) => Number(isOnline(b)) - Number(isOnline(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
@@ -319,11 +315,11 @@ function receiveList(packet) {
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
-  sessions = rows; hiddenSessions = packet.hiddenSessions || []; allowResume = packet.allowResume === true;
+  sessions = rows; allowResume = packet.allowResume === true;
   listMatched = packet.matched ?? sessions.length;
   showApp();
   markSeen();
-  selectedSummary = [...sessions, ...hiddenSessions].find(item => item.id === selected) || selectedSummary;
+  selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
   renderList(); updateControls();
 }
 async function loadList() {
@@ -348,7 +344,7 @@ function renderPagination() {
   // Scrolling loads more by itself; the line only speaks up while loading or after a failure.
   $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' : '';
   $('list-page').parentElement.hidden = !listError && !listLoading;
-  $('list-empty').hidden = listLoading || !!listError || sessions.length > 0 || hiddenSessions.length > 0;
+  $('list-empty').hidden = listLoading || !!listError || sessions.length > 0;
 }
 // Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
 const moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 400px' });
@@ -357,32 +353,20 @@ function loadMore() {
   listLimit += 20; loadList();
 }
 function renderList() {
-  // Streaming updates must not replace the element receiving an in-progress touch.
-  if (sessionGesture) { listRenderPending = true; return; }
   const matches = sessions;
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
-  const focused = document.activeElement?.closest('.session-row');
-  const focusAction = focused && { id: focused.dataset.id, action: document.activeElement.dataset.action };
   for (const [label, items] of [
-    ['Pinned', matches.filter(item => item.pinned)],
-    ['Hidden', hiddenSessions],
-    ['Online', matches.filter(item => !item.pinned && isOnline(item))],
-    ['Saved & offline', matches.filter(item => !item.pinned && !isOnline(item))]
+    ['Online', matches.filter(isOnline)],
+    ['Saved & offline', matches.filter(item => !isOnline(item))]
   ]) {
     if (!items.length) continue;
     const group = el('section', undefined, 'session-group');
     group.setAttribute('aria-label', label);
-    const heading = el(label === 'Hidden' ? 'summary' : 'h3', label);
+    const heading = el('h3', label);
     heading.append(el('span', String(items.length), 'badge'));
-    let content = group;
-    if (label === 'Hidden') {
-      content = el('details'); content.open = hiddenOpen;
-      content.addEventListener('toggle', () => { if (content.isConnected) hiddenOpen = content.open; });
-      group.append(content);
-    }
-    content.append(heading);
+    group.append(heading);
     for (const item of items.sort((a, b) => b.updatedAt - a.updatedAt)) {
       const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
@@ -418,118 +402,17 @@ function renderList() {
       }
       body.append(meta);
       button.append(body);
-      if (supportsSessionActions) content.append(sessionRow(item, button, titleText));
-      else { button.addEventListener('click', () => selectSession(item.id)); content.append(button); }
+      button.addEventListener('click', () => selectSession(item.id)); group.append(button);
     }
     fragment.append(group);
   }
   $('sessions').replaceChildren(fragment);
   moreObserver.disconnect();
-  const last = [...$('sessions').querySelectorAll('.session-group:not([aria-label="Hidden"]) .session')].at(-1);
+  const last = [...$('sessions').querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
-  if (focusAction?.action) [...$('sessions').querySelectorAll('.session-row')].find(row => row.dataset.id === focusAction.id)
-    ?.querySelector(`[data-action="${focusAction.action}"]`)?.focus({ preventScroll: true });
-  const current = [...sessions, ...hiddenSessions].find(item => item.id === selected);
+  const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
 }
-function setSessionActions(id) {
-  openSessionActions = id;
-  for (const row of $('sessions').querySelectorAll('.session-row')) {
-    const open = row.dataset.id === id;
-    row.classList.toggle('actions-open', open);
-    row.querySelector('.session-actions').inert = !open;
-    row.querySelector('.session-more').setAttribute('aria-expanded', String(open));
-  }
-}
-function sessionRow(item, button, title) {
-  const row = el('div', undefined, 'session-row'), face = el('div', undefined, 'session-face');
-  row.dataset.id = item.id;
-  const more = el('button', undefined, 'session-more');
-  more.type = 'button'; more.dataset.action = 'more'; more.setAttribute('aria-label', 'Session actions');
-  more.title = 'Actions for ' + title; more.setAttribute('aria-controls', 'session-actions-' + item.id);
-  more.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>';
-  more.addEventListener('click', () => setSessionActions(openSessionActions === item.id ? undefined : item.id));
-  const actions = el('div', undefined, 'session-actions'); actions.id = 'session-actions-' + item.id;
-  actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', title + ' actions');
-  for (const [action, label] of [[item.pinned ? 'unpin' : 'pin', item.pinned ? 'Unpin' : 'Pin'],
-    [item.hidden ? 'unhide' : 'hide', item.hidden ? 'Unhide' : 'Hide'], ['delete', 'Delete']]) {
-    const control = el('button', label); control.type = 'button'; control.dataset.action = action;
-    control.addEventListener('click', async () => {
-      if (action === 'delete' && !confirm(`Delete "${title}"?\n\nThis permanently removes the saved conversation from your computer. Project files are kept. Running sessions must be closed in Pi first.`)) return;
-      actions.querySelectorAll('button').forEach(node => { node.disabled = true; });
-      $('session-action-status').textContent = '';
-      try {
-        await request('sessionAction', { sessionId: item.id, action });
-        setSessionActions(undefined);
-        if (action === 'delete') {
-          cache.delete(item.id); drafts.delete(item.id); versions.delete(item.id); commandCatalog.delete(item.id);
-          releaseImages(imageDrafts.get(item.id) || []); imageDrafts.delete(item.id);
-          if (selected === item.id) {
-            selected = undefined; selectedSummary = undefined; clearThreadImages();
-            $('app').classList.remove('viewing'); $('transcript').replaceChildren(); $('transcript').hidden = true;
-            $('composer').hidden = true; $('empty').hidden = false; $('title').textContent = 'Pi Remote';
-            $('agent-activity').hidden = true; $('dialog').hidden = true; renderProject();
-          }
-        }
-        $('session-action-status').textContent = `${title}: ${ { pin: 'pinned', unpin: 'unpinned', hide: 'hidden', unhide: 'unhidden', delete: 'deleted' }[action]}.`;
-        await loadList();
-        // The action's row may have moved into a collapsed group or left the list.
-        const next = [...$('sessions').querySelectorAll('.session-row')].find(node => node.dataset.id === item.id);
-        (next?.checkVisibility() ? next.querySelector('.session-more') : $('sessions').querySelector('summary') || $('search-open')).focus({ preventScroll: true });
-      } catch (error) {
-        $('session-action-status').textContent = error.message;
-        actions.querySelectorAll('button').forEach(node => { node.disabled = false; });
-      }
-    });
-    actions.append(control);
-  }
-  let startX, startY, dx = 0, tracking = false, horizontal = false, wasOpen = false, suppressClick = false;
-  face.addEventListener('touchstart', event => {
-    tracking = event.touches.length === 1; horizontal = false; dx = 0; suppressClick = false;
-    if (!tracking) return;
-    sessionGesture = true;
-    startX = event.touches[0].clientX; startY = event.touches[0].clientY; wasOpen = openSessionActions === item.id;
-  }, { passive: true });
-  face.addEventListener('touchmove', event => {
-    if (!tracking || event.touches.length !== 1) return;
-    dx = event.touches[0].clientX - startX;
-    const dy = event.touches[0].clientY - startY;
-    if (!horizontal) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return;
-      if (Math.abs(dy) >= Math.abs(dx)) { tracking = false; return; }
-      horizontal = true; suppressClick = true; setSessionActions(wasOpen ? item.id : undefined);
-      row.classList.add('dragging');
-    }
-    event.preventDefault();
-    face.style.transform = `translateX(${Math.max(-actions.offsetWidth, Math.min(0, (wasOpen ? -actions.offsetWidth : 0) + dx))}px)`;
-  }, { passive: false });
-  const release = cancelled => {
-    tracking = false; sessionGesture = false;
-    if (horizontal) {
-      horizontal = false; row.classList.remove('dragging'); face.style.transform = '';
-      setSessionActions((cancelled ? wasOpen : wasOpen ? dx < 48 : dx < -48) ? item.id : undefined);
-    }
-    if (listRenderPending) { listRenderPending = false; setTimeout(renderList, 0); }
-  };
-  face.addEventListener('touchend', () => release(false));
-  face.addEventListener('touchcancel', () => release(true));
-  face.addEventListener('click', event => {
-    if (suppressClick) { event.preventDefault(); event.stopImmediatePropagation(); suppressClick = false; }
-  }, true);
-  button.addEventListener('click', () => {
-    if (openSessionActions) { setSessionActions(undefined); return; }
-    selectSession(item.id);
-  });
-  face.append(button, more); row.append(face, actions);
-  const open = openSessionActions === item.id;
-  row.classList.toggle('actions-open', open); actions.inert = !open; more.setAttribute('aria-expanded', String(open));
-  return row;
-}
-$('sessions').addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || !openSessionActions) return;
-  const row = event.target.closest('.session-row'); setSessionActions(undefined); row?.querySelector('.session-more').focus();
-});
-document.addEventListener('click', event => { if (!event.target.closest('.session-row')) setSessionActions(undefined); });
 // Hand for "needs you", a ring otherwise (filled blue when unread, spinning while working).
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
@@ -563,7 +446,7 @@ function renderProject(cwd = '') {
 function markSeen() {
   const reading = document.visibilityState === 'visible' && document.querySelector('main').getClientRects().length > 0;
   let changed = false;
-  for (const item of [...sessions, ...hiddenSessions]) {
+  for (const item of sessions) {
     if ((item.id in seen && !(reading && item.id === selected)) || seen[item.id] === item.updatedAt) continue;
     seen[item.id] = item.updatedAt; changed = true;
   }
@@ -574,7 +457,7 @@ async function selectSession(id) {
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
   if (selected !== id) clearThreadImages();
-  selected = id; selectedSummary = [...sessions, ...hiddenSessions].find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
+  selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
@@ -588,7 +471,7 @@ async function selectSession(id) {
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
-    $('title').textContent = sessionTitle(selectedSummary?.title || 'Loading…');
+    $('title').textContent = sessionTitle(sessions.find(x => x.id === id)?.title || 'Loading…');
     $('transcript').replaceChildren(); $('transcript').hidden = false; $('empty').hidden = true;
     $('composer').hidden = false; updateControls();
   }
