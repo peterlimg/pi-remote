@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { discover, cleanMessage, shown, isInside, readSession, readSessionImage } from './catalog.mjs';
@@ -15,11 +15,21 @@ function inside(file, dir) {
   return !!rel && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
 }
 
+const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
+const activityOrder = (a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+
 export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
     this.restoreIds = new Set(); this.restoreWarnings = [];
+    this.preferences = {};
+    try {
+      this.preferences = JSON.parse(readFileSync(join(dir, 'session-preferences.json'), 'utf8'));
+      if (!this.preferences || Array.isArray(this.preferences) || typeof this.preferences !== 'object' ||
+        !Object.entries(this.preferences).every(([id, value]) => /^[a-f0-9]{64}$/.test(id) && value &&
+          typeof value.pinned === 'boolean' && typeof value.hidden === 'boolean')) throw new Error('Invalid session preferences');
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
     this.journal = new CommandJournal(join(dir, 'commands'));
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
     mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
@@ -57,10 +67,10 @@ export class SessionService extends EventEmitter {
   list({ offset = 0, query = '' } = {}) {
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('Invalid session page');
     const requestOffset = offset;
-    const { matches, total } = this.matches(query);
+    const { matches, hiddenSessions, total } = this.matches(query);
     query = query.trim().toLowerCase();
     offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
-    return { sessions: matches.slice(offset, offset + 20), total, matched: matches.length, offset, requestOffset, query,
+    return { sessions: matches.slice(offset, offset + 20), hiddenSessions, total, matched: matches.length, offset, requestOffset, query,
       warnings: this.warnings, allowResume: this.allowResume };
   }
   // All sessions matching a search, in list order (the phone sorts the same way).
@@ -69,16 +79,43 @@ export class SessionService extends EventEmitter {
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker });
-    const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
-    const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
-      .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
-    return { matches, total: all.size };
+    const rows = [...all.values()].map(item => ({ ...item, ...this.preferences?.[item.id] }))
+      .filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
+      .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || activityOrder(a, b));
+    // shortcut: hidden summaries travel together; paginate this group if it grows to thousands of sessions.
+    return { matches: rows.filter(item => !item.hidden), hiddenSessions: rows.filter(item => item.hidden), total: all.size };
   }
   // Projects in list order: running first, then most recently used. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
+    const { matches, hiddenSessions } = this.matches();
+    for (const item of [...matches, ...hiddenSessions].sort(activityOrder)) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
     return [...projects.values()];
+  }
+  async sessionAction(id, requestId, action) {
+    if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id) || !['pin', 'unpin', 'hide', 'unhide', 'delete'].includes(action)) throw new Error('Invalid session action');
+    return this.journal.execute(id, requestId, { type: 'sessionAction', action }, () => {
+      const live = this.live.get(id), state = live?.state || this.catalog.get(id);
+      if (!state) throw new Error('Session not found');
+      if (action === 'delete') {
+        if (live?.socket || live?.worker) throw new Error('Close this session in Pi before deleting it. You can hide it while it is running.');
+        // The same ownership lock used by resume and terminal bridges protects deletion.
+        const lock = acquireSessionLock(join(this.dir, 'locks'), id, { kind: 'delete' });
+        try {
+          if (!isInside(state.file, this.roots) || sessionKey(state.file) !== id) throw new Error('Session is outside configured roots');
+          unlinkSync(state.file);
+        } finally { lock.release(); }
+        this.catalog.delete(id); this.live.delete(id); this.restoreIds.delete(id);
+      } else {
+        const next = { ...this.preferences, [id]: { pinned: false, hidden: false, ...this.preferences[id],
+          ...(['pin', 'unpin'].includes(action) ? { pinned: action === 'pin' } : { hidden: action === 'hide' }) } };
+        const file = join(this.dir, 'session-preferences.json');
+        writeFileSync(file + '.tmp', JSON.stringify(next), { mode: 0o600 });
+        renameSync(file + '.tmp', file); this.preferences = next;
+      }
+      this.emit('list');
+      return { updated: true };
+    });
   }
   read(id) {
     if (this.live.has(id)) {

@@ -8,7 +8,7 @@ import { parseObject, send, protectSocket } from './config.mjs';
 export function sessionWindow(service) {
   let view;
   const changes = () => {
-    const { matches, total } = service.matches(view.query);
+    const { matches, hiddenSessions, total } = service.matches(view.query);
     const rows = matches.slice(0, view.limit), changed = [];
     for (const row of rows) {
       const json = JSON.stringify(row);
@@ -16,7 +16,7 @@ export function sessionWindow(service) {
     }
     const keep = new Set(rows.map(row => row.id)), removed = [...view.sent.keys()].filter(id => !keep.has(id));
     for (const id of removed) view.sent.delete(id);
-    const meta = { total, matched: matches.length, limit: view.limit, query: view.query, warnings: service.warnings, allowResume: service.allowResume };
+    const meta = { total, hiddenSessions, matched: matches.length, limit: view.limit, query: view.query, warnings: service.warnings, allowResume: service.allowResume };
     const unchanged = !changed.length && !removed.length && JSON.stringify(meta) === view.meta;
     view.meta = JSON.stringify(meta);
     return { changes: changed, removed, ...meta, unchanged };
@@ -73,7 +73,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsSessionActions: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -116,6 +116,8 @@ export function attachClient(socket, service) {
             const staged = uploads.get(image?.uploadId);
             if (staged) { uploads.delete(image.uploadId); uploadBytes -= staged.data.length; }
           }
+        } else if (message.op === 'sessionAction') {
+          value = await service.sessionAction(message.sessionId, message.id, message.action);
         } else if (message.op === 'new') {
           value = await service.newSession(message.sessionId, message.id);
         } else if (message.op === 'newProject') {
