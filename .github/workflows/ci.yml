@@ -28,6 +28,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --ignore-scripts
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/2
       - uses: actions/upload-artifact@v4

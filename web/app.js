@@ -1,6 +1,6 @@
 import { patchState, loadedSkill, sessionTitle, taskText } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
-import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage } from './videos.js';
+import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
@@ -62,12 +62,18 @@ const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
 const sessionIcons = new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons') || '[]'));
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
-const threadImages = new Map(), usageSummaries = new Map();
+const threadImages = new Map(), threadVideos = new Map(), usageSummaries = new Map();
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) {
     imageObserver.unobserve(entry.target);
     loadThreadImage(threadImages.get(entry.target.dataset.imageKey));
+  }
+}, { root: $('transcript'), rootMargin: '160px' });
+const videoObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) {
+    videoObserver.unobserve(entry.target);
+    loadVideoPreview(threadVideos.get(entry.target.dataset.videoPath));
   }
 }, { root: $('transcript'), rootMargin: '160px' });
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
@@ -276,7 +282,7 @@ function logout() {
   for (const draft of sending.values()) releaseImages(draft.attachments);
   for (const draft of submissions.values()) releaseImages(draft.attachments);
   imageDrafts.clear(); sending.clear(); submissions.clear();
-  clearThreadImages();
+  clearThreadImages(); clearThreadVideos();
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
@@ -519,7 +525,7 @@ async function selectSession(id) {
   resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
-  if (selected !== id) clearThreadImages();
+  if (selected !== id) { clearThreadImages(); clearThreadVideos(); }
   selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0; loadCommands(id);
@@ -624,6 +630,93 @@ function appendThreadImages(parent, message, attachments) {
   }
   parent.append(gallery);
 }
+function clearThreadVideos(keep = new Set()) {
+  for (const [path, video] of threadVideos) if (!keep.has(path)) {
+    videoObserver.unobserve(video.node);
+    if (video.player) { video.player.pause(); video.player.removeAttribute('src'); video.player.load(); }
+    if (video.url) URL.revokeObjectURL(video.url);
+    if (video.posterURL) URL.revokeObjectURL(video.posterURL);
+    threadVideos.delete(path);
+  }
+}
+function showThreadVideo(video, file) {
+  video.url = URL.createObjectURL(file);
+  const player = el('video'); video.player = player;
+  player.controls = true; player.playsInline = true; player.preload = 'metadata';
+  player.setAttribute('aria-label', video.name); player.src = video.url;
+  if (video.posterURL) player.poster = video.posterURL;
+  player.addEventListener('error', () => {
+    if (threadVideos.get(video.path) !== video) return;
+    const download = el('a', 'Download original'); download.href = video.url; download.download = video.name;
+    video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);
+  });
+  video.node.replaceChildren(player);
+}
+async function loadVideoPreview(video) {
+  if (!video || video.loading || video.info || video.url) return;
+  video.loading = true; video.button.disabled = true;
+  try {
+    const info = await request('videoRead', { sessionId: video.sessionId, path: video.path });
+    if (threadVideos.get(video.path) !== video) return;
+    if (!Number.isSafeInteger(info.size) || info.size <= 0 || info.size > MAX_VIDEO_BYTES) throw new Error('Invalid video size');
+    video.info = info;
+    video.button.setAttribute('aria-label', `Play ${video.name}`);
+    if (info.poster) {
+      const [poster] = validateImages([info.poster]);
+      video.posterURL = URL.createObjectURL(new Blob([Uint8Array.from(atob(poster.data), c => c.charCodeAt(0))], { type: poster.mimeType }));
+      const image = el('img'); image.src = video.posterURL; image.alt = '';
+      const play = el('span', undefined, 'video-play-icon'); play.setAttribute('aria-hidden', 'true');
+      play.innerHTML = '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>';
+      video.button.replaceChildren(image, play);
+    } else video.button.textContent = 'Play video';
+  } catch (error) {
+    video.info = undefined; video.button.textContent = 'Video unavailable. Retry'; video.button.title = error.message;
+  } finally { video.loading = false; video.button.disabled = false; }
+}
+async function playThreadVideo(video) {
+  if (video.loading) return;
+  if (!video.info) await loadVideoPreview(video);
+  if (!video.info || threadVideos.get(video.path) !== video) return;
+  const ws = socket, chunks = [];
+  const check = () => {
+    if (socket !== ws || threadVideos.get(video.path) !== video) throw new Error('Video loading interrupted');
+  };
+  video.loading = true; video.button.disabled = true;
+  try {
+    for (let offset = 0; offset < video.info.size;) {
+      check();
+      video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
+      const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset });
+      check();
+      if (result.size !== video.info.size || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
+      const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
+      if (!bytes.length || bytes.length > Math.min(VIDEO_CHUNK_BYTES, video.info.size - offset)) throw new Error('Invalid video chunk');
+      chunks.push(bytes); offset += bytes.length;
+    }
+    showThreadVideo(video, new Blob(chunks, { type: video.info.mimeType }));
+    video.player.play().catch(() => {}); // Safari may require another tap after the download.
+  } catch (error) {
+    video.button.textContent = 'Could not load video. Retry'; video.button.title = error.message;
+  } finally { video.loading = false; video.button.disabled = false; }
+}
+function appendThreadVideos(parent, message, attachments, keep) {
+  const sources = attachments?.length ? attachments.map(item => ({ path: item.staged?.path || item.url, file: item.file }))
+    : splitVideoMessage(userMessageText(message)).paths.map(path => ({ path }));
+  for (const { path, file } of sources) {
+    keep.add(path);
+    let video = threadVideos.get(path);
+    if (!video) {
+      const node = el('div', undefined, 'thread-video'), button = el('button', 'Loading video preview…', 'secondary');
+      button.type = 'button'; node.dataset.videoPath = path; node.append(button);
+      video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected };
+      threadVideos.set(path, video);
+      button.addEventListener('click', () => playThreadVideo(video));
+      if (file) showThreadVideo(video, file);
+      else videoObserver.observe(node);
+    }
+    parent.append(video.node);
+  }
+}
 function renderConversation(state) {
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd);
@@ -633,12 +726,13 @@ function renderConversation(state) {
   const fragment = document.createDocumentFragment();
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
-  const messages = [...(state.messages || [])], localImages = new Map();
+  const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
+  const playing = [...threadVideos.values()].filter(video => video.player && !video.player.paused);
   const matched = [];
   for (const outgoing of submissions.values()) {
     if (outgoing.sessionId !== selected) continue;
     const images = outgoing.attachments.filter(item => !item.video);
-    const text = outgoing.sentText ?? videoMessage(outgoing.text, outgoing.attachments.filter(item => item.video).map(item => item.file.name));
+    const text = outgoing.sentText ?? outgoing.text;
     const index = messages.findIndex(message => message.role === 'user' && !outgoing.knownIds.has(message.id) &&
       !localImages.has(message.id) && userMessageText(message).trim() === text.trim() &&
       (message.images?.length || 0) === images.length);
@@ -646,6 +740,7 @@ function renderConversation(state) {
       images: images.map(({ file }) => ({ id: 'local', mimeType: file.type })),
       delivery: outgoing.accepted ? 'Sent. Waiting for Pi…' : 'Sending…' } : messages[index];
     localImages.set(message.id, images);
+    localVideos.set(message.id, outgoing.attachments.filter(item => item.video));
     if (index < 0) messages.push(message);
     else matched.push({ outgoing, messageId: message.id });
   }
@@ -736,13 +831,19 @@ function renderConversation(state) {
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el('div', undefined, 'message-text');
-      if (message.role === 'user') body.textContent = skill ? skill.text : userMessageText(message) || (message.images?.length ? '' : '(empty message)');
+      if (message.role === 'user') {
+        const { text, paths } = splitVideoMessage(userMessageText(message));
+        body.textContent = skill ? skill.text : text || (message.images?.length || paths.length || localVideos.get(message.id)?.length ? '' : '(empty message)');
+      }
       else {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
         body.innerHTML = markdown.render(message.text || '');
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
       }
-      if (message.role === 'user') appendThreadImages(article, message, localImages.get(message.id));
+      if (message.role === 'user') {
+        appendThreadImages(article, message, localImages.get(message.id));
+        appendThreadVideos(article, message, localVideos.get(message.id), keepVideos);
+      }
       if (body.textContent) article.append(body);
       if (message.role !== 'user') appendThreadImages(article, message);
       if (message.role === 'assistant' && message.text) {
@@ -796,6 +897,8 @@ function renderConversation(state) {
     }
   }
   box.replaceChildren(fragment);
+  clearThreadVideos(keepVideos);
+  for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
   for (const { outgoing, messageId } of matched) {
     submissions.delete(outgoing.key);
     for (const queued of submissions.values()) if (queued.sessionId === selected) queued.knownIds.add(messageId);
@@ -1492,8 +1595,8 @@ function renderImages() {
       const link = el('a'); link.href = image.url; link.setAttribute('aria-label', `Open ${image.file.name}`);
       link.addEventListener('click', openImage);
       link.append(preview); item.append(link);
-      if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
     }
+    if (image.uploading) { const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-label', 'Uploading'); item.append(spinner); }
     item.append(remove); return item;
   }));
   updateControls();

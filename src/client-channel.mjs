@@ -2,7 +2,8 @@ import { diffState } from '../web/protocol.js';
 import { randomUUID } from 'node:crypto';
 import { validateImages, MAX_IMAGES, MAX_IMAGE_BYTES } from '../web/images.js';
 import { parseObject, send, protectSocket } from './config.mjs';
-import { VideoUploads } from './videos.mjs';
+import { VideoUploads, readVideo } from './videos.mjs';
+import { splitVideoMessage } from '../web/videos.js';
 
 // Scrolling phones keep the top `limit` rows. They get only rows that changed since the
 // last send, so a live update costs one row however far the list was scrolled.
@@ -99,6 +100,10 @@ export function attachClient(socket, service) {
           const uploadId = randomUUID();
           uploads.set(uploadId, image); uploadBytes += image.data.length;
           value = { uploadId };
+        } else if (message.op === 'videoRead') {
+          if (message.sessionId !== selected || !previous?.messages?.some(item => item.role === 'user' &&
+            splitVideoMessage(item.text).paths.includes(message.path))) throw new Error('Video is not attached to this conversation');
+          value = await readVideo(service.dir, message.path, message.offset);
         } else if (message.op === 'videoStart') {
           value = videos.start(message.file);
         } else if (message.op === 'videoChunk') {

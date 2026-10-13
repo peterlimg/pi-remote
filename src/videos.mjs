@@ -1,9 +1,43 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, openSync, writeSync, closeSync, rmSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { mkdirSync, openSync, writeSync, closeSync, rmSync, realpathSync, fstatSync, readSync } from 'node:fs';
+import { resolve, join, relative, extname } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { MAX_IMAGES } from '../web/images.js';
 import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, videoMessage, VIDEO_LIMIT } from '../web/videos.js';
 import { validateCommand } from './commands.mjs';
+
+const run = promisify(execFile);
+const videoTypes = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.3gp': 'video/3gpp' };
+
+// Callers authorize the path against the watched conversation before reading any bytes.
+export async function readVideo(dir, path, offset) {
+  let fd;
+  try {
+    const root = resolve(dir, 'videos'), name = relative(root, path);
+    if (!/^[a-f0-9-]{36}\/[a-zA-Z0-9._-]{1,180}$/.test(name) || realpathSync(path) !== join(realpathSync(root), name)) throw new Error();
+    fd = openSync(path, 'r');
+    const info = fstatSync(fd), size = info.size;
+    if (!info.isFile() || size <= 0 || size > MAX_VIDEO_BYTES) throw new Error();
+    if (offset !== undefined) {
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset >= size) throw new Error();
+      const data = Buffer.alloc(Math.min(VIDEO_CHUNK_BYTES, size - offset));
+      const length = readSync(fd, data, 0, data.length, offset);
+      return { size, data: data.subarray(0, length).toString('base64') };
+    }
+    const mimeType = videoTypes[extname(path).toLowerCase()] || 'application/octet-stream';
+    let poster;
+    try {
+      const { stdout } = await run('ffmpeg', ['-nostdin', '-v', 'error', '-threads', '1',
+        '-protocol_whitelist', 'file,pipe', '-format_whitelist', 'mov,matroska,webm,avi', '-i', path,
+        '-vf', 'scale=360:360:force_original_aspect_ratio=decrease', '-frames:v', '1', '-threads', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'],
+      { encoding: 'buffer', timeout: 10000, maxBuffer: 256 * 1024 });
+      if (stdout.length) poster = { type: 'image', mimeType: 'image/jpeg', data: stdout.toString('base64') };
+    } catch {} // Playback still works when ffmpeg or a thumbnail decoder is unavailable.
+    return { size, mimeType, poster };
+  } catch { throw new Error('Video is unavailable. It may have been removed from the computer.'); }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
 
 // Each authenticated socket owns its drafts. Sent files stay on disk for the conversation.
 export class VideoUploads {
