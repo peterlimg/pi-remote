@@ -70,11 +70,14 @@ test('session icons detect reviews, stay separate from status and support persis
   await backToList();
   await expect(normal.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
   await openSettings(normal);
-  await picker.getByRole('button', { name: 'Bug', exact: true }).tap();
-  await expect(picker.getByRole('button', { name: 'Bug', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await picker.getByRole('button', { name: 'Star', exact: true }).tap();
+  await expect(picker.getByRole('button', { name: 'Star', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.getByRole('button', { name: 'Star', exact: true })).toHaveCSS('font-size', '24px');
   await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
   await backToList();
-  await expect(normal.locator('.session-type-icon')).toHaveText('🐛');
+  await expect(normal.locator('.session-type-icon')).toHaveText('⭐');
+  await expect(normal.locator('.session-type-icon')).toHaveCSS('font-size', '12px');
+  await page.screenshot({ path: testInfo.outputPath('small-list-emoji.png') });
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
   await page.getByLabel('Emoji', { exact: true }).fill('👩🏽‍💻');
