@@ -1,6 +1,6 @@
 # Deliver a generated video
 
-Pi Remote renders generated videos as conversation attachments. Tap the preview to load the video, then use the player's controls or **Download video**. Downloads also work when the browser cannot decode the video. On iOS, the browser may open a preview or share sheet instead of saving directly.
+Pi Remote renders generated videos as conversation attachments. Tap the preview to load the video, then use the player's controls or **Download video**. Phones that support file sharing open the native share sheet; choose **Save Video** or **Save to Files** on iOS. Other browsers use a download link that cannot replace the chat tab. Saving also works when the browser cannot decode the video. Canceling the share sheet leaves the conversation open.
 
 For agents:
 

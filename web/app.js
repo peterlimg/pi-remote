@@ -55,6 +55,7 @@ function fitViewport() {
 window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
+window.addEventListener('pageshow', fitViewport);
 // iOS Safari ignores user-scalable=no; its pinch arrives as gesture events.
 for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, event => event.preventDefault(), { passive: false });
 fitViewport();
@@ -270,6 +271,7 @@ window.addEventListener('online', reconnectNow);
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  fitViewport();
   if (connected && Date.now() - hiddenAt < 5000) probe(); else reconnectNow();
 });
 window.addEventListener('storage', event => {
@@ -650,6 +652,18 @@ function showThreadVideo(video, file, poster) {
   player.src = video.url;
   const download = el('a', 'Download video'); download.href = video.url; download.download = video.name;
   download.setAttribute('aria-label', `Download ${video.name}`);
+  // iOS may open a blob download in its viewer; never replace the standalone chat.
+  download.target = '_blank'; download.rel = 'noopener noreferrer';
+  download.addEventListener('click', async event => {
+    const data = { files: [new File([file], video.name, { type: file.type })] };
+    if (!navigator.share || !navigator.canShare?.(data)) return;
+    event.preventDefault();
+    player.pause();
+    try { await navigator.share(data); }
+    catch (error) {
+      if (error.name !== 'AbortError') notice('Could not save video. Try again or open Pi Remote in Safari.');
+    } finally { fitViewport(); }
+  });
   player.addEventListener('error', () => {
     if (threadVideos.get(video.path) !== video) return;
     video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);

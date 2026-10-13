@@ -204,15 +204,23 @@ test('the app follows keyboard viewport changes without resizing the document', 
   expect((await page.locator('#composer').boundingBox()).height).toBeLessThanOrEqual(175);
   expect(await page.locator('#prompt').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect((await page.locator('#send').boundingBox()).height).toBeGreaterThanOrEqual(44);
-  // An iOS tap leaves focus, and so the keyboard, on the editor; a desktop mousedown would blur it.
+  // Sending on touch screens closes the keyboard; the shell fills the screen before iOS finishes resizing.
   await page.locator('#send').dispatchEvent('click');
   await expect(page.locator('#prompt')).toHaveValue('');
+  await expect(page.locator('#prompt')).not.toBeFocused();
   await page.evaluate(() => window.changeViewport({ width: 195, height: 175, offsetLeft: 25, offsetTop: 90, scale: 2 }));
-  expect(await page.locator('#app').boundingBox()).toEqual({ x: 25, y: 90, width: 195, height: 175 });
+  expect(await page.locator('#app').boundingBox()).toEqual({ x: 25, y: 90, width: 195, height: page.viewportSize().height / 2 });
   await page.evaluate(() => window.changeViewport({ width: innerWidth, height: innerHeight, offsetLeft: 0, offsetTop: 0, scale: 1 }));
   await expect.poll(() => page.locator('#app').evaluate(node => node.getBoundingClientRect().top)).toBe(0);
   expect((await page.locator('#app').boundingBox()).height).toBe(page.viewportSize().height);
   expect(await page.evaluate(() => scrollY)).toBe(0);
+  // Native viewers may return via pageshow without a visualViewport resize.
+  await page.evaluate(() => {
+    window.changeViewport({ width: 195, height: 175, offsetLeft: 25, offsetTop: 90, scale: 2 });
+    window.changeViewport({ width: innerWidth, height: innerHeight, offsetLeft: 0, offsetTop: 0, scale: 1 }, 'native-return');
+    window.dispatchEvent(new Event('pageshow'));
+  });
+  expect(await page.locator('#app').boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
   await page.locator('#back').click();
   await expect(page.locator('#sidebar')).toBeVisible();
   await page.locator('#logout').click();

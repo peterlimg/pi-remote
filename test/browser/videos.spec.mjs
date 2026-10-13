@@ -107,6 +107,7 @@ test('video picker previews, removes and sends original bytes through the real h
 });
 
 test('agent-generated videos play and download through the real host', async ({ page }, info) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'canShare', { value: () => false }));
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/#token=' + token);
@@ -125,6 +126,8 @@ test('agent-generated videos play and download through the real host', async ({ 
   const link = message.getByRole('link', { name: 'Download edited.webm', exact: true });
   await expect(link).toHaveAttribute('href', /^blob:/);
   await expect(link).toHaveAttribute('download', 'edited.webm');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   const downloadEvent = page.waitForEvent('download');
   await link.click();
   const download = await downloadEvent;
@@ -142,6 +145,64 @@ test('agent-generated videos play and download through the real host', async ({ 
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(play).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('native video saving keeps the conversation and restores its viewport', async ({ page }) => {
+  await page.addInitScript(({ width, height }) => {
+    const viewport = new EventTarget();
+    const normal = { width, height, offsetLeft: 0, offsetTop: 0, scale: 1 };
+    Object.assign(viewport, normal);
+    Object.defineProperty(window, 'visualViewport', { value: viewport });
+    window.savedFiles = []; window.saveOutcome = 'saved';
+    Object.defineProperty(navigator, 'canShare', { value: data => data.files?.[0] instanceof File });
+    Object.defineProperty(navigator, 'share', { value: async ({ files: [file] }) => {
+      window.savedFiles.push({ name: file.name, type: file.type, bytes: Array.from(new Uint8Array(await file.arrayBuffer())) });
+      // A native sheet can restore the visible viewport without another resize event.
+      Object.assign(viewport, { width: width / 2, height: height / 2, offsetLeft: 25, offsetTop: 90, scale: 2 });
+      viewport.dispatchEvent(new Event('resize'));
+      Object.assign(viewport, normal);
+      if (window.saveOutcome !== 'saved') throw new DOMException('Save failed', window.saveOutcome);
+    } });
+  }, page.viewportSize());
+  const path = '/host/videos/12345678-1234-1234-1234-123456789abc/edited.webm';
+  const state = { id: 'save-video', title: 'Save video', cwd: '/project', status: 'idle', messages: [
+    { id: 'edit', role: 'assistant', text: videoMessage('Here is your edited video.', [path], 'assistant') }
+  ] };
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    const reply = value => ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value }));
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+    } else if (packet.op === 'watch') {
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 0, state })); reply({});
+    } else if (packet.op === 'videoRead') reply(packet.offset === undefined
+      ? { size: original.length, mimeType: 'video/webm' }
+      : { size: original.length, data: original.subarray(packet.offset, packet.offset + 256 * 1024).toString('base64') });
+    else reply([]);
+  }));
+  await page.goto('/#token=' + token);
+  await page.getByRole('button', { name: /Save video/ }).click();
+  const message = page.locator('.message.assistant');
+  await message.getByRole('button', { name: 'Play edited.webm', exact: true }).click();
+  const link = message.getByRole('link', { name: 'Download edited.webm', exact: true });
+  const url = page.url();
+  let downloads = 0; page.on('download', () => downloads++);
+  for (const [index, outcome] of ['saved', 'AbortError', 'NotAllowedError'].entries()) {
+    await page.evaluate(value => { window.saveOutcome = value; }, outcome);
+    await link.click();
+    await expect.poll(() => page.evaluate(() => window.savedFiles.length)).toBe(index + 1);
+    await expect.poll(() => page.locator('#app').boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
+    expect(page.url()).toBe(url);
+    expect(downloads).toBe(0);
+    if (outcome === 'NotAllowedError') await expect(page.locator('#notice')).toContainText('Could not save video');
+    else await expect(page.locator('#notice')).toBeHidden();
+  }
+  const saved = await page.evaluate(() => window.savedFiles[0]);
+  expect(saved.name).toBe('edited.webm'); expect(saved.type).toBe('video/webm');
+  expect(Buffer.from(saved.bytes)).toEqual(original);
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await expect(page.locator('#sidebar')).toBeVisible();
 });
 
 test('video uploads stay cancellable before the thumbnail is ready', async ({ page }) => {
