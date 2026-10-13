@@ -11,7 +11,9 @@ Anthropic's [Help Center article](https://support.claude.com/en/articles/1503654
 
 The [API-credit article](https://support.claude.com/en/articles/17154008) lists $100 for Max 5x and $200 for Max 20x. Team credits are pooled and capped at $500 monthly. Credits must be claimed into a linked Console organization. SDK calls authenticated with that organization's API key use API credits; calls authenticated through a Claude plan use plan limits instead.
 
-However, both the [SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) and [quickstart](https://code.claude.com/docs/en/agent-sdk/quickstart) still say third-party developers need prior approval to offer claude.ai login or rate limits. These pages do not establish blanket permission for a new Pi subscription integration. Confirm the supported authentication arrangement before distributing one. Do not treat existing token support in Pi as evidence of Anthropic approval.
+The current Help Center explicitly says SDK and third-party app usage can use subscription limits. In the linked [HN discussion](https://news.ycombinator.com/item?id=49997143), [luketaylor clarified](https://news.ycombinator.com/item?id=49999702) that `claude -p` had not been removed from subscriptions, and [cjav_dev linked the corrected docs](https://news.ycombinator.com/item?id=49999756). The HN replies primarily clarify billing continuity; the Help Center is the explicit source for third-party app usage.
+
+Both the [SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) and [quickstart](https://code.claude.com/docs/en/agent-sdk/quickstart) retain conflicting prior-approval wording. The earlier version of this note overstated that as a blocker to using the official SDK with a subscription. The newer, explicit support clarification supports that route. It does not establish permission to extract subscription credentials and use them for direct model API calls outside the SDK, or endorse every possible adapter design.
 
 The quickstart's separate reference to "third-party API providers" means cloud access through Bedrock, Claude Platform on AWS, Google Cloud, and Microsoft Foundry. It is not a claim that the Agent SDK runs arbitrary non-Claude models.
 
@@ -37,6 +39,26 @@ Agent SDK
 ```
 
 Wrapping a whole SDK run as one Pi model response would hide or misrepresent intermediate tools and history. Emitting SDK tool calls as ordinary Pi tool calls after the SDK already executed them could execute mutations twice.
+
+## What Amp does
+
+Amp's October 10, 2026 [announcement](https://ampcode.com/news/use-your-claude-plan) states: "Under the hood, this mode uses the Claude Agent SDK instead of Amp's own agent."
+
+Its [Claude subscription documentation](https://ampcode.com/docs/the-dial#use-your-claude-subscription) describes:
+
+- A separate **Claude Code** mode, selected when starting a thread. Amp's general mode rule fixes the mode after the first message.
+- Claude Pro/Max subscription linking for hosted orbs. Local runners and the CLI use the machine's Claude Code installation and login, requiring version 2.1.276 or later. Amp's local Claude mode does not support API keys.
+- Amp's orbs, runners, thread sharing, portals, multiplayer, and thread-to-thread messaging remain available around the SDK agent.
+- Oracle, Librarian, and Illustrator are excluded to avoid additional Amp charges. Claude Code's plan mode, todo tool, and notebook editing are disabled. Painter still uses Amp credits, and hosted orb compute is separate from the Claude subscription.
+
+```text
+Amp normal mode: Amp UI / services -> Amp agent -> model
+Amp Claude mode: Amp UI / services -> Claude Agent SDK -> Claude
+```
+
+This is an external-agent mode, not a claim that Amp feeds subscription tokens into its ordinary model provider. The public docs establish that architecture and behavior, but do not expose Amp's internal adapter implementation.
+
+For Pi Remote, following Amp means adding a distinct SDK-backed session runtime, preserving the remote UI but mapping SDK sessions, events, permissions, and cancellation. That differs from the Pi-provider experiment below, which retains Pi's agent loop. The experiment is still technically promising, but Amp is not evidence that Pi-style history restoration or that specific tool-handoff technique is solved. Keep SDK-native sessions separate initially rather than promise arbitrary mid-session switching.
 
 ## Recommended paths
 
@@ -106,4 +128,4 @@ All three final Pi bridge scenarios passed. Reproducible scripts, pinned depende
 
 ## Verification boundary
 
-The experiment validates one live query and one synthetic tool, not a general SDK provider. It did not test transcript replay into a restarted bridge, Pi branch/compaction mapping, model switching, parallel tools, images, mobile model discovery, or real shell/file side effects. The bridge buffers complete assistant messages and zeroes Pi-side usage; partial event mapping and billing accounting remain unimplemented. SDK resume succeeded separately, but does not establish compatibility with Pi history. Reported authentication success does not establish product approval or verify which billing balance was charged. Subscription-login approval remains unresolved by the conflicting public documentation.
+The experiment validates one live query and one synthetic tool, not a general SDK provider. It did not test transcript replay into a restarted bridge, Pi branch/compaction mapping, model switching, parallel tools, images, mobile model discovery, or real shell/file side effects. The bridge buffers complete assistant messages and zeroes Pi-side usage; partial event mapping and billing accounting remain unimplemented. SDK resume succeeded separately, but does not establish compatibility with Pi history. Reported authentication success does not verify which billing balance was charged or establish approval of this particular Pi adapter. Current support documentation explicitly permits subscription usage through the SDK and third-party apps; Amp provides a documented example of an SDK-native integration.
