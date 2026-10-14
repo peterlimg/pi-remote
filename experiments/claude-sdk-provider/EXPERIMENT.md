@@ -15,7 +15,7 @@ Pi or Pi Remote
 
 ## Opus 5.5 verification
 
-The same bridge passed with `claude-opus-5-5`: 21 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
+The same bridge passed with `claude-opus-5-5`: 22 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
 
 These checks use isolated configuration and synthetic tools. They do not prove a production installation or real-phone behavior.
 
@@ -115,7 +115,7 @@ Pi 1.1.0's lazy authentication wrapper turns an already-aborted request into a g
 
 ## Do not use it for restored history yet
 
-Start a fresh session. Restart, resume, compaction, forks, tree navigation, cross-provider history, images, nested model requests, steering during tool batches, model changes, and dynamic prompt/tool updates are unsupported. Cancellation closes the SDK query; start a new Pi session afterward. History operations are blocked while this provider is selected, and unrecognized transcripts fail explicitly.
+Start a fresh session. Restart, resume, compaction, forks, tree navigation, cross-provider history, images, nested model requests, steering during tool batches, model changes, and dynamic prompt/tool updates are unsupported. Cancellation closes the SDK query; start a new Pi session afterward. Pi 1.2.0's background title requests are rejected without closing the foreground query, so automatic SDK-generated titles are unavailable. History operations are blocked while this provider is selected, and unrecognized transcripts fail explicitly.
 
 The tool-ID metadata is a verified behavior of the pinned SDK, not an established public API guarantee. A later invalid handler closes the session, but a preceding Pi-approved batch may already have executed. Cancellation does not undo completed tools or forcibly stop a tool that ignores Pi's abort signal. Settlement timings above measure Pi completion, not OS child-process exit time.
 

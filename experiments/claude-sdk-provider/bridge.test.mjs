@@ -286,6 +286,25 @@ test('history edits, resumed histories, images, and request replacements fail wi
   }
 });
 
+test('unsupported title requests cannot close an existing SDK conversation', async () => {
+  const { stats, factory } = fakeQuery();
+  const bridge = createBridge('/tmp', factory);
+  const { agent } = makeAgent(bridge);
+  try {
+    await agent.prompt('test');
+    const reads = stats.reads;
+    const rejected = await bridge.streamSimple(model, context([user]), { reasoning: 'minimal', maxTokens: 120 }).result();
+    assert.equal(rejected.stopReason, 'error');
+    assert.match(rejected.errorMessage, /Nested requests/);
+    assert.equal(stats.closes, 0);
+    assert.equal(stats.reads, reads);
+    await agent.prompt('next');
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.equal(agent.state.messages.at(-1).content[0].text, 'recalled');
+    assert.equal(stats.queries, 1);
+  } finally { bridge.close(); }
+});
+
 test('rewinding a live transcript fails without re-executing a tool', async () => {
   const { stats, factory } = fakeQuery();
   const bridge = createBridge('/tmp', factory);

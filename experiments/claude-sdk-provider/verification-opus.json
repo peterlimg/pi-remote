@@ -8,7 +8,7 @@
     "playwright": "1.55.1"
   },
   "scope": "Isolated local CLI, Pi Agent, and real RPC/mobile fixture. Live Claude login. Synthetic in-memory tools. These checks do not verify a production installation.",
-  "offline": { "typecheck": true, "testsPassed": 21, "loadsWithoutLocalHostDependencies": true },
+  "offline": { "typecheck": true, "testsPassed": 22, "loadsWithoutLocalHostDependencies": true, "rejectedTitleRequestsPreserveConversation": true },
   "cli": {
     "discoveredModels": ["claude-sdk/claude-haiku-5-5", "claude-sdk/claude-opus-5-5"],
     "isolatedPrintResponse": "SDK_OPUS_CLI_OK"

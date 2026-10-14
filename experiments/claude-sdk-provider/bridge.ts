@@ -100,10 +100,13 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
     const stream = createAssistantMessageEventStream();
     const output: AssistantMessage = { role: 'assistant', api: model.api, provider: model.provider, model: model.id,
       timestamp: Date.now(), content: [], stopReason: 'pending', usage: zeroUsage() };
-    if (busy) {
-      output.stopReason = 'error';
-      output.errorMessage = 'Concurrent requests to one Claude SDK session are unsupported.';
-      stream.push({ type: 'error', reason: 'error', error: output });
+    // Reject background helpers without touching the foreground query's lifecycle.
+    if (busy || !options.sessionId) {
+      output.stopReason = options.signal?.aborted ? 'aborted' : 'error';
+      output.errorMessage = output.stopReason === 'aborted' ? 'Cancelled.' : !options.sessionId
+        ? 'Claude SDK requests require a Pi session ID. Nested requests are unsupported.'
+        : 'Concurrent requests to one Claude SDK session are unsupported.';
+      stream.push({ type: 'error', reason: output.stopReason, error: output });
       stream.end();
       return stream;
     }
@@ -113,7 +116,6 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
       try {
         options.signal?.throwIfAborted();
         if (closed) fail('Claude SDK session is no longer available. Start a new Pi session.');
-        if (!options.sessionId) fail('Claude SDK requests require a Pi session ID. Nested requests are unsupported.');
         if (options.reasoning || options.fetch || options.apiKey || options.headers && Object.keys(options.headers).length ||
           options.temperature !== undefined || options.toolChoice === 'none') {
           fail('Unsupported Claude SDK request options. Use text, thinking off, local login, and Pi tools.');
