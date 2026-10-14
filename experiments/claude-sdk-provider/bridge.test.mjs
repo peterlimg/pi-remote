@@ -45,10 +45,11 @@ function result(turn = 1, modelId = model.id) {
     modelUsage: { [modelId]: { inputTokens: turn * 30, outputTokens: turn * 40, cacheReadInputTokens: turn * 9, cacheCreationInputTokens: turn * 4 } } };
 }
 function fakeQuery(plan = {}) {
-  const stats = { queries: 0, reads: 0, closes: 0, results: [] };
+  const stats = { queries: 0, reads: 0, closes: 0, results: [], prompts: [], modelChanges: [], effortChanges: [], thinkingChanges: [] };
   const factory = args => {
     stats.queries++;
     stats.options = args.options;
+    stats.model = args.options.model;
     const client = new Client({ name: 'sdk-fixture', version: '1' });
     const stream = (async function* () {
       const [left, right] = InMemoryTransport.createLinkedPair();
@@ -56,8 +57,8 @@ function fakeQuery(plan = {}) {
       await client.connect(right);
       stats.listed = (await client.listTools()).tools;
       const source = args.prompt[Symbol.asyncIterator]();
-      await source.next();
-      yield { type: 'system', subtype: 'init', tools: ['mcp__pi__probe'], apiKeySource: plan.apiKeySource ?? 'none' };
+      stats.prompts.push((await source.next()).value);
+      yield { type: 'system', subtype: 'init', session_id: '00000000-0000-4000-8000-000000000001', tools: ['mcp__pi__probe'], apiKeySource: plan.apiKeySource ?? 'none' };
       const input = plan.badArgs ? {} : { label: 'test' };
       const blocks = [0, 1].map(i => ({ type: 'tool_use', id: `tool-${i}`, name: 'mcp__pi__probe', input }));
       // MCP tools without read-only annotations can be scheduled serially by the SDK.
@@ -72,19 +73,43 @@ function fakeQuery(plan = {}) {
         plan.truncated ? 'max_tokens' : 'tool_use', plan.malformed, args.options.model);
       stats.results = await pending;
       yield* assistant([{ type: 'text', text: plan.text ?? '😀done' }], 'end_turn', false, args.options.model);
-      yield result(1, args.options.model);
+      yield { type: 'assistant', uuid: '00000000-0000-4000-8000-000000000002' };
+      yield result(1, stats.model);
       const second = await source.next();
       if (!second.done) {
-        yield* assistant([{ type: 'text', text: 'recalled' }], 'end_turn', false, args.options.model);
-        yield result(2, args.options.model);
+        stats.prompts.push(second.value);
+        yield* assistant([{ type: 'text', text: 'recalled' }], 'end_turn', false, stats.model);
+        yield { type: 'assistant', uuid: '00000000-0000-4000-8000-000000000003' };
+        yield result(2, stats.model);
       }
     })();
     const next = stream.next.bind(stream);
     stream.next = () => { stats.reads++; return next(); };
     stream.close = () => { stats.closes++; void client.close(); };
+    stream.setModel = async id => { stats.modelChanges.push(id); stats.model = id; };
+    stream.applyFlagSettings = async settings => { stats.effortChanges.push(settings); };
+    stream.setMaxThinkingTokens = async tokens => { stats.thinkingChanges.push(tokens); };
     return stream;
   };
   return { stats, factory };
+}
+function fakeTextQuery(cumulativeTurn = 1) {
+  const stats = { queries: 0, closes: 0 };
+  const factory = args => {
+    stats.queries++;
+    stats.options = args.options;
+    const stream = (async function* () {
+      const input = await args.prompt[Symbol.asyncIterator]().next();
+      stats.prompt = input.value;
+      yield { type: 'system', subtype: 'init', session_id: '00000000-0000-4000-8000-000000000001', apiKeySource: 'none', tools: args.options.mcpServers ? ['mcp__pi__probe'] : [] };
+      yield* assistant([{ type: 'text', text: 'recalled' }], 'end_turn', false, args.options.model);
+      yield { type: 'assistant', uuid: '00000000-0000-4000-8000-000000000003' };
+      yield result(cumulativeTurn, args.options.model);
+    })();
+    stream.close = () => { stats.closes++; };
+    return stream;
+  };
+  return { factory, stats };
 }
 function makeAgent(bridge, overrides = {}) {
   let executions = 0;
@@ -139,11 +164,86 @@ test('Opus uses its requested SDK model and the same Pi-owned tool bridge', asyn
   try {
     await agent.prompt('test');
     assert.equal(stats.options.model, opus.id);
+    assert.equal(stats.options.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '16000');
     assert.equal(agent.state.messages.at(-1).model, opus.id);
     assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
     assert.equal(executions(), 2);
     assert.deepEqual(stats.options.tools, []);
     assert.equal(agent.state.messages.filter(m => m.role === 'assistant').reduce((sum, m) => sum + m.usage.input, 0), 30);
+  } finally { bridge.close(); }
+});
+
+test('thinking effort can change between turns without losing the query or memory', async () => {
+  const { stats, factory } = fakeQuery({ thinking: true });
+  const bridge = createBridge('/tmp', factory);
+  const { agent } = makeAgent(bridge);
+  agent.state.thinkingLevel = 'high';
+  try {
+    await agent.prompt('test');
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.equal(stats.options.thinking.type, 'adaptive');
+    assert.equal(stats.options.effort, 'high');
+    agent.state.thinkingLevel = 'max';
+    await agent.prompt('next');
+    assert.equal(agent.state.messages.at(-1).content[0].text, 'recalled');
+    assert.deepEqual(stats.effortChanges, [{ effortLevel: 'max' }]);
+    assert.equal(stats.queries, 1);
+  } finally { bridge.close(); }
+});
+
+test('all Pi effort levels map to SDK controls, including turning thinking back off', async () => {
+  for (const reasoning of [undefined, 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+    const fixture = fakeTextQuery();
+    const bridge = createBridge('/tmp', fixture.factory);
+    const message = await bridge.streamSimple(model, context([user]), { ...options, toolChoice: 'none', reasoning }).result();
+    assert.equal(message.stopReason, 'stop', message.errorMessage);
+    assert.equal(fixture.stats.options.effort, reasoning === 'minimal' || !reasoning ? 'low' : reasoning);
+    assert.equal(fixture.stats.options.thinking.type, reasoning ? 'adaptive' : 'disabled');
+    bridge.close();
+  }
+  const fixture = fakeQuery();
+  const bridge = createBridge('/tmp', fixture.factory);
+  const { agent } = makeAgent(bridge);
+  agent.state.thinkingLevel = 'high';
+  try {
+    await agent.prompt('test');
+    agent.state.thinkingLevel = 'off';
+    await agent.prompt('next');
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop');
+    assert.deepEqual(fixture.stats.thinkingChanges, [0]);
+    assert.deepEqual(fixture.stats.effortChanges, [{ effortLevel: 'low' }]);
+  } finally { bridge.close(); }
+});
+
+test('switching SDK models preserves conversation and cumulative usage', async () => {
+  const { stats, factory } = fakeQuery();
+  const bridge = createBridge('/tmp', factory);
+  const { agent, executions } = makeAgent(bridge);
+  try {
+    await agent.prompt('test');
+    agent.state.model = { ...model, id: 'claude-opus-5-5' };
+    await agent.prompt('next');
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.equal(agent.state.messages.at(-1).model, 'claude-opus-5-5');
+    assert.deepEqual(stats.modelChanges, ['claude-opus-5-5']);
+    assert.equal(stats.queries, 1);
+    assert.equal(executions(), 2);
+    assert.equal(agent.state.messages.filter(m => m.role === 'assistant').reduce((sum, m) => sum + m.usage.input, 0), 60);
+  } finally { bridge.close(); }
+});
+
+test('user images and Pi image tool results keep their bytes and schemas', async () => {
+  const image = { type: 'image', data: 'aW1hZ2U=', mimeType: 'image/png' };
+  const { stats, factory } = fakeQuery();
+  const bridge = createBridge('/tmp', factory);
+  const { agent } = makeAgent(bridge, { initialState: { model, systemPrompt: 'test', thinkingLevel: 'off', tools: [{ ...declaration,
+    execute: async () => ({ content: [image, { type: 'text', text: 'Image result' }], details: undefined }) }] } });
+  try {
+    await agent.prompt([{ ...user, content: [{ type: 'text', text: 'Describe this' }, image] }]);
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.deepEqual(stats.prompts[0].message.content, [{ type: 'text', text: 'Describe this' },
+      { type: 'image', source: { type: 'base64', data: image.data, media_type: 'image/png' } }]);
+    assert.deepEqual(stats.results[0].content, [image, { type: 'text', text: 'Image result' }]);
   } finally { bridge.close(); }
 });
 
@@ -269,10 +369,12 @@ test('abort during Pi tools closes the query and suppresses late SDK content', a
   } finally { bridge.close(); }
 });
 
-test('history edits, resumed histories, images, and request replacements fail without starting a new query', async () => {
+test('unknown histories, invalid images, and request replacements fail without starting a new query', async () => {
   for (const [messages, opts] of [
     [[user, { role: 'assistant', content: [{ type: 'text', text: 'old' }] }, user], options],
     [[{ ...user, content: [{ type: 'image', data: 'a', mimeType: 'image/png' }] }], options],
+    [[{ ...user, content: [{ type: 'image', data: 'aW1hZ2U=', mimeType: 'image/tiff' }] }], options],
+    [[{ ...user, content: [{ type: 'image', data: '', mimeType: 'image/png' }] }], options],
     [[user], { ...options, onPayload: p => ({ ...p, prompt: 'replacement' }) }],
     [[user], { ...options, onPayload: p => { p.prompt = 'mutated'; } }],
   ]) {
@@ -286,23 +388,99 @@ test('history edits, resumed histories, images, and request replacements fail wi
   }
 });
 
-test('unsupported title requests cannot close an existing SDK conversation', async () => {
+test('background title requests use a separate tool-free query and cannot close the conversation', async () => {
   const { stats, factory } = fakeQuery();
   const bridge = createBridge('/tmp', factory);
   const { agent } = makeAgent(bridge);
   try {
     await agent.prompt('test');
-    const reads = stats.reads;
-    const rejected = await bridge.streamSimple(model, context([user]), { reasoning: 'minimal', maxTokens: 120 }).result();
-    assert.equal(rejected.stopReason, 'error');
-    assert.match(rejected.errorMessage, /Nested requests/);
-    assert.equal(stats.closes, 0);
-    assert.equal(stats.reads, reads);
+    const title = await bridge.streamSimple(model, context([user]), { reasoning: 'minimal', maxTokens: 120 }).result();
+    assert.equal(title.stopReason, 'error'); // The fixture deliberately requests unavailable probe tools.
+    assert.equal(stats.queries, 2);
+    assert.equal(stats.options.persistSession, false);
+    assert.deepEqual(stats.options.mcpServers, undefined);
+    assert.equal(stats.options.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '120');
+    assert.equal(stats.closes, 1);
     await agent.prompt('next');
     assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
     assert.equal(agent.state.messages.at(-1).content[0].text, 'recalled');
-    assert.equal(stats.queries, 1);
+    assert.equal(stats.queries, 2);
   } finally { bridge.close(); }
+});
+
+test('tool-free helpers complete independently while a foreground query is idle', async () => {
+  const text = fakeTextQuery();
+  const bridge = createBridge('/tmp', text.factory);
+  try {
+    const message = await bridge.streamSimple(model, context([user]), { reasoning: 'minimal', maxTokens: 120 }).result();
+    assert.equal(message.stopReason, 'stop', message.errorMessage);
+    assert.equal(message.content[0].text, 'recalled');
+    assert.deepEqual(text.stats.options.tools, []);
+    assert.equal(text.stats.options.mcpServers, undefined);
+    assert.equal(text.stats.closes, 1);
+    assert.match(text.stats.prompt.message.content[0].text, /Input transcript as JSON data/);
+  } finally { bridge.close(); }
+});
+
+test('closing the parent bridge cancels its outstanding tool-free helpers', async () => {
+  const started = Promise.withResolvers();
+  let closes = 0;
+  const bridge = createBridge('/tmp', () => {
+    started.resolve();
+    return { next: () => new Promise(() => {}), close: () => { closes++; } };
+  });
+  const stream = bridge.streamSimple(model, context([user]), { maxTokens: 120 });
+  await started.promise;
+  bridge.close();
+  const message = await stream.result();
+  assert.equal(message.stopReason, 'error');
+  assert.equal(closes, 1);
+  const again = await bridge.streamSimple(model, context([user]), { maxTokens: 120 }).result();
+  assert.equal(again.stopReason, 'error');
+  assert.equal(closes, 1);
+});
+
+test('completed SDK checkpoints resume matching Pi history without replaying tools', async () => {
+  const original = fakeQuery();
+  const bridge = createBridge('/tmp', original.factory, { persistSession: true });
+  const { agent, executions } = makeAgent(bridge);
+  await agent.prompt('test');
+  const checkpoint = bridge.checkpoint();
+  assert(checkpoint);
+  assert.equal(original.stats.options.persistSession, true);
+  assert(!JSON.stringify(checkpoint).includes('😀done'));
+  bridge.close();
+  const resumed = fakeTextQuery(2);
+  const restored = createBridge('/tmp', resumed.factory, { persistSession: true, checkpoint });
+  const nextAgent = makeAgent(restored).agent;
+  nextAgent.state.messages = structuredClone(agent.state.messages);
+  try {
+    await nextAgent.prompt('next');
+    assert.equal(nextAgent.state.messages.at(-1).stopReason, 'stop', nextAgent.state.messages.at(-1).errorMessage);
+    assert.equal(nextAgent.state.messages.at(-1).content[0].text, 'recalled');
+    assert.equal(resumed.stats.options.resume, checkpoint.sdkSessionId);
+    assert.equal(resumed.stats.options.resumeSessionAt, checkpoint.sdkMessageId);
+    assert.equal(executions(), 2);
+    assert.equal(nextAgent.state.messages.filter(m => m.role === 'assistant').reduce((sum, m) => sum + m.usage.input, 0), 60);
+  } finally { restored.close(); }
+  const wrong = fakeTextQuery();
+  const mismatch = createBridge('/tmp', wrong.factory, { persistSession: true, checkpoint });
+  try {
+    const rejected = await mismatch.streamSimple(model, context([user]), options).result();
+    assert.equal(rejected.stopReason, 'error');
+    assert.equal(wrong.stats.queries, 0);
+  } finally { mismatch.close(); }
+});
+
+test('invalid output limits and unsupported sampling never start a query', async () => {
+  for (const override of [{ maxTokens: 0 }, { maxTokens: 1.5 }, { maxTokens: model.maxTokens + 1 }, { temperature: 0.2 }]) {
+    const { stats, factory } = fakeQuery();
+    const bridge = createBridge('/tmp', factory);
+    const rejected = await bridge.streamSimple(model, context([user]), { ...options, ...override }).result();
+    assert.equal(rejected.stopReason, 'error');
+    assert.equal(stats.queries, 0);
+    bridge.close();
+  }
 });
 
 test('rewinding a live transcript fails without re-executing a tool', async () => {
@@ -357,7 +535,7 @@ test('Pi loads the package without local copies of host-provided dependencies', 
     assert.deepEqual(loaded.errors, []);
     const provider = loaded.runtime.pendingNativeProviderRegistrations.find(p => p.provider.id === 'claude-sdk')?.provider;
     assert(provider);
-    assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-opus-5-5']);
+    assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']);
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
@@ -366,9 +544,9 @@ test('extension registers native ambient auth without a fake key and closes on l
   let provider;
   extension({ registerProvider: p => { provider = p; }, on: (name, handler) => { handlers.set(name, handler); } });
   assert.equal(provider.id, 'claude-sdk');
-  assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-opus-5-5']);
+  assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']);
   assert.equal(provider.auth.apiKey.login, undefined);
-  assert(provider.getModels().every(m => !m.reasoning && m.input.join() === 'text' && m.maxTokens === 4096));
+  assert(provider.getModels().every(m => m.reasoning && m.input.join() === 'text,image' && m.maxTokens === 128000));
   assert(handlers.has('session_shutdown') && handlers.has('model_select'));
   const events = ['session_before_tree', 'session_before_fork', 'session_before_compact'];
   for (const event of events) assert.deepEqual(handlers.get(event)({}, { model, hasUI: false }), { cancel: true });

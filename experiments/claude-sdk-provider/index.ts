@@ -35,20 +35,28 @@ export default function (pi: ExtensionAPI) {
     return bridge.streamSimple(...args);
   };
   const catalog = getBuiltinModels('anthropic');
-  const models = ['claude-haiku-5-5', 'claude-opus-5-5'].map((id): Model<'claude-sdk'> => {
+  const models = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'].map((id): Model<'claude-sdk'> => {
     const model = catalog.find(model => model.id === id);
     if (!model) throw new Error(`This experiment requires Pi 1.1.0 with ${id} metadata.`);
     const { compat: _compat, ...metadata } = model;
     return { ...metadata, provider: providerId, api: 'claude-sdk', baseUrl: '',
-      name: `Claude SDK ${metadata.name.replace(/^Claude /, '')} (experimental)`, input: ['text'], reasoning: false,
-      thinkingLevelMap: { off: null }, promptCache: undefined, maxTokens: 4096 };
+      name: `Claude SDK ${metadata.name.replace(/^Claude /, '')} (experimental)`, promptCache: undefined };
   });
   pi.registerProvider(createProvider({
     id: providerId, name: 'Claude SDK experiment', auth: { apiKey: localLogin },
     models,
     api: { stream: streamSimple, streamSimple },
   }));
-  pi.on('session_start', (_event, ctx) => { bridge?.close(); bridge = createBridge(ctx.cwd); });
+  pi.on('session_start', (_event, ctx) => {
+    bridge?.close();
+    const entry = ctx.sessionManager.getBranch().findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-checkpoint');
+    bridge = createBridge(ctx.cwd, undefined, { persistSession: Boolean(ctx.sessionManager.getSessionFile()),
+      checkpoint: entry?.type === 'custom' ? entry.data : undefined });
+  });
+  pi.on('agent_settled', () => {
+    const checkpoint = bridge?.checkpoint();
+    if (checkpoint) pi.appendEntry('claude-sdk-checkpoint', checkpoint);
+  });
   pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; });
   pi.on('message_end', (event, ctx) => {
     const message = event.message;

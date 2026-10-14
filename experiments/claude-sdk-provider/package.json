@@ -9,6 +9,7 @@
     "test": "node --experimental-strip-types --test bridge.test.mjs",
     "test:correlation": "node correlation.mjs",
     "test:live": "node --experimental-strip-types live.mjs",
+    "test:common": "node --experimental-strip-types common.mjs",
     "test:remote": "node remote.mjs"
   },
   "pi": { "extensions": ["./index.ts"] },

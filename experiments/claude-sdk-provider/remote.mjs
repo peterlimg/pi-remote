@@ -11,8 +11,10 @@ import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
 const modelId = process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5';
-assert(['claude-haiku-5-5', 'claude-opus-5-5'].includes(modelId), 'Choose a registered SDK test model');
-const modelName = modelId === 'claude-opus-5-5' ? 'Claude SDK Opus 5.5 (experimental)' : 'Claude SDK Haiku 5.5 (experimental)';
+assert(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'].includes(modelId), 'Choose a registered SDK test model');
+const modelName = `Claude SDK ${modelId.split('-')[1][0].toUpperCase() + modelId.split('-')[1].slice(1)} 5.5 (experimental)`;
+const thinking = process.env.PI_SDK_TEST_THINKING ?? 'off';
+assert(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking));
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-remote-'));
 const scratch = join(evidence, 'scratch');
 const sessions = join(scratch, 'sessions');
@@ -60,7 +62,7 @@ const host = await startHost({ dir: scratch, config, roots: [sessions], port: 0,
     '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] } });
 const id = sessionKey(file);
 const url = `http://127.0.0.1:${host.http.address().port}`;
-const result = { fixture: 'real Pi RPC and SDK, synthetic in-memory tool', model: modelId, modelCommands: [], permissionAnswers: [], streamingUpdates: 0 };
+const result = { fixture: 'real Pi RPC and SDK, synthetic in-memory tool', model: modelId, thinking, modelCommands: [], permissionAnswers: [], streamingUpdates: 0 };
 const events = [];
 const fixtureRows = () => { try { return readFileSync(fixtureLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
 let browser, context, page, worker;
@@ -98,6 +100,16 @@ try {
   const selected = (await worker.request('get_state')).model;
   assert.equal(selected.provider, 'claude-sdk');
   assert.equal(selected.id, modelId);
+  const reasoningName = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' }[thinking];
+  const chooseReasoning = async () => {
+    await page.getByRole('button', { name: 'Reasoning effort', exact: true }).click();
+    const reasoningPicker = page.getByRole('region', { name: 'Choose reasoning effort' });
+    await reasoningPicker.getByRole('button', { name: new RegExp(`^${reasoningName}(?: Current)?$`) }).click();
+    await expect(reasoningPicker).toBeHidden();
+    await expect(page.locator('#reasoning-value')).toHaveText(reasoningName);
+    assert.equal((await worker.request('get_state')).thinkingLevel, thinking);
+  };
+  await chooseReasoning();
   await page.locator('#model').click();
   await expect(picker.getByRole('button', { pressed: true })).toContainText(modelName);
   await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
@@ -129,6 +141,33 @@ try {
       else assert.equal(text.trim(), 'DENIED');
       await expect(page.locator('#transcript')).toContainText(text);
       await page.screenshot({ path: join(evidence, `${label}.png`), fullPage: true });
+      if (label === 'allow') {
+        // Close only our isolated worker, then reopen its saved Pi/SDK checkpoint.
+        const savedToken = text;
+        const previousPid = worker.process.pid;
+        await worker.close();
+        await expect.poll(() => host.service.live.get(id)?.worker).toBe(undefined);
+        assert.equal((await host.service.resume(id, randomUUID())).ok, true);
+        worker = host.service.live.get(id).worker;
+        assert.notEqual(worker.process.pid, previousPid);
+        await worker.request('set_auto_compaction', { enabled: false });
+        await worker.request('set_auto_retry', { enabled: false });
+        worker.on('event', event => { events.push(event); if (event.type === 'message_update') result.streamingUpdates++; });
+        await expect(page.locator('#status')).toHaveText('idle');
+        await page.locator('#model').click();
+        await picker.getByRole('button', { name: modelName, exact: true }).click();
+        await expect(picker).toBeHidden();
+        await chooseReasoning();
+        const settled = events.filter(e => e.type === 'agent_settled').length;
+        await page.locator('#prompt').fill('Repeat only the exact synthetic token from the first tool result. Do not call tools.');
+        await page.getByRole('button', { name: 'Send message' }).click();
+        await expect.poll(() => events.filter(e => e.type === 'agent_settled').length, { timeout: 60000 }).toBe(settled + 1);
+        const recalled = events.findLast(e => e.type === 'message_end' && e.message.role === 'assistant').message;
+        assert.equal(recalled.stopReason, 'stop', recalled.errorMessage);
+        assert.equal(recalled.content.filter(b => b.type === 'text').map(b => b.text).join('').trim(), savedToken.trim());
+        assert.equal(fixtureRows().filter(r => r.phase === 'execution').length, 1);
+        result.workerRestartResume = true;
+      }
       if (label === 'deny') {
         result.statsBeforeAbort = await worker.request('get_session_stats');
         const sdk = fixtureRows().findLast(r => r.phase === 'sdk-result');

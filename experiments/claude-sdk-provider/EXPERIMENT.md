@@ -1,6 +1,6 @@
 # Claude SDK provider experiment
 
-Opt-in Pi provider `claude-sdk` for Haiku 5.5 and Opus 5.5, tested October 14, 2026. It uses Claude's local login through the official Agent SDK and leaves tool validation, permissions, and execution in Pi. Pi Remote's normal extension manifest does not load this package; enable it separately with the installation command below.
+Opt-in Pi provider `claude-sdk` for Haiku 5.5, Sonnet 5.5, and Opus 5.5, tested October 14, 2026. It uses Claude's local login through the official Agent SDK and leaves tool validation, permissions, and execution in Pi. Pi Remote's normal extension manifest does not load this package; enable it separately with the installation command below.
 
 ```text
 Pi or Pi Remote
@@ -13,7 +13,24 @@ Pi or Pi Remote
     ← Claude response and usage
 ```
 
-## Opus 5.5 verification
+## Everyday controls
+
+The expanded provider passed strict TypeScript checking and 30 offline tests. Live SDK checks covered image inputs and tool results, model and effort changes, independent title generation, and completed-checkpoint recovery. CLI discovery listed all three models with thinking and image support; Sonnet with High returned `SDK_COMMON_CLI_OK`. The real Pi RPC/mobile fixture selected High through the reasoning picker, restarted its own worker, recovered the saved SDK conversation without repeating tools, exercised Allow/Deny/Stop, and retained the conversation on reload. See [current results](verification-common.json).
+
+| Function | Behavior |
+| --- | --- |
+| Thinking | Pi Low, Medium, High, Extra high, and Max map to SDK adaptive thinking and matching effort. Minimal uses adaptive thinking with Low effort. Off requests disabled thinking with Low effort; SDK-emitted thinking still does not prove the model honored zero reasoning. |
+| Change effort or model | Change between the three SDK models and thinking levels without discarding the live conversation. Live checks exercised High, Max, Low, Off, and Medium. All level mappings have offline coverage. |
+| Images | Pi image attachments and image tool results reach the SDK as image blocks. JPEG, PNG, GIF, and WebP require canonical base64 within Pi's 4.5 MiB encoded-image limit. |
+| Response limits | The default SDK response cap is now 16,000 tokens, not 4,096. Explicit caps are checked against Pi's model metadata, currently 128,000. The live title helper used 120. Full 128,000-token generation was not tested. The cap remains fixed within a query. |
+| Session titles and helpers | Calls without a Pi session ID use separate, ephemeral SDK queries with no tools. They receive the requested system prompt and transcript as JSON data. They cannot execute tools or alter the foreground query. This is helper input, not history replay. |
+| Restart and resume | Newly saved sessions record the SDK session and message IDs, conversation/configuration fingerprints, and reported usage after a completed turn. A new worker resumes that SDK checkpoint only when Pi's history and configuration match. No tool replay or Pi-to-SDK history reconstruction. |
+
+Saved conversations now also create SDK transcripts under Claude Code's session storage, normally `~/.claude/projects/`. Pi checkpoint entries contain hashes and IDs, not extra conversation bodies or credentials. Ephemeral Pi sessions and helper requests disable SDK persistence. Deleting a Pi session does not delete its SDK copy; Claude Code's own retention applies.
+
+Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
+
+## Initial Opus 5.5 verification
 
 The same bridge passed with `claude-opus-5-5`: 22 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
 
@@ -72,7 +89,9 @@ npx playwright install chromium
 cd experiments/claude-sdk-provider
 npm run test:remote
 # Exercise Opus through the same real RPC/mobile fixture:
-PI_SDK_TEST_MODEL=claude-opus-5-5 npm run test:remote
+PI_SDK_TEST_MODEL=claude-opus-5-5 PI_SDK_TEST_THINKING=high npm run test:remote
+# Image inputs/results, model/effort changes, isolated helpers, and SDK checkpoint recovery:
+npm run test:common
 ```
 
 The mobile script creates its own temporary Pi configuration, session, host on an available loopback port, and browser context. It disables external relays, exposes only its synthetic tool, and closes its owned worker and host. It retains logs, traces, and screenshots in the printed evidence directory. Never use that test's known browser token for a deployment.
@@ -104,25 +123,25 @@ pi install "$PWD"
 
 This adds the provider to your personal Pi package configuration without changing your default model. In Pi Remote, start a **fresh session**, tap the model button or use `/model`, and choose `Claude SDK Opus 5.5 (experimental)`. Its full ID is `claude-sdk/claude-opus-5-5`. Existing workers do not load newly installed extensions until reloaded or replaced; starting a fresh session creates a new worker. No Pi Remote host restart is needed.
 
-Keep reasoning off and use text only. Selectable reasoning modes are unsupported, even when the SDK emits thinking content. The experimental output limit is 4,096 tokens. To disable this package later, run `pi remove "$PWD"` from the same directory and use fresh sessions.
+Tap `Reasoning effort` to select a level, for example High. Image attachments and Pi image-reading results are supported. Switching between SDK Haiku, Sonnet, and Opus preserves the conversation. Newly saved, completed SDK sessions can resume after their worker restarts. To disable this package later, run `pi remove "$PWD"` from the same directory and use fresh sessions.
 
 ## Implementation boundaries
 
-- `index.ts` registers experimental, text-only Haiku and Opus models through Pi's native provider API. Both use the same bridge and authentication checks. Catalogue prices come from Pi's host-mapped `providers/all` entry point, without local copies of Pi's packages. An offline regression loads the package with only its runtime dependencies. No picker changes or browser credentials.
+- `index.ts` registers experimental Haiku, Sonnet, and Opus models with thinking and image support through Pi's native provider API. All three use the same bridge and authentication checks. Catalogue prices come from Pi's host-mapped `providers/all` entry point, without local copies of Pi's packages. An offline regression loads the package with only its runtime dependencies. No picker changes or browser credentials.
 - `bridge.ts` keeps one live SDK query per Pi session. Its MCP server advertises Pi's JSON schemas unchanged. Handlers wait for Pi results and never execute tools.
-- SDK built-in tools, implicit MCP servers, hooks, auto-memory, project settings, and SDK session persistence are disabled.
-- The provider checks the entire known conversation prefix and model, system prompt, tools, and explicit environment configuration. A mismatch closes the query rather than replaying tools or silently losing history.
+- SDK built-in tools, implicit MCP servers, hooks, auto-memory, project settings, and SDK auto-compaction are disabled. Only saved Pi conversations enable SDK session persistence.
+- The provider checks hashes of the entire known conversation prefix and its system prompt, tools, explicit environment, working directory, session ID, and output cap. Model and effort changes use SDK control requests. Other mismatches close the query rather than replaying tools or silently losing history.
 - Pi request-payload and raw provider-stream hooks are supported. Payload replacement is rejected. The SDK does not expose underlying HTTP response headers, so no synthetic response or header events are invented.
 - SDK result totals include pipeline usage. Cost is the SDK's nominal estimate, not a subscription-balance measurement or proof of what was charged. Intermediate and cancelled responses use observed tokens and Pi catalogue price estimates. Cost components are estimates; only the completed cumulative cost total is reconciled to the SDK.
 
-Two live findings changed the implementation. Unannotated MCP tools can run serially, so waiting for every handler before returning the batch deadlocks. The bridge checks the first handler's ID support, returns the complete batch to Pi, and resolves subsequent handlers by their explicit IDs. The SDK also emits thinking frames despite `thinking: disabled`; those frames and signatures are preserved, but selectable reasoning modes are not supported.
+Two live findings changed the implementation. Unannotated MCP tools can run serially, so waiting for every handler before returning the batch deadlocks. The bridge checks the first handler's ID support, returns the complete batch to Pi, and resolves subsequent handlers by their explicit IDs. The SDK also emits thinking frames despite `thinking: disabled`; those frames and signatures are preserved. Selectable effort now uses the SDK's adaptive-thinking controls.
 
 Pi 1.1.0's lazy authentication wrapper turns an already-aborted request into a generic setup error before this provider runs. A documented `message_end` replacement normalizes that error only for `claude-sdk` while the active Pi signal is aborted. The fix neither changes tool execution nor patches Pi. The offline regression reproduces the native authentication path, and the live RPC proof asserts an empty `aborted` result.
 
-## Do not use it for restored history yet
+## Remaining history limits
 
-Start a fresh session. Restart, resume, compaction, forks, tree navigation, cross-provider history, images, nested model requests, steering during tool batches, model changes, and dynamic prompt/tool updates are unsupported. Cancellation closes the SDK query; start a new Pi session afterward. Pi 1.2.0's background title requests are rejected without closing the foreground query, so automatic SDK-generated titles are unavailable. History operations are blocked while this provider is selected, and unrecognized transcripts fail explicitly.
+Resume is limited to this provider's newly recorded, completed SDK checkpoints with matching Pi history and configuration. Arbitrary or pre-upgrade histories, compaction, forks, tree navigation, cross-provider history, nested tool-enabled model requests, steering during tool batches, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; start a new Pi session afterward. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
 
 The tool-ID metadata is a verified behavior of the pinned SDK, not an established public API guarantee. A later invalid handler closes the session, but a preceding Pi-approved batch may already have executed. Cancellation does not undo completed tools or forcibly stop a tool that ignores Pi's abort signal. Settlement timings above measure Pi completion, not OS child-process exit time.
 
-Terminal print/JSON discovery and real RPC workers passed. Interactive terminal controls, the terminal-extension bridge path, multiple concurrent sessions, process restart, real filesystem/shell side effects, and real-phone rendering remain unverified by these isolated checks. Verify your phone's configured host separately after installation. Existing session-history research is in the [integration guide](../../docs/research/claude-agent-sdk-integration.md).
+Terminal print/JSON discovery and real RPC workers passed. Interactive terminal controls, the terminal-extension bridge path, multiple concurrent foreground sessions, real filesystem/shell side effects, and real-phone rendering remain unverified by these isolated checks. Owned-worker restart passed in the real RPC/mobile fixture. Verify your phone's configured host separately after installation. Existing session-history research is in the [integration guide](../../docs/research/claude-agent-sdk-integration.md).

@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { randomUUID } from 'node:crypto';
-import { query, createSdkMcpServer, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { query, createSdkMcpServer, type EffortLevel, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
-  createAssistantMessageEventStream, calculateCost, getCurrentSystemPrompt, getCurrentTools, parseStreamingJson,
+  createAssistantMessageEventStream, calculateCost, getCurrentSystemPrompt, getCurrentTools, normalizeContext, parseStreamingJson,
   type AssistantMessage, type JsonObject, type Message, type Model, type SimpleStreamOptions, type TranscriptContext, type Usage,
 } from '@earendil-works/pi-ai';
 
@@ -11,6 +12,15 @@ class BridgeError extends Error {}
 function fail(message: string): never { throw new BridgeError(message); }
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
+const counter = z.number().int().nonnegative();
+const cost = z.number().nonnegative();
+const digest = z.string().regex(/^[a-f0-9]{64}$/);
+const checkpointSchema = z.object({ version: z.literal(1), sdkSessionId: z.string().uuid(), sdkMessageId: z.string().uuid(),
+  prefix: z.array(digest).max(100000), configuration: digest,
+  reported: z.object({ input: counter, output: counter, cacheRead: counter, cacheWrite: counter, totalTokens: counter,
+    cost: z.object({ input: cost, output: cost, cacheRead: cost, cacheWrite: cost, total: cost }) }),
+});
+const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function rawUsage(current: Record<string, unknown>, model: Model<string>): Usage {
   const usage = zeroUsage();
   usage.input = Number(current.input_tokens ?? 0);
@@ -25,10 +35,24 @@ function rawUsage(current: Record<string, unknown>, model: Model<string>): Usage
 const stoppedTool = (): CallToolResult => ({ content: [{ type: 'text', text: 'Pi stopped this SDK session.' }], isError: true });
 const project = (message: Message) => JSON.stringify({ role: message.role, content: message.content,
   ...message.role === 'toolResult' ? { id: message.toolCallId, name: message.toolName, isError: message.isError } : {} });
-const textOnly = (content: string | Message['content']) => {
-  if (typeof content === 'string') return content;
-  return content.map(block => block.type === 'text' ? block.text : fail('This experimental provider supports text only.')).join('');
-};
+function contentBlocks(content: string | Message['content']): CallToolResult['content'] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  return content.map(block => {
+    if (block.type === 'text') return { type: 'text', text: block.text };
+    if (block.type !== 'image') fail('Unsupported Claude SDK input block.');
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(block.mimeType) || !block.data ||
+      block.data.length > 4718592 || Buffer.from(block.data, 'base64').toString('base64') !== block.data) {
+      fail('Claude SDK images require valid base64 JPEG, PNG, GIF, or WebP data within Pi image limits.');
+    }
+    return { type: 'image', data: block.data, mimeType: block.mimeType };
+  });
+}
+function userContent(content: string | Message['content']): SDKUserMessage['message']['content'] {
+  return contentBlocks(content).map(block => block.type === 'text' ? { type: 'text', text: block.text }
+    : block.type === 'image' ? { type: 'image', source: { type: 'base64', data: block.data,
+      media_type: block.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' } }
+    : fail('Unsupported Claude SDK input block.'));
+}
 
 export function sdkEnvironment(overrides: Record<string, string> = {}) {
   const env = { ...process.env, ...overrides };
@@ -48,8 +72,9 @@ type Pending = {
   ready: ReturnType<typeof Promise.withResolvers<void>>;
 };
 
-// Experimental live-session bridge. History edits require a new session, never transcript replay.
-export function createBridge(cwd: string, createQuery: typeof query = query) {
+// Resume only SDK-owned, completed checkpoints; never rebuild an SDK transcript from Pi messages.
+export function createBridge(cwd: string, createQuery: typeof query = query, state: { persistSession?: boolean; checkpoint?: unknown } = {}) {
+  const saved = checkpointSchema.safeParse(state.checkpoint).data;
   let run: ReturnType<typeof query> | undefined;
   const controller = new AbortController();
   const stopped = Promise.withResolvers<never>();
@@ -58,20 +83,29 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
   let closed = false;
   let busy = false;
   let cancelListener: (() => void) | undefined;
-  let prefix: string[] = [];
-  let configuration: string | undefined;
+  let prefix: string[] = saved?.prefix ?? [];
+  let configuration: string | undefined = saved?.configuration;
+  let sdkSessionId = saved?.sdkSessionId;
+  let sdkMessageId = saved?.sdkMessageId;
+  let completed = false;
+  let activeModel: string | undefined;
+  let activeEffort: EffortLevel | undefined;
+  let thinkingEnabled = false;
   let awaiting: string[] = [];
   const calls = new Map<string, Pending>();
   const issued = new Set<string>();
   const prompts: SDKUserMessage[] = [];
+  const helpers = new Set<{ close(): void }>();
   let wake: (() => void) | undefined;
-  let reported = zeroUsage();
+  let reported = saved?.reported ?? zeroUsage();
 
   function close() {
     if (closed) return;
     closed = true;
     cancelListener?.();
     controller.abort();
+    for (const helper of helpers) helper.close();
+    helpers.clear();
     wake?.();
     for (const call of calls.values()) call.task.resolve(stoppedTool());
     calls.clear();
@@ -96,16 +130,26 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
     return entry;
   }
 
-  function streamSimple(model: Model<string>, context: TranscriptContext, options: SimpleStreamOptions = {}) {
+  function streamSimple(model: Model<string>, context: TranscriptContext, options: SimpleStreamOptions = {}): ReturnType<typeof createAssistantMessageEventStream> {
     const stream = createAssistantMessageEventStream();
     const output: AssistantMessage = { role: 'assistant', api: model.api, provider: model.provider, model: model.id,
       timestamp: Date.now(), content: [], stopReason: 'pending', usage: zeroUsage() };
-    // Reject background helpers without touching the foreground query's lifecycle.
-    if (busy || !options.sessionId) {
+    // Helpers receive transcript data, not a live SDK conversation or executable tools.
+    if (!options.sessionId && !closed) {
+      const helper = createBridge(cwd, createQuery);
+      helpers.add(helper);
+      const transcript = context.messages.filter(message => message.role !== 'system');
+      const helperStream = helper.streamSimple(model, normalizeContext({ messages: [
+        { role: 'system', content: getCurrentSystemPrompt(context.messages), timestamp: Date.now() },
+        { role: 'user', content: `Input transcript as JSON data:\n${JSON.stringify(transcript)}`, timestamp: Date.now() },
+      ] }), { ...options, sessionId: randomUUID(), toolChoice: 'none' });
+      const release = () => { helpers.delete(helper); helper.close(); };
+      void helperStream.result().then(release, release);
+      return helperStream;
+    }
+    if (busy) {
       output.stopReason = options.signal?.aborted ? 'aborted' : 'error';
-      output.errorMessage = output.stopReason === 'aborted' ? 'Cancelled.' : !options.sessionId
-        ? 'Claude SDK requests require a Pi session ID. Nested requests are unsupported.'
-        : 'Concurrent requests to one Claude SDK session are unsupported.';
+      output.errorMessage = output.stopReason === 'aborted' ? 'Cancelled.' : 'Concurrent requests to one Claude SDK session are unsupported.';
       stream.push({ type: 'error', reason: output.stopReason, error: output });
       stream.end();
       return stream;
@@ -116,23 +160,27 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
       try {
         options.signal?.throwIfAborted();
         if (closed) fail('Claude SDK session is no longer available. Start a new Pi session.');
-        if (options.reasoning || options.fetch || options.apiKey || options.headers && Object.keys(options.headers).length ||
-          options.temperature !== undefined || options.toolChoice === 'none') {
-          fail('Unsupported Claude SDK request options. Use text, thinking off, local login, and Pi tools.');
+        if (options.fetch || options.apiKey || options.headers && Object.keys(options.headers).length || options.temperature !== undefined) {
+          fail('Unsupported Claude SDK request options. Use local login and Pi-owned tools.');
         }
+        const effort: EffortLevel = options.reasoning === 'minimal' || !options.reasoning ? 'low' : options.reasoning;
+        if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) fail('Unsupported Claude SDK thinking effort.');
+        const enabled = Boolean(options.reasoning);
+        const maxTokens = options.maxTokens ?? Math.min(model.maxTokens, 16000);
+        if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > model.maxTokens) fail('Invalid Claude SDK output token limit.');
         const env = sdkEnvironment(options.env);
-        const tools = getCurrentTools(context.messages);
+        const tools = options.toolChoice === 'none' ? [] : getCurrentTools(context.messages);
         const byName = new Map(tools.map(tool => [tool.name, tool]));
         if (byName.size !== tools.length || tools.some(tool => !('type' in tool.parameters) || tool.parameters.type !== 'object')) fail('Unsupported Pi tool declarations.');
         const systemPrompt = getCurrentSystemPrompt(context.messages);
         // SDK adds process markers after startup; explicit overrides define the live query's configuration.
-        const config = JSON.stringify({ sessionId: options.sessionId, model: model.id, systemPrompt, tools, env: options.env, maxTokens: options.maxTokens });
+        const config = hash(JSON.stringify({ cwd, sessionId: options.sessionId, systemPrompt, tools, env: options.env, maxTokens }));
         const conversation = context.messages.filter(message => message.role !== 'system');
-        const projected = conversation.map(project);
-        if (configuration !== undefined && configuration !== config) fail('SDK model, prompt, tools, or environment changed. Start a new Pi session.');
+        const projected = conversation.map(message => hash(project(message)));
+        if (configuration !== undefined && configuration !== config) fail('SDK prompt, tools, environment, or output limit changed. Start a new Pi session.');
         if (!prefix.every((value, index) => projected[index] === value)) fail('SDK history changed or was compacted. Start a new Pi session.');
         const delta = conversation.slice(prefix.length);
-        let prompt: string | undefined;
+        let prompt: SDKUserMessage['message']['content'] | undefined;
         if (awaiting.length) {
           if (delta.length !== awaiting.length || delta.some(message => message.role !== 'toolResult') ||
             new Set(delta.map(message => message.role === 'toolResult' ? message.toolCallId : '')).size !== awaiting.length) {
@@ -142,12 +190,13 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
             if (result.role !== 'toolResult' || !awaiting.includes(result.toolCallId) || calls.get(result.toolCallId)?.name !== result.toolName) {
               fail('Pi tool result does not match an outstanding SDK call.');
             }
-            textOnly(result.content);
+            contentBlocks(result.content);
           }
         } else {
           if (delta.length !== 1 || delta[0].role !== 'user') fail('This provider requires a fresh session or one new user message in its known live history.');
-          prompt = textOnly(delta[0].content);
-          if (prompt.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
+          prompt = userContent(delta[0].content);
+          const text = typeof prompt === 'string' ? prompt : prompt.filter(block => block.type === 'text').map(block => block.text).join('');
+          if (text.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
         }
         const payload = { model: model.id, prompt, toolResults: prompt === undefined ? delta : undefined, systemPrompt, tools };
         const inspection = structuredClone(payload);
@@ -158,7 +207,11 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
         options.signal?.addEventListener('abort', close, { once: true });
         cancelListener = () => options.signal?.removeEventListener('abort', close);
         timer = setTimeout(() => { stopped.reject(new BridgeError('Claude SDK request timed out. Start a new Pi session.')); close(); }, options.timeoutMs ?? 120000);
+        completed = false;
         if (!run) {
+          for (const message of conversation) if (message.role === 'assistant') {
+            for (const block of message.content) if (block.type === 'toolCall') issued.add(block.id);
+          }
           const server = createSdkMcpServer({ name: 'pi', tools: [], alwaysLoad: true });
           // Preserve Pi's JSON schemas verbatim; Pi validates before executing.
           server.instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(tool => ({
@@ -183,23 +236,32 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
             } catch { close(); return stoppedTool(); }
           });
           run = createQuery({ prompt: input(), options: {
-            cwd, model: model.id, systemPrompt, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(options.maxTokens ?? 4096) },
-            tools: [], mcpServers: { pi: server }, settingSources: [], strictMcpConfig: true,
-            settings: { disableAllHooks: true, autoMemoryEnabled: false },
-            thinking: { type: 'disabled' }, includePartialMessages: true, persistSession: false,
+            cwd, model: model.id, systemPrompt, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens) },
+            tools: [], mcpServers: tools.length ? { pi: server } : undefined, settingSources: [], strictMcpConfig: true,
+            settings: { disableAllHooks: true, autoMemoryEnabled: false, autoCompactEnabled: false, idleCompaction: false },
+            thinking: { type: enabled ? 'adaptive' : 'disabled' }, effort, includePartialMessages: true,
+            persistSession: state.persistSession ?? false, resume: saved?.sdkSessionId, resumeSessionAt: saved?.sdkMessageId,
             abortController: controller,
             canUseTool: async name => byName.has(name.replace(/^mcp__pi__/, '')) && name.startsWith('mcp__pi__')
               ? { behavior: 'allow' } : { behavior: 'deny', message: 'Tool is not exposed by Pi.' },
           } });
           configuration = config;
+          activeModel = model.id;
+          activeEffort = effort;
+          thinkingEnabled = enabled;
+        } else {
+          if (activeModel !== model.id) { await run.setModel(model.id); activeModel = model.id; }
+          if (thinkingEnabled !== enabled) { await run.setMaxThinkingTokens(enabled ? 1 : 0); thinkingEnabled = enabled; }
+          if (activeEffort !== effort) { await run.applyFlagSettings({ effortLevel: effort }); activeEffort = effort; }
         }
+        options.signal?.throwIfAborted();
         if (prompt !== undefined) {
           prompts.push({ type: 'user', session_id: '', parent_tool_use_id: null, uuid: randomUUID(), message: { role: 'user', content: prompt } });
           wake?.();
         } else {
           for (const result of delta) {
             if (result.role === 'toolResult') calls.get(result.toolCallId)!.task.resolve({
-              content: result.content as CallToolResult['content'], isError: result.isError,
+              content: contentBlocks(result.content), isError: result.isError,
             });
           }
           awaiting = [];
@@ -219,12 +281,14 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
           options.signal?.throwIfAborted();
           if (closed) fail('Claude SDK session closed. Start a new Pi session.');
           if (event.type === 'system' && event.subtype === 'init') {
+            sdkSessionId = event.session_id;
             if (event.apiKeySource !== 'none') fail('SDK resolved API-key authentication instead of local Claude login.');
             if (!isDeepStrictEqual([...event.tools].sort(), tools.map(tool => `mcp__pi__${tool.name}`).sort())) fail('SDK exposed tools outside Pi.');
           }
           if (event.type === 'system' && (event.subtype === 'compact_boundary' || event.subtype === 'status' && event.status === 'compacting') ||
             event.type === 'conversation_reset') fail('SDK context management changed its history. Start a new Pi session.');
           if (event.type === 'assistant' && event.error) fail(`Claude SDK reported ${event.error}. Check Claude Code login and start a new session.`);
+          if (event.type === 'assistant' && !event.parent_tool_use_id) sdkMessageId = event.uuid;
           if (event.type === 'stream_event') {
             if (event.parent_tool_use_id) fail('SDK subagent messages are unsupported.');
             const raw = event.event;
@@ -326,11 +390,12 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
             output.usage = totals;
             if (event.subtype !== 'success' || event.is_error) fail('Claude SDK turn failed. Check Claude Code and start a new Pi session.');
             output.stopReason = event.stop_reason === 'max_tokens' ? 'length' : 'stop';
+            completed = true;
             cancelListener?.(); cancelListener = undefined;
             break;
           }
         }
-        prefix = [...projected, project(output)];
+        prefix = [...projected, hash(project(output))];
         for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens'] as const) reported[key] += output.usage[key];
         reported.cost.total += output.usage.cost.total;
         stream.push({ type: 'done', reason: output.stopReason as 'stop' | 'length' | 'toolUse', message: output });
@@ -349,5 +414,8 @@ export function createBridge(cwd: string, createQuery: typeof query = query) {
     })();
     return stream;
   }
-  return { streamSimple, close };
+  return { streamSimple, close, checkpoint: () => {
+    if (!state.persistSession || closed || !completed || !sdkSessionId || !sdkMessageId || !configuration) return undefined;
+    return { version: 1 as const, sdkSessionId, sdkMessageId, configuration, prefix: [...prefix], reported: structuredClone(reported) };
+  } };
 }
