@@ -814,7 +814,17 @@ function renderConversation(state) {
       heading.append(label);
     }
     const statusLabel = el('span', status, 'tool-status');
-    statusLabel.hidden = status === 'done';
+    const durationMs = result?.durationMs ?? live?.durationMs;
+    const timed = ['done', 'error'].includes(status) && Number.isFinite(durationMs) && durationMs >= 0;
+    if (timed) {
+      const seconds = Math.round(durationMs / 1000);
+      const elapsed = durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
+        : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      statusLabel.textContent = status === 'error' ? `error · ${elapsed}` : elapsed;
+      statusLabel.title = `Execution time: ${durationMs} ms`;
+      statusLabel.setAttribute('aria-label', `${status === 'error' ? 'error, ' : ''}Execution time: ${elapsed}`);
+    }
+    statusLabel.hidden = status === 'done' && !timed;
     heading.append(statusLabel); summary.append(heading);
     const output = displayPaths(result?.text || live?.text || '');
     detail.append(summary);

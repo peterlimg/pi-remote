@@ -239,7 +239,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-context { display: inline-flex; color: var(--accent); overflow: hidden; white-space: nowrap; min-width: 0; }
 .tool-directory { overflow: hidden; text-overflow: ellipsis; }
 .tool-target { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.tool-status { margin-left: auto; font-size: 12px; flex-shrink: 0; }
+.tool-status { margin-left: auto; font-size: 12px; flex-shrink: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tool[data-status=error] summary, .tool[data-status=error] summary strong { color: var(--error); }
 .tool pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--mono); padding: 12px; margin: 0; }
 .tool-input { border-bottom: 1px solid var(--line); }

@@ -75,7 +75,8 @@ export function cleanMessage(message, key) {
   return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
     ...(images.size ? { images: [...images.values()] } : {}),
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
-    isError: !!message.isError, timestamp: message.timestamp };
+    isError: !!message.isError, timestamp: message.timestamp,
+    durationMs: Number.isFinite(message.durationMs) && message.durationMs >= 0 ? message.durationMs : undefined };
 }
 function readBranch(file) {
   const info = statSync(file);

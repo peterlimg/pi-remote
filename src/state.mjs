@@ -52,7 +52,7 @@ export function applyEvent(state, event) {
   }
   if (event.type.startsWith('tool_execution_')) {
     const tool = { id: event.toolCallId, name: event.toolName, status: event.type === 'tool_execution_end' ? (event.isError ? 'error' : 'done') : 'working',
-      text: textContent((event.result || event.partialResult)?.content).slice(0, 12000) };
+      text: textContent((event.result || event.partialResult)?.content).slice(0, 12000), durationMs: event.durationMs };
     const index = state.tools.findIndex(x => x.id === tool.id);
     if (index < 0) state.tools.push(tool); else state.tools[index] = tool;
     state.tools = state.tools.slice(-20);
