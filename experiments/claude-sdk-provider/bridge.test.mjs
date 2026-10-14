@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { createModels } from '@earendil-works/pi-ai';
+import { discoverAndLoadExtensions } from './node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
@@ -318,6 +323,23 @@ test('Pi native auth cancellation is normalized without starting an SDK query', 
   const ordinary = { ...setupError, stopReason: 'error', errorMessage: 'real failure' };
   assert.equal(handler?.({ message: ordinary }, { signal: new AbortController().signal }), undefined);
   assert.equal(handler?.({ message: { ...ordinary, provider: 'another' } }, { signal: controller.signal }), undefined);
+});
+
+test('Pi loads the package without local copies of host-provided dependencies', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'pi-sdk-package-load-'));
+  try {
+    for (const file of ['index.ts', 'bridge.ts', 'package.json']) copyFileSync(new URL(file, import.meta.url), join(scratch, file));
+    for (const dependency of ['@anthropic-ai/claude-agent-sdk', '@modelcontextprotocol/sdk', 'zod']) {
+      const link = join(scratch, 'node_modules', dependency);
+      mkdirSync(dirname(link), { recursive: true });
+      symlinkSync(fileURLToPath(new URL(`./node_modules/${dependency}`, import.meta.url)), link, 'dir');
+    }
+    const loaded = await discoverAndLoadExtensions([join(scratch, 'index.ts')], scratch, join(scratch, 'agent'));
+    assert.deepEqual(loaded.errors, []);
+    const provider = loaded.runtime.pendingNativeProviderRegistrations.find(p => p.provider.id === 'claude-sdk')?.provider;
+    assert(provider);
+    assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-opus-5-5']);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test('extension registers native ambient auth without a fake key and closes on lifecycle changes', () => {

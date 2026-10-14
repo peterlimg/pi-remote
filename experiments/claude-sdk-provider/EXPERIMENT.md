@@ -15,7 +15,7 @@ Pi or Pi Remote
 
 ## Opus 5.5 verification
 
-The same bridge passed with `claude-opus-5-5`: 20 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
+The same bridge passed with `claude-opus-5-5`: 21 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
 
 These checks use isolated configuration and synthetic tools. They do not prove a production installation or real-phone behavior.
 
@@ -92,6 +92,7 @@ Authentication discovery runs `claude auth status --json`, checks `loggedIn`, `c
 After installing the dependencies, run this from `experiments/claude-sdk-provider` in the checkout your local Pi Remote host uses:
 
 ```sh
+npm ci --ignore-scripts --omit=dev
 pi install "$PWD"
 ```
 
@@ -101,7 +102,7 @@ Keep reasoning off and use text only. Selectable reasoning modes are unsupported
 
 ## Implementation boundaries
 
-- `index.ts` registers experimental, text-only Haiku and Opus models through Pi's native provider API. Both use the same bridge and authentication checks. Catalogue prices come from Pi. No picker changes or browser credentials.
+- `index.ts` registers experimental, text-only Haiku and Opus models through Pi's native provider API. Both use the same bridge and authentication checks. Catalogue prices come from Pi's host-mapped `providers/all` entry point, without local copies of Pi's packages. An offline regression loads the package with only its runtime dependencies. No picker changes or browser credentials.
 - `bridge.ts` keeps one live SDK query per Pi session. Its MCP server advertises Pi's JSON schemas unchanged. Handlers wait for Pi results and never execute tools.
 - SDK built-in tools, implicit MCP servers, hooks, auto-memory, project settings, and SDK session persistence are disabled.
 - The provider checks the entire known conversation prefix and model, system prompt, tools, and explicit environment configuration. A mismatch closes the query rather than replaying tools or silently losing history.
