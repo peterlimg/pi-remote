@@ -57,6 +57,25 @@
     "piEstimatedCostBeforeAbortUsd": 0.022435999999999998,
     "sdkEstimatedCostBeforeAbortUsd": 0.022435999999999998
   },
+  "productionInstallation": {
+    "pass": true,
+    "verifiedCodeCommit": "8fecba1",
+    "pi": "1.2.0",
+    "source": "installed checkout",
+    "transport": "configured opentunnel",
+    "browser": "mobile Chromium",
+    "normalPiResources": true,
+    "model": "claude-sdk/claude-opus-5-5",
+    "servedAssetsMatch": true,
+    "realReadCalls": 1,
+    "piToolResultCorrelated": true,
+    "followUpMemory": true,
+    "reloadPreservedConversation": true,
+    "hostRestarted": false,
+    "defaultModelUnchanged": true,
+    "otherSettingsUnchanged": true,
+    "scope": "New scratch project, synthetic file and prompts. No shared production tokens or conversation snapshots. Existing conversations were not edited."
+  },
   "limits": [
     "Mobile Chromium emulation, not a real phone or Safari.",
     "No arbitrary replay, restart, compaction, forks, images or cross-provider history.",

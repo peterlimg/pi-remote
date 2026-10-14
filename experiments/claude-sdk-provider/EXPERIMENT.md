@@ -17,7 +17,13 @@ Pi or Pi Remote
 
 The same bridge passed with `claude-opus-5-5`: 22 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
 
-These checks use isolated configuration and synthetic tools. They do not prove a production installation or real-phone behavior.
+These checks use isolated configuration and synthetic tools. They do not prove real-phone behavior.
+
+## Installed host and opentunnel
+
+The installed checkout was separately verified through the configured opentunnel connection with normal Pi resources and Pi 1.2.0. A fresh mobile Chromium session selected SDK Opus, read a test file through Pi's real `read` tool, returned its random marker, and recalled it on the next turn without another tool call. Reloading and reselecting the session preserved its conversation and model. The shared host stayed running; existing conversations and the default model were not changed. No production login links, tokens, or conversation snapshots were saved in shared artifacts. See the `productionInstallation` entry in [Opus results](verification-opus.json).
+
+Only the test file in the newly created scratch project was read. Real project writes, shell effects, and Safari remain unchecked. Use a fresh session for your own tests.
 
 ## Initial Haiku checks
 
