@@ -735,6 +735,11 @@ function appendThreadVideos(parent, message, attachments, keep) {
     parent.append(video.node);
   }
 }
+function formatToolDuration(durationMs) {
+  const seconds = Math.round(durationMs / 1000);
+  return durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
+    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 function renderConversation(state) {
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd);
@@ -776,6 +781,8 @@ function renderConversation(state) {
     if (rendered.has(id)) return;
     rendered.add(id);
     const live = tools.get(id), status = result ? (result.isError ? 'error' : 'done') : live?.status || 'pending';
+    const durationMs = result?.durationMs ?? live?.durationMs;
+    const timed = ['done', 'error'].includes(status) && Number.isFinite(durationMs) && durationMs >= 0;
     const detail = el('details', undefined, 'tool');
     detail.dataset.toolId = id; detail.dataset.status = status;
     detail.dataset.disclosureId = 'tool:' + id;
@@ -788,7 +795,7 @@ function renderConversation(state) {
       node.append(summary); fragment.append(node);
       activity = { node, summary, tools: [] }; activityGroups.push(activity);
     }
-    const entry = { name: toolName, status }; activity.tools.push(entry);
+    const entry = { name: toolName, status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp }; activity.tools.push(entry);
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
     let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
@@ -814,12 +821,8 @@ function renderConversation(state) {
       heading.append(label);
     }
     const statusLabel = el('span', status, 'tool-status');
-    const durationMs = result?.durationMs ?? live?.durationMs;
-    const timed = ['done', 'error'].includes(status) && Number.isFinite(durationMs) && durationMs >= 0;
     if (timed) {
-      const seconds = Math.round(durationMs / 1000);
-      const elapsed = durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
-        : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      const elapsed = formatToolDuration(durationMs);
       statusLabel.textContent = status === 'error' ? `error · ${elapsed}` : elapsed;
       statusLabel.title = `Execution time: ${durationMs} ms`;
       statusLabel.setAttribute('aria-label', `${status === 'error' ? 'error, ' : ''}Execution time: ${elapsed}`);
@@ -920,6 +923,20 @@ function renderConversation(state) {
       const text = el('span', undefined, 'tool-activity-text'), line = el('span', running.line, 'tool-activity-line');
       line.title = running.line; text.append(label, line); group.summary.append(text);
     } else group.summary.append(label);
+    let elapsed;
+    if (group.tools.every(tool => Number.isFinite(tool.durationMs))) {
+      if (group.tools.length === 1) elapsed = group.tools[0].durationMs;
+      else if (group.tools.every(tool => Number.isFinite(tool.timestamp))) {
+        // Parallel tools overlap, so use their execution span rather than adding durations.
+        elapsed = Math.max(...group.tools.map(tool => tool.timestamp))
+          - Math.min(...group.tools.map(tool => tool.timestamp - tool.durationMs));
+      }
+    }
+    if (Number.isFinite(elapsed)) {
+      const time = el('span', formatToolDuration(elapsed), 'tool-activity-time');
+      time.setAttribute('aria-label', 'Elapsed time: ' + time.textContent);
+      time.title = `Elapsed time: ${elapsed} ms`; group.summary.append(time);
+    }
     for (const [status, text] of [['pending', 'pending']]) {
       const count = group.tools.filter(tool => tool.status === status).length;
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));

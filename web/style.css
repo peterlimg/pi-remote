@@ -232,6 +232,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-activity-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--mono); }
 .extension-prompt { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-activity-pending { flex-shrink: 0; font-size: 12px; }
+.tool-activity-time { margin-left: auto; flex-shrink: 0; white-space: nowrap; font: 12px var(--mono); font-variant-numeric: tabular-nums; }
 .tool { font-size: 13px; color: var(--muted); background: var(--panel); margin-bottom: 8px; }
 .tool summary { min-height: 44px; padding: 12px; }
 .tool-heading { display: inline-flex; align-items: baseline; gap: 8px; width: calc(100% - 1.5em); vertical-align: top; }
