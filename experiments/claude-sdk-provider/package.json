@@ -10,7 +10,8 @@
     "test:correlation": "node correlation.mjs",
     "test:live": "node --experimental-strip-types live.mjs",
     "test:common": "node --experimental-strip-types common.mjs",
-    "test:remote": "node remote.mjs"
+    "test:remote": "node remote.mjs",
+    "test:steering": "node steering.mjs"
   },
   "pi": { "extensions": ["./index.ts"] },
   "dependencies": {

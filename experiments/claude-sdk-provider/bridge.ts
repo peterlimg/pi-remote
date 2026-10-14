@@ -48,10 +48,13 @@ function contentBlocks(content: string | Message['content']): CallToolResult['co
   });
 }
 function userContent(content: string | Message['content']): SDKUserMessage['message']['content'] {
-  return contentBlocks(content).map(block => block.type === 'text' ? { type: 'text', text: block.text }
+  const blocks: SDKUserMessage['message']['content'] = contentBlocks(content).map(block => block.type === 'text' ? { type: 'text', text: block.text }
     : block.type === 'image' ? { type: 'image', source: { type: 'base64', data: block.data,
       media_type: block.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' } }
     : fail('Unsupported Claude SDK input block.'));
+  const text = blocks.filter(block => block.type === 'text').map(block => block.text).join('');
+  if (text.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
+  return blocks;
 }
 
 export function sdkEnvironment(overrides: Record<string, string> = {}) {
@@ -96,6 +99,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
   const issued = new Set<string>();
   const unqualified = new Set<string>();
   const prompts: SDKUserMessage[] = [];
+  const pendingInputs = new Set<string>();
   const helpers = new Set<{ close(): void }>();
   let wake: (() => void) | undefined;
   let reported = saved?.reported ?? zeroUsage();
@@ -119,6 +123,13 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
       if (prompt) yield prompt;
       else await new Promise<void>(resolve => { wake = resolve; });
     }
+  }
+  function send(content: SDKUserMessage['message']['content']) {
+    const uuid = randomUUID();
+    prompts.push({ type: 'user', session_id: '', parent_tool_use_id: null, uuid,
+      client_composed: true, message: { role: 'user', content } });
+    wake?.();
+    return uuid;
   }
   function remember(id: string, name: string, args: Record<string, unknown>) {
     const previous = calls.get(id);
@@ -184,12 +195,17 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
         if (!prefix.every((value, index) => projected[index] === value)) fail('SDK history changed or was compacted. Start a new Pi session.');
         const delta = conversation.slice(prefix.length);
         let prompt: SDKUserMessage['message']['content'] | undefined;
+        let results: Message[] = [];
+        let instructions: Message[] = [];
         if (awaiting.length) {
-          if (delta.length !== awaiting.length || delta.some(message => message.role !== 'toolResult') ||
-            new Set(delta.map(message => message.role === 'toolResult' ? message.toolCallId : '')).size !== awaiting.length) {
+          results = delta.slice(0, awaiting.length);
+          instructions = delta.slice(awaiting.length);
+          if (results.length !== awaiting.length || results.some(message => message.role !== 'toolResult') ||
+            instructions.some(message => message.role !== 'user') ||
+            new Set(results.map(message => message.role === 'toolResult' ? message.toolCallId : '')).size !== awaiting.length) {
             fail('Expected exactly one Pi result for every SDK tool call.');
           }
-          for (const result of delta) {
+          for (const result of results) {
             if (result.role !== 'toolResult' || !awaiting.includes(result.toolCallId) || calls.get(result.toolCallId)?.name !== result.toolName) {
               fail('Pi tool result does not match an outstanding SDK call.');
             }
@@ -198,10 +214,8 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
         } else {
           if (delta.length !== 1 || delta[0].role !== 'user') fail('This provider requires a fresh session or one new user message in its known live history.');
           prompt = userContent(delta[0].content);
-          const text = typeof prompt === 'string' ? prompt : prompt.filter(block => block.type === 'text').map(block => block.text).join('');
-          if (text.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
         }
-        const payload = { model: model.id, prompt, toolResults: prompt === undefined ? delta : undefined, systemPrompt: sdkSystemPrompt, tools };
+        const payload = { model: model.id, prompt, toolResults: prompt === undefined ? results : undefined, instructions: instructions.map(message => userContent(message.content)), systemPrompt: sdkSystemPrompt, tools };
         const inspection = structuredClone(payload);
         const replacement = await options.onPayload?.(inspection, model);
         if (!isDeepStrictEqual(payload, inspection) || replacement !== undefined && !isDeepStrictEqual(payload, replacement)) fail('Replacing SDK request payloads is unsupported.');
@@ -258,11 +272,10 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
           if (activeEffort !== effort) { await run.applyFlagSettings({ effortLevel: effort }); activeEffort = effort; }
         }
         options.signal?.throwIfAborted();
-        if (prompt !== undefined) {
-          prompts.push({ type: 'user', session_id: '', parent_tool_use_id: null, uuid: randomUUID(), message: { role: 'user', content: prompt } });
-          wake?.();
-        } else {
-          for (const result of delta) {
+        if (prompt !== undefined) send(prompt);
+        else {
+          for (const content of payload.instructions) pendingInputs.add(send(content));
+          for (const result of results) {
             if (result.role === 'toolResult') calls.get(result.toolCallId)!.task.resolve({
               content: contentBlocks(result.content), isError: result.isError,
             });
@@ -415,6 +428,8 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
             totals.cost.total = event.total_cost_usd - reported.cost.total;
             output.usage = totals;
             if (event.subtype !== 'success' || event.is_error) fail('Claude SDK turn failed. Check Claude Code and start a new Pi session.');
+            for (const uuid of event.user_message_uuids ?? (event.user_message_uuid ? [event.user_message_uuid] : [])) pendingInputs.delete(uuid);
+            if (pendingInputs.size) continue;
             output.stopReason = event.stop_reason === 'max_tokens' ? 'length' : 'stop';
             completed = true;
             cancelListener?.(); cancelListener = undefined;

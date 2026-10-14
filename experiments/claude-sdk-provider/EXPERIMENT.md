@@ -25,10 +25,19 @@ The expanded provider passed strict TypeScript checking and 30 offline tests. Li
 | Response limits | The default SDK response cap is now 16,000 tokens, not 4,096. Explicit caps are checked against Pi's model metadata, currently 128,000. The live title helper used 120. Full 128,000-token generation was not tested. The cap remains fixed within a query. |
 | Session titles and helpers | Calls without a Pi session ID use separate, ephemeral SDK queries with no tools. They receive the requested system prompt and transcript as JSON data. They cannot execute tools or alter the foreground query. This is helper input, not history replay. |
 | Restart and resume | Newly saved sessions record the SDK session and message IDs, conversation/configuration fingerprints, and reported usage after a completed turn. A new worker resumes that SDK checkpoint only when Pi's history and configuration match. No tool replay or Pi-to-SDK history reconstruction. |
+| Mid-turn input | Pi-accepted instructions go directly to the live SDK input at Pi's tool boundary, alongside the original, ID-matched tool results. The SDK/model can fold or queue them; the bridge does not force an interrupt or restart. Already-running Pi tools are not automatically cancelled. |
 
 Saved conversations now also create SDK transcripts under Claude Code's session storage, normally `~/.claude/projects/`. Pi checkpoint entries contain hashes and IDs, not extra conversation bodies or credentials. Ephemeral Pi sessions and helper requests disable SDK persistence. Deleting a Pi session does not delete its SDK copy; Claude Code's own retention applies.
 
 Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
+
+## Mid-turn input fix
+
+A second reported failure had the expected Pi tool result followed by a new user instruction. The bridge incorrectly required that the entire delta contain only tool results and closed the query. It now validates the original results separately and forwards the accepted user messages through SDK asynchronous input without replaying tools. Input UUIDs must be consumed before a final Pi response settles, including when the SDK queues them for a later turn. Pi's normal input processing, tool validation, and permission controls remain in place. SDK messages use literal Pi-composed content rather than Claude Code's file-mention or slash-command expansion.
+
+The exact error was reproduced through a real Pi 1.2 RPC worker, SDK Opus Medium, local host, and mobile Chromium. A phone message arrived while a synthetic tool was waiting. After the fix, the model followed the new instruction, both tool results retained their IDs, browser reload preserved the conversation, and a follow-up used the same SDK session without repeating tools. Pi and SDK cumulative usage matched. The fixture closed its own worker and host. No unit tests were added or run for this fix. See [mid-turn E2E results](verification-steering.json).
+
+Run this focused live check with `npm run test:steering` after installing the browser dependencies described below. It consumes Claude plan usage. A query already closed by the old failure cannot be revived; start a fresh worker to load this fix.
 
 ## Tool-name retry fix
 
@@ -150,7 +159,7 @@ Pi 1.1.0's lazy authentication wrapper turns an already-aborted request into a g
 
 ## Remaining history limits
 
-Resume is limited to this provider's newly recorded, completed SDK checkpoints with matching Pi history and configuration. Arbitrary or pre-upgrade histories, compaction, forks, tree navigation, cross-provider history, nested tool-enabled model requests, steering during tool batches, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; start a new Pi session afterward. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
+Resume is limited to this provider's newly recorded, completed SDK checkpoints with matching Pi history and configuration. Arbitrary or pre-upgrade histories, compaction, forks, tree navigation, cross-provider history, nested tool-enabled model requests, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; start a new Pi session afterward. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
 
 The tool-ID metadata is a verified behavior of the pinned SDK, not an established public API guarantee. A later invalid handler closes the session, but a preceding Pi-approved batch may already have executed. Cancellation does not undo completed tools or forcibly stop a tool that ignores Pi's abort signal. Settlement timings above measure Pi completion, not OS child-process exit time.
 
