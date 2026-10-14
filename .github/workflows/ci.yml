@@ -46,3 +46,16 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm install --no-save @earendil-works/pi-coding-agent@0.85.1
       - run: node test/pi-smoke.mjs
+  claude-sdk-provider:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/claude-sdk-provider
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test

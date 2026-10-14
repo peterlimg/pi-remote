@@ -2,7 +2,7 @@
 
 Checked October 13, 2026 against Anthropic's live documentation, installed Pi 1.1.0, and this repository.
 
-For the SDK interfaces, ownership diagram, and Pi provider design, see the [integration blueprint](claude-agent-sdk-integration.md).
+For the SDK interfaces, ownership diagram, and Pi provider design, see the [integration guide](claude-agent-sdk-integration.md). An October 14 [opt-in registered provider](../../experiments/claude-sdk-provider/EXPERIMENT.md) adds parallel-call correlation, streaming, usage accounting, and real RPC/mobile verification. The original October 13 results below remain scoped to their earlier single-call experiment.
 
 ## What changed
 
@@ -80,14 +80,14 @@ The SDK supports custom MCP tools through `createSdkMcpServer()`, permission cal
 
 ### Require an SDK entry in `/model`
 
-A custom provider registered through `pi.registerProvider()` is the right Pi entry point. The live experiment below proved a single-tool handoff through Pi's actual agent loop, including Pi permission denial and cooperative cancellation. That makes the adapter technically plausible without replacing Pi's tools.
+A custom provider registered through `pi.registerProvider()` is the right Pi entry point. The original live experiment below proved a single-tool handoff through Pi's actual agent loop. The [registered prototype](../../experiments/claude-sdk-provider/EXPERIMENT.md) extends that to identical parallel calls, normal Pi permission hooks, streaming, cumulative usage, cancellation, and real RPC/mobile model selection. It remains restricted to fresh text sessions.
 
 Remaining requirements:
 
 1. Prove Pi history can be restored after restart, branch changes, compaction, and switching away from and back to this provider. An SDK session ID alone is not sufficient.
-2. Extend the single-call bridge to parallel tools, concurrent sessions, and recovery without duplicate execution.
-3. Map partial text, thinking, images, usage, failures, and request instrumentation to Pi's stream contract. Account for the SDK's own retries and compaction.
-4. Verify authentication in terminal and RPC workers without exposing credentials to the mobile browser.
+2. Verify concurrent sessions and recovery without duplicate execution. Identical parallel calls now pass, but their SDK metadata is not a public compatibility guarantee.
+3. Extend the tested partial text, thinking-frame, usage, cancellation, and error mapping to images, selectable reasoning, and SDK context management. HTTP response details are not exposed by the SDK.
+4. Verify interactive terminal controls and the terminal-extension bridge path. CLI and real RPC/mobile discovery, authentication, permissions, and Stop now pass without browser credential delivery.
 
 Do not assume `maxTurns: 1` turns the SDK into a stateless completion API. The [TypeScript reference](https://code.claude.com/docs/en/agent-sdk/typescript) defines it as a limit on agentic turns, not an external tool-execution contract.
 
@@ -99,7 +99,7 @@ A correctly registered Pi provider should need no model-picker redesign:
 - `src/rpc.mjs` uses `get_available_models` and `set_model` for host-owned workers.
 - `src/commands.mjs` passes through provider, model ID, and display name without a provider allowlist.
 
-Authentication remains on the local host. Mobile model discovery and selection would still need verification in both bridge and RPC modes.
+Authentication remains on the local host. The October 14 prototype verifies mobile model discovery and selection in a real RPC worker. The terminal-extension bridge mode and real-phone delivery still need verification.
 
 ## Live experiment results
 

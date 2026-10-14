@@ -1,6 +1,6 @@
 # Integrating the Claude Agent SDK as a Pi model
 
-This is an implementation blueprint, not an installed provider. It targets the original goal: selecting Claude SDK access in Pi's `/model` while keeping Pi's tools and extensions. It differs from Amp's separate-agent mode.
+This guide covers selecting Claude SDK access in Pi's `/model` while keeping Pi's tools and extensions. It differs from Amp's separate-agent mode. A [runnable opt-in prototype](../../experiments/claude-sdk-provider/EXPERIMENT.md) now verifies the restricted fresh-session path; it is not installed in the normal Pi configuration.
 
 Checked against `@anthropic-ai/claude-agent-sdk` 0.3.296, its shipped `sdk.d.ts`, and installed Pi 1.1.0. See [research and live evidence](claude-agent-sdk.md) for policy, experiments, and limitations.
 
@@ -44,7 +44,7 @@ The provider must not execute the tool in its MCP handler and then also emit a P
 | `interrupt()` | Interrupt streaming-input execution; queued inputs may remain, so it is not a sufficient hard-stop operation by itself |
 | `close()` and `abortController` | Terminate the SDK query and cooperate with cancellation in host work |
 
-`tool()` accepts a Zod raw shape; Pi declares tools with TypeBox/JSON Schema. A general adapter needs a checked schema conversion or an MCP server that preserves the original JSON Schema. Do not replace validation with an unrestricted `any` schema. The existing experiment uses one explicit schema and does not solve arbitrary conversion.
+`tool()` accepts a Zod raw shape; Pi declares tools with TypeBox/JSON Schema. A general adapter needs a checked schema conversion or an MCP server that preserves the original JSON Schema. Do not replace validation with an unrestricted `any` schema. The earlier single-call experiment uses one explicit schema. The registered prototype instead advertises Pi's original JSON schemas through the SDK MCP server's public list/call handlers; Pi remains the argument validator.
 
 ## Smallest SDK-facing example
 
@@ -127,11 +127,11 @@ streamSimple(model, transcript, options)
     suppress late content; emit one aborted terminal Pi event
 ```
 
-Real implementation must handle a complete assistant tool-call batch, not just stop on its first tool block. Multiple same-name calls with identical arguments require reliable correlation to their SDK and Pi call IDs. The shipped MCP handler's `extra` argument is typed `unknown`; do not assume it contains a documented Anthropic tool-use ID. The single-call experiment avoids that unresolved mapping problem.
+Real implementation must handle a complete assistant tool-call batch, not just stop on its first tool block. Multiple same-name calls with identical arguments require reliable correlation to their SDK and Pi call IDs. The shipped MCP handler's `extra` argument is typed `unknown`; do not assume it contains a documented Anthropic tool-use ID. The earlier single-call experiment avoided that mapping problem.
 
-[Static inspection of Amp's shipped adapter](amp-sdk-static-analysis.md) found that it reads `extra._meta["claudecode/toolUseId"]` and rejects calls without a string ID. This gives us a concrete candidate to test with the pinned SDK, including parallel identical calls. It is not yet a verified Pi mapping or an established public SDK contract.
+[Static inspection of Amp's shipped adapter](amp-sdk-static-analysis.md) found that it reads `extra._meta["claudecode/toolUseId"]` and rejects calls without a string ID. The October 14 [correlation test and registered prototype](../../experiments/claude-sdk-provider/EXPERIMENT.md) verified this metadata with the pinned SDK, including identical parallel calls and reverse-order results. It remains an implementation behavior, not an established public SDK contract. Unannotated MCP handlers can be scheduled serially, so the bridge cannot wait for every handler before returning a complete batch to Pi.
 
-A streaming-input query can span user turns. A `result` then ends the current run, not necessarily the lifetime of the input generator. The earlier experiment used string input and one live query; persistent streaming input is documented but not verified by that experiment.
+A streaming-input query can span user turns. A `result` then ends the current run, not necessarily the lifetime of the input generator. The earlier experiment used string input and one live query; the registered prototype now verifies persistent input and a second user turn recovering a random marker.
 
 ## Extension and authentication boundary
 
@@ -148,15 +148,15 @@ Use `pi.registerProvider()` with a native provider and custom `streamSimple`. So
 
 For local subscription access, sign in using Claude's supported local login and let the SDK resolve it. No token copying into `models.json`, no fabricated API key to bypass model availability, and no browser credential delivery. The provider must explicitly model ambient SDK authentication and report unavailable/expired login instead of advertising unconditional availability. Startup/CLI inspection should not launch a long-lived agent just because the extension factory loaded.
 
-Pi Remote already discovers registered models via `ctx.modelRegistry.getAvailable()` in `extension/index.ts` and `get_available_models` in `src/rpc.mjs`. A correctly registered provider should appear without a picker redesign, but terminal and RPC authentication/discovery still need tests.
+Pi Remote already discovers registered models via `ctx.modelRegistry.getAvailable()` in `extension/index.ts` and `get_available_models` in `src/rpc.mjs`. The registered prototype passes CLI discovery and a real RPC/mobile model-picker proof without redesigning the picker. The terminal-extension bridge path remains unverified.
 
 ## First implementation scope
 
-Start with fresh SDK-backed Pi sessions, text input, one explicitly exposed tool at a time, normal Pi permission hooks, streaming, accurate usage, and hard cancellation. Fail clearly on unsupported resume, compaction, branch changes, or cross-provider history rather than flattening old messages into a new user prompt. Keep SDK context-management changes detectable so the two histories cannot silently diverge.
+The prototype supports fresh SDK-backed Pi sessions, text input, complete Pi tool batches, normal Pi permission hooks, streaming, cumulative usage, and hard cancellation. Fail clearly on unsupported resume, compaction, branch changes, or cross-provider history rather than flattening old messages into a new user prompt. Keep SDK context-management changes detectable so the two histories cannot silently diverge.
 
 Before calling this a normal `/model` provider, verify parallel-call correlation, SDK-to-Pi checkpoint mapping, process restart, cross-provider handoff, images, reasoning settings, malformed streams, and actual serialized errors. Provider request/response instrumentation also needs an honest mapping: the SDK does not expose every underlying HTTP detail available to Pi's direct HTTP providers. Do not fabricate response headers.
 
-Previously verified: local login without an API key, SDK streaming and native resume, and one real Pi tool call/denial/abort. Not verified here: a registered provider extension or the broader behavior above.
+The [prototype report](../../experiments/claude-sdk-provider/EXPERIMENT.md) distinguishes the newer registered-provider evidence from the earlier single-call experiment. Nineteen offline tests and live correlation, Pi permission, memory, usage, cancellation, CLI, and real RPC/mobile checks passed. General restoration, interactive terminal controls, images, concurrent sessions, and production delivery remain unverified.
 
 ## Primary references
 
