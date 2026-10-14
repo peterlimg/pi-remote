@@ -94,6 +94,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
   let awaiting: string[] = [];
   const calls = new Map<string, Pending>();
   const issued = new Set<string>();
+  const unqualified = new Set<string>();
   const prompts: SDKUserMessage[] = [];
   const helpers = new Set<{ close(): void }>();
   let wake: (() => void) | undefined;
@@ -150,6 +151,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
     if (busy) {
       output.stopReason = options.signal?.aborted ? 'aborted' : 'error';
       output.errorMessage = output.stopReason === 'aborted' ? 'Cancelled.' : 'Concurrent requests to one Claude SDK session are unsupported.';
+      if (output.stopReason === 'error') output.content = [{ type: 'text', text: output.errorMessage }];
       stream.push({ type: 'error', reason: output.stopReason, error: output });
       stream.end();
       return stream;
@@ -173,6 +175,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
         const byName = new Map(tools.map(tool => [tool.name, tool]));
         if (byName.size !== tools.length || tools.some(tool => !('type' in tool.parameters) || tool.parameters.type !== 'object')) fail('Unsupported Pi tool declarations.');
         const systemPrompt = getCurrentSystemPrompt(context.messages);
+        const sdkSystemPrompt = tools.length ? `${systemPrompt}\n\nSDK tool-call names: ${tools.map(tool => `mcp__pi__${tool.name}`).join(', ')}. Pi instructions use unqualified names; call the SDK names exactly. Bare names and Claude Code built-in tools are unavailable.` : systemPrompt;
         // SDK adds process markers after startup; explicit overrides define the live query's configuration.
         const config = hash(JSON.stringify({ cwd, sessionId: options.sessionId, systemPrompt, tools, env: options.env, maxTokens }));
         const conversation = context.messages.filter(message => message.role !== 'system');
@@ -198,7 +201,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
           const text = typeof prompt === 'string' ? prompt : prompt.filter(block => block.type === 'text').map(block => block.text).join('');
           if (text.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
         }
-        const payload = { model: model.id, prompt, toolResults: prompt === undefined ? delta : undefined, systemPrompt, tools };
+        const payload = { model: model.id, prompt, toolResults: prompt === undefined ? delta : undefined, systemPrompt: sdkSystemPrompt, tools };
         const inspection = structuredClone(payload);
         const replacement = await options.onPayload?.(inspection, model);
         if (!isDeepStrictEqual(payload, inspection) || replacement !== undefined && !isDeepStrictEqual(payload, replacement)) fail('Replacing SDK request payloads is unsupported.');
@@ -236,7 +239,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
             } catch { close(); return stoppedTool(); }
           });
           run = createQuery({ prompt: input(), options: {
-            cwd, model: model.id, systemPrompt, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens) },
+            cwd, model: model.id, systemPrompt: sdkSystemPrompt, env: { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens) },
             tools: [], mcpServers: tools.length ? { pi: server } : undefined, settingSources: [], strictMcpConfig: true,
             settings: { disableAllHooks: true, autoMemoryEnabled: false, autoCompactEnabled: false, idleCompaction: false },
             thinking: { type: enabled ? 'adaptive' : 'disabled' }, effort, includePartialMessages: true,
@@ -267,7 +270,8 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
           awaiting = [];
         }
         stream.push({ type: 'start', partial: output });
-        const blocks = new Map<number, { index: number; json: string; ended: boolean }>();
+        const blocks = new Map<number, { index: number; json: string; ended: boolean; internal?: boolean }>();
+        let unqualifiedAttempts = 0;
         let currentUsage: Record<string, unknown> = {};
         let reason: string | null = null;
         let messageOpen = false;
@@ -289,11 +293,18 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
             event.type === 'conversation_reset') fail('SDK context management changed its history. Start a new Pi session.');
           if (event.type === 'assistant' && event.error) fail(`Claude SDK reported ${event.error}. Check Claude Code login and start a new session.`);
           if (event.type === 'assistant' && !event.parent_tool_use_id) sdkMessageId = event.uuid;
+          if (event.type === 'user' && !event.parent_tool_use_id && Array.isArray(event.message.content)) {
+            for (const block of event.message.content) if (block.type === 'tool_result' && unqualified.has(block.tool_use_id)) {
+              if (block.is_error !== true) fail('SDK did not reject an unqualified tool call.');
+              unqualified.delete(block.tool_use_id);
+            }
+          }
           if (event.type === 'stream_event') {
             if (event.parent_tool_use_id) fail('SDK subagent messages are unsupported.');
             const raw = event.event;
             if (raw.type === 'message_start') {
               if (messageOpen) fail('Overlapping SDK model messages are unsupported.');
+              if (unqualified.size) fail('SDK did not reject an unqualified tool call.');
               messageOpen = true; blocks.clear(); reason = null;
               currentUsage = { ...raw.message.usage };
               output.usage = rawUsage(currentUsage, model);
@@ -309,7 +320,16 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
                 stream.push({ type: 'text_start', contentIndex: index, partial: output });
               } else if (block.type === 'tool_use') {
                 const name = block.name.replace(/^mcp__pi__/, '');
-                if (!block.name.startsWith('mcp__pi__') || !byName.has(name)) fail('SDK requested a tool outside Pi.');
+                if (!block.name.startsWith('mcp__pi__') || !byName.has(name)) {
+                  if (!byName.has(block.name)) fail('SDK requested a tool outside Pi.');
+                  if (!block.id || issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
+                  if (++unqualifiedAttempts > 3) fail('SDK repeatedly requested unqualified Pi tool names. Start a new Pi session.');
+                  issued.add(block.id);
+                  unqualified.add(block.id);
+                  // SDK rejects bare names internally; never dispatch them to Pi or stop its corrected retry.
+                  blocks.set(raw.index, { index, json: '', ended: false, internal: true });
+                  continue;
+                }
                 if (!block.input || typeof block.input !== 'object' || Array.isArray(block.input)) fail('Malformed SDK tool arguments.');
                 output.content.push({ type: 'toolCall', id: block.id, name, arguments: block.input as JsonObject });
                 stream.push({ type: 'toolcall_start', contentIndex: index, partial: output });
@@ -324,6 +344,11 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
             if (raw.type === 'content_block_delta' || raw.type === 'content_block_stop') {
               const state = blocks.get(raw.index);
               if (!state || state.ended) fail('Malformed SDK content stream.');
+              if (state.internal) {
+                if (raw.type === 'content_block_stop') state.ended = true;
+                else if (raw.delta.type !== 'input_json_delta') fail('Unsupported SDK content delta.');
+                continue;
+              }
               const block = output.content[state.index];
               if (raw.type === 'content_block_delta') {
                 if (raw.delta.type === 'text_delta' && block.type === 'text') {
@@ -375,6 +400,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
           }
           if (event.type === 'result') {
             if (messageOpen || awaiting.length) fail('SDK result arrived before completing its message.');
+            if (unqualified.size) fail('SDK did not reject an unqualified tool call.');
             const totals = zeroUsage();
             for (const usage of Object.values(event.modelUsage)) {
               totals.input += usage.inputTokens; totals.output += usage.outputTokens;
@@ -403,7 +429,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
         output.stopReason = options.signal?.aborted ? 'aborted' : 'error';
         output.errorMessage = output.stopReason === 'aborted' ? 'Cancelled.' : error instanceof BridgeError ? error.message :
           'Claude SDK request failed. Check Claude Code login and start a new Pi session.';
-        if (output.stopReason === 'aborted') output.content = [];
+        output.content = output.stopReason === 'aborted' ? [] : [{ type: 'text', text: output.errorMessage }];
         close();
         stream.push({ type: 'error', reason: output.stopReason, error: output });
       } finally {

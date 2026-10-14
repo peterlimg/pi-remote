@@ -30,6 +30,14 @@ Saved conversations now also create SDK transcripts under Claude Code's session 
 
 Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
 
+## Tool-name retry fix
+
+A reported turn stopped after two successful searches because the SDK emitted bare `bash`, received its own unknown-tool error, and then requested `mcp__pi__bash`. The bridge had already aborted at the bare name. The phone showed no explanation because the failed assistant message had only `errorMessage`, which Pi Remote does not render as conversation text.
+
+The SDK prompt now lists its exact MCP tool names. If it mistakenly uses an unqualified, declared Pi name, the bridge lets the SDK reject that unavailable name and retry. It never dispatches that attempt to Pi. A matching SDK error is required before the next model response; missing or successful results, undeclared names, duplicate IDs, and more than three unqualified attempts still fail closed. Sanitized failure text is now also emitted as visible message content. Pi remains the sole executor.
+
+The recorded failure was reproduced in a deterministic offline test before the fix. Strict checking and all 35 offline tests passed with Pi 1.2.0 dependencies. The mobile Chromium UI-contract test also preserved the visible error after reload. The already-closed reported query cannot be recovered; keep that conversation and retry in a fresh session. The full repository suite and Safari were not run.
+
 ## Initial Opus 5.5 verification
 
 The same bridge passed with `claude-opus-5-5`: 22 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).
@@ -64,7 +72,7 @@ The browser proof uses Chromium with Playwright's iPhone 13 profile. It is not a
 
 ## Run it
 
-Requirements: Node 22.19+, Pi 1.1.0, and a local first-party Claude login. SDK 0.3.296 bundles Claude Code 2.1.296. The separately installed `claude` command used for the authentication check was 2.1.299. No subscription tokens are copied into Pi, and no fake API key is supplied.
+Requirements: Node 22.19+, Pi 1.2.0 for the current development and live checks, and a local first-party Claude login. The package retains its `^1.1.0` compatibility range; earlier recorded checks used 1.1.0. SDK 0.3.296 bundles Claude Code 2.1.296. The separately installed `claude` command used for the authentication check was 2.1.299. No subscription tokens are copied into Pi, and no fake API key is supplied.
 
 ```sh
 cd experiments/claude-sdk-provider

@@ -13,6 +13,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
 import { createBridge, sdkEnvironment } from './bridge.ts';
 import extension from './index.ts';
+import { cleanMessage } from '../../src/catalog.mjs';
 
 const model = { ...anthropicProvider().getModels().find(m => m.id === 'claude-haiku-5-5'), provider: 'claude-sdk', api: 'claude-sdk', reasoning: false };
 const parameters = Type.Object({ label: Type.String(), choice: Type.Optional(Type.Union([Type.Literal('a'), Type.Literal('b')])) }, { additionalProperties: false });
@@ -72,6 +73,19 @@ function fakeQuery(plan = {}) {
       yield* assistant(plan.thinking ? [{ type: 'thinking', thinking: 'reason', signature: 'signed' }, ...blocks] : blocks,
         plan.truncated ? 'max_tokens' : 'tool_use', plan.malformed, args.options.model);
       stats.results = await pending;
+      if (plan.unqualified) {
+        for (let i = 0; i < (plan.unqualifiedCount ?? 1); i++) {
+          const id = `tool-unqualified-${i}`;
+          yield* assistant([{ type: 'tool_use', id, name: plan.unqualifiedName ?? 'probe', input }], 'tool_use', false, args.options.model);
+          if (plan.unqualifiedResult !== 'missing') yield { type: 'user', parent_tool_use_id: null, message: { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: id, is_error: plan.unqualifiedResult !== 'success', content: 'Error: No such tool available: probe' },
+          ] } };
+        }
+        const repaired = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': 'tool-repaired' } });
+        void repaired.catch(() => {});
+        yield* assistant([{ type: 'tool_use', id: 'tool-repaired', name: 'mcp__pi__probe', input }], 'tool_use', false, args.options.model);
+        stats.results.push(await repaired);
+      }
       yield* assistant([{ type: 'text', text: plan.text ?? '😀done' }], 'end_turn', false, args.options.model);
       yield { type: 'assistant', uuid: '00000000-0000-4000-8000-000000000002' };
       yield result(1, stats.model);
@@ -150,6 +164,41 @@ test('parallel identical calls preserve schemas, stream Unicode, and keep cumula
     assert.deepEqual(await stats.options.canUseTool('Bash'), { behavior: 'deny', message: 'Tool is not exposed by Pi.' });
   } finally { bridge.close(); }
 });
+
+test('SDK corrects an unqualified Pi tool name after completed tools without ending the turn', async () => {
+  const { stats, factory } = fakeQuery({ unqualified: true });
+  const bridge = createBridge('/tmp', factory);
+  const { agent, executions } = makeAgent(bridge);
+  const updates = [];
+  agent.subscribe(event => { if (event.type === 'message_update') updates.push(event.assistantMessageEvent.type); });
+  try {
+    await agent.prompt('test');
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.equal(executions(), 3);
+    const toolCalls = agent.state.messages.filter(m => m.role === 'assistant').flatMap(m => m.content.filter(b => b.type === 'toolCall'));
+    assert.deepEqual(toolCalls.map(c => c.id), ['tool-0', 'tool-1', 'tool-repaired']);
+    assert.equal(stats.results.length, 3);
+    assert.equal(stats.closes, 0);
+    assert.deepEqual(await stats.options.canUseTool('probe'), { behavior: 'deny', message: 'Tool is not exposed by Pi.' });
+    assert.equal(updates.filter(t => t === 'toolcall_start').length, updates.filter(t => t === 'toolcall_end').length);
+    assert.match(stats.options.systemPrompt, /mcp__pi__probe/);
+  } finally { bridge.close(); }
+});
+
+for (const plan of [{ unqualifiedName: 'not-a-pi-tool' }, { unqualifiedResult: 'success' }, { unqualifiedResult: 'missing' }, { unqualifiedCount: 4 }]) {
+  test(`unqualified SDK calls remain fail-closed unless SDK confirms their failure: ${JSON.stringify(plan)}`, async () => {
+    const { factory } = fakeQuery({ unqualified: true, ...plan });
+    const bridge = createBridge('/tmp', factory);
+    const { agent, executions } = makeAgent(bridge);
+    try {
+      await agent.prompt('test');
+      assert.equal(agent.state.messages.at(-1).stopReason, 'error');
+      assert.equal(executions(), 2);
+      const message = agent.state.messages.at(-1);
+      assert.equal(cleanMessage(message, 'sdk-error').text, message.errorMessage);
+    } finally { bridge.close(); }
+  });
+}
 
 test('Opus uses its requested SDK model and the same Pi-owned tool bridge', async () => {
   let provider;

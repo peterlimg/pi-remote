@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { cleanMessage } from '../../src/catalog.mjs';
 
 test('activity groups follow message boundaries, count each call once and keep disclosure state during streaming', async ({ page }, testInfo) => {
   const call = (id, name) => ({ id, name, text: JSON.stringify({ command: 'echo private-command', path: 'src/app.js' }) });
@@ -60,4 +61,12 @@ test('activity groups follow message boundaries, count each call once and keep d
     .toEqual(['hint', 'activity', 'Check the changes.', 'activity', 'I found the failure.', 'activity', 'Try again.', 'activity']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const error = 'SDK requested a tool outside Pi.';
+  state.messages.push(cleanMessage({ role: 'assistant', stopReason: 'error', errorMessage: error,
+    content: [{ type: 'text', text: error }] }, 'failed'));
+  snapshot();
+  await expect(page.locator('#transcript')).toContainText(error);
+  await page.reload();
+  await page.locator('.session').click();
+  await expect(page.locator('#transcript')).toContainText(error);
 });
