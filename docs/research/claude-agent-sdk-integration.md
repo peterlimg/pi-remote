@@ -1,6 +1,6 @@
 # Integrating the Claude Agent SDK as a Pi model
 
-This guide covers selecting Claude SDK access in Pi's `/model` while keeping Pi's tools and extensions. It differs from Amp's separate-agent mode. A [runnable opt-in prototype](../../experiments/claude-sdk-provider/EXPERIMENT.md) now verifies the restricted fresh-session path; it is not installed in the normal Pi configuration.
+This guide covers selecting Claude SDK access in Pi's `/model` while keeping Pi's tools and extensions. It differs from Amp's separate-agent mode. A [runnable opt-in prototype](../../experiments/claude-sdk-provider/EXPERIMENT.md) verifies the restricted fresh-session path with Haiku 5.5 and Opus 5.5. It requires separate installation and does not load through Pi Remote's default extension manifest.
 
 Checked against `@anthropic-ai/claude-agent-sdk` 0.3.296, its shipped `sdk.d.ts`, and installed Pi 1.1.0. See [research and live evidence](claude-agent-sdk.md) for policy, experiments, and limitations.
 

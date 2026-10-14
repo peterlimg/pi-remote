@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-10-14",
+  "model": "claude-opus-5-5",
+  "versions": {
+    "sdk": "0.3.296",
+    "pi": "1.1.0",
+    "node": "26.5.0",
+    "playwright": "1.55.1"
+  },
+  "scope": "Isolated local CLI, Pi Agent, and real RPC/mobile fixture. Live Claude login. Synthetic in-memory tools. These checks do not verify a production installation.",
+  "offline": { "typecheck": true, "testsPassed": 20 },
+  "cli": {
+    "discoveredModels": ["claude-sdk/claude-haiku-5-5", "claude-sdk/claude-opus-5-5"],
+    "isolatedPrintResponse": "SDK_OPUS_CLI_OK"
+  },
+  "piAgent": [
+    {
+      "scenario": "allow",
+      "pass": true,
+      "preflights": 2,
+      "executions": 2,
+      "followUpMemory": true,
+      "piTotals": { "input": 1283, "output": 226, "cacheRead": 2742, "cacheWrite": 1669 },
+      "sdkTotals": { "input": 1283, "output": 226, "cacheRead": 2742, "cacheWrite": 1669 },
+      "piEstimatedCostUsd": 0.0182406,
+      "sdkEstimatedCostUsd": 0.0182406
+    },
+    {
+      "scenario": "deny",
+      "pass": true,
+      "preflights": 2,
+      "executions": 0,
+      "piTotals": { "input": 1278, "output": 273, "cacheRead": 1223, "cacheWrite": 1468 },
+      "sdkTotals": { "input": 1278, "output": 273, "cacheRead": 1223, "cacheWrite": 1468 },
+      "piEstimatedCostUsd": 0.014394,
+      "sdkEstimatedCostUsd": 0.014394
+    },
+    {
+      "scenario": "abort",
+      "pass": true,
+      "preflights": 2,
+      "executions": 2,
+      "abortSettleMs": 1
+    }
+  ],
+  "remote": {
+    "pass": true,
+    "fixture": "real Pi RPC and SDK, synthetic in-memory tool",
+    "modelCommands": [{ "type": "setModel", "provider": "claude-sdk", "modelId": "claude-opus-5-5" }],
+    "permissionDecisions": ["allow", "deny", "allow"],
+    "executedLabels": ["allow", "abort"],
+    "streamingUpdates": 26,
+    "abortSettleMs": 130,
+    "reloadPreservedConversation": true,
+    "workerClosed": true,
+    "piTokensBeforeAbort": { "input": 1221, "output": 176, "cacheRead": 6031, "cacheWrite": 2236, "total": 9664 },
+    "piEstimatedCostBeforeAbortUsd": 0.022435999999999998,
+    "sdkEstimatedCostBeforeAbortUsd": 0.022435999999999998
+  },
+  "limits": [
+    "Mobile Chromium emulation, not a real phone or Safari.",
+    "No arbitrary replay, restart, compaction, forks, images or cross-provider history.",
+    "Abort timing measures Pi settlement, not OS child-process exit.",
+    "SDK cost is an estimate, not a subscription-balance or billing audit."
+  ]
+}

@@ -10,6 +10,9 @@ import { startHost } from '../../src/host.mjs';
 import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
+const modelId = process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5';
+assert(['claude-haiku-5-5', 'claude-opus-5-5'].includes(modelId), 'Choose a registered SDK test model');
+const modelName = modelId === 'claude-opus-5-5' ? 'Claude SDK Opus 5.5 (experimental)' : 'Claude SDK Haiku 5.5 (experimental)';
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-remote-'));
 const scratch = join(evidence, 'scratch');
 const sessions = join(scratch, 'sessions');
@@ -57,7 +60,7 @@ const host = await startHost({ dir: scratch, config, roots: [sessions], port: 0,
     '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] } });
 const id = sessionKey(file);
 const url = `http://127.0.0.1:${host.http.address().port}`;
-const result = { fixture: 'real Pi RPC and SDK, synthetic in-memory tool', modelCommands: [], permissionAnswers: [], streamingUpdates: 0 };
+const result = { fixture: 'real Pi RPC and SDK, synthetic in-memory tool', model: modelId, modelCommands: [], permissionAnswers: [], streamingUpdates: 0 };
 const events = [];
 const fixtureRows = () => { try { return readFileSync(fixtureLog, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
 let browser, context, page, worker;
@@ -89,12 +92,14 @@ try {
   await page.locator('#sessions button.session').click();
   await page.locator('#model').click();
   const picker = page.getByRole('region', { name: 'Choose a model' });
-  await picker.getByRole('button', { name: /Claude SDK Haiku/ }).click();
+  await picker.getByRole('button', { name: modelName, exact: true }).click();
   await expect(picker).toBeHidden();
-  assert.deepEqual(result.modelCommands, [{ type: 'setModel', provider: 'claude-sdk', modelId: 'claude-haiku-5-5' }]);
-  assert.equal((await worker.request('get_state')).model.provider, 'claude-sdk');
+  assert.deepEqual(result.modelCommands, [{ type: 'setModel', provider: 'claude-sdk', modelId }]);
+  const selected = (await worker.request('get_state')).model;
+  assert.equal(selected.provider, 'claude-sdk');
+  assert.equal(selected.id, modelId);
   await page.locator('#model').click();
-  await expect(picker.getByRole('button', { pressed: true })).toContainText('Claude SDK Haiku');
+  await expect(picker.getByRole('button', { pressed: true })).toContainText(modelName);
   await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   for (const label of ['allow', 'deny', 'abort']) {
     const settledBefore = events.filter(e => e.type === 'agent_settled').length;

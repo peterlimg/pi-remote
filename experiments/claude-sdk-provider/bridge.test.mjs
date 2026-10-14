@@ -17,8 +17,8 @@ const context = messages => ({ messages: [{ role: 'system', content: 'test', too
 const options = { sessionId: 'unit-session', timeoutMs: 3000 };
 const fixtureUsage = { input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 3, cache_creation_input_tokens: 2 };
 const wrap = event => ({ type: 'stream_event', parent_tool_use_id: null, event });
-function* assistant(blocks, stopReason = 'end_turn', malformed = false) {
-  yield wrap({ type: 'message_start', message: { id: 'msg-test', model: model.id, usage: fixtureUsage } });
+function* assistant(blocks, stopReason = 'end_turn', malformed = false, modelId = model.id) {
+  yield wrap({ type: 'message_start', message: { id: 'msg-test', model: modelId, usage: fixtureUsage } });
   for (const [index, block] of blocks.entries()) {
     yield wrap({ type: 'content_block_start', index, content_block: block.type === 'text' ? { type: 'text', text: '' }
       : block.type === 'thinking' ? { type: 'thinking', thinking: '', signature: '' } : { ...block, input: {} } });
@@ -35,9 +35,9 @@ function* assistant(blocks, stopReason = 'end_turn', malformed = false) {
   yield wrap({ type: 'message_delta', delta: { stop_reason: stopReason }, usage: { output_tokens: 20 } });
   yield wrap({ type: 'message_stop' });
 }
-function result(turn = 1) {
+function result(turn = 1, modelId = model.id) {
   return { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', total_cost_usd: turn * 0.004,
-    modelUsage: { [model.id]: { inputTokens: turn * 30, outputTokens: turn * 40, cacheReadInputTokens: turn * 9, cacheCreationInputTokens: turn * 4 } } };
+    modelUsage: { [modelId]: { inputTokens: turn * 30, outputTokens: turn * 40, cacheReadInputTokens: turn * 9, cacheCreationInputTokens: turn * 4 } } };
 }
 function fakeQuery(plan = {}) {
   const stats = { queries: 0, reads: 0, closes: 0, results: [] };
@@ -64,14 +64,14 @@ function fakeQuery(plan = {}) {
       })();
       void pending.catch(() => {});
       yield* assistant(plan.thinking ? [{ type: 'thinking', thinking: 'reason', signature: 'signed' }, ...blocks] : blocks,
-        plan.truncated ? 'max_tokens' : 'tool_use', plan.malformed);
+        plan.truncated ? 'max_tokens' : 'tool_use', plan.malformed, args.options.model);
       stats.results = await pending;
-      yield* assistant([{ type: 'text', text: plan.text ?? '😀done' }]);
-      yield result();
+      yield* assistant([{ type: 'text', text: plan.text ?? '😀done' }], 'end_turn', false, args.options.model);
+      yield result(1, args.options.model);
       const second = await source.next();
       if (!second.done) {
-        yield* assistant([{ type: 'text', text: 'recalled' }]);
-        yield result(2);
+        yield* assistant([{ type: 'text', text: 'recalled' }], 'end_turn', false, args.options.model);
+        yield result(2, args.options.model);
       }
     })();
     const next = stream.next.bind(stream);
@@ -118,6 +118,27 @@ test('parallel identical calls preserve schemas, stream Unicode, and keep cumula
     assert.deepEqual(stats.options.settingSources, []);
     assert.equal(stats.options.strictMcpConfig, true);
     assert.deepEqual(await stats.options.canUseTool('Bash'), { behavior: 'deny', message: 'Tool is not exposed by Pi.' });
+  } finally { bridge.close(); }
+});
+
+test('Opus uses its requested SDK model and the same Pi-owned tool bridge', async () => {
+  let provider;
+  extension({ registerProvider: p => { provider = p; }, on: () => {} });
+  const opus = provider.getModels().find(m => m.id === 'claude-opus-5-5');
+  assert(opus);
+  assert.deepEqual(opus.cost, anthropicProvider().getModels().find(m => m.id === opus.id).cost);
+  const { stats, factory } = fakeQuery();
+  const bridge = createBridge('/tmp', factory);
+  const { agent, executions } = makeAgent(bridge);
+  agent.state.model = opus;
+  try {
+    await agent.prompt('test');
+    assert.equal(stats.options.model, opus.id);
+    assert.equal(agent.state.messages.at(-1).model, opus.id);
+    assert.equal(agent.state.messages.at(-1).stopReason, 'stop', agent.state.messages.at(-1).errorMessage);
+    assert.equal(executions(), 2);
+    assert.deepEqual(stats.options.tools, []);
+    assert.equal(agent.state.messages.filter(m => m.role === 'assistant').reduce((sum, m) => sum + m.usage.input, 0), 30);
   } finally { bridge.close(); }
 });
 
@@ -304,9 +325,9 @@ test('extension registers native ambient auth without a fake key and closes on l
   let provider;
   extension({ registerProvider: p => { provider = p; }, on: (name, handler) => { handlers.set(name, handler); } });
   assert.equal(provider.id, 'claude-sdk');
-  assert.equal(provider.getModels().length, 1);
+  assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-opus-5-5']);
   assert.equal(provider.auth.apiKey.login, undefined);
-  assert.equal(provider.getModels()[0].reasoning, false);
+  assert(provider.getModels().every(m => !m.reasoning && m.input.join() === 'text' && m.maxTokens === 4096));
   assert(handlers.has('session_shutdown') && handlers.has('model_select'));
   const events = ['session_before_tree', 'session_before_fork', 'session_before_compact'];
   for (const event of events) assert.deepEqual(handlers.get(event)({}, { model, hasUI: false }), { cancel: true });

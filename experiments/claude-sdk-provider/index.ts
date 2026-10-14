@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createProvider, type ApiKeyAuth } from '@earendil-works/pi-ai';
+import { createProvider, type ApiKeyAuth, type Model } from '@earendil-works/pi-ai';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createBridge, sdkEnvironment } from './bridge.ts';
@@ -34,14 +34,18 @@ export default function (pi: ExtensionAPI) {
     if (!bridge) throw new Error('Claude SDK requires an active Pi session.');
     return bridge.streamSimple(...args);
   };
-  const catalog = anthropicProvider().getModels().find(model => model.id === 'claude-haiku-5-5');
-  if (!catalog) throw new Error('This experiment requires Pi 1.1.0 with Claude Haiku 5.5 metadata.');
-  const { compat: _compat, ...metadata } = catalog;
+  const catalog = anthropicProvider().getModels();
+  const models = ['claude-haiku-5-5', 'claude-opus-5-5'].map((id): Model<'claude-sdk'> => {
+    const model = catalog.find(model => model.id === id);
+    if (!model) throw new Error(`This experiment requires Pi 1.1.0 with ${id} metadata.`);
+    const { compat: _compat, ...metadata } = model;
+    return { ...metadata, provider: providerId, api: 'claude-sdk', baseUrl: '',
+      name: `Claude SDK ${metadata.name.replace(/^Claude /, '')} (experimental)`, input: ['text'], reasoning: false,
+      thinkingLevelMap: { off: null }, promptCache: undefined, maxTokens: 4096 };
+  });
   pi.registerProvider(createProvider({
     id: providerId, name: 'Claude SDK experiment', auth: { apiKey: localLogin },
-    models: [{ ...metadata, provider: providerId, api: 'claude-sdk', baseUrl: '',
-      name: 'Claude SDK Haiku 5.5 (experimental)', input: ['text'], reasoning: false,
-      thinkingLevelMap: { off: null }, promptCache: undefined, maxTokens: 4096 }],
+    models,
     api: { stream: streamSimple, streamSimple },
   }));
   pi.on('session_start', (_event, ctx) => { bridge?.close(); bridge = createBridge(ctx.cwd); });

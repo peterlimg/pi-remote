@@ -13,11 +13,12 @@ import { createBridge } from './bridge.ts';
 
 const cwd = mkdtempSync(join(tmpdir(), 'pi-sdk-provider-live-'));
 const rows = [];
-const model = { ...anthropicProvider().getModels().find(m => m.id === 'claude-haiku-5-5'),
-  provider: 'claude-sdk', api: 'claude-sdk', reasoning: false, input: ['text'] };
+const catalog = anthropicProvider().getModels().find(m => m.id === (process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5'));
+assert(catalog, 'Test model must exist in Pi metadata');
+const model = { ...catalog, provider: 'claude-sdk', api: 'claude-sdk', reasoning: false, input: ['text'] };
 const prompt = 'Remember marker MARKER. Call probe exactly TWICE in the SAME assistant message, in parallel, both with {"label":"test"}. Never retry. Then reply with both tool tokens, one per line, or DENIED if Pi denies both calls.';
 for (const scenario of process.argv.slice(2).length ? process.argv.slice(2) : ['allow', 'deny', 'abort']) {
-  const row = { scenario, preflights: 0, executions: 0, events: [], sdkOrder: [], costs: [], tokens: [] };
+  const row = { scenario, model: model.id, preflights: 0, executions: 0, events: [], sdkOrder: [], costs: [], tokens: [] };
   const marker = `MEMORY_${randomUUID()}`;
   const bridge = createBridge(cwd, args => query({ ...args, options: { ...args.options, maxTurns: 8, maxBudgetUsd: 0.2 } }));
   row.sdkToolResults = [];
