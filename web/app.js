@@ -1028,10 +1028,13 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       label.classList.add('tool-activity-live'); label.style.animationDelay = `-${Date.now() % 2400}ms`;
     }
     const running = group.tools.findLast(tool => tool.status === 'working' && tool.preview) || group.tools.findLast(tool => tool.status === 'working');
-    if (running) {
-      const text = el('span', undefined, 'tool-activity-text'), line = el('span', running.line, 'tool-activity-line');
-      line.title = running.line; text.append(label, line);
-      if (running.preview) text.append(el('span', running.preview, 'tool-activity-progress'));
+    const recent = running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
+      ? group.tools.findLast(tool => ['done', 'error'].includes(tool.status)) : undefined);
+    if (recent) {
+      const context = (running ? '' : 'Last: ') + recent.line;
+      const text = el('span', undefined, 'tool-activity-text'), line = el('span', context, 'tool-activity-line');
+      line.title = context; text.append(label, line);
+      if (recent.preview && (running || recent.name !== 'read' || recent.status === 'error')) text.append(el('span', recent.preview, 'tool-activity-progress'));
       group.summary.append(text);
     } else group.summary.append(label);
     let elapsed;

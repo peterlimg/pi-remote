@@ -112,7 +112,7 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
   await expect(page.locator('#tools, .message-label')).toHaveCount(0);
   await expect(page.locator('#composer-hint')).toBeHidden();
   expect((await page.locator('.conversation-header').boundingBox()).height).toBeLessThan(80);
-  await expect(page.locator('.tool-activity > summary')).toHaveText('Read 1 file');
+  await expect(page.locator('.tool-activity-label')).toHaveText('Read 1 file');
   await page.locator('.tool-activity > summary').click();
   await tool.locator('summary').click();
   await expect(tool.locator('.tool-output')).toBeVisible();
@@ -138,7 +138,8 @@ test('tool summaries group consecutive activity and hide raw commands until expa
   const shell = page.locator('[data-tool-id="run-checks"]');
   await expect(shell.locator('.tool-context')).toHaveText('npm run check && npm test');
   const group = page.locator('.tool-activity').last();
-  await expect(group.locator(':scope > summary')).toHaveText('Ran 1 command, read 2 files');
+  await expect(group.locator('.tool-activity-label')).toHaveText('Ran 1 command, read 2 files');
+  await expect(group.locator(':scope > summary .tool-activity-line')).toHaveText('Last: read src/store/betslip/index.ts:60-85');
   await expect(shell.locator('.tool-context')).toBeHidden();
   await expect(page.locator('.tool-preview')).toHaveCount(0);
   await group.scrollIntoViewIfNeeded();

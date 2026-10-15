@@ -65,8 +65,22 @@ test('inline activity shows fresh output before tools finish and keeps separate 
   await expect(groups.nth(1).locator('.tool-activity-progress')).toHaveText('Reviewing the activity preview styles.');
   await expect(page.locator('#activity-toggle, #activity-log')).toHaveCount(0);
   await expect(page.locator('#transcript')).not.toContainText('View activity');
-  state.messages.push({ id: 'final-result', role: 'toolResult', toolCallId: 'final-read', toolName: 'read', text: 'Reviewed.' });
-  state.tools[2].status = 'done'; state.status = 'idle'; publish();
-  await expect(page.locator('.tool-activity-progress')).toHaveCount(0);
-  await expect(groups.nth(1).locator('.tool-activity-label')).toHaveText('Read 1 file');
+  state.messages.push({ id: 'final-result', role: 'toolResult', toolCallId: 'final-read', toolName: 'read', text: 'Source code that should not fill the preview.' });
+  state.tools[2].status = 'done'; publish();
+  const latest = groups.nth(1).locator(':scope > summary');
+  await expect(latest.locator('.tool-activity-line')).toHaveText('Last: read web/style.css');
+  await expect(latest.locator('.tool-activity-line')).toBeVisible();
+  await expect(latest.locator('.tool-activity-progress')).toHaveCount(0);
+  state.messages.push({ id: 'quick-call', role: 'assistant', toolCalls: [{ id: 'quick', name: 'read', text: '{"path":"web/app.js"}' }] },
+    { id: 'quick-result', role: 'toolResult', toolCallId: 'quick', toolName: 'read', text: 'Source code.' }); publish();
+  await expect(latest.locator('.tool-activity-line')).toHaveText('Last: read web/app.js');
+  await expect(latest.locator('.tool-activity-label')).toHaveText('Read 2 files');
+  state.messages.push({ id: 'command-call', role: 'assistant', toolCalls: [{ id: 'command', name: 'bash', text: '{"command":"npm run check"}' }] },
+    { id: 'command-result', role: 'toolResult', toolCallId: 'command', toolName: 'bash', text: 'Starting checks\nTypeScript passed\nSyntax passed' }); publish();
+  await expect(latest.locator('.tool-activity-line')).toHaveText('Last: $ npm run check');
+  await expect(latest.locator('.tool-activity-progress')).toHaveText('TypeScript passed\nSyntax passed');
+  await expect(groups).toHaveCount(2);
+  state.status = 'idle'; publish();
+  await expect(page.locator('.tool-activity-progress, .tool-activity-line')).toHaveCount(0);
+  await expect(groups.nth(1).locator('.tool-activity-label')).toHaveText('Read 2 files, ran 1 command');
 });
