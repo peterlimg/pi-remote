@@ -1226,6 +1226,11 @@ function contextPercent(usage) {
   return usage && Number.isFinite(usage.tokens) && usage.tokens >= 0 && usage.contextWindow > 0 &&
     Number.isFinite(usage.percent) && usage.percent >= 0 ? usage.percent : undefined;
 }
+function usageBar(label, percent) {
+  const bar = el('progress'); bar.max = 100; bar.value = Math.min(100, percent);
+  bar.setAttribute('aria-label', label);
+  return bar;
+}
 function renderUsageMeter() {
   const percent = contextPercent(cache.get(selected)?.contextUsage), known = percent !== undefined;
   const button = $('usage-meter');
@@ -1244,9 +1249,7 @@ function renderUsagePanel() {
   heading.append(el('h3', 'Current context'), el('strong', percent === undefined ? 'Unavailable' : `${usageNumbers.format(percent)}% used`));
   context.append(heading);
   if (percent !== undefined) {
-    const bar = el('progress'); bar.max = 100; bar.value = Math.min(100, percent);
-    bar.setAttribute('aria-label', 'Current context usage');
-    context.append(bar, el('p', `${tokenNumbers.format(usage.tokens)} / ${tokenNumbers.format(usage.contextWindow)} tokens`, 'hint'));
+    context.append(usageBar('Current context usage', percent), el('p', `${tokenNumbers.format(usage.tokens)} / ${tokenNumbers.format(usage.contextWindow)} tokens`, 'hint'));
   } else {
     context.append(el('p', usage?.tokens === null ? 'Waiting for the next model response after compaction.' : 'This session has not reported its context usage.', 'hint'));
   }
@@ -1254,7 +1257,14 @@ function renderUsagePanel() {
   const summary = usageSummaries.get(selected);
   const report = current?.providerUsage || (summary && summary.model === state?.model ? summary.dialog : undefined);
   if (report) {
-    for (const line of usageLines(report)) limits.append(el('p', line));
+    for (const row of usageRows(report)) {
+      if (row.percent === undefined) { limits.append(el('p', row.text)); continue; }
+      const limit = el('div', undefined, 'usage-limit'), heading = el('div', undefined, 'usage-heading');
+      heading.append(el('h4', row.label), el('strong', `${usageNumbers.format(row.percent)}% used`));
+      limit.append(heading, usageBar(row.label, row.percent));
+      if (row.reset) limit.append(el('p', row.reset, 'hint'));
+      limits.append(limit);
+    }
     if (current?.capturedAt) limits.append(el('p', 'Checked ' + new Date(current.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), 'hint'));
   } else limits.append(el('p', current?.busy ? 'Checking provider limits…' : current?.providerMessage || 'Five-hour and weekly limits are shown when reported by your provider.', 'hint'));
   content.append(context, limits); $('picker-options').replaceChildren(content);
@@ -1456,24 +1466,25 @@ document.addEventListener('pointerdown', event => {
 function isUsageDialog(dialog) {
   return dialog?.method === 'select' && dialog.title?.split(/\r?\n/)[0] === 'Provider usage';
 }
-function usageLines(dialog) {
-  const lines = [], description = [dialog.title.split(/\r?\n/).slice(1).join('\n'), dialog.message].filter(Boolean).join('\n');
+function usageRows(dialog) {
+  const rows = [], description = [dialog.title.split(/\r?\n/).slice(1).join('\n'), dialog.message].filter(Boolean).join('\n');
   for (const raw of description.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || /^(Credits|Usage limit resets|Plan|Fast mode|Semantics):/.test(line) || / Usage · /.test(line)) continue;
     const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
     if (limit && Number(limit[2]) <= 100) {
       const [, label, remaining, reset] = limit;
-      lines.push(`${label}: ${Number((100 - Number(remaining)).toFixed(2))}% used${reset ? ' · ' + reset : ''}`);
-    } else lines.push(line);
+      const percent = Number((100 - Number(remaining)).toFixed(2));
+      rows.push({ label, percent, reset, text: `${label}: ${percent}% used${reset ? ' · ' + reset : ''}` });
+    } else rows.push({ text: line });
   }
-  return lines.length ? lines : ['Usage information is unavailable.'];
+  return rows.length ? rows : [{ text: 'Usage information is unavailable.' }];
 }
 function renderUsage(usage) {
   const article = el('article', undefined, 'message usage-summary');
   article.setAttribute('aria-label', 'Provider usage');
   const content = el('blockquote'), body = el('div', undefined, 'message-text');
-  for (const line of usageLines(usage.dialog)) content.append(el('p', line));
+  for (const row of usageRows(usage.dialog)) content.append(el('p', row.text));
   if (usage.error) {
     content.append(el('p', usage.error, 'dialog-error'));
     const retry = el('button', 'Retry closing usage', 'quiet');

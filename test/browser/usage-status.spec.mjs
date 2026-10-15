@@ -24,8 +24,11 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await page.locator('#prompt').fill('Keep this draft');
     await meter.tap();
     await expect(pane).toContainText('64,000 / 200,000 tokens');
-    await expect(pane).toContainText('5-hour limit: 25% used · resets in 2h');
-    await expect(pane).toContainText('Weekly limit: 1% used · resets tomorrow');
+    await expect(pane.getByRole('progressbar', { name: 'Current context usage', exact: true })).toHaveAttribute('value', '32');
+    await expect(pane.getByRole('progressbar', { name: '5-hour limit', exact: true })).toHaveAttribute('value', '25');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '1');
+    await expect(pane).toContainText('resets in 2h');
+    await expect(pane).toContainText('resets tomorrow');
     await expect(page.locator('#usage-refresh')).toBeEnabled();
     await expect(page.locator('#dialog')).toBeHidden();
     await expect(page.locator('#status')).toHaveText('idle');
@@ -34,7 +37,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     expect(host.service.read(id).messages).toHaveLength(0);
     await page.screenshot({ path: testInfo.outputPath('usage-mobile.png') });
     await page.locator('#usage-refresh').click();
-    await expect(pane).toContainText('Weekly limit: 2% used');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '2');
     await page.keyboard.press('Escape');
     await expect(pane).toBeHidden();
     await expect(meter).toBeFocused();
@@ -44,7 +47,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(page.locator('#status')).toHaveText('working');
     await page.locator('#prompt').fill('Still a draft');
     await meter.click();
-    await expect(pane).toContainText('Weekly limit: 4% used');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '4');
     await expect(page.locator('#status')).toHaveText('working');
     await expect(page.locator('#abort')).toBeVisible();
     await expect(page.locator('#prompt')).toHaveValue('Still a draft');
@@ -54,7 +57,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await page.getByRole('button', { name: 'Second', exact: true }).click();
     await expect(page.locator('#model')).toHaveText('org/second');
     await meter.click();
-    await expect(pane).toContainText('Weekly limit: 5% used');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '5');
     await expect(pane).not.toContainText('5-hour limit');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -66,7 +69,8 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await meter.click();
     await expect(pane).toContainText('Waiting for the next model response after compaction.');
     await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
-    await expect(pane.getByRole('progressbar')).toHaveCount(0);
+    await expect(pane.getByRole('progressbar', { name: 'Current context usage', exact: true })).toHaveCount(0);
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '6');
     await page.reload();
     await page.locator('#sessions button.session').click();
     await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
@@ -78,7 +82,8 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
 test('usage follows session snapshots and never invents missing account limits', async ({ page }, testInfo) => {
   const states = [
     { id: 'alpha', title: 'Alpha', cwd: '/project', status: 'idle', contextUsage: { tokens: 0, contextWindow: 200000, percent: 0 }, messages: [] },
-    { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [] }
+    { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [],
+      providerUsage: { title: 'Provider usage\n5-hour limit: [░░░░] 100% left (resets in 4h)\nWeekly limit: [████] 0% left (resets tomorrow)\nMonthly limit: [█░░░] 87.5% left\nOther limits are unavailable.' } }
   ];
   let client, selected, version = 0, fail = false;
   const snapshot = state => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
@@ -93,7 +98,8 @@ test('usage follows session snapshots and never invents missing account limits',
       else if (p.op === 'commands') reply([]);
       else if (p.op === 'usage') {
         if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
-        else reply({ model: selected.model, contextUsage: selected.contextUsage, providerMessage: 'No provider usage extension is installed in this session.' });
+        else reply({ model: selected.model, contextUsage: selected.contextUsage,
+          ...(selected.providerUsage ? { providerUsage: selected.providerUsage } : { providerMessage: 'No provider usage extension is installed in this session.' }) });
       } else throw new Error('Usage must not send a model prompt');
     });
   });
@@ -104,7 +110,7 @@ test('usage follows session snapshots and never invents missing account limits',
   await meter.click();
   await expect(pane).toContainText('0 / 200,000 tokens');
   await expect(pane).toContainText('No provider usage extension');
-  await expect(pane).not.toContainText('Weekly limit:');
+  await expect(pane.getByRole('progressbar')).toHaveCount(1);
   await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
   await expect(pane).toBeHidden();
   await expect(meter).toHaveAttribute('aria-expanded', 'false');
@@ -144,6 +150,12 @@ test('usage follows session snapshots and never invents missing account limits',
   await expect(meter).toHaveAttribute('data-level', 'error');
   await meter.click();
   await expect(pane).toContainText('190,000 / 200,000 tokens');
+  await expect(pane.getByRole('progressbar', { name: '5-hour limit', exact: true })).toHaveAttribute('value', '0');
+  await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '100');
+  await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('max', '100');
+  await expect(pane.getByRole('progressbar', { name: 'Monthly limit', exact: true })).toHaveAttribute('value', '12.5');
+  await expect(pane).toContainText('Other limits are unavailable.');
+  await expect(pane.getByRole('progressbar')).toHaveCount(4);
   states[1].contextUsage = { tokens: 150000, contextWindow: 200000, percent: 75 }; snapshot(states[1]);
   await expect(meter).toHaveAccessibleName('Usage: 75% of context used');
   await expect(meter).toHaveAttribute('data-level', 'warning');
