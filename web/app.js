@@ -202,10 +202,11 @@ async function loadHistory(direction) {
     renderConversation(cache.get(selected), { anchor: readingAnchor(), historyChanged: true });
   }
 }
-function notice(text) {
+function notice(text, sessionId = '') {
   // Connection state belongs in the composer, not in persistent error notices.
   if (text === 'Computer is disconnected' || text === 'Computer is offline') return;
   $('notice').textContent = text || ''; $('notice').hidden = !text;
+  $('notice').dataset.sessionId = sessionId;
 }
 function request(op, extra = {}) {
   if (!connected || socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Computer is disconnected'));
@@ -867,6 +868,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   renderProject(state.cwd);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
+  if (state.error || $('notice').dataset.sessionId === state.id) notice(state.error, state.id);
   $('transcript').setAttribute('aria-busy', String(!!historyRequest));
   if (historyWindow && !historyChanged) {
     // Live patches update controls, not the historical DOM or the reader's scroll position.
@@ -989,7 +991,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       continue;
     }
     const skill = loadedSkill({ ...message, text: userMessageText(message) });
-    if (message.text || message.images?.length || message.role === 'user') {
+    const failed = message.role === 'assistant' && message.stopReason === 'error';
+    if (message.text || message.images?.length || message.role === 'user' || failed) {
       activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
@@ -1024,7 +1027,11 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         });
         article.append(copy);
       }
-      if (message.role === 'assistant' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
+      if (failed) {
+        const error = el('p', 'Reply failed. You can send another message.', 'message-error');
+        error.setAttribute('role', 'alert'); article.append(error);
+      }
+      if (message.role === 'assistant' && !failed && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
         const phrases = ['Tinkered for', 'Chipped away for', 'Puzzled over it for', 'Plugged away for', 'Kept at it for'];
         let hash = 0;
         // Timestamps keep the wording stable even when saved history uses different message IDs.
@@ -1106,11 +1113,32 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (node) box.scrollTop += node.getBoundingClientRect().top - anchor.top;
   }
   historyScrollTop = box.scrollTop;
-  if (state.error) notice(state.error);
   renderDialog(state);
   updateControls();
   updateScrollButton();
 }
+function updateActivity() {
+  const state = cache.get(selected), activity = $('agent-activity');
+  const active = connected && state?.status === 'working';
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
+    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
+    activity.dataset.label = labels[Math.floor(Math.random() * labels.length)];
+    activity.dataset.sessionId = selected;
+  }
+  activity.hidden = !active;
+  if (!active) return;
+  const message = state.messages?.findLast(message => message.role === 'assistant');
+  const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, Date.now() - message.timestamp) : 0;
+  const slow = elapsed >= 30000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
+    && !state.tools?.some(tool => tool.status === 'working');
+  const label = slow ? 'Waiting for model…' : activity.dataset.label;
+  if ($('activity-label').textContent !== label) $('activity-label').textContent = label;
+  $('activity-time').hidden = $('activity-detail').hidden = !slow;
+  $('activity-time').textContent = slow ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
+  const detail = slow ? 'No reply text yet. You can stop this turn.' : '';
+  if ($('activity-detail').textContent !== detail) $('activity-detail').textContent = detail;
+}
+setInterval(() => { if (!document.hidden) updateActivity(); }, 1000);
 function updateControls() {
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
@@ -1130,13 +1158,7 @@ function updateControls() {
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
-  const activity = $('agent-activity'), active = connected && state?.status === 'working';
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
-    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
-    activity.querySelector('span').textContent = labels[Math.floor(Math.random() * labels.length)];
-    activity.dataset.sessionId = selected;
-  }
-  activity.hidden = !active;
+  updateActivity();
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
   $('model').textContent = modelName;
   $('model').title = modelName ? `Switch model: ${modelName}` : '';

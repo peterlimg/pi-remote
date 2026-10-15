@@ -321,6 +321,7 @@ export class SessionService extends EventEmitter {
       item.state.thinkingLevel = rpcState?.thinkingLevel;
       item.agentActive = !!rpcState?.isStreaming;
       item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';
+      delete item.state.error;
       this.restoreIds.delete(id);
       this.changed(id); return { resumed: true };
     } catch (e) { await worker.close(); throw e; }

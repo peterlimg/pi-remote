@@ -9,7 +9,7 @@ const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.j
 // Like Pi, create a new session's folder at startup and its file on the first prompt.
 if (fresh) mkdirSync(dir, { recursive: true });
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
-let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false;
+let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
   title: `Provider usage\n${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
@@ -47,6 +47,10 @@ const parser = new JsonLines(command => {
   // Pi acknowledges extension commands only after their handler returns.
   if (command.message?.startsWith('/usage')) usageCommand = command;
   else out({ id: command.id, type: 'response', success: true, data });
+  if (command.type === 'abort' && waitingTimestamp) {
+    out({ type: 'message_end', message: { role: 'assistant', timestamp: waitingTimestamp, content: [], stopReason: 'aborted' } });
+    out({ type: 'agent_end' }); waitingTimestamp = undefined;
+  }
   if (['prompt', 'steer', 'follow_up'].includes(command.type)) {
     if (fresh) writeFileSync(sessionFile, JSON.stringify({ type: 'session', id: sessionId, cwd: process.cwd() }) + '\n' +
       JSON.stringify({ type: 'message', id: randomUUID(), parentId: null, message: { role: 'user', content: command.message } }) + '\n' +
@@ -97,6 +101,23 @@ const parser = new JsonLines(command => {
         out({ type: 'message_end', message: { role: 'assistant', timestamp: Date.now() + 1, content: 'Done.', stopReason: 'stop', durationMs: 1 } });
         out({ type: 'agent_end' });
       }, 4000);
+      return;
+    }
+    if (command.message === 'wait for model') {
+      waitingTimestamp = Date.now();
+      out({ type: 'message_end', message: { role: 'user', timestamp: waitingTimestamp - 1, content: command.message } });
+      out({ type: 'message_start', message: { role: 'assistant', timestamp: waitingTimestamp, content: [], stopReason: 'pending' } });
+      out({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+      out({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'Private reasoning must not appear.' } });
+      return;
+    }
+    if (['provider error', 'partial provider error'].includes(command.message)) {
+      const timestamp = Date.now();
+      out({ type: 'message_end', message: { role: 'user', timestamp, content: command.message } });
+      out({ type: 'message_end', message: { role: 'assistant', timestamp: timestamp + 1,
+        content: command.message.startsWith('partial') ? [{ type: 'text', text: 'Partial reply.' }] : [],
+        stopReason: 'error', errorMessage: 'WebSocket error', durationMs: 93343 } });
+      out({ type: 'agent_end' });
       return;
     }
     if (command.message === 'ask') out({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Proceed?' });
