@@ -181,6 +181,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .notice { padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
 #transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; overscroll-behavior: contain; }
 #transcript:focus-visible { outline: none; }
+.conversation-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 24px 0; color: var(--muted); }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
 #transcript::before, #transcript::after { content: ''; display: block; height: var(--transcript-gap); }
 .message, .tool, .skill-loaded, #transcript > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
@@ -406,12 +407,12 @@ pre.message-text { white-space: pre-wrap; }
   /* One page scroll on phones: the list grows instead of scrolling inside a box. */
   #sessions { overflow: visible; flex: none; }
   .shell main { display: none; }
-  /* The list stays laid out under the thread so a swipe back reveals it live, scroll position intact. */
+  /* Keep the live list under the thread during navigation, with its scroll position intact. */
   .shell > aside, .shell > main { grid-area: 1 / 1; }
   .shell.viewing aside { visibility: hidden; }
-  .shell.viewing.swiping aside { visibility: visible; }
+  .shell.viewing:is(.swiping, .opening) aside { visibility: visible; }
   .shell.viewing main { display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
-  .shell.swiping main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
+  .shell:is(.swiping, .opening) main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .mobile-only { display: block; }
   .conversation-header { padding: 4px 8px; }
   #transcript { --transcript-gap: 20px; padding-inline: 16px; }

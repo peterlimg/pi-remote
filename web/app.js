@@ -111,7 +111,7 @@ let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('p
 let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const ownSwipe = navigator.standalone === true;
-let swipeTimer, trackingSwipe = false;
+let swipeTimer, trackingSwipe = false, openingAnimation;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -369,6 +369,7 @@ window.addEventListener('storage', event => {
   if (event.storageArea === localStorage && (event.key === 'pi-remote-token' || event.key === null) && !event.newValue) logout();
 });
 function logout() {
+  resetSwipe();
   manualClose = true; disconnect(); $('project-picker').close();
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
@@ -619,6 +620,7 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
+  const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   resetScrollback();
   resetSwipe();
   closePicker();
@@ -636,16 +638,40 @@ async function selectSession(id) {
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!ownSwipe && !history.state?.session) history.pushState({ session: true }, '');
-  $('app').classList.add('viewing'); markSeen(); renderList(); notice('');
+  $('app').classList.add('viewing');
+  if (entering) {
+    $('app').classList.add('opening'); $('sidebar').inert = true;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    openingAnimation = document.querySelector('main').animate(reduced
+      ? [{ opacity: .6 }, { opacity: 1 }]
+      : [{ transform: 'translateX(100%)' }, { transform: 'none' }],
+    { duration: reduced ? 120 : 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    openingAnimation.onfinish = () => {
+      openingAnimation = undefined;
+      $('app').classList.remove('opening'); $('sidebar').inert = false;
+    };
+  }
+  markSeen(); renderList(); notice('');
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
     $('title').textContent = sessionTitle(sessions.find(x => x.id === id)?.title || 'Loading…');
-    $('transcript').replaceChildren(); $('transcript').hidden = false; $('empty').hidden = true;
+    const loading = el('p', 'Loading conversation…', 'conversation-loading'); loading.setAttribute('role', 'status');
+    const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-hidden', 'true'); loading.prepend(spinner);
+    $('transcript').replaceChildren(loading); $('transcript').setAttribute('aria-busy', 'true');
+    $('transcript').hidden = false; $('empty').hidden = true;
     $('composer').hidden = false; updateControls();
   }
   resizePrompt();
-  try { await request('watch', { sessionId: id }); loadUsage(id); } catch (e) { if (selected === id) notice(e.message); }
+  try { await request('watch', { sessionId: id }); loadUsage(id); }
+  catch (e) {
+    if (selected !== id) return;
+    if (!cache.has(id)) {
+      $('transcript').setAttribute('aria-busy', 'false');
+      $('transcript').replaceChildren(el('p', 'Could not load conversation. Go back and try again.', 'hint'));
+    }
+    notice(e.message);
+  }
 }
 function clearThreadImages(keep = new Set()) {
   for (const [id, image] of threadImages) if (!keep.has(id)) {
@@ -1677,10 +1703,11 @@ $('project-close').addEventListener('click', () => $('project-picker').close());
 $('project-picker').addEventListener('click', event => { if (event.target === $('project-picker')) $('project-picker').close(); });
 function resetSwipe() {
   clearTimeout(swipeTimer);
+  openingAnimation?.cancel(); openingAnimation = undefined;
   trackingSwipe = false;
   const main = document.querySelector('main');
   main.style.transition = main.style.transform = '';
-  $('app').classList.remove('swiping');
+  $('app').classList.remove('swiping', 'opening'); $('sidebar').inert = false;
 }
 $('back').addEventListener('click', () => {
   resetSwipe();
