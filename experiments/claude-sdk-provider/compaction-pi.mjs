@@ -13,6 +13,8 @@ import { createBridge } from './bridge.ts';
 const cwd = mkdtempSync(join(tmpdir(), 'pi-sdk-auto-compact-'));
 const budget = Number(process.env.PI_SDK_TEST_BUDGET_USD ?? 0.35);
 assert(Number.isFinite(budget) && budget > 0 && budget <= 2, 'Experiment query budget must be within $0..$2');
+const thinking = process.env.PI_SDK_TEST_THINKING ?? 'off';
+assert(['off', 'low', 'medium', 'high', 'xhigh', 'max', 'default'].includes(thinking), 'Unsupported experiment thinking level');
 mkdirSync(join(cwd, 'project', '.claude'), { recursive: true });
 const sentinel = join(cwd, 'project-hook-ran');
 writeFileSync(join(cwd, 'project', '.claude', 'settings.json'), JSON.stringify({ hooks: {
@@ -21,7 +23,8 @@ writeFileSync(join(cwd, 'project', '.claude', 'settings.json'), JSON.stringify({
 const result = { fixture: 'real Pi 1.2 agent core + SDK; experimental event adapter, not production/RPC/mobile',
   sdk: JSON.parse(readFileSync(new URL('./node_modules/@anthropic-ai/claude-agent-sdk/package.json', import.meta.url))).version,
   model: process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5', cliPath: process.env.PI_SDK_TEST_CLI ?? 'SDK bundled executable',
-  window: 100000, queryBudgetUsd: budget, contexts: [], compactions: [], hooks: [], executions: 0, queries: [], pass: false };
+  window: 100000, queryBudgetUsd: budget, thinking, thinkingBlocks: 0,
+  contexts: [], compactions: [], hooks: [], executions: 0, queries: [], pass: false };
 const scheduled = process.argv.includes('--scheduled');
 const manual = process.argv.includes('--manual') || scheduled, checkpointGap = process.argv.includes('--checkpoint-gap');
 assert(!checkpointGap || manual, 'Checkpoint-gap probe requires the controlled manual path');
@@ -59,7 +62,8 @@ const factory = args => {
       else await new Promise(resolve => { wake = resolve; });
     }
   })();
-  result.queries.push({ resumed: Boolean(args.options.resume) });
+  result.queries.push({ resumed: Boolean(args.options.resume),
+    thinking: thinking === 'default' ? 'CLI default' : args.options.thinking, effort: args.options.effort });
   const hook = async input => {
     if (midTurn && input.hook_event_name === 'PreCompact' && !result.midTurnQueued) {
       assert.equal(agent.state.isStreaming, true);
@@ -75,6 +79,7 @@ const factory = args => {
   assert.equal(args.options.settings.disableAllHooks, true);
   const run = query({ ...args, prompt, options: { ...args.options, maxBudgetUsd: budget, maxTurns: 12,
     ...process.env.PI_SDK_TEST_CLI ? { pathToClaudeCodeExecutable: process.env.PI_SDK_TEST_CLI } : {},
+    thinking: thinking === 'default' ? undefined : args.options.thinking,
     systemPrompt: preset ? { type: 'preset', preset: 'claude_code', append: args.options.systemPrompt } : args.options.systemPrompt,
     settings: { ...args.options.settings, autoCompactEnabled: !manual, autoCompactWindow: result.window,
       ...defaultPrecompute ? {} : { precomputeCompactionEnabled: false }, idleCompaction: false },
@@ -87,6 +92,8 @@ const factory = args => {
       const value = await next();
       if (value.done) return value;
       const e = value.value;
+      if (e.type === 'stream_event' && e.event.type === 'content_block_start' &&
+        ['thinking', 'redacted_thinking'].includes(e.event.content_block.type)) result.thinkingBlocks++;
       if (e.type === 'result') {
         sdkResults.push(e);
         (result.sdkOutcomes ??= []).push({ subtype: e.subtype, isError: e.is_error, cost: e.total_cost_usd });
@@ -113,7 +120,7 @@ const systemPrompt = 'Synthetic compaction experiment. Remember the exact tool m
 let bridge = createBridge(join(cwd, 'project'), factory, { persistSession: true });
 const makeAgent = () => new Agent({ sessionId: 'pi-compaction-probe',
   streamFn: (m, c, options) => bridge.streamSimple(m, c, { ...options, maxTokens: 2048 }),
-  initialState: { model, systemPrompt, tools, thinkingLevel: 'off' } });
+  initialState: { model, systemPrompt, tools, thinkingLevel: thinking === 'default' ? 'off' : thinking } });
 let agent = makeAgent();
 const final = () => agent.state.messages.findLast(m => m.role === 'assistant');
 const text = () => final().content.filter(b => b.type === 'text').map(b => b.text).join('').trim();

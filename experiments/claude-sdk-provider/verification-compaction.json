@@ -214,6 +214,46 @@
         "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-FDsp65/result.json"
       }
     ],
+    "haikuThinkingControls": {
+      "model": "claude-haiku-5-5",
+      "sdk": "0.3.296",
+      "cli": "2.1.300",
+      "autoCompactWindow": 100000,
+      "queryBudgetSettingUsd": 0.35,
+      "allLostMarkerAfterCompactAndResume": true,
+      "summaryInEveryRun": "ACK_0",
+      "sdkTurnsSucceededInEveryRun": true,
+      "toolExecutionsPerRun": 1,
+      "callResultIdsAndCumulativeUsageMatched": true,
+      "projectHookExecutedInAnyRun": false,
+      "thinkingBlockCountsAreNotInternalCompactorTelemetry": true,
+      "runs": [
+        {
+          "thinking": "adaptive",
+          "effort": "low",
+          "pass": false,
+          "thinkingBlocks": 1,
+          "sdkEstimatedCumulativeCostUsd": 0.03226591,
+          "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-56ZTOW/result.json"
+        },
+        {
+          "thinking": "CLI default",
+          "effort": "low",
+          "pass": false,
+          "thinkingBlocks": 2,
+          "sdkEstimatedCumulativeCostUsd": 0.032389955000000005,
+          "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-riaLnp/result.json"
+        },
+        {
+          "thinking": "adaptive",
+          "effort": "high",
+          "pass": false,
+          "thinkingBlocks": 3,
+          "sdkEstimatedCumulativeCostUsd": 0.03230104,
+          "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-JS9hqY/result.json"
+        }
+      ]
+    },
     "directManualRegression": {
       "pass": true,
       "cli": "2.1.300",
@@ -227,6 +267,7 @@
   "recommendation": "Native automatic compaction with Opus and the explicitly tested SDK/CLI pair is an implementation candidate, not a safe all-model toggle. Preserve the Haiku counterexamples. The idle-threshold native-command scheduler passed on both models but cannot protect unbounded in-flight turns. Keep production disabled until actual Coding Agent/RPC, model-switch, checkpoint, and failure recovery gates pass.",
   "verificationLimits": [
     "Haiku automatic counterexamples use synthetic padding; neutral acknowledgements also failed, and generality and root cause remain unresolved",
+    "Haiku adaptive Low, adaptive High, and CLI-default thinking with Low effort all reproduced marker loss; no live Amp Haiku run was performed",
     "native automatic Opus proof is one run with SDK 0.3.296, explicit CLI 2.1.300, thinking Off, effort Low, and a 100K policy window",
     "Opus native automatic compaction with the bundled CLI 2.1.296, Sonnet, High/Max effort, and Amp's older SDK client remain untested",
     "idle-threshold scheduling compacts between completed turns only; the test-only 25K threshold is not a production reserve/window policy",

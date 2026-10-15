@@ -8,7 +8,7 @@ Inspected versions: Claude Agent SDK `0.3.296`, Pi `1.2.0`, provider implementat
 
 Keep the SDK as owner of its model context, with Pi retaining tool validation, permissions, execution, and the durable audit history. Do not run two independent summarizers or rebuild an SDK conversation by replaying Pi tools.
 
-**Native auto-compaction is now a tested Opus candidate, not a safe all-model toggle.** A real Pi-agent/SDK run with Opus 5.5, SDK `0.3.296`, and explicitly selected CLI `2.1.300` preserved the marker, tool identity, completed-session resume, and cumulative usage through native automatic compaction. Haiku still failed the same memory check across the CLI and input controls below. The root cause of that model-dependent result remains open; the earlier Haiku failures do not establish that all SDK auto-compaction is broken.
+**Native auto-compaction is now a tested Opus candidate, not a safe all-model toggle.** A real Pi-agent/SDK run with Opus 5.5, SDK `0.3.296`, and explicitly selected CLI `2.1.300` preserved the marker, tool identity, completed-session resume, and cumulative usage through native automatic compaction. Haiku still failed the same memory check across the CLI, input, and thinking controls below. The root cause of that model-dependent result remains open; the earlier Haiku failures do not establish that all SDK auto-compaction is broken.
 
 A threshold-driven, focused native `/compact` also passed on Haiku and Opus at completed idle boundaries. That is an automatic scheduler using the native manual command, not SDK-native automatic compaction, and it cannot protect an unbounded tool-heavy turn in flight. Keep the production guard until the actual Coding Agent/RPC path, model switching, and failure recovery are verified.
 
@@ -44,6 +44,18 @@ These checks kept local login, Pi-only tools, `settingSources: []`, disabled pro
 | Opus budget controls | An instrumented scheduled run hit `error_max_budget_usd` at a $0.35 setting. A native automatic run hit the same error at a $1 setting despite retaining the marker in its summary. These are incomplete checks, not memory failures. The passing scheduled and native-auto runs used $0.50 and $2 settings respectively. |
 
 The passing native-auto Opus run reported cumulative estimated cost `$1.2735315`; the passing scheduled Opus run reported `$0.4134077`. These are SDK estimates, not subscription billing. `maxBudgetUsd` is not a hard spending ceiling: the $1 probe reported `$1.2424911` before rejecting continuation. Preserve budget stops rather than counting an observed boundary as a complete pass.
+
+### Haiku thinking controls
+
+The inspected Amp Claude Code model selector includes Haiku 5.5, and its SDK factory passes model/effort without explicitly setting `thinking`. Our earlier failures forced thinking Off. Three new isolated runs tested that difference with SDK `0.3.296`, CLI `2.1.300`, the same 100K window, literal input, and unchanged prompts/tools.
+
+| Thinking configuration | Result |
+| --- | --- |
+| Adaptive thinking, Low effort | Failed marker recall after compact and resume. Summary `ACK_0`; one thinking block observed. |
+| CLI-default thinking, Low effort | Failed the same checks with the same summary; two thinking blocks observed. Only the thinking option was left to the CLI, not the entire configuration. |
+| Adaptive thinking, High effort | Failed the same checks with the same summary; three thinking blocks observed. |
+
+All three runs completed the SDK turns successfully, executed the Pi tool once, matched tool IDs and cumulative usage, and left the project-hook sentinel absent. These are semantic memory failures, not budget stops. Thinking-block counts describe the normal assistant stream, not visibility into the internal compactor's reasoning. Explicitly disabling thinking is therefore not necessary to reproduce this counterexample. This does not establish Amp's live Haiku behavior or prove that Haiku compaction always fails.
 
 All runs are recorded in [sanitized evidence](../../experiments/claude-sdk-provider/verification-compaction.json). The automatic Opus proof used thinking Off, effort Low, and a 100K native policy window with an 84,952-token threshold. It is one synthetic Pi-agent-core run, not full Coding Agent/RPC/mobile verification, a 1M-window stress test, or evidence for Sonnet. Opus with bundled CLI `2.1.296`, High/Max effort, and Amp's older client remain untested here.
 
@@ -136,6 +148,10 @@ PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --neu
 PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --default-precompute
 PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --preset --default-precompute
 PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-sdk -- --auto
+# Thinking controls, also expected nonzero memory-check exits:
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_THINKING=low npm run experiment:compact-pi
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_THINKING=default npm run experiment:compact-pi
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_THINKING=high npm run experiment:compact-pi
 # Passing native automatic Opus check on the recorded CLI 2.1.300:
 PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_MODEL=claude-opus-5-5 \
   PI_SDK_TEST_BUDGET_USD=2 npm run experiment:compact-pi
