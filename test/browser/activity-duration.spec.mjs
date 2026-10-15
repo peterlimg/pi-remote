@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { initialState, applyEvent } from '../../src/state.mjs';
 
-test('elapsed time stays on completed activity links and parallel tools are not added together', async ({ page }, testInfo) => {
+test('elapsed time stays visible on collapsed activity and parallel tools are not added together', async ({ page }, testInfo) => {
   const state = initialState({ id: 'visible-time', title: 'Visible tool timing', cwd: '/project' });
   const calls = (timestamp, ids) => applyEvent(state, { type: 'message_end', message: {
     role: 'assistant', timestamp, content: ids.map(id => ({ type: 'toolCall', id, name: 'bash', arguments: { command: 'sleep 10' } }))
@@ -10,10 +10,7 @@ test('elapsed time stays on completed activity links and parallel tools are not 
   const result = (id, timestamp, durationMs, isError = false) => applyEvent(state, { type: 'message_end', message: {
     role: 'toolResult', toolCallId: id, toolName: 'bash', content: [{ type: 'text', text: 'Finished' }], timestamp, durationMs, isError
   } });
-  const reply = timestamp => {
-    applyEvent(state, { type: 'message_end', message: { role: 'assistant', timestamp, content: 'Next checks.' } });
-    applyEvent(state, { type: 'message_end', message: { role: 'user', timestamp: timestamp + 1, content: 'Continue checking.' } });
-  };
+  const reply = timestamp => applyEvent(state, { type: 'message_end', message: { role: 'assistant', timestamp, content: 'Next checks.' } });
   calls(1, ['countdown']);
   applyEvent(state, { type: 'agent_start' });
   applyEvent(state, { type: 'tool_execution_start', toolCallId: 'countdown', toolName: 'bash' });
@@ -41,12 +38,9 @@ test('elapsed time stays on completed activity links and parallel tools are not 
     durationMs: 10147, result: { content: [{ type: 'text', text: 'Finished' }] }, isError: false });
   snapshot();
   await expect(time).toHaveText('10.1s');
-  await expect(time).toBeHidden();
-  await expect(countdown.locator('.tool-status')).toBeHidden();
-  await page.getByRole('button', { name: 'View activity', exact: true }).click();
   await expect(time).toBeVisible();
   await expect(time).toHaveAccessibleName('Elapsed time: 10.1s');
-  await countdown.locator(':scope > summary').click();
+  await expect(countdown.locator('.tool-status')).toBeHidden();
   result('countdown', 20000, 10147);
   reply(21000); calls(25000, ['long', 'short']); result('short', 31500, 1000); snapshot();
   const parallel = groups.nth(1);

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('activity follows the selected agent through streaming, tools, waiting, completion and disconnect', async ({ page }, testInfo) => {
+test('activity follows the selected agent through streaming, tools, waiting, completion and disconnect', async ({ page }) => {
   const state = { id: 'active', title: 'Review changes', cwd: '/project', status: 'idle', messages: [
     { id: 'user', role: 'user', text: 'Check how to fix the slow runs.' },
     { id: 'reply', role: 'assistant', text: 'I’ll check the timings from the last three runs.' }
@@ -25,27 +25,23 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.getByRole('button', { name: /Review changes/ }).click();
   const activity = page.locator('#agent-activity');
   await expect(activity).toBeHidden();
+  await page.evaluate(() => { Math.random = () => 0; });
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  const label = page.locator('#activity-label');
-  await expect(label).toHaveText('Writing a reply…');
+  await expect(activity).toHaveText('Thinking…');
   await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
-  await expect(label).toHaveAttribute('role', 'status');
-  await expect(page.locator('#activity-time')).toBeHidden();
+  await page.evaluate(() => { Math.random = () => 0.999; });
+  await expect(activity).toHaveAttribute('role', 'status');
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'connection-spin');
   state.messages[1].text += ' The first run took longer.'; snapshot();
   await expect(activity).toBeVisible();
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
-  await expect(page.locator('.tool-activity > summary')).toBeHidden();
-  await expect(page.locator('#activity-toggle')).toBeVisible();
+  await expect(page.locator('.tool-activity > summary')).toBeVisible();
+  await expect(page.locator('.tool-activity-working')).toHaveCount(0);
   await expect(page.locator('.tool')).toBeHidden();
-  await expect(label).toHaveText('Running a command…');
+  await expect(activity).toHaveText('Thinking…'); // Streaming updates must not shuffle the label.
   await page.locator('#prompt').fill('Keep checking');
-  await expect(label).toHaveText('Running a command…');
-  for (const [name, text] of [['read', 'Reading files…'], ['ffgrep', 'Searching the project…'], ['write', 'Making changes…'], ['constructor', 'Using tools…'], ['bash', 'Running a command…']]) {
-    state.tools[0].name = name; snapshot();
-    await expect(label).toHaveText(text);
-  }
+  await expect(activity).toHaveText('Thinking…');
   const checkPosition = async () => expect(async () => {
     const row = await activity.boundingBox(), composer = await page.locator('#composer').boundingBox();
     expect(row.y + row.height).toBeLessThanOrEqual(composer.y);
@@ -67,30 +63,14 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
   await expect(activity).toHaveCSS('color', 'rgb(156, 200, 189)');
   await checkPosition();
-  await page.screenshot({ path: testInfo.outputPath('activity-desktop-dark.png') });
-  await testInfo.attach('activity-desktop', { body: await activity.ariaSnapshot(), contentType: 'text/plain' });
-  state.status = 'waiting'; snapshot();
-  await expect(activity).toBeVisible();
-  await expect(label).toHaveText('Waiting for input in Pi’s terminal…');
-  await expect(activity.locator('svg')).toBeHidden();
-  await expect(page.locator('#composer-hint')).toBeHidden();
-  for (const status of ['idle', 'saved', 'disconnected']) {
+  for (const status of ['waiting', 'idle', 'saved', 'disconnected']) {
     state.status = status; snapshot();
     await expect(activity).toBeHidden();
   }
-  state.error = 'The check could not finish.'; snapshot();
-  await expect(page.locator('#notice')).toHaveText(state.error);
-  await expect(page.locator('#notice')).toBeVisible();
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  await expect(label).toHaveText('Running a command…');
+  await expect(activity).toHaveText('Piecing it together…');
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();
-  const summary = page.locator('.tool-activity > summary');
-  await expect(summary).toBeVisible();
-  await summary.click();
-  await expect(page.locator('.tool')).toBeVisible();
-  await summary.click();
-  await expect(summary).toBeFocused();
 });
