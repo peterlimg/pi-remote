@@ -43,8 +43,26 @@ export function takeText(pending, text) {
   if (index >= 0) pending.splice(index, 1);
   return index >= 0;
 }
+export function noteTaskTiming(message, task) {
+  if (message.role === 'user') {
+    if (task.finished) { task.startedAt = undefined; task.lastReply = undefined; task.finished = false; }
+    task.startedAt ??= message.timestamp;
+    return;
+  }
+  if (message.role !== 'assistant') return;
+  if (task.finished && task.lastReply?.id !== message.id) {
+    delete task.lastReply.taskDurationMs; task.finished = false;
+  }
+  task.startedAt = message.taskStartedAt ?? task.startedAt ?? message.timestamp;
+  message.taskStartedAt = task.startedAt; task.lastReply = message;
+  if (!['stop', 'length', 'error', 'aborted'].includes(message.stopReason)) return;
+  task.finished = true;
+  if (Number.isFinite(task.startedAt) && Number.isFinite(message.timestamp) && Number.isFinite(message.durationMs)) {
+    message.taskDurationMs = Math.max(0, message.timestamp + message.durationMs - task.startedAt);
+  }
+}
 export function branchMessages(branch, key) {
-  const pending = [];
+  const pending = [], task = {};
   return branch.flatMap(entry => {
     if (entry.type === 'custom' && entry.customType === EXTENSION_INPUT) pending.push(entry.data?.text);
     const message = entry.type === 'custom_message' ? { role: 'custom', content: entry.content, display: entry.display,
@@ -52,6 +70,7 @@ export function branchMessages(branch, key) {
     if (!message || !shown(message)) return [];
     const item = cleanMessage(message, key({ ...entry, message }));
     if (item.role === 'user' && takeText(pending, item.text)) item.source = 'extension';
+    noteTaskTiming(item, task);
     return [item];
   });
 }
@@ -75,7 +94,7 @@ export function cleanMessage(message, key) {
   return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
     ...(images.size ? { images: [...images.values()] } : {}),
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
-    isError: !!message.isError, timestamp: message.timestamp,
+    isError: !!message.isError, timestamp: message.timestamp, stopReason: message.stopReason,
     durationMs: Number.isFinite(message.durationMs) && message.durationMs >= 0 ? message.durationMs : undefined };
 }
 function readBranch(file) {

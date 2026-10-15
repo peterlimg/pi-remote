@@ -890,6 +890,9 @@ function renderConversation(state) {
         });
         article.append(copy);
       }
+      if (message.role === 'assistant' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
+        article.append(el('p', 'Worked for ' + formatToolDuration(message.taskDurationMs), 'task-duration'));
+      }
       if (message.delivery) article.append(el('small', message.delivery, 'delivery-status'));
       if (article.childNodes.length) fragment.append(article);
     }

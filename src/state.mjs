@@ -1,11 +1,12 @@
 import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
-import { cleanMessage, shown, textContent, takeText, EXTENSION_INPUT } from './catalog.mjs';
+import { cleanMessage, shown, textContent, takeText, noteTaskTiming, EXTENSION_INPUT } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { taskText } from '../web/protocol.js';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
 const running = new WeakMap();
+const tasks = new WeakMap();
 // Prompts extensions sent whose user message has not arrived yet, also off the wire.
 const extensionInputs = new WeakMap();
 export function noteExtensionInput(state, text) {
@@ -15,7 +16,10 @@ export function noteExtensionInput(state, text) {
 // Reconnecting is not activity: keep the session file's time so the phone's unread marks survive host restarts.
 const lastWrite = file => { try { return statSync(file).mtimeMs; } catch { return Date.now(); } };
 export function initialState(meta, messages = []) {
-  return { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: meta.file ? lastWrite(meta.file) : Date.now() };
+  const state = { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: meta.file ? lastWrite(meta.file) : Date.now() };
+  const task = {}; tasks.set(state, task);
+  for (const message of state.messages) noteTaskTiming(message, task);
+  return state;
 }
 export function applyEvent(state, event) {
   if (event.type === 'extension_ui_request') {
@@ -42,6 +46,8 @@ export function applyEvent(state, event) {
     const m = event.message;
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');
     const item = cleanMessage(m, key);
+    if (!tasks.has(state)) tasks.set(state, {});
+    noteTaskTiming(item, tasks.get(state));
     let index = state.messages.findIndex(x => x.id === key);
     if (index >= 0 ? state.messages[index].source : m.role === 'user' && takeText(extensionInputs.get(state) || [], item.text)) item.source = 'extension';
     if (index < 0) {
