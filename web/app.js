@@ -1292,7 +1292,7 @@ function openUsage() {
   openPicker(selected, 'usage', $('usage-meter'));
   renderUsagePanel(); loadUsage(selected, true);
 }
-$('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker(true) : openUsage());
+$('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker() : openUsage());
 $('usage-refresh').addEventListener('click', () => loadUsage(selected, true));
 setInterval(() => { if (!document.hidden && selected) loadUsage(selected); }, 15000);
 function renderModels() {
@@ -1406,7 +1406,7 @@ $('model').addEventListener('click', () => settingsPicker?.kind === 'model' ? cl
 $('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 'reasoning' ? closePicker() : openReasoning(selected));
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
-$('picker-cancel').addEventListener('click', () => closePicker(true));
+$('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
 // Any tap on the sheet or its backdrop dismisses it; Escape is native.
 $('image-viewer').addEventListener('click', () => $('image-viewer').close());
 // Pull a bottom sheet down to dismiss it. A drag inside a scrolled list scrolls it instead.

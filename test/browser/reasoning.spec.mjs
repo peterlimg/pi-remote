@@ -53,7 +53,7 @@ test('reasoning uses the model picker interaction and preserves drafts and sessi
   await expect(picker).toBeHidden();
   expect(commands).toHaveLength(0);
   await effort.click();
-  await page.getByRole('button', { name: 'Close reasoning picker' }).click();
+  await page.getByRole('button', { name: 'Close reasoning picker' }).press('Enter');
   await expect(effort).toBeFocused();
   await expect(effort).toHaveAttribute('aria-expanded', 'false');
   await expect(effort).toHaveCSS('background-color', idleBackground);

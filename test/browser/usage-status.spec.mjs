@@ -75,7 +75,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
   }
 });
 
-test('usage follows session snapshots and never invents missing account limits', async ({ page }) => {
+test('usage follows session snapshots and never invents missing account limits', async ({ page }, testInfo) => {
   const states = [
     { id: 'alpha', title: 'Alpha', cwd: '/project', status: 'idle', contextUsage: { tokens: 0, contextWindow: 200000, percent: 0 }, messages: [] },
     { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [] }
@@ -105,6 +105,31 @@ test('usage follows session snapshots and never invents missing account limits',
   await expect(pane).toContainText('0 / 200,000 tokens');
   await expect(pane).toContainText('No provider usage extension');
   await expect(pane).not.toContainText('Weekly limit:');
+  await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
+  await expect(pane).toBeHidden();
+  await expect(meter).toHaveAttribute('aria-expanded', 'false');
+  await expect(meter).toHaveCSS('outline-style', 'none');
+  await page.screenshot({ path: testInfo.outputPath('usage-after-touch-close-mobile.png') });
+  await meter.tap();
+  await expect(pane).toBeVisible();
+  await meter.tap();
+  await expect(pane).toBeHidden();
+  await expect(meter).toHaveCSS('outline-style', 'none');
+  await meter.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(pane).toBeHidden();
+  await expect(meter).toBeFocused();
+  await expect(meter).toHaveCSS('outline-style', 'solid');
+  await meter.press('Enter');
+  await page.getByRole('button', { name: 'Close usage', exact: true }).press('Enter');
+  await expect(pane).toBeHidden();
+  await expect(meter).toBeFocused();
+  await expect(meter).toHaveCSS('outline-style', 'solid');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: testInfo.outputPath('usage-after-keyboard-close-desktop-dark.png') });
+  await page.setViewportSize({ width: 390, height: 664 });
+  await meter.tap();
   fail = true;
   await page.locator('#usage-refresh').click();
   await expect(pane).toContainText('Usage temporarily unavailable. Try again.');
