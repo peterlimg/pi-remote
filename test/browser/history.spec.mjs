@@ -15,7 +15,7 @@ import { videoMessage } from '../../web/videos.js';
 test('all saved messages remain reachable with bounded scrollback while Pi keeps working', async ({ page }, testInfo) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-history-'));
   const config = loadConfig(dir), file = join(dir, 'history.jsonl');
-  let host, agent, lock, parentId = null;
+  let host, agent, lock, releaseHistory, parentId = null;
   const append = (id, fields) => {
     appendFileSync(file, JSON.stringify({ id, parentId, timestamp: new Date().toISOString(), ...fields }) + '\n');
     parentId = id;
@@ -57,10 +57,28 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     await expect(messages.first()).toContainText('Message 550');
     await expect(page.getByRole('button', { name: 'Load older messages', exact: true })).toBeAttached();
     const firstNumber = () => messages.first().innerText().then(text => Number(text.match(/Message (\d+)/)[1]));
+    const history = host.service.history.bind(host.service);
+    host.service.history = async (...args) => {
+      host.service.history = history;
+      await new Promise(resolve => { releaseHistory = resolve; });
+      return history(...args);
+    };
     await transcript.evaluate(node => {
       node.scrollTop = 0;
       window.pageAnchorTop = node.querySelector('[data-message-id="m550"]').getBoundingClientRect().top;
     });
+    await expect.poll(() => typeof releaseHistory).toBe('function');
+    await expect(transcript.getByText(/^Loading(?: messages)?…$/)).toHaveCount(1);
+    const loading = transcript.getByRole('button', { name: 'Loading…', exact: true });
+    await expect(loading).toBeDisabled();
+    await expect(loading).toHaveAttribute('aria-busy', 'true');
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.screenshot({ path: testInfo.outputPath(`history-loading-${width}.png`) });
+      writeFileSync(testInfo.outputPath(`history-loading-${width}.aria.txt`), await transcript.ariaSnapshot());
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    releaseHistory();
     await expect.poll(firstNumber).toBeLessThan(550);
     expect(await page.locator('[data-message-id="m550"]').evaluate(node => Math.abs(node.getBoundingClientRect().top - window.pageAnchorTop))).toBeLessThan(2);
     expect(await messages.count()).toBeLessThanOrEqual(200);
@@ -113,6 +131,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
       maxPatchBytes: Math.max(...patches.map(frame => Buffer.byteLength(JSON.stringify(frame))))
     }, null, 2));
   } finally {
+    releaseHistory?.();
     agent?.ws.terminate(); lock?.release(); await host?.close(); rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -180,10 +180,11 @@ async function loadHistory(direction) {
   }
 }
 function historyControl(direction) {
-  const older = direction === 'before';
-  const button = el('button', historyRequest?.direction === direction ? 'Loading messages…' : older ? 'Load older messages'
+  const older = direction === 'before', loading = historyRequest?.direction === direction;
+  const button = el('button', loading ? 'Loading…' : older ? 'Load older messages'
     : historyWindow.newer ? 'Load newer messages' : 'Return to latest messages', 'secondary history-page');
   button.type = 'button'; button.disabled = !!historyRequest || !connected;
+  button.setAttribute('aria-busy', String(loading));
   button.addEventListener('click', () => older || historyWindow?.newer ? loadHistory(direction) : showLatest());
   return button;
 }
@@ -924,7 +925,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (historyWindow?.older ?? state.historyTruncated) {
     fragment.append(supportsHistory ? historyControl('before') : el('p', 'Latest 100 messages.', 'hint'));
   }
-  if (historyRequest) { const loading = el('p', 'Loading messages…', 'hint'); loading.setAttribute('role', 'status'); fragment.append(loading); }
   if (historyError) { const error = el('p', historyError + ' Retry loading, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
