@@ -222,7 +222,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
 });
 
-test('desktop Enter sends, Shift+Enter adds a line and Alt+Enter queues a follow-up', async ({ browser }) => {
+test('desktop Enter and Alt+Enter send normal prompts, while Shift+Enter adds a line', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false });
   const page = await context.newPage(), commands = [];
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
@@ -248,7 +248,7 @@ test('desktop Enter sends, Shift+Enter adds a line and Alt+Enter queues a follow
     await prompt.press('Alt+Enter');
     await expect(prompt).toHaveValue('');
     await expect.poll(() => commands.length).toBe(2);
-    expect(commands).toEqual([{ type: 'prompt', text: 'first line\n' }, { type: 'followUp', text: 'next turn' }]);
+    expect(commands).toEqual([{ type: 'prompt', text: 'first line\n' }, { type: 'prompt', text: 'next turn' }]);
     await expect(page.locator('#composer select')).toHaveCount(0);
     await prompt.fill('normal message');
     await page.locator('#send').click();

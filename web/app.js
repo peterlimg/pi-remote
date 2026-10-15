@@ -761,7 +761,7 @@ function renderConversation(state) {
       (message.images?.length || 0) === images.length);
     const message = index < 0 ? { id: outgoing.key, role: 'user', text,
       images: images.map(({ file }) => ({ id: 'local', mimeType: file.type })),
-      delivery: outgoing.accepted ? outgoing.delivery : 'Sending…' } : messages[index];
+      delivery: outgoing.accepted ? undefined : 'Sending…' } : messages[index];
     localImages.set(message.id, images);
     localVideos.set(message.id, outgoing.attachments.filter(item => item.video));
     if (index < 0) messages.push(message);
@@ -973,13 +973,7 @@ function updateControls() {
   $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${noun}${imageCount === 1 ? '' : 's'}…` : 'Sending…';
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
-  const steering = !!working && hasDraft && !$('prompt').value.trim().startsWith('/');
-  $('send').classList.toggle('steering', steering);
-  $('send').setAttribute('aria-label', steering ? 'Steer message' : 'Send message');
-  $('send').title = steering ? 'Steer this turn at the next opportunity' : 'Send message';
-  $('send-label').hidden = !steering;
-  $('commands').hidden = steering;
-  $('prompt').placeholder = working ? 'Steer Pi while it works…' : 'Type / for commands';
+  $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
   $('image-files').disabled = !selected || sending.has(selected);
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
@@ -1550,13 +1544,13 @@ $('prompt').addEventListener('keydown', event => {
     if (event.key === 'Tab' && completeCommand()) { event.preventDefault(); return; }
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (completeCommand()) sendMessage(event.altKey ? 'followUp' : 'prompt');
+      if (completeCommand()) sendMessage();
       return;
     }
   }
   if (event.key === 'Enter' && !event.shiftKey && matchMedia('(pointer: fine)').matches) {
     event.preventDefault();
-    sendMessage(event.altKey ? 'followUp' : 'prompt');
+    sendMessage();
   }
 });
 function readImage(file) {
@@ -1739,16 +1733,15 @@ $('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
 });
-async function sendMessage(type = 'prompt') {
+async function sendMessage() {
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
   if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
-  const isCommand = text.trim().startsWith('/'), queued = ['working', 'waiting'].includes(cache.get(id)?.status);
+  const isCommand = text.trim().startsWith('/');
   if (attachments.length && isCommand) { notice('Send attachments with a message, not a slash command.'); return; }
   const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,
-    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false,
-    delivery: queued ? (type === 'followUp' ? 'Queued for next turn' : 'Queued to steer') : 'Sent. Waiting for Pi…' };
+    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
   sending.set(id, outgoing);
   if (!isCommand) submissions.set(outgoing.key, outgoing);
   // The editor owns the next draft; retain this submission until delivery is confirmed.
@@ -1778,7 +1771,7 @@ async function sendMessage(type = 'prompt') {
       const key = text.trim().slice(6).trim();
       if (key) await switchModel(id, key);
       else openModels(id);
-    } else await request('command', { sessionId: id, command: { type, text, ...(images.length ? { images } : {}), ...(videos.length ? { videos: videos.map(video => video.uploadId) } : {}) } });
+    } else await request('command', { sessionId: id, command: { type: 'prompt', text, ...(images.length ? { images } : {}), ...(videos.length ? { videos: videos.map(video => video.uploadId) } : {}) } });
     if (sending.get(id) !== outgoing) return;
     outgoing.accepted = true;
     if (created && selected === id) await selectSession(created.sessionId);

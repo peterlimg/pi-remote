@@ -60,7 +60,7 @@ for (const rejected of [false, true]) test(`slow image acknowledgement frees the
   else {
     // An acknowledgement is not the conversation echo. Keep the preview in between.
     await expect(sent).toHaveCount(1);
-    await expect(sent.locator('.delivery-status')).toHaveText('Sent. Waiting for Pi…');
+    await expect(sent.locator('.delivery-status')).toHaveCount(0);
     state.messages.push(cleanMessage({ role: 'user', content: [
       { type: 'text', text: 'Describe this screenshot\n\n[Image: original 1170x2532, displayed at 924x2000. Multiply coordinates by 1.27 to map to original image.]' },
       { type: 'image', mimeType: file.mimeType, data: file.buffer.toString('base64') }
