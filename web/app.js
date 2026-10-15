@@ -891,7 +891,11 @@ function renderConversation(state) {
         article.append(copy);
       }
       if (message.role === 'assistant' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
-        article.append(el('p', 'Worked for ' + formatToolDuration(message.taskDurationMs), 'task-duration'));
+        const phrases = ['Tinkered for', 'Chipped away for', 'Puzzled over it for', 'Plugged away for', 'Kept at it for'];
+        let hash = 0;
+        // Timestamps keep the wording stable even when saved history uses different message IDs.
+        for (const char of `${message.timestamp ?? message.id}`) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+        article.append(el('p', phrases[hash % phrases.length] + ' ' + formatToolDuration(message.taskDurationMs), 'task-duration'));
       }
       if (message.delivery) {
         const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);

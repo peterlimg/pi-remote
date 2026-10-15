@@ -18,6 +18,8 @@ test('final replies show total thinking and tool time, survive steering, long ta
   };
   const call = id => [{ type: 'text', text: 'Checking the files.' }, { type: 'toolCall', id, name: 'read', arguments: { path: 'app.js' } }];
   const snapshot = () => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
+  const phrases = '(?:Tinkered for|Chipped away for|Puzzled over it for|Plugged away for|Kept at it for)';
+  const duration = text => new RegExp('^' + phrases + ' ' + text.replace('.', '\\.') + '$');
   try {
     message('user', 500, 'Think about this.');
     message('assistant', 1000, 'A reply with no tools.', { durationMs: 9000, stopReason: 'stop' });
@@ -43,13 +45,17 @@ test('final replies show total thinking and tool time, survive steering, long ta
     });
     await page.goto('/#token=browser-test-token-only-123456789012345');
     await page.locator('.session').click();
-    await expect(page.locator('.task-duration')).toHaveText(['Worked for 9.5s']);
+    await expect(page.locator('.task-duration')).toHaveText([duration('9.5s')]);
+    const firstWording = await page.locator('.task-duration').textContent();
     await expect(page.locator('.message.assistant').filter({ hasText: 'Finishing the answer.' }).locator('.task-duration')).toHaveCount(0);
     message('assistant', 29000, 'Finished the whole task.', { durationMs: 2000, stopReason: 'stop' });
     applyEvent(state, { type: 'agent_end' }); snapshot();
     const final = page.locator('.message.assistant').filter({ hasText: 'Finished the whole task.' });
-    await expect(final.locator('.copy-message + .task-duration')).toHaveText('Worked for 20.0s');
+    await expect(final.locator('.copy-message + .task-duration')).toHaveText(duration('20.0s'));
     await expect(page.locator('.task-duration')).toHaveCount(2);
+    await expect(page.locator('.task-duration').first()).toHaveText(firstWording);
+    const prefixes = (await page.locator('.task-duration').allTextContents()).map(text => text.replace(/\d.*$/, ''));
+    expect(new Set(prefixes).size).toBe(2);
     for (const [width, colorScheme] of [[390, 'light'], [1280, 'dark']]) {
       await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme });
       await final.scrollIntoViewIfNeeded();
@@ -64,10 +70,11 @@ test('final replies show total thinking and tool time, survive steering, long ta
       message('toolResult', 32200 + i * 300, 'Output', { toolCallId: 'long-' + i, toolName: 'read', durationMs: 100 });
     }
     message('assistant', 61000, 'The long task is done.', { durationMs: 1000, stopReason: 'stop' }); snapshot();
-    await expect(page.locator('.task-duration')).toHaveText(['Worked for 30.5s']);
+    await expect(page.locator('.task-duration')).toHaveText([duration('30.5s')]);
+    const savedWording = await page.locator('.task-duration').textContent();
     state.messages = readSession(file).messages; state.status = 'saved';
     await page.reload(); await page.locator('.session').click();
-    await expect(page.locator('.task-duration')).toHaveText(['Worked for 30.5s']);
+    await expect(page.locator('.task-duration')).toHaveText([savedWording]);
     await expect(page.locator('.task-duration')).toBeVisible();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
