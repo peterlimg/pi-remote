@@ -1,0 +1,98 @@
+{
+  "sdk": "0.3.296",
+  "pi": "1.2.0",
+  "productionProviderChangedOrCompactionEnabled": false,
+  "unitTestsAddedOrRun": false,
+  "fixtures": ["real SDK with synthetic MCP tool", "real Pi agent core and SDK with an experimental compaction-event adapter"],
+  "nativeManual": [
+    {
+      "model": "claude-haiku-5-5",
+      "pass": true,
+      "disableAllHooks": true,
+      "programmaticPreAndPostCompactRan": true,
+      "untrustedProjectHookExecuted": false,
+      "markerRecalledAfterCompactAndResume": true,
+      "toolExecutions": 1,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-compaction-diiDM4/result.json"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "pass": true,
+      "disableAllHooks": true,
+      "programmaticPreAndPostCompactRan": true,
+      "untrustedProjectHookExecuted": false,
+      "markerRecalledAfterCompactAndResume": true,
+      "toolExecutions": 1,
+      "requestedSmallerWindow": 20000,
+      "reportedWindowAfterUpdate": 100000,
+      "reportedAutoThreshold": 84952,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-compaction-1sV0z4/result.json"
+    }
+  ],
+  "piAgentManual": {
+    "model": "claude-haiku-5-5",
+    "pass": true,
+    "markerRecalledAfterCompactAndResume": true,
+    "toolExecutions": 1,
+    "callResultIdsMatched": true,
+    "cumulativeUsageMatched": true,
+    "boundaryPreTokens": 61490,
+    "boundaryPostTokens": 1074,
+    "piHistoryReplayedToSDK": false,
+    "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-Ey8C19/result.json"
+  },
+  "piAgentCheckpointGap": {
+    "pass": true,
+    "interruption": "controlled query close after native compact and before a new Pi checkpoint; not a hard crash",
+    "preCompactAnchorExplicitlyPreservedBySDK": true,
+    "markerRecalledAfterResume": true,
+    "toolExecutions": 1,
+    "cumulativeUsageMatched": true,
+    "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-w57eeA/result.json"
+  },
+  "automaticCounterexamples": [
+    {
+      "variant": "custom Pi system prompt",
+      "pass": false,
+      "nativeAutoCompactionObserved": true,
+      "summary": "ACK_0",
+      "summaryRetainedMarker": false,
+      "markerRecalledAfterCompactAndResume": false,
+      "mechanicalResumeAndUsageMatched": true,
+      "toolExecutions": 1,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-j71M7U/result.json"
+    },
+    {
+      "variant": "Pi input queued during automatic compact",
+      "pass": false,
+      "nativeAutoCompactionObserved": true,
+      "summary": "ACK_0",
+      "midTurnInputConsumedOnce": true,
+      "markerRecalledAfterCompactAndResume": false,
+      "mechanicalResumeAndUsageMatched": true,
+      "toolExecutions": 1,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-GbuihZ/result.json"
+    },
+    {
+      "variant": "Claude Code preset plus Pi system prompt",
+      "pass": false,
+      "nativeAutoCompactionObserved": true,
+      "summary": "ACK_0",
+      "markerRecalledAfterCompactAndResume": false,
+      "mechanicalResumeAndUsageMatched": true,
+      "toolExecutions": 1,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-auto-compact-aaH8UZ/result.json"
+    }
+  ],
+  "recommendation": "Develop a controlled, focused native compact path first. Do not simply enable production auto-compaction; preserve semantic failures as acceptance blockers.",
+  "verificationLimits": [
+    "automatic counterexamples use synthetic padding and earlier strict ACK-only output instructions; generality and root cause remain unresolved",
+    "Pi agent-core integration is not full Coding Agent, RPC, mobile-browser, Safari, or opentunnel verification",
+    "controlled query close is not SIGKILL, power loss, or partial-file-write crash coverage",
+    "managed hook-policy variants and dropped resume anchors were not tested",
+    "SDK/Pi context telemetry reconciliation and exact retained-tail mirroring remain unimplemented",
+    "local full summaries remain private; this artifact excludes them, credentials, and production conversation bodies",
+    "native SDK transcript retention is separate from Pi session deletion",
+    "SDK cost figures are estimates, not subscription billing proof"
+  ]
+}

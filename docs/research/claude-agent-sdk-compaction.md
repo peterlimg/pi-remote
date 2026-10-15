@@ -1,12 +1,14 @@
 # Safe Claude SDK compaction integration
 
-Research only. No provider, personal configuration, active session, or compaction setting was changed. No SDK query, inference, or test was launched for this investigation.
+Research with isolated live experiments. Production provider code, personal configuration, and active conversations were not changed. The experiments called the real SDK with synthetic data and consumed Claude plan usage. No unit tests were added or run.
 
 Inspected versions: Claude Agent SDK `0.3.296`, Pi `1.2.0`, provider implementation at `351cd6c`.
 
 ## Recommendation
 
-Make the SDK the sole owner of its model context. Pi remains the tool validator, permission authority, executor, and durable audit history. Do not run two independent summarizers and do not rebuild an SDK conversation by replaying Pi tools.
+Keep the SDK as owner of its model context, with Pi retaining tool validation, permissions, execution, and the durable audit history. Do not run two independent summarizers or rebuild an SDK conversation by replaying Pi tools.
+
+**Start with a controlled, focused native compact operation at an eligible idle point, not an unconditional auto-compaction toggle.** Focused manual compaction preserved the marker, Pi tool identity, completed-session resume, and usage totals in the experiments. Default automatic compaction repeatedly generated `ACK_0` as its summary in a synthetic fixed-response workload and dropped the required marker from active context. The Claude Code system-prompt preset did not fix that case. This is a counterexample to the proposed automatic path, not proof that all SDK auto-compaction is broken. Keep the production guard until semantic behavior and failure recovery are addressed.
 
 ```text
 Pi-approved tools and accepted input
@@ -18,7 +20,25 @@ Pi-approved tools and accepted input
 
 A native SDK compaction does not inherently require deleting or rewriting Pi's audit transcript. The present bridge guard is an implementation restriction, not an SDK requirement. If Pi's active projection is later shortened too, that is a separate, explicitly authorized projection change. Its new fingerprint and kept boundary must be committed consistently; ordinary history-edit detection must remain strict.
 
-## Verified from the pinned interfaces
+## Live findings
+
+[Sanitized results](../../experiments/claude-sdk-provider/verification-compaction.json) retain successes and failures. Full local summaries stay private; shared evidence contains only selected facts, counts, and estimates.
+
+| Experiment | Result |
+| --- | --- |
+| Native focused `/compact`, Haiku and Opus | Both passed. Pre/PostCompact callbacks ran with `disableAllHooks: true`. The scratch project shell hook did not execute. The marker survived compact/resume, and the synthetic tool executed once. |
+| Effective native window | A 100K policy reported an 84,952-token trigger. Updating the top-level setting to 20K still reported 100K. With auto-compaction off, the Pi-agent experiment reported the model's 1M window and no auto threshold. Do not assume arbitrary small windows or a Pi reserve-token translation. |
+| Real Pi agent core, focused manual compact | Passed with the experimental event adapter. Native boundary metadata reported about 61.5K tokens before and 1.1K after. The marker survived, tool/result IDs matched, and completed-checkpoint resume repeated no tool. Pi/SDK cumulative tokens and estimated cost matched. |
+| Query closed after compact, before a new Pi checkpoint | Passed when the pre-compact anchor was explicitly present in the SDK's preserved-message set. This was a controlled close, not SIGKILL or a partial-file-write crash. An older anchor is not necessarily stale merely because compaction happened; check native lineage before designing extra journal machinery. |
+| Automatic compact, custom Pi prompt | Mechanically continued/resumed with matching IDs and usage, but failed marker recall. The generated summary was five characters, `ACK_0`. Original audit history was not deleted. |
+| Input queued during automatic compact | The Pi agent accepted the instruction once and the SDK answered it. The earlier marker was still missing after compact/resume. This exercised Pi agent-core steering, not browser/RPC delivery. |
+| Automatic compact, Claude Code preset plus Pi prompt | Failed the same marker test with the same five-character summary. Replacing the custom prompt with a preset is not an established fix. |
+
+The Pi cases use the real Pi 1.2 agent loop and SDK, with Pi executing the counted tool. A scratch adapter enables native compaction and observes known compaction notifications instead of passing them to the production guard. It is **not** a deployed provider, full Coding Agent compaction scheduler, RPC, or mobile-browser proof. The automatic scenarios intentionally exit nonzero when memory validation fails, even when mechanical continuation and accounting pass.
+
+The negative workload deliberately contains long irrelevant padding and strict earlier ACK-only output instructions. It is reproducible in the recorded custom-prompt, queued-input, and preset runs. Root cause and generality remain open; do not turn this evidence into a claim that the SDK guarantees lossless summaries. Also do not silently accept a tiny summary just because `compact_result` says success.
+
+## Verified interfaces and runtime observations
 
 | Interface | What it establishes |
 | --- | --- |
@@ -27,7 +47,7 @@ A native SDK compaction does not inherently require deleting or rewriting Pi's a
 | `Query.applyFlagSettings()` | Session-scoped settings can be updated without writing personal settings files. |
 | `SDKStatusMessage` | Reports `compacting` and optional `compact_result: success/failed`. |
 | `SDKCompactBoundaryMessage` | Reports manual/automatic trigger, pre/post token counts, boundary UUID, and optional preserved-message relinking metadata. The boundary itself is not a summary string. |
-| `PostCompactHookInput.compact_summary` | A programmatic post-compaction hook can receive the generated summary. Its availability under the bridge's hook restrictions still needs verification. |
+| `PostCompactHookInput.compact_summary` | Programmatic Pre/PostCompact callbacks executed with the bridge's non-managed `disableAllHooks: true` and `settingSources: []`. No need to relax those settings for the tested SDK. Managed-policy variants remain untested. |
 | `Query.getContextUsage({ detail: 'summary' })` | Reports active context estimates and native compaction state without per-category token-count calls. Returned fields include `totalTokens`, `rawMaxTokens`, `autoCompactThreshold`, and `isAutoCompactEnabled`. |
 | SDK result `modelUsage` | Includes internal compaction calls and is cumulative across streaming-input turns. Use it for reconciled totals, not as an active-context measurement. |
 | Pi `session_before_compact` | Can cancel Pi compaction or supply a custom `summary`, `firstKeptEntryId`, `tokensBefore`, details, and usage. |
@@ -40,7 +60,7 @@ The pinned `Query` interface has no typed `compact()` method. Do not invent one.
 1. **Keep the existing tool and authentication isolation.** Retain Pi-only MCP tools, unchanged schemas and call IDs, strict MCP configuration, explicit local login, no SDK built-in tools, no auto-memory, and no user/project settings. Do not relax managed policy or enable shell hooks to obtain a summary.
 2. **Handle native compaction as a state transition.** Accept recognized native compaction status/boundary events instead of unconditionally closing the bridge. Continue rejecting unrelated conversation resets and unverified history edits. Do not treat a status notification alone as a committed compaction.
 3. **Track native context separately from usage totals.** Pi's full audit history and SDK cumulative pipeline tokens do not measure the SDK's current compacted context. Expose native context and its effective threshold honestly. A catalogued 1M capability does not prove the native compaction policy waits until 1M.
-4. **Persist a safe checkpoint after completion.** Save the native session ID, a valid post-compaction message anchor, the Pi history/configuration fingerprint, compaction metadata, and reconciled usage only after a successful completed turn with every Pi result and accepted input accounted for. Keep original audit entries. Add a durable pending/invalidation record if an old checkpoint could otherwise be mistaken for a safe post-compaction checkpoint after a crash.
+4. **Persist a safe checkpoint after completion.** Save the native session ID, a verified native anchor, the Pi history/configuration fingerprint, compaction metadata, and reconciled usage only after every Pi result and accepted input is accounted for. Keep original audit entries. A completed post-compaction response anchor passed. A pre-compact anchor explicitly preserved by the SDK also passed the controlled-close gap. Do not assume all older anchors are safe or all are invalid. Hard-crash behavior and dropped anchors must be tested before deciding whether an additional durable pending/invalidation record is necessary.
 5. **Keep Pi from independently compacting the SDK session.** Delegate model-context compaction to the SDK. If Pi's active projection also needs trimming for memory and context estimation, mirror the authoritative SDK summary and retained segment only after their mapping is verified. Do not assume Pi's 20K kept tail equals the SDK's kept messages or silently rebase the fingerprint.
 
 This is a direction, not an implementation already proven safe. Context telemetry, crash consistency, and any Pi projection mirroring are part of completing it, not optional polish after flipping `autoCompactEnabled`.
@@ -49,14 +69,32 @@ This is a direction, not an implementation already proven safe. Context telemetr
 
 - Pi `AgentSession.compact()` calls `await this.abort()` **before** `session_before_compact`. The current bridge closes on that abort. Calling `ctx.compact()` from a live SDK stream can therefore destroy the query before the hook can coordinate anything. Schedule manual work only at an eligible idle point; do not use manual compaction as an in-flight auto-compaction shortcut.
 - SDK-native compaction must not cause Pi to lose or repeat a pending tool result or accepted mid-turn message. Preserve the existing input UUID tracking and call/result checks.
-- The bridge currently passes `disableAllHooks: true`. Do not assume a `PostCompact` callback will run with that restriction. Verify the supported callback policy in isolation; managed hook restrictions must not be bypassed. A documented read of the provider-owned persisted SDK session is an alternative to investigate for saved sessions, not a license to scrape unrelated histories or mutate SDK JSONL. Ephemeral sessions need a solution that does not rely on a transcript file.
-- `getSessionMessages()` supports `dir` and `includeSystemMessages`, and reconstructs the native chain. The returned message body is `unknown`; this declaration alone does not establish a stable compact-summary payload shape.
+- Programmatic Pre/PostCompact callbacks did run with `disableAllHooks: true`; keep that restriction and the empty settings sources. The scratch project PostCompact command sentinel remained absent. This does not establish behavior under every managed-policy setting, nor justify bypassing managed policy. Callbacks provide a route that need not depend on SDK transcript files for ephemeral sessions.
+- `getSessionMessages()` reconstructed the owned compacted chain. The observed compact-summary user entry had an extra `isCompactSummary` field, while a system entry's `message` was undefined. These shapes are version-specific observations, not a stable schema promised by the declared `unknown` body. Always scope reads to the provider-owned session and directory; never mutate the vendor JSONL or scan unrelated histories.
 - SDK preserved-message UUIDs and Pi entry IDs are not interchangeable. The bridge can combine multiple SDK messages into one Pi assistant response, and SDK-internal rejected tool attempts need not appear as Pi tool executions. Exact retained-tail mirroring therefore needs an explicit mapping, not positional guessing.
 - Pi reserve/kept-tail settings cannot be advertised as working SDK controls without a verified translation. Initially expose the native window/threshold separately.
 
-## Focused E2E acceptance gate
+## Reproduce the experiments
 
-No new unit tests. Use one isolated host, real Pi RPC, pinned SDK, mobile browser, and synthetic tools. Obtain approval before a token-heavy auto-compaction proof; do not use existing sessions to reach the threshold.
+After the existing package dependencies are installed:
+
+```sh
+cd experiments/claude-sdk-provider
+npm run experiment:compact-sdk
+PI_SDK_TEST_MODEL=claude-opus-5-5 npm run experiment:compact-sdk
+npm run experiment:compact-pi -- --manual
+npm run experiment:compact-pi -- --manual --checkpoint-gap
+# Counterexamples: expect nonzero exits until their memory failure is resolved.
+npm run experiment:compact-pi
+npm run experiment:compact-pi -- --mid-turn
+npm run experiment:compact-pi -- --preset
+```
+
+These are live experiments, not mocks or unit tests. Each SDK query has a $0.35 SDK budget setting; resumed totals are cumulative, not a new billing statement. All working files and tool effects belong to newly created scratch directories. Persistent native SDK transcripts remain subject to Claude Code retention. Public script entrypoints do not run from the normal `npm test` command or extension loader.
+
+## Remaining E2E acceptance gate
+
+No new unit tests. Before enabling the provider, add the actual Coding Agent/RPC/browser path and resolve the observed automatic memory failure. Do not use existing conversations to reach a threshold.
 
 1. Run a synthetic tool with a counted side effect in a new scratch directory. Force native compaction in the isolated session, continue, and verify remembered markers, exact tool/result IDs, one execution, and reconciled usage including compaction.
 2. Send a user message near the compaction transition. Require it to be consumed once, preserve its order, and verify a subsequent follow-up without restarting the SDK conversation.
@@ -71,4 +109,4 @@ No new unit tests. Use one isolated host, real Pi RPC, pinned SDK, mobile browse
 - Pi 1.2.0 installed sources: `dist/core/agent-session.js` manual `compact()`; `dist/core/extensions/types.d.ts` compaction events; `dist/core/compaction/compaction.d.ts` custom result shape; `docs/compaction.md`; `examples/extensions/custom-compaction.ts`.
 - [Pi compaction reference source](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/compaction/compaction.ts) and [extension interface source](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts). Local 1.2.0 files, rather than a moving GitHub main branch, were used for the findings above.
 
-Official web documentation could not be fetched because this environment's network-address safety check rejected the resolved site address. That check was not weakened or bypassed. The findings above come from pinned local interfaces and Pi implementation, not an executed SDK compaction. Runtime event order, callback restrictions, retained-tail mapping, and crash recovery remain unverified.
+Official web documentation could not be fetched because this environment's network-address safety check rejected the resolved site address. That check was not weakened or bypassed. Interface findings come from pinned local sources; live findings come from the linked isolated results. Full Coding Agent/RPC/mobile integration, managed-policy variants, dropped-anchor behavior, forced compaction failure, hard crashes, and exact Pi retained-tail mirroring remain unverified. No production compaction support has been enabled.
