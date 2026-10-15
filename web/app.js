@@ -12,15 +12,37 @@ function atThreadBottom() {
 }
 function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
 // Shrinking the transcript (activity row, taller composer) keeps scrollTop, hiding the last message.
-let pinnedToBottom = true, transcriptHeight = 0;
+let pinnedToBottom = true, transcriptHeight = 0, historyTouch;
+function scrollHistory(delta) {
+  const box = $('transcript');
+  if (delta < 0 && box.scrollTop < 400) loadHistory('before');
+  else if (delta > 0 && historyWindow?.newer && box.scrollHeight - box.scrollTop - box.clientHeight < 400) loadHistory('after');
+}
 $('transcript').addEventListener('scroll', () => {
   const box = $('transcript');
   // The browser may shift scrollTop by up to the pending resize before the resize callback runs.
   pinnedToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 2 + Math.abs(box.clientHeight - transcriptHeight);
   updateScrollButton();
   const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
-  if (direction < 0 && box.scrollTop < 400) loadHistory('before');
-  else if (direction > 0 && historyWindow?.newer && box.scrollHeight - box.scrollTop - box.clientHeight < 400) loadHistory('after');
+  scrollHistory(direction);
+}, { passive: true });
+// Collapsed tools can leave no scrolling room; input at the edge must still page history.
+$('transcript').addEventListener('wheel', event => scrollHistory(event.deltaY), { passive: true });
+$('transcript').addEventListener('keydown', event => {
+  if (event.target !== $('transcript')) return;
+  if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) scrollHistory(-1);
+  else if (['ArrowDown', 'PageDown', 'End'].includes(event.key)) scrollHistory(1);
+});
+$('transcript').addEventListener('touchstart', event => {
+  const touch = event.touches.length === 1 && event.touches[0];
+  historyTouch = touch && { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+$('transcript').addEventListener('touchmove', event => {
+  if (!historyTouch || event.touches.length !== 1) { historyTouch = undefined; return; }
+  const touch = event.touches[0], dx = touch.clientX - historyTouch.x, dy = touch.clientY - historyTouch.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+  historyTouch = undefined;
+  if (Math.abs(dy) > Math.abs(dx)) scrollHistory(-dy);
 }, { passive: true });
 $('transcript').addEventListener('toggle', updateScrollButton, true);
 new ResizeObserver(() => {
@@ -120,7 +142,7 @@ const el = (tag, text, className) => {
   return node;
 };
 function resetScrollback() {
-  historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyError = ''; historyScrollTop = 0;
+  historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyError = ''; historyScrollTop = 0; historyTouch = undefined;
 }
 function showLatest() {
   resetScrollback();
@@ -156,11 +178,9 @@ async function loadHistory(direction) {
   if (direction === 'before' ? !(historyWindow?.older ?? state.historyTruncated) : !historyWindow?.newer) return;
   const messages = [...(historyWindow?.messages || state.messages)], cursor = direction === 'before' ? messages[0] : messages.at(-1);
   if (!cursor) return;
-  const focusReader = document.activeElement?.classList.contains('history-page');
   const current = historyRequest = { sessionId: selected, generation: historyGeneration, direction };
   historyError = '';
   renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
-  if (focusReader) $('transcript').focus({ preventScroll: true });
   try {
     const page = await request('history', { sessionId: selected, [direction]: cursor.id, expectedTip: historyWindow?.tip });
     if (historyRequest !== current || selected !== current.sessionId || historyGeneration !== current.generation) return;
@@ -178,15 +198,6 @@ async function loadHistory(direction) {
     historyRequest = undefined; historyError = error.message;
     renderConversation(cache.get(selected), { anchor: readingAnchor(), historyChanged: true });
   }
-}
-function historyControl(direction) {
-  const older = direction === 'before', loading = historyRequest?.direction === direction;
-  const button = el('button', loading ? 'Loading…' : older ? 'Load older messages'
-    : historyWindow.newer ? 'Load newer messages' : 'Return to latest messages', 'secondary history-page');
-  button.type = 'button'; button.disabled = !!historyRequest || !connected;
-  button.setAttribute('aria-busy', String(loading));
-  button.addEventListener('click', () => older || historyWindow?.newer ? loadHistory(direction) : showLatest());
-  return button;
 }
 function notice(text) {
   // Connection state belongs in the composer, not in persistent error notices.
@@ -220,7 +231,6 @@ function connection(text) {
   if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
-  for (const button of $('transcript').querySelectorAll('.history-page')) button.disabled = !!historyRequest || !connected;
 }
 function disconnect() {
   closePicker();
@@ -922,10 +932,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     activity.node.append(detail);
   };
-  if (historyWindow?.older ?? state.historyTruncated) {
-    fragment.append(supportsHistory ? historyControl('before') : el('p', 'Latest 100 messages.', 'hint'));
-  }
-  if (historyError) { const error = el('p', historyError + ' Retry loading, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
+  const loading = historyRequest && el('p', 'Loading…', 'history-loading ' + historyRequest.direction);
+  loading?.setAttribute('role', 'status');
+  if (historyRequest?.direction === 'before') fragment.append(loading);
+  if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
@@ -1040,7 +1050,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
-  if (historyWindow) fragment.append(historyControl('after'));
+  if (historyRequest?.direction === 'after') fragment.append(loading);
   box.replaceChildren(fragment);
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});

@@ -55,7 +55,8 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     await page.getByRole('button', { name: /Full history/ }).click();
     const transcript = page.locator('#transcript'), messages = transcript.locator('article.message');
     await expect(messages.first()).toContainText('Message 550');
-    await expect(page.getByRole('button', { name: 'Load older messages', exact: true })).toBeAttached();
+    await expect(transcript.getByRole('button', { name: /Load (older|newer) messages|Return to latest messages/ })).toHaveCount(0);
+    await expect(transcript.getByRole('status')).toHaveCount(0);
     const firstNumber = () => messages.first().innerText().then(text => Number(text.match(/Message (\d+)/)[1]));
     const history = host.service.history.bind(host.service);
     host.service.history = async (...args) => {
@@ -69,9 +70,10 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     });
     await expect.poll(() => typeof releaseHistory).toBe('function');
     await expect(transcript.getByText(/^Loading(?: messages)?…$/)).toHaveCount(1);
-    const loading = transcript.getByRole('button', { name: 'Loading…', exact: true });
-    await expect(loading).toBeDisabled();
-    await expect(loading).toHaveAttribute('aria-busy', 'true');
+    const loading = transcript.getByRole('status');
+    await expect(loading).toHaveText('Loading…');
+    await expect(loading).toBeVisible();
+    await expect(transcript).toHaveAttribute('aria-busy', 'true');
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await page.screenshot({ path: testInfo.outputPath(`history-loading-${width}.png`) });
@@ -80,6 +82,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     await page.setViewportSize({ width: 390, height: 844 });
     releaseHistory();
     await expect.poll(firstNumber).toBeLessThan(550);
+    await expect(transcript.getByRole('status')).toHaveCount(0);
     expect(await page.locator('[data-message-id="m550"]').evaluate(node => Math.abs(node.getBoundingClientRect().top - window.pageAnchorTop))).toBeLessThan(2);
     expect(await messages.count()).toBeLessThanOrEqual(200);
     await transcript.evaluate(node => { node.scrollTop = 0; });
@@ -133,6 +136,55 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
   } finally {
     releaseHistory?.();
     agent?.ws.terminate(); lock?.release(); await host?.close(); rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('wheel, keyboard and touch can page collapsed history without idle controls', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-collapsed-history-'));
+  const config = loadConfig(dir), file = join(dir, 'tools.jsonl');
+  let host;
+  try {
+    const entries = [{ type: 'session', version: 3, id: randomUUID(), cwd: dir },
+      { id: 'name', type: 'session_info', parentId: null, name: 'Collapsed history' }];
+    for (let i = 0; i < 310; i++) entries.push({ id: 'm' + i, parentId: i ? 'm' + (i - 1) : 'name', type: 'message',
+      message: { role: 'toolResult', toolCallId: 't' + i, toolName: 'read', content: 'Output ' + i, timestamp: 1000 + i } });
+    writeFileSync(file, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+    host = await startHost({ dir, config, port: 0, roots: [dir], publicUrl: 'http://127.0.0.1:8787', relayUrl: '' });
+    const history = host.service.history.bind(host.service);
+    let attempts = 0;
+    host.service.history = (...args) => {
+      if (++attempts === 1) throw new Error('Temporary history read failure');
+      return history(...args);
+    };
+    await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
+    await page.getByRole('button', { name: /Collapsed history/ }).click();
+    const transcript = page.locator('#transcript'), tools = transcript.locator('details.tool');
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't210');
+    expect(await transcript.evaluate(node => node.scrollHeight === node.clientHeight)).toBe(true);
+    await transcript.hover(); await page.mouse.wheel(0, -100);
+    await expect(transcript.getByRole('alert')).toContainText('Temporary history read failure');
+    expect(attempts).toBe(1);
+    await page.mouse.wheel(0, -100);
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't110');
+    await expect(transcript.getByRole('alert')).toHaveCount(0);
+    await transcript.focus(); await page.keyboard.press('PageUp');
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't10');
+    const cdp = await page.context().newCDPSession(page), box = await transcript.boundingBox();
+    const x = box.x + box.width / 2, y = box.y + 100;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + 50 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't0');
+    await transcript.hover(); await page.mouse.wheel(0, 100);
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't100');
+    expect(await tools.count()).toBeLessThanOrEqual(200);
+    await expect(transcript.getByRole('button', { name: /Load (older|newer) messages|Return to latest messages/ })).toHaveCount(0);
+    await expect(transcript.getByRole('status')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Go to thread bottom' }).click();
+    await expect(tools.first()).toHaveAttribute('data-tool-id', 't210');
+    expect(await tools.count()).toBe(100);
+  } finally {
+    await host?.close(); rmSync(dir, { recursive: true, force: true });
   }
 });
 
