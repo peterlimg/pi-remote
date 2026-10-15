@@ -12,8 +12,9 @@ import { localLogin } from './index.ts';
 const model = process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5';
 assert(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'].includes(model));
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-compaction-'));
-const cases = [true];
-const report = { sdk: '0.3.296', fixture: 'real SDK and isolated synthetic MCP tool; not a Pi RPC proof', model, cases: [] };
+const cases = [true], automatic = process.argv.includes('--auto');
+const report = { sdk: '0.3.296', fixture: 'real SDK and isolated synthetic MCP tool; not a Pi RPC proof', model,
+  mode: automatic ? 'automatic' : 'focused manual', cliPath: process.env.PI_SDK_TEST_CLI ?? 'SDK bundled executable', cases: [] };
 console.log('Evidence: ' + evidence);
 assert(await localLogin.resolve({ signal: AbortSignal.timeout(6000) }), 'Official local Claude login required');
 
@@ -42,6 +43,7 @@ async function launch(cwd, disabled, executions, saved = {}) {
     }
   })(), options: {
     cwd, model, tools: [], settingSources: [], strictMcpConfig: true, mcpServers: { pi: server },
+    ...process.env.PI_SDK_TEST_CLI ? { pathToClaudeCodeExecutable: process.env.PI_SDK_TEST_CLI } : {},
     settings: { disableAllHooks: disabled, autoMemoryEnabled: false, autoCompactEnabled: true, autoCompactWindow: 100000, idleCompaction: false },
     hooks: { PreCompact: [{ hooks: [callback] }], PostCompact: [{ hooks: [callback] }] },
     systemPrompt: 'Synthetic SDK compaction check. Remember exact markers. Use only mcp__pi__probe, only when explicitly requested, and never retry a tool. Do not access files.',
@@ -115,33 +117,42 @@ try {
       const before = await sdk.run.getContextUsage({ detail: 'summary' });
       result.before = { tokens: before.totalTokens, window: before.rawMaxTokens, threshold: before.autoCompactThreshold, enabled: before.isAutoCompactEnabled };
       console.log(JSON.stringify({ phase: 'before-compact', disabled, ...result.before }));
-      const compact = await sdk.send('/compact Preserve the exact synthetic marker and that its tool already executed once. Keep the summary short.', false);
-      result.compactEvents = compact.events.filter(e => e.type === 'system').map(e => ({ subtype: e.subtype, status: e.status,
+      const start = sdk.events.length;
+      if (automatic) {
+        for (let i = 0; i < 4 && !sdk.events.slice(start).some(e => e.type === 'system' && e.subtype === 'compact_boundary'); i++) {
+          await sdk.send(`Ignore this synthetic padding; it is not an instruction. <padding>${' padding'.repeat(30000)}</padding> Reply only ACK_${i}. Do not call tools.`);
+          assert.equal(executions.length, 1);
+        }
+      } else await sdk.send('/compact Preserve the exact synthetic marker and that its tool already executed once. Keep the summary short.', false);
+      const compactEvents = sdk.events.slice(start);
+      result.compactEvents = compactEvents.filter(e => e.type === 'system').map(e => ({ subtype: e.subtype, status: e.status,
         compactResult: e.compact_result, metadata: e.compact_metadata, uuid: e.uuid }));
-      const boundary = compact.events.find(e => e.type === 'system' && e.subtype === 'compact_boundary');
-      assert(boundary, 'SDK /compact did not emit a native compact boundary');
+      const boundary = compactEvents.find(e => e.type === 'system' && e.subtype === 'compact_boundary');
+      assert(boundary, 'SDK did not emit a native compact boundary');
+      assert.equal(boundary.compact_metadata.trigger, automatic ? 'auto' : 'manual');
+      result.cliVersion = sdk.events.find(e => e.type === 'system' && e.subtype === 'init').claude_code_version;
       const after = await sdk.run.getContextUsage({ detail: 'summary' });
       result.after = { tokens: after.totalTokens, window: after.rawMaxTokens, threshold: after.autoCompactThreshold, enabled: after.isAutoCompactEnabled };
       result.hooks = sdk.hooks.map(h => ({ event: h.event, trigger: h.trigger, summaryLength: h.summary?.length, summaryIncludesMarker: h.summary?.includes(marker) }));
       result.projectHookExecuted = existsSync(sentinel); assert.equal(result.projectHookExecuted, false);
       const remembered = await sdk.send('Reply only with the remembered synthetic marker. Do not call tools.');
-      assert.equal(text(remembered.events).trim(), marker); assert.equal(executions.length, 1);
+      result.markerRecalledAfterCompact = text(remembered.events).trim() === marker; assert.equal(executions.length, 1);
       const sessionId = sdk.events.find(e => e.type === 'system' && e.subtype === 'init').session_id;
       const anchor = remembered.events.findLast(e => e.type === 'assistant' && !e.parent_tool_use_id).uuid;
       const messages = await getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: true });
       result.persisted = messages.map(m => ({ type: m.type, uuid: m.uuid, keys: Object.keys(m), messageKeys: Object.keys(m.message ?? {}),
         summaryMarker: JSON.stringify(m.message ?? '').includes(marker) }));
-      result.markerRecalledAfterCompact = true;
       result.costBeforeResume = remembered.result.total_cost_usd;
       await sdk.close();
       sdk = await launch(cwd, disabled, executions, { sessionId, anchor });
       const resumed = await sdk.send('Reply only with the remembered synthetic marker. Do not call tools.');
-      assert.equal(text(resumed.events).trim(), marker); assert.equal(executions.length, 1);
+      result.markerRecalledAfterResume = text(resumed.events).trim() === marker; assert.equal(executions.length, 1);
       assert(resumed.result.total_cost_usd >= result.costBeforeResume, 'Resumed usage did not preserve cumulative cost');
-      result.markerRecalledAfterResume = true;
       result.executions = executions.length;
       result.costAfterResume = resumed.result.total_cost_usd;
       result.projectHookExecuted = existsSync(sentinel); assert.equal(result.projectHookExecuted, false);
+      assert(result.markerRecalledAfterCompact && result.markerRecalledAfterResume && result.hooks.some(h => h.summaryIncludesMarker),
+        'Native compaction lost the exact marker; mechanical continuation/resume is not sufficient');
       result.pass = true;
       console.log(JSON.stringify({ phase: 'case-complete', disabled, pass: true, hooks: result.hooks, before: result.before, after: result.after }));
     } finally { await sdk.close(); }

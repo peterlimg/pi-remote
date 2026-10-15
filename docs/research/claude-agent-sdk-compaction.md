@@ -8,7 +8,9 @@ Inspected versions: Claude Agent SDK `0.3.296`, Pi `1.2.0`, provider implementat
 
 Keep the SDK as owner of its model context, with Pi retaining tool validation, permissions, execution, and the durable audit history. Do not run two independent summarizers or rebuild an SDK conversation by replaying Pi tools.
 
-**Start with a controlled, focused native compact operation at an eligible idle point, not an unconditional auto-compaction toggle.** Focused manual compaction preserved the marker, Pi tool identity, completed-session resume, and usage totals in the experiments. Default automatic compaction repeatedly generated `ACK_0` as its summary in a synthetic fixed-response workload and dropped the required marker from active context. The Claude Code system-prompt preset did not fix that case. This is a counterexample to the proposed automatic path, not proof that all SDK auto-compaction is broken. Keep the production guard until semantic behavior and failure recovery are addressed.
+**Native auto-compaction is now a tested Opus candidate, not a safe all-model toggle.** A real Pi-agent/SDK run with Opus 5.5, SDK `0.3.296`, and explicitly selected CLI `2.1.300` preserved the marker, tool identity, completed-session resume, and cumulative usage through native automatic compaction. Haiku still failed the same memory check across the CLI and input controls below. The root cause of that model-dependent result remains open; the earlier Haiku failures do not establish that all SDK auto-compaction is broken.
+
+A threshold-driven, focused native `/compact` also passed on Haiku and Opus at completed idle boundaries. That is an automatic scheduler using the native manual command, not SDK-native automatic compaction, and it cannot protect an unbounded tool-heavy turn in flight. Keep the production guard until the actual Coding Agent/RPC path, model switching, and failure recovery are verified.
 
 ```text
 Pi-approved tools and accepted input
@@ -24,7 +26,35 @@ A native SDK compaction does not inherently require deleting or rewriting Pi's a
 
 [Static inspection of Amp's newer public build](amp-sdk-static-analysis.md#compaction-follow-up-in-the-newer-public-build) confirms that its local SDK relay forwards all SDK events on one live query without a compaction-specific rejection. Its factory does not impose our auto-compaction disable flag. It delegates to the configured Claude executable and supplied settings, environment, arguments, and appended preset prompt; its private backend may add behavior not visible in the client.
 
-That build embeds SDK client `0.3.276`. These experiments used client `0.3.296` with bundled Claude Code `2.1.296`; the separately installed local CLI now reports `2.1.300`. A version-matched control using an explicitly selected CLI is therefore a priority before generalizing the automatic-summary failure. Neither live Amp compaction nor a matched client/CLI matrix has been tested. Borrow its SDK ownership model, not its broader settings/tool/permission exposure.
+That build embeds SDK client `0.3.276`. Our client `0.3.296` now has explicit CLI controls for `2.1.296` and `2.1.300`. Haiku failed on both; Opus passed on `2.1.300`. We have not run Amp or its older client, and its actual selected CLI/backend configuration remains unknown. Borrow its SDK ownership model, not its broader settings/tool/permission exposure.
+
+## Verified automatic-compaction follow-up
+
+These checks kept local login, Pi-only tools, `settingSources: []`, disabled project hooks, and literal Pi input unless a diagnostic explicitly changed the input mode. A scratch project PostCompact shell-hook sentinel stayed absent. No production provider or personal settings were changed.
+
+| Control | Observed result |
+| --- | --- |
+| Haiku, client `0.3.296`, bundled CLI `2.1.296` versus explicit CLI `2.1.300` | Both failed marker recall after compact/resume. The summary remained `ACK_0`. Upgrading the CLI alone did not fix this case. |
+| Haiku, native input processing instead of literal input | Failed with the same summary. This provides no reason to weaken Pi's literal-input protection. |
+| Haiku, neutral acknowledgements instead of strict `ACK_n` replies | Failed. The summary was a 33-character acknowledgement without the marker. The exact ACK instruction is not necessary to reproduce marker loss. The workload still uses synthetic padding. |
+| Haiku, default precomputation, then preset plus default precomputation | Both failed. The safe Amp-like combination did not fix Haiku; user/project settings and SDK built-in tools remained disabled. |
+| Direct SDK automatic compaction without the Pi bridge | Haiku failed marker recall and resume. The counterexample does not require Pi's tool-boundary adapter. |
+| Native automatic compaction with Opus 5.5 and CLI `2.1.300` | **Passed.** Native `trigger: auto`, 121,532 to 60,886 tokens, a 1,740-character marker-preserving summary, successful follow-up and completed-checkpoint resume, one tool execution, matching IDs and cumulative usage. |
+| Idle-threshold controller with Haiku and Opus | **Both passed.** It skipped compaction below a test-only 25K threshold, triggered once at about 31.5K, and skipped again after resume. Native boundaries reported about 971 tokens after compact for Haiku and 858 for Opus. Both preserved memory, one execution, IDs, usage, and hook isolation. These boundaries correctly say `trigger: manual`. |
+| Opus budget controls | An instrumented scheduled run hit `error_max_budget_usd` at a $0.35 setting. A native automatic run hit the same error at a $1 setting despite retaining the marker in its summary. These are incomplete checks, not memory failures. The passing scheduled and native-auto runs used $0.50 and $2 settings respectively. |
+
+The passing native-auto Opus run reported cumulative estimated cost `$1.2735315`; the passing scheduled Opus run reported `$0.4134077`. These are SDK estimates, not subscription billing. `maxBudgetUsd` is not a hard spending ceiling: the $1 probe reported `$1.2424911` before rejecting continuation. Preserve budget stops rather than counting an observed boundary as a complete pass.
+
+All runs are recorded in [sanitized evidence](../../experiments/claude-sdk-provider/verification-compaction.json). The automatic Opus proof used thinking Off, effort Low, and a 100K native policy window with an 84,952-token threshold. It is one synthetic Pi-agent-core run, not full Coding Agent/RPC/mobile verification, a 1M-window stress test, or evidence for Sonnet. Opus with bundled CLI `2.1.296`, High/Max effort, and Amp's older client remain untested here.
+
+### How to borrow the design for Pi
+
+1. **Keep one SDK query and let the SDK compact its own context.** In `bridge.ts`, a future implementation should handle validated compact status/boundary events instead of closing the query. Keep the separate `conversation_reset` rejection and Pi-history fingerprint checks. Do not reconstruct or truncate Pi's audit history just because the native context shrank.
+2. **Start with the exact tested model/CLI policy.** Opus with client `0.3.296` and explicit CLI `2.1.300` is a candidate. The production bridge currently selects the SDK's bundled CLI, so flipping its flag alone does not reproduce that proof. Verify or select the intended executable. Do not silently enable the failed Haiku path; switching models needs a corresponding live policy change and E2E coverage. Helpers must retain their isolated queries.
+3. **Commit context transitions and checkpoints safely.** Preserve native lineage, input UUIDs, Pi tool IDs, and cumulative usage through compaction. `index.ts` currently persists checkpoints on `agent_settled`; recovery between native compaction and that event still needs verification. The scratch scheduled adapter even offers its old checkpoint until a subsequent Pi response, so it must not be shipped as production code. Verify or invalidate stale anchors, preserve audit history, and fail explicitly on inconsistent recovery.
+4. **Report native context separately and keep Pi from running a second summarizer.** Use `getContextUsage()` and the actual native threshold. Do not translate Pi's reserve/kept-tail settings by assumption or call Pi `compact()` inside a live SDK turn. The idle-threshold native-command scheduler is a possible bounded fallback, not a replacement for mid-turn compaction.
+
+This is a verified implementation direction, not permission to remove the guard alone. The remaining E2E gate below still applies, including failures and model switches. No implementation or active-session rollout was performed.
 
 ## Live findings
 
@@ -96,11 +126,30 @@ npm run experiment:compact-pi -- --mid-turn
 npm run experiment:compact-pi -- --preset
 ```
 
-These are live experiments, not mocks or unit tests. Each SDK query has a $0.35 SDK budget setting; resumed totals are cumulative, not a new billing statement. All working files and tool effects belong to newly created scratch directories. Persistent native SDK transcripts remain subject to Claude Code retention. Public script entrypoints do not run from the normal `npm test` command or extension loader.
+Follow-up controls reuse the same scripts. `PI_SDK_TEST_CLI` selects an executable only in these experiments. Native input processing is diagnostic only; ordinary Pi input must stay literal.
+
+```sh
+# Haiku counterexamples, expected nonzero exits:
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --native-input
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --neutral
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --default-precompute
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --preset --default-precompute
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-sdk -- --auto
+# Passing native automatic Opus check on the recorded CLI 2.1.300:
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_MODEL=claude-opus-5-5 \
+  PI_SDK_TEST_BUDGET_USD=2 npm run experiment:compact-pi
+# Passing idle-threshold controller, native manual command:
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" npm run experiment:compact-pi -- --scheduled
+PI_SDK_TEST_CLI="$HOME/.local/bin/claude" PI_SDK_TEST_MODEL=claude-opus-5-5 \
+  PI_SDK_TEST_BUDGET_USD=0.5 npm run experiment:compact-pi -- --scheduled
+```
+
+These are live experiments, not mocks or unit tests. The default SDK query budget setting is $0.35. The Pi-agent fixture accepts an explicit test budget above $0 and up to $2; resumed totals are cumulative, not a new billing statement. All working files and tool effects belong to newly created scratch directories. Persistent native SDK transcripts remain subject to Claude Code retention. Public script entrypoints do not run from the normal `npm test` command or extension loader.
 
 ## Remaining E2E acceptance gate
 
-No new unit tests. Before enabling the provider, add the actual Coding Agent/RPC/browser path and resolve the observed automatic memory failure. Do not use existing conversations to reach a threshold.
+No new unit tests. Before enabling production compaction, add the actual Coding Agent/RPC/browser path and a safe policy for the observed Haiku failure. Exercise Opus-to-Haiku/Sonnet switching, queued input during native compaction, and the intended CLI and thinking levels. Do not use existing conversations to reach a threshold.
 
 1. Run a synthetic tool with a counted side effect in a new scratch directory. Force native compaction in the isolated session, continue, and verify remembered markers, exact tool/result IDs, one execution, and reconciled usage including compaction.
 2. Send a user message near the compaction transition. Require it to be consumed once, preserve its order, and verify a subsequent follow-up without restarting the SDK conversation.
