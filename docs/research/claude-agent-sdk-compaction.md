@@ -173,6 +173,31 @@ No new unit tests. Before enabling production compaction, add the actual Coding 
 4. Stop the owned worker between native compaction and checkpoint/projection publication. Reopening must either recover from a verified consistent record or fail explicitly without executing tools; never silently resume a stale checkpoint.
 5. Include an untrusted scratch hook sentinel and verify that compaction does not execute it. Exercise summary/compaction failure without deleting audit history or advancing the checkpoint as if it succeeded.
 
+## Public web research
+
+**I found related public reports, but no reliable indexed match for the exact `ACK_0` failure or a confirmed fix for our SDK/CLI pair.** A separate quoted search for `ACK_0` with Claude/Haiku and compaction returned unrelated uses of that token. This is a bounded search result, not proof that no matching report exists.
+
+Retrieval was limited. Radius and OpenAI web search surfaced primary documentation and GitHub issue pages, but direct fetches of the selected pages were blocked by this environment's fake-IP network-address safety check. That check was not changed. The descriptions below come from search-indexed primary sources; full issue threads, maintainer responses, current status, and fixes were not independently verified. User reports are not vendor-confirmed diagnoses.
+
+| Primary source | Indexed finding | Relation to our case |
+| --- | --- | --- |
+| [Claude Code #75759](https://github.com/anthropics/claude-code/issues/75759) | Reports compaction omitting earlier work in the same session, including files the agent created. | Similar memory-loss symptom, but not an exact Haiku 5.5 or version-matched reproduction. |
+| [Claude Code #24677](https://github.com/anthropics/claude-code/issues/24677) | Reports a Cowork compaction loop with system context consuming 86.5% of the window. The indexed description attributes oversized, sometimes verbatim summaries to Haiku. | A Haiku-related report, but its oversized-summary/context-exhaustion failure differs from our five-character summary. |
+| [Claude Code #96950](https://github.com/anthropics/claude-code/issues/96950) | Reports assistant text preceding a tool call disappearing from the transcript after automatic compaction. | A transcript-retention problem. Our Pi audit remains intact, so do not treat it as the same failure. |
+| [Agent SDK TypeScript #381](https://github.com/anthropics/claude-agent-sdk-typescript/issues/381) | Reports automatic compaction no longer triggering after SDK `0.3.202`, compared with `0.3.146`. | Not the observed mechanism here: our runs emitted native automatic boundaries and reduced context. Triggering and summary correctness are separate checks. |
+| [Claude Code #38358](https://github.com/anthropics/claude-code/issues/38358) | Requests a `compactionModel` option for using a cheaper model during compaction. | A feature request is not evidence that the option exists in our SDK or that changing a summarizer model fixes this bug. |
+| [Anthropic API threshold-compaction documentation](https://platform.claude.com/docs/en/build-with-claude/compaction-threshold) | Indexed documentation covers Haiku 5.5 and custom summarization `instructions` that replace the default prompt. It recommends stating what to preserve and forbidding tool calls during summarization. | This documents Messages API server-side compaction, not the behavior or options of a long-lived Claude Code/Agent SDK query. Do not copy the API's `instructions` field into SDK settings by assumption. |
+
+### What the documentation does and does not explain
+
+The indexed API guidance also says custom-instruction summaries do not see earlier thinking blocks. That does not explain our lost marker: the marker was visible Pi tool output, not information present only in hidden reasoning. Our thinking controls also reproduced the failure with adaptive Low, adaptive High, and CLI-default thinking.
+
+The public material supports treating compaction as lossy and checking important retained facts. It does not establish that Haiku is categorically unsupported, that our exact failure is an acknowledged Anthropic bug, or that Amp has the same problem. No live Amp test ran because its CLI authorization remained blocked.
+
+For Pi, keep the existing conclusions bounded to the recorded experiments. The focused native `/compact` path passed on both models, and native automatic compaction passed in the recorded Opus configuration. Preserve the failed Haiku cases, do not enable every model globally, and do not introduce an undocumented `compactionModel` setting or a second Pi summarizer based on these reports. A change to summary instructions needs its own SDK-native control and the existing memory/resume/one-execution acceptance checks.
+
+No new live Claude/Amp experiment calls, unit tests, production configuration changes, or upstream issue posts were made for this web research. The third-party release-note articles found in search were not treated as proof of a fix because the corresponding official release entry could not be verified.
+
 ## Sources and verification limits
 
 - [Pinned SDK dependency](../../experiments/claude-sdk-provider/package-lock.json), installed `@anthropic-ai/claude-agent-sdk/sdk.d.ts`: `Query`, `Settings`, `SDKCompactBoundaryMessage`, `SDKStatusMessage`, `PostCompactHookInput`, `GetSessionMessagesOptions`, `SDKControlGetContextUsageResponse`, and SDK result usage documentation.
