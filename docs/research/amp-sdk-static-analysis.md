@@ -61,6 +61,46 @@ The bundled SDK JavaScript declares `CLAUDE_AGENT_SDK_VERSION` as **0.3.276**. O
 
 Amp's generic observer also has `compaction_started`/`compaction_complete` UI state and cut-message records. The private server translation from SDK messages to those events is not present in this artifact, so this is not proof of SDK-mode history mirroring or summary-quality validation.
 
+### REA check of the newer build
+
+REA **6.4.0** analyzed a focused selection from this newer build. The selection contains seven complete declarations in source order: SDK entry/initialization functions `cIt` and `pOr`, plus `Sar`, `Tar`, `Yyn`, `Jyn`, and `Zyn`. Nothing was imported or executed. The decoded source hash matches the follow-up artifact above; offsets are retained in the private selection manifest.
+
+The analysis parsed one file with no failures, visited **3,679 AST nodes**, and retained **2,453 semantic nodes**, **2,025 relations**, and **867 unknowns**. No graph nodes or relations were truncated, but overall semantic coverage is `unknown`. This is a graph of the selected declarations, not the full Amp application.
+
+Six evidence-linked semantic queries produced these results. Every query reported partial coverage, including those whose status was `found`.
+
+| Query | REA result | What it establishes |
+| --- | --- | --- |
+| Callers of SDK entry `pOr` | `found`, 2 nodes, 1 resolved call edge | The call inside `Zyn` resolves to the SDK entry in this selection. |
+| Forward influence of `appendEvent`'s message parameter | `found`, 2 nodes, 1 resolved read edge | REA tracks the parameter to its read in the event's `message` field. It does not reconstruct delivery through the whole relay. |
+| Ownership of the query read in `consume` | `found`, 1 node, 0 edges | The query property is located, but ownership is unresolved. `found` alone is not a successful ownership trace. |
+| Backward provenance of `resumeSessionAt` | `ambiguous`, 3 nodes, 0 edges | REA finds property slots but does not recover an unambiguous resume chain. |
+| Forward influence of literal `project` | `partial`, 0 seed matches | The literal exists in the inspected settings array, but this semantic query does not recover it. Zero matches cannot prove absence. |
+| Forward influence of literal `compact_boundary` | `partial`, 0 seed matches | No compaction path was recovered. This does not prove compaction is absent or disabled. |
+
+REA corroborates the factory-to-SDK call. It does **not** independently establish the complete compaction, event-delivery, or resume behavior. The generic forwarding loop and lack of a local compaction override remain findings from reading the complete adapter declarations. Missing dependencies, unresolved calls, and dynamic instance properties limit the graph. No live Amp compaction or summary-quality comparison was performed.
+
+Local evidence is under `/tmp/amp-rea-compaction.Jh43xG`: `selection.json`, `focused/sdk-relay.mjs`, `analysis.json`, and each query's `*-input.json`, result JSON, and stderr. The evidence and recovered source stay private.
+
+- Analysis evidence ID: `ev_19725f2ed8fabbd753c1b44ab436f757e507730949b485aba72f7c57c698257f`.
+- Semantic graph ID: `jsrg_22068f961dae9e77eaef9a0f068c11b07e970499b6f591c033e09bb5eef8dd74`.
+- Focused file SHA-256: `5c67370154ba8ceba924bf94ac81bc25d2220868a27516cc8253d49185b89b24`.
+
+Using the installed REA CLI, the actual analysis and query commands were:
+
+```bash
+REA=/tmp/rea-inspect.6nawA9/tools/node_modules/rea-agents/scripts/rea.mjs
+ROOT=/tmp/amp-rea-compaction.Jh43xG
+node "$REA" analyze-javascript-application "$ROOT/focused" \
+  --max-heap-mb 1024 --analysis-timeout-ms 60000 --format json \
+  > "$ROOT/analysis.json" 2> "$ROOT/analysis.stderr"
+# Each input contains the complete analysis Evidence plus its query.
+for name in event-flow query-owner sdk-callers settings-flow resume-flow compact-literal; do
+  node "$REA" trace-javascript-semantics "$ROOT/$name-input.json" \
+    --format json > "$ROOT/$name.json" 2> "$ROOT/$name.stderr"
+done
+```
+
 ### What to borrow, and what not to copy
 
 Borrow the ownership model: keep one SDK conversation alive, forward native compaction events, retain separate receipt/call identity, and resume through the SDK. The local relay does not build its own compaction summary or reconstruct another model history.
