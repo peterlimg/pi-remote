@@ -761,7 +761,7 @@ function renderConversation(state) {
       (message.images?.length || 0) === images.length);
     const message = index < 0 ? { id: outgoing.key, role: 'user', text,
       images: images.map(({ file }) => ({ id: 'local', mimeType: file.type })),
-      delivery: outgoing.accepted ? 'Sent. Waiting for Pi…' : 'Sending…' } : messages[index];
+      delivery: outgoing.accepted ? outgoing.delivery : 'Sending…' } : messages[index];
     localImages.set(message.id, images);
     localVideos.set(message.id, outgoing.attachments.filter(item => item.video));
     if (index < 0) messages.push(message);
@@ -893,7 +893,9 @@ function renderConversation(state) {
       if (message.role === 'assistant' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
         article.append(el('p', 'Worked for ' + formatToolDuration(message.taskDurationMs), 'task-duration'));
       }
-      if (message.delivery) article.append(el('small', message.delivery, 'delivery-status'));
+      if (message.delivery) {
+        const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);
+      }
       if (article.childNodes.length) fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
@@ -971,7 +973,13 @@ function updateControls() {
   $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${noun}${imageCount === 1 ? '' : 's'}…` : 'Sending…';
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
-  $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
+  const steering = !!working && hasDraft && !$('prompt').value.trim().startsWith('/');
+  $('send').classList.toggle('steering', steering);
+  $('send').setAttribute('aria-label', steering ? 'Steer message' : 'Send message');
+  $('send').title = steering ? 'Steer this turn at the next opportunity' : 'Send message';
+  $('send-label').hidden = !steering;
+  $('commands').hidden = steering;
+  $('prompt').placeholder = working ? 'Steer Pi while it works…' : 'Type / for commands';
   $('image-files').disabled = !selected || sending.has(selected);
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
@@ -1736,17 +1744,19 @@ async function sendMessage(type = 'prompt') {
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
   if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
-  if (attachments.length && text.trim().startsWith('/')) { notice('Send attachments with a message, not a slash command.'); return; }
+  const isCommand = text.trim().startsWith('/'), queued = ['working', 'waiting'].includes(cache.get(id)?.status);
+  if (attachments.length && isCommand) { notice('Send attachments with a message, not a slash command.'); return; }
   const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,
-    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
+    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false,
+    delivery: queued ? (type === 'followUp' ? 'Queued for next turn' : 'Queued to steer') : 'Sent. Waiting for Pi…' };
   sending.set(id, outgoing);
-  if (attachments.length) submissions.set(outgoing.key, outgoing);
+  if (!isCommand) submissions.set(outgoing.key, outgoing);
   // The editor owns the next draft; retain this submission until delivery is confirmed.
   drafts.set(id, ''); imageDrafts.delete(id);
   $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
   // On touch screens a sent message closes the keyboard to reveal the conversation; desktops keep typing.
   if (matchMedia('(hover: none)').matches) $('prompt').blur();
-  if (attachments.length) {
+  if (!isCommand) {
     renderConversation(cache.get(id));
     $('transcript').scrollTop = $('transcript').scrollHeight;
   }
@@ -1784,7 +1794,7 @@ async function sendMessage(type = 'prompt') {
     if (sending.get(id) === outgoing) {
       if (!restored && !submissions.has(outgoing.key)) releaseImages(attachments);
       sending.delete(id);
-      if (selected === id && attachments.length) renderConversation(cache.get(id));
+      if (selected === id && !isCommand) renderConversation(cache.get(id));
       else updateControls();
     }
   }

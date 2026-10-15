@@ -299,6 +299,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer-actions button { font-size: 12px; }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
+.composer-actions #send.steering { display: flex; justify-content: center; gap: 6px; width: auto; padding-inline: 8px; border-radius: 22px; }
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
 /* Keep the native file input aligned with its visible attachment control. */
