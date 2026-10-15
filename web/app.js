@@ -117,6 +117,7 @@ const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'M
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
+const sessionSortTimes = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashParams = new URLSearchParams(location.hash.slice(1)), hashToken = hashParams.get('token');
@@ -380,6 +381,7 @@ function logout() {
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  sessionSortTimes.clear();
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -420,6 +422,8 @@ function receiveList(packet) {
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
+  // Live activity must not reshuffle rows the user is trying to tap.
+  for (const item of rows) if (!sessionSortTimes.has(item.id)) sessionSortTimes.set(item.id, item.updatedAt);
   sessions = rows; allowResume = packet.allowResume === true;
   listMatched = packet.matched ?? sessions.length;
   showApp();
@@ -472,7 +476,7 @@ function renderList() {
     const heading = el('h3', label);
     heading.append(el('span', String(items.length), 'badge'));
     group.append(heading);
-    for (const item of items.sort((a, b) => b.updatedAt - a.updatedAt)) {
+    for (const item of items.sort((a, b) => sessionSortTimes.get(b.id) - sessionSortTimes.get(a.id) || a.id.localeCompare(b.id))) {
       const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
       button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
       const icon = statusIcon(item.status);

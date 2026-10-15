@@ -2,6 +2,77 @@ import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
+test('working sessions keep their order across updates, search and reconnect until reload', async ({ page }, testInfo) => {
+  let client, scroll, connections = 0, time = Date.now();
+  const states = ['Alpha', 'Beta'].map((name, i) => ({ id: name, title: `Task ${name}`, cwd: '/projects/app',
+    status: 'working', updatedAt: time - i * 60000, messages: [] }));
+  const service = Object.assign(Object.create(SessionService.prototype),
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true });
+  const publish = () => {
+    const update = scroll.active ? scroll.update() : service.list();
+    if (update) client.send(JSON.stringify({ type: 'sessions', ...update }));
+  };
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws; scroll = sessionWindow(service);
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.type === 'auth') { connections++; ws.send(JSON.stringify({ type: 'ready' })); publish(); }
+      else if (packet.op === 'list') ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: scroll.request(packet) }));
+      else if (packet.op === 'watch') {
+        ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 1, state: service.catalog.get(packet.sessionId) }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+      } else ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+    });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  const titles = page.locator('#sessions .session strong');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  const update = async (state, text) => {
+    state.updatedAt = time += 60000;
+    state.messages.push({ role: 'assistant', text });
+    publish();
+    const row = page.locator('#sessions .session').filter({ hasText: state.title });
+    await expect(row.locator('.session-preview')).toHaveText('Pi: ' + text);
+    await expect(row.locator('time')).toHaveAttribute('datetime', new Date(time).toISOString());
+  };
+  await update(states[1], 'Beta full-page update');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await expect(page.getByRole('button', { name: /Task Beta/ }).locator('.session-icon')).toHaveAttribute('data-unread', '');
+  await update(states[0], 'Alpha full-page update');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await page.getByRole('button', { name: /Task Beta/ }).click();
+  await expect(page.locator('#title')).toHaveText('Task Beta');
+  await update(states[0], 'Alpha updates while Beta is selected');
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await expect(page.getByRole('button', { name: /Task Beta/ })).toHaveAttribute('aria-current', 'true');
+
+  await page.getByRole('button', { name: 'Search sessions', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search sessions' }).fill('Task Beta');
+  await expect(titles).toHaveText(['Task Beta']);
+  await update(states[1], 'Beta filtered update');
+  await page.getByRole('searchbox', { name: 'Search sessions' }).fill('');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await page.getByRole('searchbox', { name: 'Search sessions' }).blur();
+  await update(states[1], 'Beta diff update');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+
+  const fresh = { id: 'Gamma', title: 'Task Gamma', cwd: '/projects/app', status: 'working', updatedAt: time += 60000, messages: [] };
+  service.catalog.set(fresh.id, fresh); publish();
+  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
+  client.close({ code: 1012, reason: 'Reconnect test' });
+  await expect.poll(() => connections).toBe(2);
+  await update(states[0], 'Alpha reconnect update');
+  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
+  await page.screenshot({ path: testInfo.outputPath('stable-session-order-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await update(states[1], 'Beta desktop update');
+  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
+  await page.screenshot({ path: testInfo.outputPath('stable-session-order-desktop.png') });
+  await page.reload();
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
+});
+
 test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }, testInfo) => {
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
@@ -103,9 +174,9 @@ test('same-project sessions show their tasks, previews, status and activity with
   publish();
   await expect(page.locator('#title')).toHaveText('Fix login timing out after the browser reconnects');
   await page.locator('#back').click();
-  await expect(online.locator('.session').first()).toHaveAttribute('aria-current', 'true');
-  await expect(online.locator('.session').first().locator('.session-state')).toHaveCount(0);
-  await expect(online.locator('.session').first().locator('.session-preview')).toHaveText('You: Now check logout');
+  await expect(online.locator('.session').nth(1)).toHaveAttribute('aria-current', 'true');
+  await expect(login.locator('.session-state')).toHaveCount(0);
+  await expect(login.locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
 test('closing search clears the filter before the keyboard moves the close button', async ({ page }) => {
