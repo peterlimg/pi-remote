@@ -389,7 +389,6 @@ pre.message-text { white-space: pre-wrap; }
 .usage-details progress::-webkit-progress-bar { background: var(--line); }
 .usage-details progress::-webkit-progress-value { background: var(--accent); }
 .usage-details progress::-moz-progress-bar { background: var(--accent); }
-#usage-refresh { width: 100%; margin-top: 4px; padding-inline: 12px; font-size: 14px; text-align: left; }
 #picker-help { margin: 0; overflow-wrap: anywhere; }
 #picker-help:not(:empty) { margin-top: 6px; padding: 8px 12px 2px; border-top: 1px solid var(--line); }
 #picker-help.picker-error { color: var(--error); }

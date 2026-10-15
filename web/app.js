@@ -1216,7 +1216,7 @@ function openPicker(id, kind, opener = document.activeElement) {
   $('picker-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
   $('model-search').hidden = reasoning || usage; $('picker-title').hidden = !reasoning && !usage;
   $('picker-title').textContent = usage ? 'Usage' : 'Reasoning effort';
-  $('model-retry').hidden = true; $('usage-refresh').hidden = !usage; $('picker-help').classList.remove('picker-error');
+  $('model-retry').hidden = true; $('picker-help').classList.remove('picker-error');
   $('settings-picker').setAttribute('aria-label', usage ? 'Usage' : reasoning ? 'Choose reasoning effort' : 'Choose a model');
   $('picker-cancel').setAttribute('aria-label', usage ? 'Close usage' : reasoning ? 'Close reasoning picker' : 'Close model picker');
   $('settings-picker').hidden = false;
@@ -1273,7 +1273,6 @@ function renderUsagePanel() {
   } else limits.append(el('p', current?.busy ? 'Checking provider limits…' : current?.providerMessage || 'Five-hour and weekly limits are shown when reported by your provider.', 'hint'));
   content.append(context, limits); $('picker-options').replaceChildren(content);
   const online = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
-  $('usage-refresh').disabled = !online || !supportsUsage || !!current?.busy;
   $('picker-help').classList.toggle('picker-error', !!current?.error);
   $('picker-help').textContent = current?.error || (!connected ? 'Offline. Usage may be out of date.' : !online ? 'Resume this session to check current usage.' :
     !supportsUsage ? 'Restart Pi Remote on your computer to enable usage checks.' : current?.busy && report ? 'Checking provider limits…' : 'Account limits are shared across sessions.');
@@ -1307,7 +1306,6 @@ function openUsage() {
   renderUsagePanel(); loadUsage(selected, true);
 }
 $('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker() : openUsage());
-$('usage-refresh').addEventListener('click', () => loadUsage(selected, true));
 setInterval(() => { if (!document.hidden && selected) loadUsage(selected); }, 15000);
 function renderModels() {
   const picker = settingsPicker;
