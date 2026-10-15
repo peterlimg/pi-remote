@@ -66,7 +66,7 @@ test('thread images load lazily, survive updates, open full size and retry failu
     sheet.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
   });
   await expect(viewer).toBeHidden(); // Pulling the sheet down dismisses it.
-  await page.locator('.tool-activity > summary').click();
+  await page.getByRole('button', { name: 'View activity', exact: true }).click();
   await page.locator('.tool summary').click();
   const toolImage = page.locator('.tool .thread-images img');
   await expect(toolImage).toBeVisible();

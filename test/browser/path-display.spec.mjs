@@ -40,7 +40,7 @@ test('home paths hide usernames in tool labels, details and project locations', 
     await expect(label).toHaveText(text);
     await expect(label).toHaveAttribute('title', text);
   }
-  await page.locator('.tool-activity > summary').click();
+  await page.getByRole('button', { name: 'View activity', exact: true }).click();
   const external = page.locator('[data-tool-id="external"]');
   await external.locator('summary').click();
   await expect(external.locator('.tool-input')).toContainText('"path":"~/.pi/agent/skills/SKILL.md"');

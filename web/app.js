@@ -44,7 +44,25 @@ $('transcript').addEventListener('touchmove', event => {
   historyTouch = undefined;
   if (Math.abs(dy) > Math.abs(dx)) scrollHistory(-dy);
 }, { passive: true });
-$('transcript').addEventListener('toggle', updateScrollButton, true);
+$('transcript').addEventListener('toggle', event => {
+  const node = event.target;
+  if (node.isConnected && node.matches('.tool-activity[data-live]')) {
+    $('activity-toggle').textContent = node.open ? 'Hide activity' : 'View activity';
+    $('activity-toggle').setAttribute('aria-expanded', String(node.open));
+    if (!node.open && !$('agent-activity').hidden && node.contains(document.activeElement)) $('activity-toggle').focus({ preventScroll: true });
+  }
+  updateScrollButton();
+}, true);
+$('activity-toggle').addEventListener('click', () => {
+  if (historyWindow) showLatest();
+  const node = $('transcript').querySelector('.tool-activity[data-live]');
+  if (!node) return;
+  node.open = !node.open;
+  if (node.open) {
+    node.scrollIntoView({ block: 'end' });
+    node.querySelector('summary').focus({ preventScroll: true });
+  }
+});
 new ResizeObserver(() => {
   transcriptHeight = $('transcript').clientHeight;
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
@@ -844,6 +862,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const fragment = document.createDocumentFragment();
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
+  const focusedActivity = document.activeElement === $('activity-toggle') ? box.querySelector('.tool-activity[data-live]')?.dataset.disclosureId : undefined;
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
   const playing = [...threadVideos.values()].filter(video => video.player && !video.player.paused);
   const matched = [];
@@ -872,6 +891,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
   const rendered = new Set(), activityGroups = [];
   let activity;
+  const ensureActivity = id => {
+    if (!activity) {
+      const node = el('details', undefined, 'tool-activity'), summary = el('summary');
+      node.id = 'activity-log-' + activityGroups.length;
+      node.dataset.disclosureId = 'activity:' + id; node.dataset.scrollKey = node.dataset.disclosureId;
+      node.open = expanded.get(node.dataset.disclosureId) ?? false;
+      node.append(summary);
+      activity = { node, summary, tools: [] }; activityGroups.push(activity);
+    }
+    return activity;
+  };
   const appendTool = (id, name, input, result) => {
     if (rendered.has(id)) return;
     rendered.add(id);
@@ -883,14 +913,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     detail.dataset.disclosureId = 'tool:' + id;
     detail.open = expanded.get(detail.dataset.disclosureId) ?? false;
     const toolName = name || live?.name || 'Tool';
-    if (!activity) {
-      const node = el('details', undefined, 'tool-activity'), summary = el('summary');
-      node.dataset.disclosureId = 'activity:' + id; node.dataset.scrollKey = node.dataset.disclosureId;
-      node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      node.append(summary); fragment.append(node);
-      activity = { node, summary, tools: [] }; activityGroups.push(activity);
-    }
-    const entry = { name: toolName, status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp }; activity.tools.push(entry);
+    const group = ensureActivity(id);
+    group.tools.push({ status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp });
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
     let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
@@ -904,7 +928,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       }
     }
     context = displayPaths(context);
-    entry.line = (toolName === 'bash' ? '$' : toolName) + (context ? ' ' + context : '');
     const summary = el('summary'), heading = el('span', undefined, 'tool-heading');
     heading.append(el('strong', toolName === 'bash' ? '$' : toolName));
     if (toolName === 'bash') heading.append(el('span', 'bash', 'sr-only'));
@@ -930,32 +953,33 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
     appendThreadImages(detail, result);
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
-    activity.node.append(detail);
+    group.node.append(detail);
   };
   const loading = historyRequest && el('p', 'Loading…', 'history-loading ' + historyRequest.direction);
   loading?.setAttribute('role', 'status');
   if (historyRequest?.direction === 'before') fragment.append(loading);
   if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   for (const [index, message] of messages.entries()) {
-    if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
+    if (index === usagePosition) fragment.append(renderUsage(usage));
     if (message.role === 'toolResult') {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
       continue;
     }
-    // Extensions prompt the agent as the user (e.g. a subagent wake); show one quiet line, not a bubble.
+    // Internal wake-up prompts belong in the log, not between progress messages.
     if (message.source === 'extension') {
-      activity = undefined;
-      const node = el('details', undefined, 'tool-activity'), summary = el('summary');
-      node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
+      const group = ensureActivity('prompt:' + message.id), node = el('details', undefined, 'tool');
+      node.dataset.disclosureId = 'prompt:' + message.id;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      summary.append(el('span', 'Prompted by an extension', 'tool-activity-label'));
-      node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
-      fragment.append(node);
+      node.append(el('summary', 'Prompted by an extension'), el('p', userMessageText(message), 'extension-prompt'));
+      group.node.append(node);
       continue;
+    }
+    if (message.role === 'user') {
+      if (activity) fragment.append(activity.node);
+      activity = undefined;
     }
     const skill = loadedSkill({ ...message, text: userMessageText(message) });
     if (message.text || message.images?.length || message.role === 'user') {
-      activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
       article.dataset.messageId = message.id; article.dataset.scrollKey = message.liveId || message.id;
@@ -1002,37 +1026,21 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (article.childNodes.length) fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
-    if (message.truncated && (!skill || skill.text)) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
+    if (message.truncated && (!skill || skill.text)) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
   }
-  if (usagePosition === messages.length) { activity = undefined; fragment.append(renderUsage(usage)); }
+  if (usagePosition === messages.length) fragment.append(renderUsage(usage));
   for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
+  if (activity) fragment.append(activity.node);
+  const liveActivity = !historyWindow && ['working', 'waiting'].includes(state.status)
+    ? activity || activityGroups.findLast(group => group.tools.some(tool => tool.status === 'working')) : undefined;
   for (const group of activityGroups) {
-    const counts = new Map();
-    for (const tool of group.tools) counts.set(tool.name, (counts.get(tool.name) || 0) + 1);
-    const actions = { bash: ['Ran', 'Running', 'command'], read: ['Read', 'Reading', 'file'],
-      edit: ['Edited', 'Editing', 'file'], write: ['Wrote', 'Writing', 'file'],
-      grep: ['Searched', 'Searching', 'time'], find: ['Searched', 'Searching', 'time'],
-      ffgrep: ['Searched', 'Searching', 'time'], fffind: ['Searched', 'Searching', 'time'],
-      ls: ['Listed', 'Listing', 'directory', 'directories'] };
-    const labels = [...counts].map(([name, count], index) => {
-      const [past, present, noun, plural] = Object.hasOwn(actions, name) ? actions[name] : ['Used ' + name, 'Using ' + name, 'time'];
-      const active = group.tools.some(tool => tool.name === name && ['working', 'pending'].includes(tool.status));
-      const verb = active ? present : past;
-      return `${index ? verb[0].toLowerCase() + verb.slice(1) : verb} ${count} ${count === 1 ? noun : plural || noun + 's'}`;
-    });
-    const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
-    if (group.tools.some(tool => ['working', 'pending'].includes(tool.status))
-      || (state.status === 'working' && group === activityGroups.at(-1))) {
-      // Negative delay keeps the breathing phase continuous when the row re-renders.
-      label.classList.add('tool-activity-live'); label.style.animationDelay = `-${Date.now() % 2400}ms`;
-    }
-    const running = group.tools.findLast(tool => tool.status === 'working');
-    if (running) {
-      const text = el('span', undefined, 'tool-activity-text'), line = el('span', running.line, 'tool-activity-line');
-      line.title = running.line; text.append(label, line); group.summary.append(text);
-    } else group.summary.append(label);
+    group.summary.append(el('span', 'View activity', 'tool-activity-label'));
+    const failures = group.tools.filter(tool => tool.status === 'error').length;
+    group.node.dataset.failures = failures;
+    if (failures) group.summary.append(el('span', `${failures} failed`, 'tool-activity-error'));
+    if (group === liveActivity) group.node.dataset.live = '';
     let elapsed;
-    if (group.tools.every(tool => Number.isFinite(tool.durationMs))) {
+    if (group.tools.length && group.tools.every(tool => Number.isFinite(tool.durationMs))) {
       if (group.tools.length === 1) elapsed = group.tools[0].durationMs;
       else if (group.tools.every(tool => Number.isFinite(tool.timestamp))) {
         // Parallel tools overlap, so use their execution span rather than adding durations.
@@ -1044,10 +1052,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       const time = el('span', formatToolDuration(elapsed), 'tool-activity-time');
       time.setAttribute('aria-label', 'Elapsed time: ' + time.textContent);
       time.title = `Elapsed time: ${elapsed} ms`; group.summary.append(time);
-    }
-    for (const [status, text] of [['pending', 'pending']]) {
-      const count = group.tools.filter(tool => tool.status === status).length;
-      if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
   if (historyRequest?.direction === 'after') fragment.append(loading);
@@ -1069,6 +1073,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (state.error) notice(state.error);
   renderDialog(state);
   updateControls();
+  if (focusedActivity && ($('agent-activity').hidden || $('activity-toggle').hidden)) {
+    const summary = [...box.querySelectorAll('.tool-activity')].find(node => node.dataset.disclosureId === focusedActivity)?.querySelector('summary');
+    (summary || box).focus({ preventScroll: true });
+  }
   updateScrollButton();
 }
 function updateControls() {
@@ -1090,13 +1098,7 @@ function updateControls() {
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
-  const activity = $('agent-activity'), active = connected && state?.status === 'working';
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
-    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
-    activity.querySelector('span').textContent = labels[Math.floor(Math.random() * labels.length)];
-    activity.dataset.sessionId = selected;
-  }
-  activity.hidden = !active;
+  updateActivity(state);
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
   $('model').textContent = modelName;
   $('model').title = modelName ? `Switch model: ${modelName}` : '';
@@ -1112,11 +1114,52 @@ function updateControls() {
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
   $('resume').disabled = !connected || !resumable;
   $('composer-hint').textContent = !connected ? '' :
-    state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
   $('composer-hint').hidden = !$('composer-hint').textContent;
   renderCommands();
 }
+function updateActivity(state) {
+  const row = $('agent-activity');
+  row.hidden = !connected || !['working', 'waiting'].includes(state?.status);
+  if (row.hidden) return;
+  const messages = state.messages || [], results = new Set(messages.filter(message => message.role === 'toolResult').map(message => message.toolCallId));
+  const assistantIndex = messages.findLastIndex(message => message.role === 'assistant');
+  const userIndex = messages.findLastIndex(message => message.role === 'user' && message.source !== 'extension');
+  const assistant = messages[assistantIndex], tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
+  const finished = Number.isFinite(assistant?.taskDurationMs) || ['stop', 'length', 'error', 'aborted'].includes(assistant?.stopReason);
+  const running = [...tools.values()].findLast(tool => tool.status === 'working' && !results.has(tool.id))
+    || (assistantIndex > userIndex && assistant?.toolCalls?.findLast(call => !results.has(call.id) && !['done', 'error'].includes(tools.get(call.id)?.status)));
+  const phases = { read: 'Reading files…', edit: 'Making changes…', write: 'Making changes…',
+    grep: 'Searching the project…', find: 'Searching the project…', ffgrep: 'Searching the project…', fffind: 'Searching the project…', ls: 'Exploring the project…', bash: 'Running a command…' };
+  const waiting = state.status === 'waiting';
+  row.dataset.status = state.status;
+  row.querySelector('svg').toggleAttribute('hidden', waiting);
+  const label = waiting ? (state.dialog ? 'Waiting for your input…' : 'Waiting for input in Pi’s terminal…')
+    : running ? (Object.hasOwn(phases, running.name) ? phases[running.name] : 'Using tools…')
+    : messages.at(-1) === assistant && assistant?.text && !assistant.toolCalls?.length && !finished ? 'Writing a reply…' : 'Working…';
+  if ($('activity-label').textContent !== label) $('activity-label').textContent = label;
+  const startedAt = assistant && !finished ? assistant.taskStartedAt ?? messages[userIndex]?.timestamp
+    : userIndex > assistantIndex ? messages[userIndex]?.timestamp : undefined;
+  $('activity-time').hidden = !Number.isFinite(startedAt) || startedAt > Date.now();
+  $('activity-time').dataset.startedAt = startedAt;
+  updateActivityTime();
+  const group = $('transcript').querySelector('.tool-activity[data-live]'), button = $('activity-toggle');
+  button.hidden = !group && !(historyWindow && (messages.some(message => message.toolCalls?.length || message.role === 'toolResult' || message.source === 'extension') || tools.size));
+  button.textContent = group?.open ? 'Hide activity' : 'View activity';
+  button.setAttribute('aria-expanded', String(!!group?.open));
+  button.setAttribute('aria-controls', group?.id || 'transcript');
+  const failures = Number(group?.dataset.failures || 0), problem = $('activity-error');
+  problem.hidden = !failures;
+  const warning = `${failures} tool${failures === 1 ? '' : 's'} failed`;
+  if (problem.textContent !== warning) problem.textContent = warning;
+}
+function updateActivityTime() {
+  const time = $('activity-time');
+  if ($('agent-activity').hidden || time.hidden) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - Number(time.dataset.startedAt)) / 1000));
+  time.textContent = seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
+}
+setInterval(updateActivityTime, 1000);
 async function loadCommands(id) {
   const entry = {};
   commandCatalog.set(id, entry);

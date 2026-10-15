@@ -97,7 +97,12 @@
       <div id="notice" class="notice" role="status" hidden></div>
       <section id="empty" class="empty"><p>Select a session.</p></section>
       <section id="transcript" aria-label="Conversation" tabindex="0" hidden></section>
-      <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span>Pondering…</span></div>
+      <div id="agent-activity" hidden>
+        <svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg>
+        <div class="activity-status"><span id="activity-label" role="status">Working…</span><span id="activity-error" role="status" hidden></span></div>
+        <span id="activity-time" aria-live="off" hidden></span>
+        <button id="activity-toggle" type="button" class="quiet" aria-expanded="false" aria-controls="transcript" hidden>View activity</button>
+      </div>
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
       <form id="composer" class="composer" hidden>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
