@@ -11,3 +11,7 @@ Do not wait for CI or Render after pushing. Report the push and local validation
 Keep unrelated work out of the commit unless explicitly authorized.
 
 For generated-video delivery to the phone, follow `docs/generated-videos.md`. A Markdown link to a local file is not a download.
+
+## Operational commands
+
+Reuse existing project scripts and commands. Do not create temporary wrappers just to bundle execution and verification. For host restarts, use `scripts/restart-and-resume.mjs`, detach it when needed to survive the restart, and check status separately. Write a new script only for a genuine missing capability.
