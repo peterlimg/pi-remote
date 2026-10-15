@@ -187,6 +187,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .skill-loaded { color: var(--accent); font-size: 14px; overflow-wrap: anywhere; }
 .tool { font-family: var(--mono); }
 #transcript > .hint { font: 17px/1.65 var(--sans); }
+.history-page { display: block; max-width: 100%; margin: 0 auto 18px; }
 .message.user { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .message.user .message-text { max-width: 85%; padding: 12px 16px; border-radius: 20px; background: var(--user); line-height: 1.5; white-space: pre-wrap; }
 .message.user .thread-images { justify-content: flex-end; }

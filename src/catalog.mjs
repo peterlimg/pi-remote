@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, realpathSync, openSync, readSync, closeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -136,7 +136,25 @@ export function readSessionImage(file, imageId) {
   throw new Error('Image is no longer available in this session');
 }
 export function readSession(file) {
-  const { info, entries, header, branch } = readBranch(file);
+  const info = statSync(file);
+  if (info.size > 32 * 1024 * 1024) {
+    // Discovery only needs a bounded preview. The selected session is indexed off-thread on demand.
+    const handle = openSync(file, 'r'), buffer = Buffer.alloc(64 * 1024);
+    let prefix;
+    try { prefix = buffer.subarray(0, readSync(handle, buffer)).toString('utf8'); } finally { closeSync(handle); }
+    const lines = prefix.split('\n'); lines.pop();
+    let header;
+    try { header = JSON.parse(lines[0]); } catch { throw new Error('Invalid session JSONL'); }
+    if (header?.type !== 'session') throw Object.assign(new Error('Not a Pi session'), { code: 'NOT_PI_SESSION' });
+    if (!header.cwd || !header.id) throw new Error('Not a Pi session');
+    let name;
+    for (const line of lines.slice(1)) {
+      try { const entry = JSON.parse(line); if (entry.type === 'session_info' && entry.name) name = entry.name; } catch { break; }
+    }
+    return { id: sessionKey(file), piSessionId: header.id, file: realpathSync(file), cwd: header.cwd,
+      title: sessionTitle(name), updatedAt: info.mtimeMs, status: 'saved', messages: [], historyTruncated: true, historyPending: true };
+  }
+  const { entries, header, branch } = readBranch(file);
   const allMessages = branchMessages(branch, x => x.id);
   const modelEntry = branch.findLast(x => x.type === 'model_change' || (x.type === 'message' && x.message?.role === 'assistant' && x.message.provider && x.message.model));
   const model = modelEntry?.type === 'model_change' ? `${modelEntry.provider}/${modelEntry.modelId}` :

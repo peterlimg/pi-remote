@@ -30,6 +30,9 @@ export function sessionTitle(title, messages = []) {
   return line ? (line.length > 80 ? line.slice(0, 79) + '…' : line) : title || 'Untitled session';
 }
 
+// Live events predate their JSONL entry IDs; history uses this alias only at the live boundary.
+export const messageKey = message => `${message.role}:${message.timestamp ?? message.id}:${message.toolCallId || ''}`;
+
 export function diffState(previous, next) {
   const before = new Map((previous.messages || []).map(x => [x.id, JSON.stringify(x)]));
   const messages = next.messages || [];

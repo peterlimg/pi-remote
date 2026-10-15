@@ -5,11 +5,12 @@ import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
+let historyWindow, historyRequest, historyError = '', historyGeneration = 0, historyScrollTop = 0;
 function atThreadBottom() {
   const box = $('transcript');
   return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
 }
-function updateScrollButton() { $('scroll-bottom').hidden = atThreadBottom(); }
+function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
 // Shrinking the transcript (activity row, taller composer) keeps scrollTop, hiding the last message.
 let pinnedToBottom = true, transcriptHeight = 0;
 $('transcript').addEventListener('scroll', () => {
@@ -17,6 +18,9 @@ $('transcript').addEventListener('scroll', () => {
   // The browser may shift scrollTop by up to the pending resize before the resize callback runs.
   pinnedToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 2 + Math.abs(box.clientHeight - transcriptHeight);
   updateScrollButton();
+  const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
+  if (direction < 0 && box.scrollTop < 400) loadHistory('before');
+  else if (direction > 0 && historyWindow?.newer && box.scrollHeight - box.scrollTop - box.clientHeight < 400) loadHistory('after');
 }, { passive: true });
 $('transcript').addEventListener('toggle', updateScrollButton, true);
 new ResizeObserver(() => {
@@ -25,6 +29,7 @@ new ResizeObserver(() => {
   updateScrollButton();
 }).observe($('transcript'));
 $('scroll-bottom').addEventListener('click', () => {
+  if (historyWindow) showLatest();
   $('transcript').scrollTop = $('transcript').scrollHeight;
   $('transcript').focus({ preventScroll: true });
   updateScrollButton();
@@ -85,7 +90,7 @@ const ownSwipe = navigator.standalone === true;
 let swipeTimer, trackingSwipe = false;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, blankDir, settingsPicker, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -114,6 +119,74 @@ const el = (tag, text, className) => {
   if (className) node.className = className;
   return node;
 };
+function resetScrollback() {
+  historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyError = ''; historyScrollTop = 0;
+}
+function showLatest() {
+  resetScrollback();
+  const state = cache.get(selected);
+  if (state) renderConversation(state);
+  $('transcript').scrollTop = $('transcript').scrollHeight;
+}
+function readingAnchor() {
+  const top = $('transcript').getBoundingClientRect().top;
+  const node = [...$('transcript').querySelectorAll('[data-scroll-key]')].find(item => item.getBoundingClientRect().bottom > top);
+  return node && { key: node.dataset.scrollKey, id: node.dataset.messageId, top: node.getBoundingClientRect().top };
+}
+function mergeHistory(before, after) {
+  const messages = [...before];
+  const ids = new Map(messages.map((message, index) => [message.id, index]));
+  const aliases = new Map(messages.filter(message => message.liveId).map(message => [message.liveId, ids.get(message.id)]));
+  for (const message of after) {
+    // Do not collapse distinct saved entries that happen to share a timestamp.
+    const index = ids.get(message.id) ?? (message.liveId ? ids.get(message.liveId) : aliases.get(message.id));
+    if (index === undefined) { ids.set(message.id, messages.length); messages.push(message); }
+    else {
+      const previous = messages[index];
+      if (previous.liveId === message.id) messages[index] = { ...message, id: previous.id, liveId: previous.liveId };
+      else { ids.delete(previous.id); messages[index] = message; ids.set(message.id, index); }
+    }
+    if (message.liveId) aliases.set(message.liveId, ids.get(message.id));
+  }
+  return messages;
+}
+async function loadHistory(direction) {
+  const state = cache.get(selected);
+  if (!supportsHistory || !connected || !state || historyRequest) return;
+  if (direction === 'before' ? !(historyWindow?.older ?? state.historyTruncated) : !historyWindow?.newer) return;
+  const messages = [...(historyWindow?.messages || state.messages)], cursor = direction === 'before' ? messages[0] : messages.at(-1);
+  if (!cursor) return;
+  const focusReader = document.activeElement?.classList.contains('history-page');
+  const current = historyRequest = { sessionId: selected, generation: historyGeneration, direction };
+  historyError = '';
+  renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
+  if (focusReader) $('transcript').focus({ preventScroll: true });
+  try {
+    const page = await request('history', { sessionId: selected, [direction]: cursor.id, expectedTip: historyWindow?.tip });
+    if (historyRequest !== current || selected !== current.sessionId || historyGeneration !== current.generation) return;
+    if (direction === 'after' && !page.messages.length) { showLatest(); return; }
+    const anchor = readingAnchor();
+    let combined = direction === 'before' ? mergeHistory(page.messages, messages) : mergeHistory(messages, page.messages);
+    if (direction === 'after' && !page.newer) combined = mergeHistory(combined, cache.get(selected).messages);
+    historyWindow = { messages: direction === 'before' ? combined.slice(0, 200) : combined.slice(-200), tip: page.tip,
+      older: direction === 'before' ? page.older : historyWindow.older || combined.length > 200,
+      newer: direction === 'before' || page.newer };
+    historyRequest = undefined;
+    renderConversation(cache.get(selected), { anchor, historyChanged: true });
+  } catch (error) {
+    if (historyRequest !== current) return;
+    historyRequest = undefined; historyError = error.message;
+    renderConversation(cache.get(selected), { anchor: readingAnchor(), historyChanged: true });
+  }
+}
+function historyControl(direction) {
+  const older = direction === 'before';
+  const button = el('button', historyRequest?.direction === direction ? 'Loading messages…' : older ? 'Load older messages'
+    : historyWindow.newer ? 'Load newer messages' : 'Return to latest messages', 'secondary history-page');
+  button.type = 'button'; button.disabled = !!historyRequest || !connected;
+  button.addEventListener('click', () => older || historyWindow?.newer ? loadHistory(direction) : showLatest());
+  return button;
+}
 function notice(text) {
   // Connection state belongs in the composer, not in persistent error notices.
   if (text === 'Computer is disconnected' || text === 'Computer is offline') return;
@@ -146,11 +219,12 @@ function connection(text) {
   if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
+  for (const button of $('transcript').querySelectorAll('.history-page')) button.disabled = !!historyRequest || !connected;
 }
 function disconnect() {
   closePicker();
   listRequest++; legacyList = undefined;
-  const old = socket; socket = undefined; connected = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
+  const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -201,6 +275,7 @@ function connect() {
     if (!packet || typeof packet !== 'object') return;
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
+      supportsHistory = packet.supportsHistory === true;
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
@@ -288,6 +363,7 @@ function logout() {
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
+  resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
@@ -524,6 +600,7 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
+  resetScrollback();
   resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
@@ -674,7 +751,7 @@ async function loadVideoPreview(video) {
   if (!video || video.loading || video.info || video.url) return;
   video.loading = true; video.button.disabled = true;
   try {
-    const info = await request('videoRead', { sessionId: video.sessionId, path: video.path });
+    const info = await request('videoRead', { sessionId: video.sessionId, path: video.path, messageId: video.messageId });
     if (threadVideos.get(video.path) !== video) return;
     if (!Number.isSafeInteger(info.size) || info.size <= 0 || info.size > MAX_VIDEO_BYTES) throw new Error('Invalid video size');
     video.info = info;
@@ -704,7 +781,7 @@ async function playThreadVideo(video) {
     for (let offset = 0; offset < video.info.size;) {
       check();
       video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
-      const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset });
+      const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
       check();
       if (result.size !== video.info.size || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
       const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
@@ -726,7 +803,7 @@ function appendThreadVideos(parent, message, attachments, keep) {
     if (!video) {
       const node = el('div', undefined, 'thread-video'), button = el('button', 'Loading video preview…', 'secondary');
       button.type = 'button'; node.dataset.videoPath = path; node.append(button);
-      video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected };
+      video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected, messageId: message.id };
       threadVideos.set(path, video);
       button.addEventListener('click', () => playThreadVideo(video));
       if (file) showThreadVideo(video, file, poster);
@@ -740,12 +817,19 @@ function formatToolDuration(durationMs) {
   return durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
-function renderConversation(state) {
+function renderConversation(state, { anchor, historyChanged = false } = {}) {
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
-  const box = $('transcript'), bottom = atThreadBottom(), oldScroll = box.scrollTop;
+  $('transcript').setAttribute('aria-busy', String(!!historyRequest));
+  if (historyWindow && !historyChanged) {
+    // Live patches update controls, not the historical DOM or the reader's scroll position.
+    historyWindow.newer = true;
+    renderDialog(state); updateControls(); updateScrollButton(); return;
+  }
+  if (historyWindow) state = { ...state, messages: historyWindow.messages, tools: [] };
+  const box = $('transcript'), bottom = !anchor && atThreadBottom(), oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
@@ -790,7 +874,7 @@ function renderConversation(state) {
     const toolName = name || live?.name || 'Tool';
     if (!activity) {
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
-      node.dataset.disclosureId = 'activity:' + id;
+      node.dataset.disclosureId = 'activity:' + id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
       node.append(summary); fragment.append(node);
       activity = { node, summary, tools: [] }; activityGroups.push(activity);
@@ -837,7 +921,11 @@ function renderConversation(state) {
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     activity.node.append(detail);
   };
-  if (state.historyTruncated) fragment.append(el('p', 'Latest 100 messages.', 'hint'));
+  if (historyWindow?.older ?? state.historyTruncated) {
+    fragment.append(supportsHistory ? historyControl('before') : el('p', 'Latest 100 messages.', 'hint'));
+  }
+  if (historyRequest) { const loading = el('p', 'Loading messages…', 'hint'); loading.setAttribute('role', 'status'); fragment.append(loading); }
+  if (historyError) { const error = el('p', historyError + ' Retry loading, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
@@ -848,7 +936,7 @@ function renderConversation(state) {
     if (message.source === 'extension') {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
-      node.dataset.disclosureId = 'prompt:' + message.id;
+      node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
       summary.append(el('span', 'Prompted by an extension', 'tool-activity-label'));
       node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
@@ -860,6 +948,7 @@ function renderConversation(state) {
       activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
+      article.dataset.messageId = message.id; article.dataset.scrollKey = message.liveId || message.id;
       article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el('div', undefined, 'message-text');
       if (message.role === 'user') {
@@ -951,6 +1040,7 @@ function renderConversation(state) {
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
+  if (historyWindow) fragment.append(historyControl('after'));
   box.replaceChildren(fragment);
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
@@ -961,6 +1051,11 @@ function renderConversation(state) {
   }
   if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.disclosureId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
+  if (anchor) {
+    const node = [...box.querySelectorAll('[data-scroll-key]')].find(item => item.dataset.scrollKey === anchor.key || anchor.id && item.dataset.messageId === anchor.id);
+    if (node) box.scrollTop += node.getBoundingClientRect().top - anchor.top;
+  }
+  historyScrollTop = box.scrollTop;
   if (state.error) notice(state.error);
   renderDialog(state);
   updateControls();
@@ -1742,6 +1837,7 @@ async function sendMessage() {
   if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
   if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
+  if (historyWindow) showLatest();
   const isCommand = text.trim().startsWith('/');
   if (attachments.length && isCommand) { notice('Send attachments with a message, not a slash command.'); return; }
   const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,

@@ -40,7 +40,7 @@ export function sessionWindow(service) {
 
 export function attachClient(socket, service) {
   let selected, previous;
-  let version = 0, listOptions = {};
+  let version = 0, watchGeneration = 0, listOptions = {};
   const list = options => {
     const page = service.list(options);
     listOptions = { offset: page.offset, query: page.query };
@@ -61,7 +61,7 @@ export function attachClient(socket, service) {
     }, 150);
   };
   const onState = id => {
-    if (selected === id && !stateTimer) stateTimer = setTimeout(() => {
+    if (selected === id && previous && !stateTimer) stateTimer = setTimeout(() => {
       stateTimer = undefined;
       if (closed || !selected) return;
       try {
@@ -75,7 +75,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -88,11 +88,20 @@ export function attachClient(socket, service) {
         else if (message.op === 'projects') value = service.projects();
         else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
         else if (message.op === 'watch') {
-          const state = service.read(message.sessionId);
-          selected = message.sessionId; version = 0; previous = structuredClone(state);
-          send(socket, { type: 'snapshot', sessionId: selected, version, state }); value = { watching: selected };
+          const generation = ++watchGeneration;
+          selected = message.sessionId; previous = undefined;
+          clearTimeout(stateTimer); stateTimer = undefined;
+          const state = await service.view(selected);
+          if (!closed && generation === watchGeneration) {
+            version = 0; previous = structuredClone(state);
+            send(socket, { type: 'snapshot', sessionId: selected, version, state });
+          }
+          value = { watching: message.sessionId };
+        } else if (message.op === 'history') {
+          if (message.sessionId !== selected) throw new Error('Select this session before loading history');
+          value = await service.history(selected, message);
         } else if (message.op === 'image') {
-          value = service.getImage(message.sessionId, message.imageId);
+          value = await service.getImage(message.sessionId, message.imageId);
         } else if (message.op === 'upload') {
           const [image] = validateImages([message.image]);
           // ponytail: removed drafts stay staged until the socket closes; the cap bounds that leak.
@@ -102,7 +111,8 @@ export function attachClient(socket, service) {
           value = { uploadId };
         } else if (message.op === 'videoRead') {
           if (message.sessionId !== selected || !previous?.messages?.some(item => ['user', 'assistant'].includes(item.role) &&
-            splitVideoMessage(item.text, item.role).paths.includes(message.path))) throw new Error('Video is not attached to this conversation');
+            splitVideoMessage(item.text, item.role).paths.includes(message.path)) &&
+            !await service.historyVideo(selected, message.messageId, message.path)) throw new Error('Video is not attached to this conversation');
           value = await readVideo(service.dir, message.path, message.offset);
         } else if (message.op === 'videoStart') {
           value = videos.start(message.file);

@@ -2,13 +2,14 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { discover, isInside, readSession, readSessionImage } from './catalog.mjs';
+import { discover, isInside, readSession } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
+import { HistoryReader } from './history.mjs';
 
 function inside(file, dir) {
   const rel = relative(canonical(dir), canonical(file));
@@ -21,6 +22,7 @@ export class SessionService extends EventEmitter {
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
     this.restoreIds = new Set(); this.restoreWarnings = [];
     this.journal = new CommandJournal(join(dir, 'commands'));
+    this.historyReader = new HistoryReader();
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
     mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
     this.scan();
@@ -105,10 +107,30 @@ export class SessionService extends EventEmitter {
     if (!isInside(saved.file, this.roots)) throw new Error('Session is outside configured roots');
     return readSession(saved.file);
   }
-  getImage(id, imageId) {
+  async view(id) {
+    const state = this.read(id);
+    if (!state.historyPending) return state;
+    const page = await this.history(id, {});
+    const { historyPending, ...meta } = state;
+    return { ...meta, messages: page.messages, title: page.title, model: page.model,
+      thinkingLevel: page.thinkingLevel, historyTruncated: page.older };
+  }
+  historySource(id) {
     const state = this.live.get(id)?.state || this.catalog.get(id);
     if (!state?.file || !isInside(state.file, this.roots)) throw new Error('Session not found in configured roots');
-    return readSessionImage(state.file, imageId);
+    return { file: state.file, tips: this.live.has(id) ? [...state.messages].reverse().map(message => message.id) : undefined };
+  }
+  history(id, { before, after, expectedTip } = {}) {
+    if (before !== undefined && after !== undefined || [before, after, expectedTip].some(cursor => cursor !== undefined &&
+      (typeof cursor !== 'string' || !cursor || cursor.length > 512))) throw new Error('Invalid history cursor');
+    return this.historyReader.request('page', { ...this.historySource(id), before, after, expectedTip });
+  }
+  getImage(id, imageId) {
+    return this.historyReader.request('image', { ...this.historySource(id), imageId });
+  }
+  historyVideo(id, messageId, path) {
+    if (typeof messageId !== 'string' || messageId.length > 512) return false;
+    return this.historyReader.request('video', { ...this.historySource(id), messageId, path });
   }
   register(socket, state, owner) {
     if (!state || !state.file || typeof state.cwd !== 'string') throw new Error('Invalid session registration');
@@ -265,7 +287,7 @@ export class SessionService extends EventEmitter {
     if (current?.socket || current?.worker) return { attached: true };
     const saved = this.catalog.get(id);
     if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
-    const actual = readSession(saved.file);
+    const actual = await this.view(id);
     if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
     const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
     let worker;
@@ -278,7 +300,11 @@ export class SessionService extends EventEmitter {
     try {
       const rpcState = await worker.request('get_state');
       // The saved branch already has image references; get_messages duplicates all base64 over RPC.
-      const history = readSession(actual.file);
+      let history = readSession(actual.file);
+      if (history.historyPending) {
+        const page = await this.history(id, {});
+        history = { ...history, messages: page.messages, historyTruncated: page.older };
+      }
       item.state.messages = history.messages;
       item.state.historyTruncated = history.historyTruncated;
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
@@ -321,6 +347,7 @@ export class SessionService extends EventEmitter {
       renameSync(file + '.tmp', file);
     }
     this.stopping = true;
+    await this.historyReader.close();
     await Promise.all([...this.live.values()].filter(x => x.worker).map(x => x.worker.close()));
     for (const item of this.live.values()) if (item.socket) item.socket.close();
     for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('Service stopped')); }

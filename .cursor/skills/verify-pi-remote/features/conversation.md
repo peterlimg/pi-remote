@@ -8,6 +8,7 @@ A conversation shows user and assistant messages, formatted replies, collapsible
 - `conversation-tool`: expand grouped activity, then open and close individual tool arguments and output.
 - `conversation-project`: reveal the selected project's full directory.
 - `conversation-bottom`: return to the latest message in a long thread.
+- `conversation-history`: scroll back through the saved branch, including messages before compaction, while live replies continue.
 
 ## How to get to it (user POV)
 
@@ -26,6 +27,7 @@ Preconditions: authenticated baseline, no command sent yet. Start with Project A
 - **Tool.** Require `.tool-activity > summary` to say `Read 1 file`. Set `const tool = page.locator('#transcript details.tool')`; require it hidden. Click the activity summary, then `await tool.locator('summary').click()` to reveal `Relay configuration output`; click again to hide it. Repeat with `await tool.locator('summary').focus(); await page.keyboard.press('Enter')` to prove keyboard entry separately.
 - **Shell output.** Return via `Show sessions`, open Project Beta, and set `const shell = page.locator('[data-tool-id="run-checks"]')`. Require the last `.tool-activity > summary` to say `Ran 1 command, read 2 files` and the shell command to be hidden. Open that activity, then the shell's `summary`; require `.tool-output` to contain `check 1: passed`. This is seeded output, not evidence that npm tests ran.
 - **Bottom button.** Run `npm run test:browser -- test/browser/scroll.spec.mjs --grep 'bottom button' --trace on`. It supplies the long thread missing from baseline. The handle is `page.getByRole('button', { name: 'Go to thread bottom' })`; require the latest message visible and following subsequent replies after choosing it. This spec simulates the browser WebSocket.
+- **History.** Run `npm run test:browser -- test/browser/history.spec.mjs`. It uses real JSONL files and an isolated real host, with only Pi's bridge simulated. It proves scrollback beyond 100 records, equal/out-of-order timestamps, pre-compaction history, forward paging after eviction, unchanged historical DOM during live updates, bounded pages/live patches and page bytes, encrypted historical image/video reads with session/branch boundaries, and browsing above 32 MiB. At the top, `Load older messages` is the keyboard/touch fallback for automatic scroll loading. `Go to thread bottom` returns directly to live replies. The browser keeps at most 200 historical records, not the entire session.
 - **Regression.** Run `npm run test:browser -- test/browser/mobile.spec.mjs --grep 'conversation renders|tool summaries' --trace on` for the real local host paths. `test/browser/tool-activity.spec.mjs` simulates the browser WebSocket to check grouping boundaries, failure/running counts, and expansion/focus across streaming updates.
 
 ## Gotchas
