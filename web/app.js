@@ -1122,21 +1122,17 @@ function updateActivity() {
   const active = connected && state?.status === 'working';
   if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
-    activity.dataset.label = labels[Math.floor(Math.random() * labels.length)];
+    $('activity-label').textContent = labels[Math.floor(Math.random() * labels.length)];
     activity.dataset.sessionId = selected;
   }
   activity.hidden = !active;
   if (!active) return;
   const message = state.messages?.findLast(message => message.role === 'assistant');
   const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, Date.now() - message.timestamp) : 0;
-  const slow = elapsed >= 30000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
+  const showTime = elapsed >= 30000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
     && !state.tools?.some(tool => tool.status === 'working');
-  const label = slow ? 'Waiting for model…' : activity.dataset.label;
-  if ($('activity-label').textContent !== label) $('activity-label').textContent = label;
-  $('activity-time').hidden = $('activity-detail').hidden = !slow;
-  $('activity-time').textContent = slow ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
-  const detail = slow ? 'No reply text yet. You can stop this turn.' : '';
-  if ($('activity-detail').textContent !== detail) $('activity-detail').textContent = detail;
+  $('activity-time').hidden = !showTime;
+  $('activity-time').textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
 }
 setInterval(() => { if (!document.hidden) updateActivity(); }, 1000);
 function updateControls() {

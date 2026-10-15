@@ -65,15 +65,16 @@ test('failed replies, recovered workers and long model waits have honest feedbac
     await page.locator('#send').click();
     await expect(page.locator('#status')).toHaveText('working');
     await expect(page.locator('#composer-send-status')).toBeHidden();
-    await expect(page.locator('#activity-detail')).toBeHidden();
+    const activityLabel = await page.locator('#activity-label').textContent();
+    await expect(page.locator('#activity-time')).toBeHidden();
     const startedAt = [...host.service.live.values()][0].state.messages.at(-1).timestamp;
     await page.clock.install({ time: startedAt });
     await page.clock.pauseAt(startedAt);
     await page.clock.fastForward(31000);
-    await expect(page.locator('#activity-label')).toHaveText('Waiting for model…');
-    await expect(page.locator('#activity-time')).toHaveText(' · 31s');
+    await expect(page.locator('#agent-activity')).toHaveText(activityLabel + ' · 31s');
     await expect(page.locator('#activity-time')).toHaveAttribute('aria-hidden', 'true');
-    await expect(page.locator('#activity-detail')).toHaveText('No reply text yet. You can stop this turn.');
+    await expect(page.locator('#activity-detail')).toHaveCount(0);
+    await expect(page.locator('#agent-activity')).not.toContainText('Waiting for model');
     await expect(page.locator('#transcript')).not.toContainText('Private reasoning');
     await page.locator('#back').click();
     await page.getByRole('button', { name: /Reply recovery/ }).click();
@@ -85,6 +86,9 @@ test('failed replies, recovered workers and long model waits have honest feedbac
     await page.clock.runFor(100);
     await expect(async () => {
       const activity = await page.locator('#agent-activity').boundingBox(), composer = await page.locator('#composer').boundingBox();
+      const label = await page.locator('#activity-label').boundingBox(), time = await page.locator('#activity-time').boundingBox();
+      expect(Math.abs(label.y + label.height / 2 - time.y - time.height / 2)).toBeLessThan(2);
+      expect(time.x + time.width).toBeLessThanOrEqual(activity.x + activity.width);
       expect(activity.x + activity.width).toBeLessThanOrEqual(320);
       expect(activity.y + activity.height).toBeLessThanOrEqual(composer.y);
       expect(composer.y + composer.height).toBeLessThanOrEqual(380);

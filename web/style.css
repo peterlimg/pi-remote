@@ -256,8 +256,7 @@ pre.message-text { white-space: pre-wrap; }
 .composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
 #agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-text { min-width: 0; }
-#activity-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
-#activity-detail { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; }
+#activity-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
 #composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--panel); color: var(--text); font-size: 13px; }
