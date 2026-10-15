@@ -109,7 +109,7 @@
             <button id="picker-cancel" type="button" class="quiet" aria-label="Close model picker"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
           </div>
           <div id="picker-options"></div>
-          <footer><p id="picker-help" class="hint" role="status"></p><button id="model-retry" type="button" class="secondary" hidden>Try again</button></footer>
+          <footer><p id="picker-help" class="hint" role="status"></p><button id="model-retry" type="button" class="secondary" hidden>Try again</button><button id="usage-refresh" type="button" class="quiet" hidden>Refresh usage</button></footer>
         </section>
         <label class="sr-only" for="prompt">Message</label>
         <div id="command-menu" class="command-menu" hidden>
@@ -128,6 +128,7 @@
           </div>
           <svg id="fast-mode" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Fast mode enabled" hidden><title>Fast mode enabled</title><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg>
           <div class="composer-actions">
+            <button id="usage-meter" type="button" class="quiet" aria-label="Usage" title="Context usage" aria-expanded="false" aria-controls="settings-picker" hidden><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="usage-track" cx="12" cy="12" r="9"/><circle id="usage-arc" cx="12" cy="12" r="9" pathLength="100" stroke="currentColor" stroke-dasharray="0 100" transform="rotate(-90 12 12)"/></svg></button>
             <button id="commands" type="button" class="quiet" aria-label="Open slash commands" title="Open slash commands" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m15 5-6 14"/></svg></button>
             <button id="abort" type="button" class="quiet" aria-label="Abort turn" title="Abort this turn. Queued messages may still run."><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
             <button id="send" type="submit" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>

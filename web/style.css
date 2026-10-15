@@ -301,6 +301,13 @@ pre.message-text { white-space: pre-wrap; }
   .composer textarea { max-height: 44px; }
 }
 .composer-actions button { font-size: 12px; }
+#usage-meter { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--accent); background: transparent; }
+.composer-actions #usage-meter svg { width: 24px; height: 24px; }
+.usage-track { stroke: var(--line); }
+#usage-meter[data-unknown] .usage-track { stroke: var(--muted); stroke-dasharray: 2 3; }
+#usage-meter[data-level=warning] { color: var(--warning); }
+#usage-meter[data-level=error] { color: var(--error); }
+#usage-meter[aria-expanded=true] { background: var(--selection); }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
@@ -369,6 +376,17 @@ pre.message-text { white-space: pre-wrap; }
 .picker-option strong { color: var(--text); font: 15px/1.4 var(--sans); }
 .picker-option .picker-current { flex-shrink: 0; color: var(--accent); }
 .settings-picker footer { flex-shrink: 0; }
+.usage-details { padding: 8px 12px; font-variant-numeric: tabular-nums; }
+.usage-details section + section { margin-top: 24px; }
+.usage-details h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.usage-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.usage-heading strong { font-size: 14px; font-weight: 500; }
+.usage-details p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.usage-details progress { display: block; width: 100%; height: 5px; border: 0; border-radius: 3px; overflow: hidden; background: var(--line); color: var(--accent); accent-color: var(--accent); appearance: none; }
+.usage-details progress::-webkit-progress-bar { background: var(--line); }
+.usage-details progress::-webkit-progress-value { background: var(--accent); }
+.usage-details progress::-moz-progress-bar { background: var(--accent); }
+#usage-refresh { width: 100%; margin-top: 4px; padding-inline: 12px; font-size: 14px; text-align: left; }
 #picker-help { margin: 0; overflow-wrap: anywhere; }
 #picker-help:not(:empty) { margin-top: 6px; padding: 8px 12px 2px; border-top: 1px solid var(--line); }
 #picker-help.picker-error { color: var(--error); }

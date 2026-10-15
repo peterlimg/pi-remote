@@ -171,7 +171,7 @@ export class SessionService extends EventEmitter {
       if (command.type === 'setModel' || command.type === 'setThinkingLevel') {
         const item = this.live.get(id);
         if (item) {
-          if (command.type === 'setModel') item.state.model = result.model;
+          if (command.type === 'setModel') { item.state.model = result.model; item.state.contextUsage = undefined; }
           item.state.thinkingLevel = result.thinkingLevel;
           item.state.revision++; this.changed(id);
         }
@@ -186,6 +186,16 @@ export class SessionService extends EventEmitter {
   async getCommands(id) {
     const result = await this.dispatch(id, randomUUID(), { type: 'getCommands' });
     return commandList(result.commands, true);
+  }
+  async getUsage(id, includeProvider = false) {
+    const item = this.live.get(id), model = item?.state.model;
+    if (includeProvider && item?.state.dialog) throw new Error('Close the active dialog before checking usage.');
+    const result = await this.dispatch(id, randomUUID(), { type: 'getUsage', includeProvider });
+    if (this.live.get(id) === item && item.state.model === model) {
+      item.state.contextUsage = result.contextUsage;
+      item.state.revision++; this.changed(id);
+    }
+    return { ...result, model };
   }
   async dispatch(id, requestId, command) {
     const item = this.live.get(id);

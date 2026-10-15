@@ -91,6 +91,8 @@ let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
 const sessionIcons = new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons') || '[]'));
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
 const threadImages = new Map(), threadVideos = new Map(), usageSummaries = new Map();
+const usageDetails = new Map(), usageLoading = new Set();
+let supportsUsage = false;
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) {
@@ -233,7 +235,7 @@ function connection(text) {
   updateControls(); renderPagination();
 }
 function disconnect() {
-  closePicker();
+  closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined;
   const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
@@ -286,6 +288,7 @@ function connect() {
     if (!packet || typeof packet !== 'object') return;
     if (connected || packet.type === 'ready') { clearTimeout(connectionTimer); connectionTimer = undefined; }
     if (packet.type === 'ready') {
+      supportsUsage = packet.supportsUsage === true;
       supportsHistory = packet.supportsHistory === true;
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
@@ -306,8 +309,9 @@ function connect() {
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       if (listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
-        request('watch', { sessionId: selected }).catch(e => notice(e.message));
-        loadCommands(selected);
+        const id = selected;
+        request('watch', { sessionId: id }).then(() => loadUsage(id)).catch(e => notice(e.message));
+        loadCommands(id);
       }
     } else if (packet.type === 'sessions') {
       receiveList(packet);
@@ -375,7 +379,7 @@ function logout() {
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
-  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -637,7 +641,7 @@ async function selectSession(id) {
     $('composer').hidden = false; updateControls();
   }
   resizePrompt();
-  try { await request('watch', { sessionId: id }); } catch (e) { if (selected === id) notice(e.message); }
+  try { await request('watch', { sessionId: id }); loadUsage(id); } catch (e) { if (selected === id) notice(e.message); }
 }
 function clearThreadImages(keep = new Set()) {
   for (const [id, image] of threadImages) if (!keep.has(id)) {
@@ -863,7 +867,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     else matched.push({ outgoing, messageId: message.id });
   }
   if (isUsageDialog(state.dialog) && usageSummaries.get(selected)?.dialog.id !== state.dialog.id) {
-    usageSummaries.set(selected, { dialog: state.dialog, afterId: messages.at(-1)?.id });
+    usageSummaries.set(selected, { dialog: state.dialog, model: state.model, afterId: messages.at(-1)?.id });
   }
   const usage = usageSummaries.get(selected);
   const usagePosition = usage ? messages.findIndex(message => message.id === usage.afterId) + 1 : -1;
@@ -1112,7 +1116,9 @@ function updateControls() {
   $('reasoning-control').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
   $('reasoning-control').hidden = !state?.thinkingLevel;
-  if (settingsPicker && !live) closePicker();
+  if (settingsPicker && !live && settingsPicker.kind !== 'usage') closePicker();
+  renderUsageMeter();
+  if (settingsPicker?.kind === 'usage') renderUsagePanel();
   $('fast-mode').toggleAttribute('hidden', !live || state?.fastMode !== true);
   $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
@@ -1188,6 +1194,7 @@ function closePicker(restoreFocus = false) {
   $('settings-picker').hidden = true;
   $('model').setAttribute('aria-expanded', 'false');
   $('reasoning-control').setAttribute('aria-expanded', 'false');
+  $('usage-meter').setAttribute('aria-expanded', 'false');
   if (restoreFocus) opener?.focus();
 }
 function fitPickerMenu() {
@@ -1200,18 +1207,94 @@ function openPicker(id, kind, opener = document.activeElement) {
   if (settingsPicker?.kind === kind) opener = settingsPicker.opener;
   closePicker();
   const picker = { id, kind, opener }; settingsPicker = picker;
-  const reasoning = kind === 'reasoning';
+  const reasoning = kind === 'reasoning', usage = kind === 'usage';
   commandDismissed = true; renderCommands();
   $('picker-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
-  $('model-search').hidden = reasoning; $('picker-title').hidden = !reasoning;
-  $('model-retry').hidden = true; $('picker-help').classList.remove('picker-error');
-  $('settings-picker').setAttribute('aria-label', reasoning ? 'Choose reasoning effort' : 'Choose a model');
-  $('picker-cancel').setAttribute('aria-label', reasoning ? 'Close reasoning picker' : 'Close model picker');
+  $('model-search').hidden = reasoning || usage; $('picker-title').hidden = !reasoning && !usage;
+  $('picker-title').textContent = usage ? 'Usage' : 'Reasoning effort';
+  $('model-retry').hidden = true; $('usage-refresh').hidden = !usage; $('picker-help').classList.remove('picker-error');
+  $('settings-picker').setAttribute('aria-label', usage ? 'Usage' : reasoning ? 'Choose reasoning effort' : 'Choose a model');
+  $('picker-cancel').setAttribute('aria-label', usage ? 'Close usage' : reasoning ? 'Close reasoning picker' : 'Close model picker');
   $('settings-picker').hidden = false;
-  $(reasoning ? 'reasoning-control' : 'model').setAttribute('aria-expanded', 'true');
+  $(usage ? 'usage-meter' : reasoning ? 'reasoning-control' : 'model').setAttribute('aria-expanded', 'true');
   fitPickerMenu();
   return picker;
 }
+const usageNumbers = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+const tokenNumbers = new Intl.NumberFormat();
+function contextPercent(usage) {
+  return usage && Number.isFinite(usage.tokens) && usage.tokens >= 0 && usage.contextWindow > 0 &&
+    Number.isFinite(usage.percent) && usage.percent >= 0 ? usage.percent : undefined;
+}
+function renderUsageMeter() {
+  const percent = contextPercent(cache.get(selected)?.contextUsage), known = percent !== undefined;
+  const button = $('usage-meter');
+  button.hidden = !selected;
+  button.toggleAttribute('data-unknown', !known);
+  button.dataset.level = percent > 90 ? 'error' : percent > 70 ? 'warning' : 'normal';
+  button.title = known ? `${usageNumbers.format(percent)}% of context used` : 'Context usage unavailable';
+  button.setAttribute('aria-label', 'Usage: ' + button.title);
+  $('usage-arc').setAttribute('stroke-dasharray', `${known ? Math.min(100, percent) : 0} 100`);
+}
+function renderUsagePanel() {
+  const state = cache.get(selected), usage = state?.contextUsage, percent = contextPercent(usage);
+  const details = usageDetails.get(selected), current = details?.model === state?.model ? details : undefined;
+  const content = el('div', undefined, 'usage-details'), context = el('section');
+  const heading = el('div', undefined, 'usage-heading');
+  heading.append(el('h3', 'Current context'), el('strong', percent === undefined ? 'Unavailable' : `${usageNumbers.format(percent)}% used`));
+  context.append(heading);
+  if (percent !== undefined) {
+    const bar = el('progress'); bar.max = 100; bar.value = Math.min(100, percent);
+    bar.setAttribute('aria-label', 'Current context usage');
+    context.append(bar, el('p', `${tokenNumbers.format(usage.tokens)} / ${tokenNumbers.format(usage.contextWindow)} tokens`, 'hint'));
+  } else {
+    context.append(el('p', usage?.tokens === null ? 'Waiting for the next model response after compaction.' : 'This session has not reported its context usage.', 'hint'));
+  }
+  const limits = el('section'); limits.append(el('h3', 'Account limits'));
+  const summary = usageSummaries.get(selected);
+  const report = current?.providerUsage || (summary && summary.model === state?.model ? summary.dialog : undefined);
+  if (report) {
+    for (const line of usageLines(report)) limits.append(el('p', line));
+    if (current?.capturedAt) limits.append(el('p', 'Checked ' + new Date(current.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), 'hint'));
+  } else limits.append(el('p', current?.busy ? 'Checking provider limits…' : current?.providerMessage || 'Five-hour and weekly limits are shown when reported by your provider.', 'hint'));
+  content.append(context, limits); $('picker-options').replaceChildren(content);
+  const online = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
+  $('usage-refresh').disabled = !online || !supportsUsage || !!current?.busy;
+  $('picker-help').classList.toggle('picker-error', !!current?.error);
+  $('picker-help').textContent = current?.error || (!connected ? 'Offline. Usage may be out of date.' : !online ? 'Resume this session to check current usage.' :
+    !supportsUsage ? 'Restart Pi Remote on your computer to enable usage checks.' : current?.busy && report ? 'Checking provider limits…' : 'Account limits are shared across sessions.');
+}
+async function loadUsage(id, includeProvider = false) {
+  const state = cache.get(id), key = id + (includeProvider ? ':provider' : ':context');
+  if (!supportsUsage || !connected || !state || !['idle', 'working', 'waiting'].includes(state.status) || usageLoading.has(key)) return;
+  usageLoading.add(key);
+  const model = state.model, details = includeProvider ? { ...(usageDetails.get(id)?.model === model ? usageDetails.get(id) : {}), model, busy: true, error: '' } : undefined;
+  if (details) usageDetails.set(id, details);
+  if (selected === id && settingsPicker?.kind === 'usage') renderUsagePanel();
+  try {
+    const result = await request('usage', { sessionId: id, includeProvider });
+    const current = cache.get(id);
+    if (!current || current.model !== model || result.model !== model) return;
+    current.contextUsage = result.contextUsage;
+    if (details && usageDetails.get(id) === details) Object.assign(details, result, { providerUsage: result.providerUsage, capturedAt: Date.now() });
+  } catch (error) {
+    if (details) details.error = error.message === 'Unsupported command' ? 'Reload this Pi terminal to enable context usage.' : error.message;
+  } finally {
+    usageLoading.delete(key);
+    if (details) details.busy = false;
+    if (selected === id) {
+      renderUsageMeter();
+      if (settingsPicker?.kind === 'usage') renderUsagePanel();
+    }
+  }
+}
+function openUsage() {
+  openPicker(selected, 'usage', $('usage-meter'));
+  renderUsagePanel(); loadUsage(selected, true);
+}
+$('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker(true) : openUsage());
+$('usage-refresh').addEventListener('click', () => loadUsage(selected, true));
+setInterval(() => { if (!document.hidden && selected) loadUsage(selected); }, 15000);
 function renderModels() {
   const picker = settingsPicker;
   if (!picker?.models) return;
@@ -1367,26 +1450,30 @@ document.addEventListener('keydown', event => {
   }
 });
 document.addEventListener('pointerdown', event => {
-  const trigger = settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
+  const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
   if (settingsPicker && !$('settings-picker').contains(event.target) && !trigger.contains(event.target)) closePicker();
 });
 function isUsageDialog(dialog) {
   return dialog?.method === 'select' && dialog.title?.split(/\r?\n/)[0] === 'Provider usage';
 }
+function usageLines(dialog) {
+  const lines = [], description = [dialog.title.split(/\r?\n/).slice(1).join('\n'), dialog.message].filter(Boolean).join('\n');
+  for (const raw of description.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || /^(Credits|Usage limit resets|Plan|Fast mode|Semantics):/.test(line) || / Usage · /.test(line)) continue;
+    const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
+    if (limit && Number(limit[2]) <= 100) {
+      const [, label, remaining, reset] = limit;
+      lines.push(`${label}: ${Number((100 - Number(remaining)).toFixed(2))}% used${reset ? ' · ' + reset : ''}`);
+    } else lines.push(line);
+  }
+  return lines.length ? lines : ['Usage information is unavailable.'];
+}
 function renderUsage(usage) {
   const article = el('article', undefined, 'message usage-summary');
   article.setAttribute('aria-label', 'Provider usage');
   const content = el('blockquote'), body = el('div', undefined, 'message-text');
-  const description = [usage.dialog.title.split(/\r?\n/).slice(1).join('\n'), usage.dialog.message].filter(Boolean).join('\n');
-  for (const line of description.split(/\r?\n/).filter(Boolean)) {
-    if (/^(Credits|Usage limit resets|Plan|Fast mode|Semantics):/.test(line) || / Usage · /.test(line)) continue;
-    const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
-    if (limit && Number(limit[2]) <= 100) {
-      const [, label, remaining, reset] = limit;
-      content.append(el('p', `${label}: ${Number((100 - Number(remaining)).toFixed(2))}% used${reset ? ' · ' + reset : ''}`));
-    } else content.append(el('p', line));
-  }
-  if (!content.childElementCount) content.append(el('p', 'Usage information is unavailable.'));
+  for (const line of usageLines(usage.dialog)) content.append(el('p', line));
   if (usage.error) {
     content.append(el('p', usage.error, 'dialog-error'));
     const retry = el('button', 'Retry closing usage', 'quiet');

@@ -75,7 +75,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -124,6 +124,8 @@ export function attachClient(socket, service) {
           value = { path, poster };
         } else if (message.op === 'videoDiscard') {
           videos.discard(message.uploadId);
+        } else if (message.op === 'usage') {
+          value = await service.getUsage(message.sessionId, message.includeProvider === true);
         } else if (message.op === 'models') {
           value = await service.getModels(message.sessionId);
         } else if (message.op === 'commands') {

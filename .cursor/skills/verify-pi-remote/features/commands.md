@@ -10,6 +10,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 - `commands-new`: open a new session in the same project.
 - `commands-model`: choose through `/model`, a direct model ID, or the model button.
 - `commands-reasoning`: set the selected session's reasoning effort.
+- `commands-usage`: tap the context ring for current context and available provider limits.
 
 ## How to get to it (user POV)
 
@@ -31,6 +32,8 @@ Preconditions: authenticated baseline. Alpha exposes `/review`, Beta exposes `/d
 - **New session.** Run `npm run test:browser -- test/browser/slash-commands.spec.mjs --grep '/new creates' --trace on`. It clicks the `/new` option and Send, then requires `Untitled session` in the same project. The spec routes `/ws`; this is not proof of real worker creation. Do not send `/new` to the baseline to create a real worker under its fictional `/projects/...` directory.
 - **Model entries.** Run `npm run test:browser -- test/browser/models.spec.mjs --trace on`. Its controlled model list exercises `/model`, direct IDs, `Switch model: first`, the `Search models` field, selection, and `Close model picker`. Require the chosen model on the selected session and no prompt command, while the other session remains unchanged. These are mocked browser-protocol checks; provider selection requires a separate real Pi proof.
 - **Reasoning.** Run `npm run test:browser -- test/browser/reasoning.spec.mjs --trace on`. Tap `page.getByRole('button', { name: 'Reasoning effort', exact: true })`, then select a level in the `Choose reasoning effort` region. It shares the model picker panel, marks the current level, and closes on selection, Escape, outside tap, or `Close reasoning picker`. Require the acknowledged level on the button and after reopening; it can differ from the requested level because Pi applies the closest supported setting. Inspect the spec's mocked state before reporting scope.
+
+- **Usage.** Run `npm run test:browser -- test/browser/usage-status.spec.mjs --trace on`. Tap `#usage-meter` beside the slash shortcut. The `Usage` region shows current context tokens and percentage, plus provider-reported five-hour and weekly limits with reset times. `Refresh usage` preserves the composer draft and agent activity. Escape, outside tap, or `Close usage` closes the pane. The worker check uses a real host and simulated Pi RPC; the session/error check routes the browser WebSocket. `test/pi-smoke.mjs` additionally checks real Pi's context API and captures a simulated usage extension's dialog without calling a model. Unknown context stays unavailable after compaction, not zero. Terminal-owned bridges report context but direct account-limit checks to `/usage` in that terminal.
 
 ## Gotchas
 

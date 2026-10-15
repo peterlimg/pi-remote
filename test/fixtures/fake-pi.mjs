@@ -10,8 +10,9 @@ const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.j
 if (fresh) mkdirSync(dir, { recursive: true });
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false;
+let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
-  title: `Provider usage\nWeekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
+  title: `Provider usage\n${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
   if (command.type === 'extension_ui_response') {
     if (command.id.startsWith('usage-')) {
@@ -28,6 +29,7 @@ const parser = new JsonLines(command => {
   let data;
   if (command.type === 'get_state') data = { isStreaming: false, model, thinkingLevel, ...(fresh ? { sessionId, sessionFile } : {}) };
   if (command.type === 'get_available_models') data = { models };
+  if (command.type === 'get_session_stats') data = { contextUsage, tokens: { total: 9000000 } };
   if (command.type === 'set_model') {
     const next = models.find(model => model.provider === command.provider && model.id === command.modelId);
     if (!next) { out({ id: command.id, type: 'response', success: false, error: 'Model not found' }); return; }
@@ -39,7 +41,7 @@ const parser = new JsonLines(command => {
   if (command.message?.startsWith('/review') && command.type !== 'prompt') {
     out({ id: command.id, type: 'response', success: false, error: 'Extension commands require prompt' }); return;
   }
-  if (!['get_state', 'get_commands', 'get_available_models', 'set_model', 'set_thinking_level', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
+  if (!['get_state', 'get_commands', 'get_session_stats', 'get_available_models', 'set_model', 'set_thinking_level', 'prompt', 'steer', 'follow_up', 'clear_queue', 'abort'].includes(command.type)) {
     out({ id: command.id, type: 'response', success: false, error: 'Unknown fake command' }); return;
   }
   // Pi acknowledges extension commands only after their handler returns.
@@ -60,6 +62,7 @@ const parser = new JsonLines(command => {
       if (command.message === '/usage-settled') out({ type: 'agent_end' });
       return;
     }
+    if (command.message === 'compact context') contextUsage = { tokens: null, contextWindow: 200000, percent: null };
     out({ type: 'agent_start' });
     if (command.message === 'stream response') {
       const timestamp = Date.now();

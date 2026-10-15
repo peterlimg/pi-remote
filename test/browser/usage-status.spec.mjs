@@ -8,6 +8,130 @@ import { startHost } from '../../src/host.mjs';
 import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
+test('context ring opens a read-only usage pane without losing the draft or blocking the agent', async ({ page }, testInfo) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-meter-')), file = join(dir, 'usage.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
+  const config = loadConfig(dir), id = sessionKey(file);
+  const host = await startHost({ dir, config, port: 0, roots: [dir], allowResume: true, relayUrl: '',
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url))] } });
+  try {
+    expect((await host.service.resume(id, randomUUID())).ok).toBe(true);
+    await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
+    await page.locator('#sessions button.session').click();
+    const meter = page.locator('#usage-meter'), pane = page.getByRole('region', { name: 'Usage', exact: true });
+    await expect(meter).toHaveAccessibleName('Usage: 32% of context used');
+    await expect(page.locator('#usage-arc')).toHaveAttribute('stroke-dasharray', '32 100');
+    await page.locator('#prompt').fill('Keep this draft');
+    await meter.tap();
+    await expect(pane).toContainText('64,000 / 200,000 tokens');
+    await expect(pane).toContainText('5-hour limit: 25% used · resets in 2h');
+    await expect(pane).toContainText('Weekly limit: 1% used · resets tomorrow');
+    await expect(page.locator('#usage-refresh')).toBeEnabled();
+    await expect(page.locator('#dialog')).toBeHidden();
+    await expect(page.locator('#status')).toHaveText('idle');
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+    await expect(page.getByRole('article', { name: 'Provider usage' })).toHaveCount(0);
+    expect(host.service.read(id).messages).toHaveLength(0);
+    await page.screenshot({ path: testInfo.outputPath('usage-mobile.png') });
+    await page.locator('#usage-refresh').click();
+    await expect(pane).toContainText('Weekly limit: 2% used');
+    await page.keyboard.press('Escape');
+    await expect(pane).toBeHidden();
+    await expect(meter).toBeFocused();
+    await expect(meter).toHaveAttribute('aria-expanded', 'false');
+    await page.locator('#prompt').fill('/usage-working');
+    await page.locator('#send').click();
+    await expect(page.locator('#status')).toHaveText('working');
+    await page.locator('#prompt').fill('Still a draft');
+    await meter.click();
+    await expect(pane).toContainText('Weekly limit: 4% used');
+    await expect(page.locator('#status')).toHaveText('working');
+    await expect(page.locator('#abort')).toBeVisible();
+    await expect(page.locator('#prompt')).toHaveValue('Still a draft');
+    await page.locator('#title').click();
+    await expect(pane).toBeHidden();
+    await page.locator('#model').click();
+    await page.getByRole('button', { name: 'Second', exact: true }).click();
+    await expect(page.locator('#model')).toHaveText('org/second');
+    await meter.click();
+    await expect(pane).toContainText('Weekly limit: 5% used');
+    await expect(pane).not.toContainText('5-hour limit');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.screenshot({ path: testInfo.outputPath('usage-desktop-dark.png') });
+    await page.locator('#picker-cancel').click();
+    await page.locator('#prompt').fill('compact context');
+    await page.locator('#send').click();
+    await expect(page.locator('#status')).toHaveText('idle');
+    await meter.click();
+    await expect(pane).toContainText('Waiting for the next model response after compaction.');
+    await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
+    await expect(pane.getByRole('progressbar')).toHaveCount(0);
+    await page.reload();
+    await page.locator('#sessions button.session').click();
+    await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
+  } finally {
+    await page.close(); await host.close(); rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('usage follows session snapshots and never invents missing account limits', async ({ page }) => {
+  const states = [
+    { id: 'alpha', title: 'Alpha', cwd: '/project', status: 'idle', contextUsage: { tokens: 0, contextWindow: 200000, percent: 0 }, messages: [] },
+    { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [] }
+  ];
+  let client, selected, version = 0, fail = false;
+  const snapshot = state => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws;
+    ws.onMessage(raw => {
+      const p = JSON.parse(raw), reply = value => ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true, value }));
+      if (p.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready', supportsUsage: true }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+      } else if (p.op === 'watch') { selected = states.find(s => s.id === p.sessionId); snapshot(selected); reply({}); }
+      else if (p.op === 'commands') reply([]);
+      else if (p.op === 'usage') {
+        if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
+        else reply({ model: selected.model, contextUsage: selected.contextUsage, providerMessage: 'No provider usage extension is installed in this session.' });
+      } else throw new Error('Usage must not send a model prompt');
+    });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Alpha/ }).click();
+  const meter = page.locator('#usage-meter'), pane = page.getByRole('region', { name: 'Usage', exact: true });
+  await expect(meter).toHaveAccessibleName('Usage: 0% of context used');
+  await meter.click();
+  await expect(pane).toContainText('0 / 200,000 tokens');
+  await expect(pane).toContainText('No provider usage extension');
+  await expect(pane).not.toContainText('Weekly limit:');
+  fail = true;
+  await page.locator('#usage-refresh').click();
+  await expect(pane).toContainText('Usage temporarily unavailable. Try again.');
+  await expect(page.locator('#usage-refresh')).toBeEnabled();
+  fail = false;
+  await page.locator('#usage-refresh').click();
+  await expect(pane).not.toContainText('Usage temporarily unavailable');
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await expect(pane).toBeHidden();
+  await page.getByRole('button', { name: /Beta/ }).click();
+  await expect(meter).toHaveAccessibleName('Usage: 95% of context used');
+  await expect(meter).toHaveAttribute('data-level', 'error');
+  await meter.click();
+  await expect(pane).toContainText('190,000 / 200,000 tokens');
+  states[1].contextUsage = { tokens: 150000, contextWindow: 200000, percent: 75 }; snapshot(states[1]);
+  await expect(meter).toHaveAccessibleName('Usage: 75% of context used');
+  await expect(meter).toHaveAttribute('data-level', 'warning');
+  states[1].status = 'saved'; snapshot(states[1]);
+  await expect(pane).toContainText('Resume this session');
+  await expect(page.locator('#usage-refresh')).toBeDisabled();
+  await page.setViewportSize({ width: 320, height: 350 });
+  expect((await meter.boundingBox()).x).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => (await pane.boundingBox()).y).toBeGreaterThanOrEqual(0);
+  await page.keyboard.press('Escape');
+  await expect(meter).toBeFocused();
+});
+
 test('inline usage automatically releases the extension and preserves actual agent activity', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-usage-')), file = join(dir, 'usage.jsonl');
   writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
@@ -27,7 +151,7 @@ test('inline usage automatically releases the extension and preserves actual age
     ].entries()) {
       await page.locator('#prompt').fill(command);
       await page.locator('#send').click();
-      await expect(summary).toHaveText(`Weekly limit: ${index + 1}% used · resets tomorrow`);
+      await expect(summary).toHaveText(`5-hour limit: 25% used · resets in 2hWeekly limit: ${index + 1}% used · resets tomorrow`);
       await expect(page.locator('#dialog')).toBeHidden();
       await expect(page.locator('#composer-send-status')).toBeHidden({ timeout: 1500 });
       await expect(page.locator('#status')).toHaveText(expected, { timeout: 1500 });

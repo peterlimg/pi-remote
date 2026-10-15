@@ -28,13 +28,20 @@ export default function remoteExtension(pi: any) {
     state.historyTruncated = messages.length > 100;
     state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
     state.thinkingLevel = pi.getThinkingLevel?.() ?? ctx.thinkingLevel;
+    state.contextUsage = ctx.getContextUsage?.();
     state.revision++;
   };
   const publish = () => {
     if (!state || !enabled || stopped) return;
     state.title = pi.getSessionName?.() || state.title;
     if (flush) return;
-    flush = setTimeout(() => { flush = undefined; if (state && enabled && !stopped) send(socket || {}, { type: 'snapshot', state }); }, 80);
+    flush = setTimeout(() => {
+      flush = undefined;
+      if (state && enabled && !stopped) {
+        state.contextUsage = ctx.getContextUsage?.();
+        send(socket || {}, { type: 'snapshot', state });
+      }
+    }, 80);
   };
   registerSessionTitles(pi, (title: string) => {
     if (state) { state.title = title; state.revision++; publish(); }
@@ -67,6 +74,13 @@ export default function remoteExtension(pi: any) {
         if (stopped || generation !== epoch || message.sessionId !== state.id) throw new Error('Session changed');
         if (message.command?.type === 'getCommands') {
           send(ws, { type: 'result', id: message.id, ok: true, value: { commands: commandList(pi.getCommands?.()) } });
+          return;
+        }
+        if (message.command?.type === 'getUsage') {
+          send(ws, { type: 'result', id: message.id, ok: true, value: {
+            contextUsage: ctx.getContextUsage?.(),
+            providerMessage: 'Check /usage in the Pi terminal for account limits.'
+          } });
           return;
         }
         if (message.command?.type === 'getModels') {

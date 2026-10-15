@@ -20,8 +20,8 @@ const receivedImage = join(dir, 'received-image.json');
 writeFileSync(trust, `import { writeFileSync } from 'node:fs';
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
-  pi.registerCommand('smoke-usage', { handler: async (_args, ctx) => {
-    await ctx.ui.select('Provider usage', ['Close']);
+  for (const name of ['smoke-usage', 'usage']) pi.registerCommand(name, { handler: async (_args, ctx) => {
+    await ctx.ui.select('Provider usage\\n5-hour limit: [██░░] 75% left', ['Close']);
   } });
   pi.on('input', event => {
     if (!event.images?.length) return;
@@ -44,6 +44,11 @@ try {
   child.stdin.write(JSON.stringify({ id: 'state', type: 'get_state' }) + '\n');
   const state = await until(() => messages.find(x => x.id === 'state' && x.type === 'response'));
   assert.equal(state.success, true);
+  child.stdin.write(JSON.stringify({ id: 'stats', type: 'get_session_stats' }) + '\n');
+  const stats = await until(() => messages.find(x => x.id === 'stats' && x.type === 'response'));
+  const remoteUsage = await host.service.getUsage([...host.service.live.keys()][0]);
+  assert.ok(remoteUsage.contextUsage.contextWindow > 0);
+  assert.deepEqual(remoteUsage.contextUsage, stats.data.contextUsage);
   child.stdin.write(JSON.stringify({ id: 'commands', type: 'get_commands' }) + '\n');
   const commands = await until(() => messages.find(x => x.id === 'commands' && x.type === 'response'));
   assert.ok(commands.data.commands.some(x => x.name === 'pi-remote'));
@@ -82,8 +87,20 @@ try {
     assert.deepEqual(await sent, { accepted: true }); // Must not wait for the user to close the dialog.
     worker.process.stdin.write(JSON.stringify({ type: 'extension_ui_response', id: dialog.id, cancelled: true }) + '\n');
     await until(() => worker.pending.size === 0);
+    dialog = undefined;
+    const usage = await worker.command({ type: 'getUsage', includeProvider: true });
+    assert.ok(usage.contextUsage.contextWindow > 0);
+    assert.equal(usage.providerUsage.title, 'Provider usage\n5-hour limit: [██░░] 75% left');
+    assert.equal(dialog, undefined); // The read-only query closes its own dialog before publishing events.
   } finally { await worker.close(); }
-  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on, dialog command receipt. No model calls.');
+  const bare = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions'] });
+  try {
+    const usage = await bare.command({ type: 'getUsage', includeProvider: true });
+    assert.ok(usage.contextUsage.contextWindow > 0);
+    assert.equal(usage.providerUsage, undefined);
+    assert.match(usage.providerMessage, /No provider usage extension/);
+  } finally { await bare.close(); }
+  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on, dialog command receipt, context usage and read-only provider report. No model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;
