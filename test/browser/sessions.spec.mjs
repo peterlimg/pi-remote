@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
-test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }) => {
+test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }, testInfo) => {
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
   const states = [
@@ -54,6 +54,8 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
   await expect(login.locator('.session-icon svg')).toHaveCSS('animation-name', 'connection-spin');
+  await expect(login.locator('.session-icon svg')).toHaveCSS('width', '18px');
+  await expect(login.locator('.session-icon svg')).toHaveCSS('height', '18px');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.locator('.session').first().locator('.session-preview')).toHaveCount(0);
@@ -62,9 +64,11 @@ test('same-project sessions show their tasks, previews, status and activity with
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
   })).toBe(true);
   await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath('working-ring-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath('working-ring-desktop-dark.png') });
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.locator('.session').last().scrollIntoViewIfNeeded();

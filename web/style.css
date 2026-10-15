@@ -134,7 +134,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
 .session-icon[data-unread] circle { fill: currentColor; }
 /* Working: the ring opens a gap and spins. statusIcon phase-locks it to this 1.2s period. */
-.session-icon[data-status=working] svg { width: 14px; height: 14px; animation: connection-spin 1.2s linear var(--spin-delay, 0s) infinite; }
+.session-icon[data-status=working] svg { width: 18px; height: 18px; animation: connection-spin 1.2s linear var(--spin-delay, 0s) infinite; }
 .session-icon[data-status=working] circle { fill: none; stroke-width: 2; stroke-dasharray: 36 14; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
