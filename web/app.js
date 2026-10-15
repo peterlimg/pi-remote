@@ -645,7 +645,7 @@ async function selectSession(id) {
     openingAnimation = document.querySelector('main').animate(reduced
       ? [{ opacity: .6 }, { opacity: 1 }]
       : [{ transform: 'translateX(100%)' }, { transform: 'none' }],
-    { duration: reduced ? 120 : 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    { duration: reduced ? 120 : 360, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
     openingAnimation.onfinish = () => {
       openingAnimation = undefined;
       $('app').classList.remove('opening'); $('sidebar').inert = false;
