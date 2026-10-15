@@ -61,6 +61,41 @@ const parser = new JsonLines(command => {
       return;
     }
     out({ type: 'agent_start' });
+    if (command.message === 'stream response') {
+      const timestamp = Date.now();
+      const update = assistantMessageEvent => out({ type: 'message_update', assistantMessageEvent });
+      out({ type: 'message_end', message: { role: 'user', timestamp: timestamp - 1, content: command.message } });
+      out({ type: 'message_start', message: { role: 'assistant', timestamp, content: [], stopReason: 'pending' } });
+      update({ type: 'thinking_start', contentIndex: 0 });
+      update({ type: 'thinking_delta', contentIndex: 0, delta: 'Private reasoning must not appear.' });
+      update({ type: 'text_start', contentIndex: 1 });
+      update({ type: 'text_delta', contentIndex: 1, delta: 'Reading' });
+      setTimeout(() => update({ type: 'text_delta', contentIndex: 1, delta: ' the source.' }), 1000);
+      setTimeout(() => {
+        update({ type: 'text_end', contentIndex: 1, content: 'Read the source.' });
+        update({ type: 'toolcall_start', contentIndex: 2, id: 'stream-read', toolName: 'read' });
+        update({ type: 'toolcall_delta', contentIndex: 2, delta: '{"path":"web/' });
+      }, 2000);
+      setTimeout(() => {
+        update({ type: 'toolcall_delta', contentIndex: 2, delta: 'app.js"}' });
+        update({ type: 'toolcall_end', contentIndex: 2, toolCall: { type: 'toolCall', id: 'stream-read', name: 'read', arguments: { path: 'web/app.js' } } });
+        update({ type: 'text_start', contentIndex: 3 });
+        update({ type: 'text_delta', contentIndex: 3, delta: 'Checking the result.' });
+      }, 3000);
+      setTimeout(() => {
+        out({ type: 'message_end', message: { role: 'assistant', timestamp, content: [
+          { type: 'text', text: 'Read the source.' },
+          { type: 'toolCall', id: 'stream-read', name: 'read', arguments: { path: 'web/app.js' } },
+          { type: 'text', text: 'Checked the result.' }
+        ], stopReason: 'toolUse', durationMs: 4000 } });
+        out({ type: 'tool_execution_start', toolCallId: 'stream-read', toolName: 'read', args: { path: 'web/app.js' } });
+        out({ type: 'tool_execution_end', toolCallId: 'stream-read', toolName: 'read', result: { content: [{ type: 'text', text: 'Source read.' }] }, durationMs: 37 });
+        out({ type: 'message_end', message: { role: 'toolResult', toolCallId: 'stream-read', toolName: 'read', timestamp: Date.now(), content: 'Source read.', durationMs: 37 } });
+        out({ type: 'message_end', message: { role: 'assistant', timestamp: Date.now() + 1, content: 'Done.', stopReason: 'stop', durationMs: 1 } });
+        out({ type: 'agent_end' });
+      }, 4000);
+      return;
+    }
     if (command.message === 'ask') out({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Proceed?' });
     else {
       out({ type: 'message_end', message: { role: 'assistant', timestamp: Date.now(), content: 'reply: ' + command.message } });

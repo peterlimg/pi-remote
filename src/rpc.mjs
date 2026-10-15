@@ -30,7 +30,7 @@ export class RpcWorker extends EventEmitter {
       if (value.type === 'response' && this.pending.has(value.id)) {
         const item = this.pending.get(value.id); this.pending.delete(value.id); clearTimeout(item.timer);
         if (value.success) item.resolve(value.data); else item.reject(new Error(value.error || 'Pi command failed'));
-      } else this.emit('event', value);
+      } else this.emit('event', this.expandMessageEvent(value));
     });
     const stop = error => {
       if (this.failure) return;
@@ -45,6 +45,31 @@ export class RpcWorker extends EventEmitter {
       if (!this.failure) this.fail(new Error(`Pi worker exited (${signal || 'code ' + code})` + (this.stderr ? ': ' + this.stderr : '')));
       this.emit('exit');
     });
+  }
+  // Pi's RPC wire updates are delta-only; state consumers expect cumulative messages.
+  expandMessageEvent(event) {
+    if (event.type === 'message_start' && event.message?.role === 'assistant') this.streamingMessage = structuredClone(event.message);
+    if ((event.type === 'message_end' && event.message?.role === 'assistant') || event.type === 'agent_end') this.streamingMessage = undefined;
+    if (event.type !== 'message_update') return event;
+    if (event.message) { this.streamingMessage = event.message; return event; }
+    const message = this.streamingMessage, delta = event.assistantMessageEvent;
+    if (!message || !delta || typeof delta.type !== 'string' || !Array.isArray(message.content)) return event;
+    const index = delta.contentIndex;
+    // Do not let malformed indexes allocate a sparse array.
+    if (!Number.isSafeInteger(index) || index < 0 || index > message.content.length) return event;
+    const block = message.content[index];
+    if (delta.type === 'text_start') message.content[index] = { type: 'text', text: '' };
+    else if (delta.type === 'text_delta' && block?.type === 'text' && typeof delta.delta === 'string') block.text += delta.delta;
+    else if (delta.type === 'text_end' && typeof delta.content === 'string') message.content[index] = { type: 'text', text: delta.content };
+    else if (delta.type.startsWith('thinking_')) message.content[index] ??= { type: 'thinking', thinking: '' };
+    else if (delta.type === 'toolcall_start') message.content[index] = { type: 'toolCall', id: delta.id, name: delta.toolName, arguments: {}, partialJson: '' };
+    else if (delta.type === 'toolcall_delta' && block?.type === 'toolCall' && typeof delta.delta === 'string') {
+      // Bound argument previews like cleanMessage; toolcall_end supplies the authoritative arguments.
+      block.partialJson = ((block.partialJson || '') + delta.delta).slice(0, 24001);
+      try { block.arguments = JSON.parse(block.partialJson); } catch { /* Incomplete arguments are expected. */ }
+    } else if (delta.type === 'toolcall_end' && delta.toolCall) message.content[index] = delta.toolCall;
+    if (event.usage) message.usage = event.usage;
+    return { ...event, message };
   }
   fail(error) {
     for (const item of this.pending.values()) { clearTimeout(item.timer); item.reject(error); }
