@@ -1,6 +1,6 @@
 # Tracing Amp's Claude SDK adapter with REA
 
-Checked October 13, 2026. Static inspection only. Amp was not launched, no credentials were read, and no provider was installed.
+Initial artifact checked October 13, 2026; a newer public build is examined in the compaction follow-up below. Static inspection only. Amp was not launched, no credentials were read, and no provider was installed.
 
 ## Result
 
@@ -43,6 +43,41 @@ The names below are minified identifiers from this exact release, not stable pub
 `N0n()` enables partial messages, uses the `claude_code` system-prompt preset with an appended prompt, and loads `user`, `project`, and `local` settings. It does not use our experiment's `tools: []` or isolated settings configuration. It passes through the configured permission mode and enables the SDK's bypass flag only when that mode is `bypassPermissions`. This relay does not establish which mode Amp's server selects.
 
 SDK resume uses `resume` and, when supplied with it, `resumeSessionAt`. Reconnecting to an existing relay run uses a separate sequence/checkpoint mechanism. These are different operations; neither proves arbitrary Pi transcript restoration.
+
+## Compaction follow-up in the newer public build
+
+The registry's latest public macOS package at the follow-up check was `@ampcode/cli-darwin-arm64@0.0.1792065649-g5a30fc`. It was downloaded with install scripts disabled, unpacked, and inspected as inert source. It was not executed. The relevant declarations were read in full and parsed independently.
+
+| Observed code | Compaction implication |
+| --- | --- |
+| SDK query factory `Zyn()` | Uses the Claude Code preset plus an appended prompt, and reads `user`, `project`, and `local` settings. It sets no explicit local `autoCompactEnabled` or `autoCompactWindow` override. Policy can therefore come from the CLI, loaded settings, supplied environment/arguments, and the appended prompt. This does not prove auto-compaction is always enabled. |
+| Relay `Tar.consume()` | Iterates one live SDK query and forwards each SDK message through its generic event buffer. It special-cases initialization and result receipts, not compaction. A native compact status or boundary is not rejected by this local loop. |
+| Relay prompt handling | Preserves the supplied SDK user-message fields, stamps the receipt UUID, and queues the message on the existing async input. This is not Pi-to-SDK history reconstruction. |
+| Relay commands | The local command path handles stop, interrupt, and model changes. No dedicated local compact implementation was found there. A backend-supplied prompt could still carry a native command; whether it does is not visible here. |
+| SDK resume options | Native `resume` and optional `resumeSessionAt` are passed through. Sequence acknowledgements are separate relay-delivery checkpoints, not context compaction. |
+| Configured executable | `pathToClaudeCodeExecutable` and executable arguments come from the supplied executable configuration, rather than necessarily using the SDK's bundled Claude binary. The local factory does not establish the actual selected CLI version. |
+
+The bundled SDK JavaScript declares `CLAUDE_AGENT_SDK_VERSION` as **0.3.276**. Our compaction experiments used SDK **0.3.296** and its bundled Claude Code **2.1.296**. The separately installed local `claude --version` now reports **2.1.300**. These are different comparisons; do not infer that Amp exhibits our automatic `ACK_0` summary failure. A version-matched CLI/client control is the next useful experiment before attributing that failure to the architecture.
+
+Amp's generic observer also has `compaction_started`/`compaction_complete` UI state and cut-message records. The private server translation from SDK messages to those events is not present in this artifact, so this is not proof of SDK-mode history mirroring or summary-quality validation.
+
+### What to borrow, and what not to copy
+
+Borrow the ownership model: keep one SDK conversation alive, forward native compaction events, retain separate receipt/call identity, and resume through the SDK. The local relay does not build its own compaction summary or reconstruct another model history.
+
+Do **not** copy its user/project/local settings loading, SDK tool exposure, or permission configuration into the Pi bridge merely to match it. Pi must retain its tool execution and permission authority. We already tested the Claude Code preset alone and it did not fix the automatic counterexample on our pinned CLI.
+
+This inspection narrows [the compaction research](claude-agent-sdk-compaction.md), but does not prove a safe production Pi implementation. Amp's server-supplied prompts/configuration and live summary quality remain unknown.
+
+### Follow-up evidence
+
+- Package: [`@ampcode/cli-darwin-arm64@0.0.1792065649-g5a30fc`](https://www.npmjs.com/package/@ampcode/cli-darwin-arm64/v/0.0.1792065649-g5a30fc).
+- Binary SHA-256: `f47b67a260564ab2c5d3500733dc769ac630fa18898880d5af0c5ca26d938895`.
+- Decoded UTF-8 SHA-256: `c57344562d2a01c61624c684c8e38eb43644c27c247be1e018cfa000a052f86b`.
+- Original UTF-16 ranges, end-exclusive: `Tar` at `2642577..2648480`, `Zyn` at `2649396..2650182`.
+- Private extraction and selection manifest: `/tmp/amp-compact-static.I2IxfG`. Proprietary recovered code remains local and is not committed.
+- A whole-bundle parse under a 1 GiB heap limit exhausted memory. Targeted complete declaration parsing then succeeded; no complete application graph or private backend analysis is claimed.
+- No live Amp, model inference, permission bypass, or active-session compaction was performed.
 
 ## What this changes for Pi
 

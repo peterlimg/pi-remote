@@ -20,6 +20,12 @@ Pi-approved tools and accepted input
 
 A native SDK compaction does not inherently require deleting or rewriting Pi's audit transcript. The present bridge guard is an implementation restriction, not an SDK requirement. If Pi's active projection is later shortened too, that is a separate, explicitly authorized projection change. Its new fingerprint and kept boundary must be committed consistently; ordinary history-edit detection must remain strict.
 
+## Amp comparison and next control
+
+[Static inspection of Amp's newer public build](amp-sdk-static-analysis.md#compaction-follow-up-in-the-newer-public-build) confirms that its local SDK relay forwards all SDK events on one live query without a compaction-specific rejection. Its factory does not impose our auto-compaction disable flag. It delegates to the configured Claude executable and supplied settings, environment, arguments, and appended preset prompt; its private backend may add behavior not visible in the client.
+
+That build embeds SDK client `0.3.276`. These experiments used client `0.3.296` with bundled Claude Code `2.1.296`; the separately installed local CLI now reports `2.1.300`. A version-matched control using an explicitly selected CLI is therefore a priority before generalizing the automatic-summary failure. Neither live Amp compaction nor a matched client/CLI matrix has been tested. Borrow its SDK ownership model, not its broader settings/tool/permission exposure.
+
 ## Live findings
 
 [Sanitized results](../../experiments/claude-sdk-provider/verification-compaction.json) retain successes and failures. Full local summaries stay private; shared evidence contains only selected facts, counts, and estimates.
