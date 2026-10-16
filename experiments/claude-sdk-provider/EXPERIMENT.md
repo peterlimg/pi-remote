@@ -29,7 +29,21 @@ The expanded provider passed strict TypeScript checking and 30 offline tests. Li
 
 Saved conversations now also create SDK transcripts under Claude Code's session storage, normally `~/.claude/projects/`. Pi checkpoint entries contain hashes and IDs, not extra conversation bodies or credentials. Ephemeral Pi sessions and helper requests disable SDK persistence. Deleting a Pi session does not delete its SDK copy; Claude Code's own retention applies.
 
-Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
+Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, and changed prompt/tool sets remain unsupported. Interrupted conversations require the explicit recovery operation below rather than a normal native resume.
+
+## Explicit recovery after interruption
+
+In an idle, saved SDK conversation, run `/sdk-recover` and confirm the warning. Then send a new message. This keeps the same Pi chat and starts a **new native SDK context**, using saved Pi history as labeled historical JSON. It does not pretend to resume the interrupted native turn, rewind its transcript, or reconstruct an unrecorded shell exit status. Previous native transcripts remain archived under Claude Code's existing retention policy.
+
+Recorded Pi results are retained as data, never replayed actions. Missing results receive explicit historical recovery rows saying `Execution outcome unknown`. They are not synthetic successful Pi tool results. Original Pi entries are not rewritten. Images are retained, while thinking and provider signatures are omitted from the imported JSON.
+
+Recovery requires a valid completed checkpoint and its unchanged prefix/configuration. The operator decision binds the entire current history and interrupted call identities. Changed history, new intervening input, changed configuration, or tampered recovery metadata fail before SDK startup. The decision is marked started before launching its new query; the new native session ID is recorded, and the next completed checkpoint uses that native context and its own usage baseline. Previous Pi usage records remain unchanged.
+
+Every later tool call in the recovered Pi conversation requires confirmation, including after worker restarts and model changes. Denial leaves the tool unexecuted. Parallel approval dialogs are serialized. This additional review does not replace Pi's schema validation or existing permission hooks.
+
+A fresh worker must load this command. It requires interactive confirmation, a saved completed checkpoint, and ordinary/custom-message context. Summary and terminal-command context remain unsupported. This is explicit context recovery, not a durable executor or automatic reconstruction of arbitrary command output. Production compaction remains disabled.
+
+`npm run test:recovery` drives real Pi RPC, the production extension and bridge, MCP, and synthetic effects with an SDK replay peer. It kills a worker after an effect but before its result, reproduces the old guard, checks recovery cancellation/confirmation, verifies no automatic replay, denies a proposed repeat, permits one new approved action, restarts the recovered worker, and retains duplicate-ID and history/configuration rejection. No model service or Claude login is used by this E2E. The check passed with Pi 1.2.0 and installed Pi 1.3.0; see [recovery verification](verification-recovery.json). Live SDK inference is a separate acceptance level.
 
 ## Managed lifecycle and safe host restarts
 
@@ -47,7 +61,7 @@ A conversation can begin with another Pi provider or leave SDK Claude for comple
 
 The handoff validates turn ordering, unique tool-call IDs, and a matching result for every foreign tool call before sending anything to the SDK. Images remain image blocks with source references in the historical JSON. Private reasoning and opaque provider signatures are omitted from that JSON. Existing prompt, tool-schema, environment, output-limit, and prefix hashes still have to match. Native SDK compaction remains disabled.
 
-A valid saved checkpoint can also recover two known local rejections that occurred before an SDK request started: the old unavailable-session error and the old one-new-message restriction. These must be zero-usage, text-only errors with the exact known message. Their user requests and error records remain visible as historical context, not automatically retried actions. Unknown SDK failures, uncheckpointed SDK responses, interrupted SDK tools, changed prefixes, and incomplete foreign tool batches still fail closed.
+A valid saved checkpoint can also recover two known local rejections that occurred before an SDK request started: the old unavailable-session error and the old one-new-message restriction. These must be zero-usage, text-only errors with the exact known message. Their user requests and error records remain visible as historical context, not automatically retried actions. Unknown SDK failures, uncheckpointed SDK responses, interrupted SDK tools, changed prefixes, and incomplete foreign tool batches still fail closed during normal native resumes. The explicit recovery command above starts a separate native context instead.
 
 `node handoff.mjs` exercises the installed Pi executable with real SDK Opus and Codex GPT-6.1 Sol, both existing official logins, the Pi Remote progress extension, an isolated host, and mobile Chromium. Only the synthetic probe can execute. Project-local settings disable compaction and retries; personal settings are checked unchanged, and no credentials are copied. The check covers an initial GPT conversation, SDK and GPT tool turns, image/code recall after returning, refresh, worker restart while away and after sync, a recorded local-rejection replay, and tampered-prefix/missing-result rejection before SDK startup. It consumes both plans' usage. npm's `test:handoff` uses the development Pi on its PATH instead. See [handoff E2E results](verification-handoff.json).
 
@@ -57,11 +71,11 @@ Existing workers need replacement to load this change. Recovery requires a verif
 
 A reported conversation could no longer accept SDK messages after the user selected another provider and returned to SDK Opus. The extension closed the native query on every switch away, even after a completed turn. Returning to the SDK reused that permanently closed bridge. Refreshing the page did not cause or repair the failure.
 
-The first fix kept the completed query alive during picker-only provider changes. The handoff implementation above now returns through its completed checkpoint and supplies completed foreign turns as context. Switching away during an active SDK turn still closes that query; interrupted SDK tools are not recovered.
+The first fix kept the completed query alive during picker-only provider changes. The handoff implementation above now returns through its completed checkpoint and supplies completed foreign turns as context. Switching away during an active SDK turn still closes that query; interrupted SDK tools are not resumed automatically.
 
 The focused `npm run test:reconnect` check uses the Pi executable on PATH, real SDK Opus, a local host, and mobile Chromium. npm selects the development Pi dependency; run `node reconnect.mjs` directly to use your normal shell's Pi installation. It remembers a synthetic tool result, refreshes and sends a follow-up, selects a non-SDK control provider without inference, returns to SDK Opus, refreshes again, and checks recall, one native session, one tool execution, and matching call/result IDs. The control provider is synthetic and rejects inference. This case was missing from earlier tests, which covered SDK-to-SDK changes and reloads without leaving the SDK provider. See [reconnect E2E results](verification-reconnect.json).
 
-This first fix did not revive already-closed queries. The current handoff recovery above additionally handles known zero-work local rejections without deleting their audit records. General Stop/error recovery and real iPhone/Safari behavior remain unverified.
+This first fix did not revive already-closed queries. The current handoff recovery above additionally handles known zero-work local rejections without deleting their audit records. General in-place native Stop/error recovery and real iPhone/Safari behavior remain unverified. The explicit recovery command starts a separate native context.
 
 ## Mid-turn input fix
 

@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-16",
+  "scope": "Explicit operator-approved recovery into a new native SDK context in the same Pi chat, not in-place native continuation or a durable executor",
+  "command": "/sdk-recover",
+  "verification": {
+    "kind": "Real Pi RPC, production extension and bridge, MCP, filesystem persistence and synthetic tool effects; external SDK protocol replay",
+    "modelCalls": false,
+    "claudeLoginRequired": false,
+    "node": "26.5.0",
+    "sdkProtocolVersion": "0.3.296",
+    "red": {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-TlX8gO/result.json",
+      "originalFailureReproduced": true,
+      "failure": "An interrupted SDK conversation needs an explicit /sdk-recover operation."
+    },
+    "green": [
+      {
+        "piVersion": "1.2.0",
+        "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-FFRdgx/result.json"
+      },
+      {
+        "piVersion": "1.3.0",
+        "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-f3jAaf/result.json"
+      }
+    ],
+    "checks": [
+      "Normal SDK-style tool execution and completed checkpoint before fault injection",
+      "Kill worker after a synthetic effect but before recording its result",
+      "A recovery request during active tool execution does not interrupt it or open a recovery dialog",
+      "Ordinary recovery stays blocked before starting another SDK query",
+      "Cancelling explicit recovery does not mutate history",
+      "Confirming recovery preserves original history bytes and starts a new explicitly identified native context without rewind or resume flags",
+      "An SDK initialization reporting an unexpected native session identity is rejected before tool dispatch",
+      "Recorded results, missing-result unknown status and image retained; thinking/signatures omitted",
+      "Native usage baseline resets for the new context while previous Pi usage remains recorded",
+      "Tampered history, recovery decision, interrupted identity, checkpoint binding, changed configuration and intervening input reject before SDK startup",
+      "Proposed repetition of the interrupted action requires approval and denial executes nothing",
+      "A separately approved new action executes once through Pi",
+      "Completed checkpoint and mandatory tool approval survive worker restart",
+      "Historical tool-call ID reuse rejects before dispatch",
+      "Personal settings remain unchanged"
+    ]
+  },
+  "readOnlyExistingSessionPreflight": {
+    "script": "/tmp/pi-sdk-recovery.sPgpxN/preflight.mjs",
+    "sessions": [
+      { "historyMessages": 53, "interrupted": 1, "canPrepare": true, "originalUnchanged": true },
+      { "historyMessages": 115, "interrupted": 0, "canPrepare": true, "originalUnchanged": true }
+    ],
+    "limit": "Preflight only. No recovery decision applied to existing conversations, no native query, and no tool execution."
+  },
+  "commands": [
+    "npm run check",
+    "npm run test:recovery",
+    "PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node recovery.mjs"
+  ],
+  "safety": {
+    "piOwnsValidationPermissionsAndExecution": true,
+    "originalAuditEntriesRewritten": false,
+    "oldNativeTranscriptRewoundOrDeleted": false,
+    "missingExitStatusOrSuccessInvented": false,
+    "historicalToolsAutomaticallyReplayed": false,
+    "subsequentToolsRequireApprovalAcrossModelsAndRestarts": true,
+    "configurationHistoryIdentityAuthenticationGuardsRetained": true,
+    "nativeCompactionEnabled": false
+  },
+  "limits": [
+    "Live SDK inference and the real model's recovery response were not rerun; prior workspace extra-usage blocking remains a separate prerequisite",
+    "A valid saved completed checkpoint and unchanged configuration are required",
+    "Summary and terminal-command context are unsupported by this recovery operation",
+    "Only Pi-saved history enters the new context; unobserved SDK-only state is not resumed and previous transcripts retain their existing retention policy",
+    "No general durable executor, automatic completion-receipt reconstruction, power-loss acceptance, unit tests, full local suite or physical Safari verification"
+  ]
+}

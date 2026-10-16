@@ -1,6 +1,6 @@
 # Durable execution and interrupted SDK recovery
 
-Investigated October 16, 2026. This is a recovery design and read-only evidence report, not a shipped recovery implementation. The restart lifecycle fix remains in place.
+Investigated October 16, 2026. The initial design and read-only evidence follow below. The implemented [`/sdk-recover` operation](../../experiments/claude-sdk-provider/EXPERIMENT.md#explicit-recovery-after-interruption) provides an operator-approved **new SDK context** from the same Pi chat, with mandatory tool review. It preserves the old native transcript rather than attempting the in-place native continuation discussed here. It does not implement a durable executor or reconstruct unrecorded command output. The restart lifecycle fix remains in place.
 
 ## Finding
 
