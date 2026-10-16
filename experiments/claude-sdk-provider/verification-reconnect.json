@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-16",
+  "sdk": "0.3.296",
+  "bundledCli": "2.1.296",
+  "model": "claude-opus-5-5",
+  "thinking": "off",
+  "fixture": "real Pi RPC, SDK, isolated local host and mobile Chromium; synthetic Pi tool and selection-only alternative provider",
+  "commands": ["node reconnect.mjs", "npm run check", "npm run test:reconnect"],
+  "redBeforeFix": {
+    "pi": "1.3.0",
+    "refreshFollowUp": true,
+    "failedStage": "provider-switch-and-refresh",
+    "error": "Claude SDK session is no longer available. Start a new Pi session.",
+    "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-reconnect-5ac81h/result.json"
+  },
+  "greenAfterFix": [
+    {
+      "pi": "1.2.0",
+      "command": "npm run test:reconnect",
+      "pass": true,
+      "refreshFollowUp": true,
+      "idleProviderRoundTrip": true,
+      "workerPidUnchanged": true,
+      "oneNativeSession": true,
+      "oneToolExecution": true,
+      "callResultIdsMatched": true,
+      "noOtherProviderInference": true,
+      "ownedWorkerClosed": true,
+      "ownedHostClosed": true,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-reconnect-TnBx8X/result.json"
+    },
+    {
+      "pi": "1.3.0",
+      "command": "node reconnect.mjs",
+      "pass": true,
+      "refreshFollowUp": true,
+      "idleProviderRoundTrip": true,
+      "workerPidUnchanged": true,
+      "oneNativeSession": true,
+      "oneToolExecution": true,
+      "callResultIdsMatched": true,
+      "noOtherProviderInference": true,
+      "ownedWorkerClosed": true,
+      "ownedHostClosed": true,
+      "evidencePath": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-reconnect-CZZ3CY/result.json"
+    }
+  ],
+  "unitTestsAddedOrRunForThisFix": false,
+  "limits": [
+    "The alternative provider is a selection-only fixture; no inference or history conversion through another provider was tested.",
+    "History, configuration, authentication, tool validation and active-turn closure checks remain in place.",
+    "An already-closed query is not revived; existing workers need replacement to load this fix.",
+    "Stop/error recovery remains unsupported; failed-turn history is not discarded to force a checkpoint resume.",
+    "Mobile Chromium is not physical iPhone or Safari verification.",
+    "The focused fixture is not configured opentunnel inference verification.",
+    "No production conversations or personal settings were changed; the shared host was not restarted.",
+    "The full repository suite and CI results were not checked."
+  ]
+}

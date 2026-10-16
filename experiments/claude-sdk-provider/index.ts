@@ -66,8 +66,9 @@ export default function (pi: ExtensionAPI) {
       return { message: { ...message, content: [], stopReason: 'aborted', errorMessage: 'Cancelled.' } };
     }
   });
-  pi.on('model_select', event => {
-    if (event.previousModel?.provider === providerId && event.model.provider !== providerId) bridge?.close();
+  pi.on('model_select', (event, ctx) => {
+    // Picker-only changes must not invalidate a completed native conversation.
+    if (event.previousModel?.provider === providerId && event.model.provider !== providerId && !ctx.isIdle()) bridge?.close();
   });
   const blockHistoryChange = (_event: unknown, ctx: ExtensionContext) => {
     if (ctx.model?.provider !== providerId) return;

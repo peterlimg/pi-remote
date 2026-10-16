@@ -31,6 +31,16 @@ Saved conversations now also create SDK transcripts under Claude Code's session 
 
 Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
 
+## Idle provider-switch fix
+
+A reported conversation could no longer accept SDK messages after the user selected another provider and returned to SDK Opus. The extension closed the native query on every switch away, even after a completed turn. Returning to the SDK reused that permanently closed bridge. Refreshing the page did not cause or repair the failure.
+
+Picker-only provider changes now keep a completed SDK conversation alive. Switching away during an active turn still closes it. Sending messages through another provider does not convert their history into an SDK conversation; existing history and configuration checks remain unchanged.
+
+The focused `npm run test:reconnect` check uses the Pi executable on PATH, real SDK Opus, a local host, and mobile Chromium. npm selects the development Pi dependency; run `node reconnect.mjs` directly to use your normal shell's Pi installation. It remembers a synthetic tool result, refreshes and sends a follow-up, selects a non-SDK control provider without inference, returns to SDK Opus, refreshes again, and checks recall, one native session, one tool execution, and matching call/result IDs. The control provider is synthetic and rejects inference. This case was missing from earlier tests, which covered SDK-to-SDK changes and reloads without leaving the SDK provider. See [reconnect E2E results](verification-reconnect.json).
+
+Existing workers need replacement to load the fix. An already-closed query is not revived, and failed-turn history is not discarded to force a checkpoint resume. Keep the old conversation; use a fresh SDK session if it has already hit this error. No shared host restart is required. Stop/error recovery and real iPhone/Safari behavior remain unverified.
+
 ## Mid-turn input fix
 
 A second reported failure had the expected Pi tool result followed by a new user instruction. The bridge incorrectly required that the entire delta contain only tool results and closed the query. It now validates the original results separately and forwards the accepted user messages through SDK asynchronous input without replaying tools. Input UUIDs must be consumed before a final Pi response settles, including when the SDK queues them for a later turn. Pi's normal input processing, tool validation, and permission controls remain in place. SDK messages use literal Pi-composed content rather than Claude Code's file-mention or slash-command expansion.
@@ -81,7 +91,7 @@ The browser proof uses Chromium with Playwright's iPhone 13 profile. It is not a
 
 ## Run it
 
-Requirements: Node 22.19+, Pi 1.2.0 for the current development and live checks, and a local first-party Claude login. The package retains its `^1.1.0` compatibility range; earlier recorded checks used 1.1.0. SDK 0.3.296 bundles Claude Code 2.1.296. The separately installed `claude` command used for the authentication check was 2.1.299. No subscription tokens are copied into Pi, and no fake API key is supplied.
+Requirements: Node 22.19+, a local first-party Claude login, and Pi 1.2.0 for the pinned development checks. The reconnect E2E uses the installed Pi executable and was reproduced on Pi 1.3.0. The package retains its `^1.1.0` compatibility range; earlier recorded checks used 1.1.0. SDK 0.3.296 bundles Claude Code 2.1.296. The separately installed `claude` command used for the authentication check was 2.1.299. No subscription tokens are copied into Pi, and no fake API key is supplied.
 
 ```sh
 cd experiments/claude-sdk-provider

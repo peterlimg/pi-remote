@@ -12,6 +12,7 @@
     "test:common": "node --experimental-strip-types common.mjs",
     "test:remote": "node remote.mjs",
     "test:steering": "node steering.mjs",
+    "test:reconnect": "node reconnect.mjs",
     "experiment:compact-sdk": "node --experimental-strip-types compaction.mjs",
     "experiment:compact-pi": "node --experimental-strip-types compaction-pi.mjs"
   },
