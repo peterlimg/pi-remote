@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const login = '/#token=browser-test-token-only-123456789012345';
 
-test('the bottom button returns to the latest message and resumes following replies', async ({ page }) => {
+test('the bottom button returns to the latest message and resumes following replies', async ({ page }, testInfo) => {
   const state = { id: 'scroll', title: 'Long thread', cwd: '/project', status: 'idle', messages: [
     { id: 'reply', role: 'assistant', text: 'A short reply.' }
   ] };
@@ -34,9 +34,9 @@ test('the bottom button returns to the latest message and resumes following repl
   await expect.poll(gap).toBeLessThan(1);
   await expect(button).toBeHidden();
   state.status = 'working'; snapshot();
-  await expect(page.locator('#agent-activity')).toBeVisible();
+  const activity = page.locator('#agent-activity');
+  await expect(activity).toBeVisible();
   await expect.poll(gap).toBeLessThan(1);
-  state.status = 'idle'; snapshot();
   for (const [size, theme, name] of [
     [{ width: 390, height: 844 }, 'light', 'mobile'],
     [{ width: 1280, height: 900 }, 'dark', 'desktop']
@@ -45,6 +45,7 @@ test('the bottom button returns to the latest message and resumes following repl
     await page.emulateMedia({ colorScheme: theme });
     await transcript.evaluate(node => { node.scrollTop = 0; });
     await expect(button).toBeVisible();
+    await expect(activity).not.toBeInViewport({ timeout: 1000 });
     state.messages.push({ id: name, role: 'assistant', text: `New ${name} reply` }); snapshot();
     await expect(transcript).toContainText(`New ${name} reply`);
     expect(await transcript.evaluate(node => node.scrollTop)).toBe(0);
@@ -58,11 +59,17 @@ test('the bottom button returns to the latest message and resumes following repl
     await expect.poll(gap).toBeLessThan(1);
     await expect(button).toBeHidden();
     await expect(transcript).toBeFocused();
+    await expect(transcript.locator(':scope > #agent-activity:last-child')).toBeInViewport();
+    const message = await transcript.locator('.message').last().boundingBox(), row = await activity.boundingBox();
+    expect(message.y + message.height).toBeLessThanOrEqual(row.y);
+    await page.screenshot({ path: testInfo.outputPath(`inline-thinking-${name}.png`) });
     state.messages.push({ id: `${name}-next`, role: 'assistant', text: `Following ${name} reply` }); snapshot();
     await expect(transcript).toContainText(`Following ${name} reply`);
     await expect.poll(gap).toBeLessThan(1);
     await expect(button).toBeHidden();
   }
+  state.status = 'idle'; snapshot();
+  await expect(activity).toBeHidden();
 });
 
 test('dragging the composer cannot scroll the page after sending or resizing', async ({ page }) => {

@@ -254,7 +254,7 @@ pre.message-text { white-space: pre-wrap; }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
 .composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
-#agent-activity { display: flex; align-items: center; gap: 10px; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
+#agent-activity { display: flex; align-items: center; gap: 10px; max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-text { min-width: 0; }
 #activity-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
@@ -421,7 +421,6 @@ pre.message-text { white-space: pre-wrap; }
   #transcript { --transcript-gap: 20px; padding-inline: 16px; }
   .message.user .message-text { padding: 10px 16px; }
   .composer { width: calc(100% - 16px); }
-  #agent-activity { width: calc(100% - 32px); }
   .composer-actions { gap: 4px; }
   .dialog { width: calc(100% - 16px); }
   .notice { padding: 12px 16px; }
