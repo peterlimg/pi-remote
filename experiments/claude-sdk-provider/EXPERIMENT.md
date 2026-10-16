@@ -31,15 +31,27 @@ Saved conversations now also create SDK transcripts under Claude Code's session 
 
 Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
 
+## Cross-provider handoff and recovery
+
+A conversation can begin with another Pi provider or leave SDK Claude for completed successful turns with another model and return. Returning to SDK Claude resumes its last completed native checkpoint. Only the new Pi turns are appended as explicitly labeled historical JSON data, followed by the current user message. Historical tool calls are not sent as executable SDK calls or pending MCP results. Pi keeps its original audit history unchanged, and a new completed checkpoint fingerprints the entire accepted prefix so the same foreign turns are not imported again. Imported turns also enter the SDK's native transcript and follow its separate retention rules.
+
+The handoff validates turn ordering, unique tool-call IDs, and a matching result for every foreign tool call before sending anything to the SDK. Images remain image blocks with source references in the historical JSON. Private reasoning and opaque provider signatures are omitted from that JSON. Existing prompt, tool-schema, environment, output-limit, and prefix hashes still have to match. Native SDK compaction remains disabled.
+
+A valid saved checkpoint can also recover two known local rejections that occurred before an SDK request started: the old unavailable-session error and the old one-new-message restriction. These must be zero-usage, text-only errors with the exact known message. Their user requests and error records remain visible as historical context, not automatically retried actions. Unknown SDK failures, uncheckpointed SDK responses, interrupted SDK tools, changed prefixes, and incomplete foreign tool batches still fail closed.
+
+`node handoff.mjs` exercises the installed Pi executable with real SDK Opus and Codex GPT-6.1 Sol, both existing official logins, the Pi Remote progress extension, an isolated host, and mobile Chromium. Only the synthetic probe can execute. Project-local settings disable compaction and retries; personal settings are checked unchanged, and no credentials are copied. The check covers an initial GPT conversation, SDK and GPT tool turns, image/code recall after returning, refresh, worker restart while away and after sync, a recorded local-rejection replay, and tampered-prefix/missing-result rejection before SDK startup. It consumes both plans' usage. npm's `test:handoff` uses the development Pi on its PATH instead. See [handoff E2E results](verification-handoff.json).
+
+Existing workers need replacement to load this change. Recovery requires a verifiable provider-owned checkpoint and unchanged configuration. A pure non-SDK history can initialize a fresh native SDK conversation as context, but an arbitrary SDK transcript without its checkpoint cannot. No original conversations are rewritten, no tool replay is used, and no shared host restart is required.
+
 ## Idle provider-switch fix
 
 A reported conversation could no longer accept SDK messages after the user selected another provider and returned to SDK Opus. The extension closed the native query on every switch away, even after a completed turn. Returning to the SDK reused that permanently closed bridge. Refreshing the page did not cause or repair the failure.
 
-Picker-only provider changes now keep a completed SDK conversation alive. Switching away during an active turn still closes it. Sending messages through another provider does not convert their history into an SDK conversation; existing history and configuration checks remain unchanged.
+The first fix kept the completed query alive during picker-only provider changes. The handoff implementation above now returns through its completed checkpoint and supplies completed foreign turns as context. Switching away during an active SDK turn still closes that query; interrupted SDK tools are not recovered.
 
 The focused `npm run test:reconnect` check uses the Pi executable on PATH, real SDK Opus, a local host, and mobile Chromium. npm selects the development Pi dependency; run `node reconnect.mjs` directly to use your normal shell's Pi installation. It remembers a synthetic tool result, refreshes and sends a follow-up, selects a non-SDK control provider without inference, returns to SDK Opus, refreshes again, and checks recall, one native session, one tool execution, and matching call/result IDs. The control provider is synthetic and rejects inference. This case was missing from earlier tests, which covered SDK-to-SDK changes and reloads without leaving the SDK provider. See [reconnect E2E results](verification-reconnect.json).
 
-Existing workers need replacement to load the fix. An already-closed query is not revived, and failed-turn history is not discarded to force a checkpoint resume. Keep the old conversation; use a fresh SDK session if it has already hit this error. No shared host restart is required. Stop/error recovery and real iPhone/Safari behavior remain unverified.
+This first fix did not revive already-closed queries. The current handoff recovery above additionally handles known zero-work local rejections without deleting their audit records. General Stop/error recovery and real iPhone/Safari behavior remain unverified.
 
 ## Mid-turn input fix
 
@@ -169,7 +181,7 @@ Pi 1.1.0's lazy authentication wrapper turns an already-aborted request into a g
 
 ## Remaining history limits
 
-Resume is limited to this provider's newly recorded, completed SDK checkpoints with matching Pi history and configuration. Arbitrary or pre-upgrade histories, compaction, forks, tree navigation, cross-provider history, nested tool-enabled model requests, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; start a new Pi session afterward. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
+Native resume is limited to this provider's completed SDK checkpoints with a matching Pi prefix and configuration. Completed successful non-SDK turns can be imported as context, including when initializing a new SDK conversation. Arbitrary or pre-upgrade SDK histories without their checkpoint, compaction, forks, tree navigation, nested tool-enabled model requests, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; interrupted SDK tools and unknown SDK errors are not automatically recovered. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
 
 The tool-ID metadata is a verified behavior of the pinned SDK, not an established public API guarantee. A later invalid handler closes the session, but a preceding Pi-approved batch may already have executed. Cancellation does not undo completed tools or forcibly stop a tool that ignores Pi's abort signal. Settlement timings above measure Pi completion, not OS child-process exit time.
 

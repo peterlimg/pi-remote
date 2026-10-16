@@ -47,7 +47,7 @@ function contentBlocks(content: string | Message['content']): CallToolResult['co
     return { type: 'image', data: block.data, mimeType: block.mimeType };
   });
 }
-function userContent(content: string | Message['content']): SDKUserMessage['message']['content'] {
+function userContent(content: string | Message['content']): Exclude<SDKUserMessage['message']['content'], string> {
   const blocks: SDKUserMessage['message']['content'] = contentBlocks(content).map(block => block.type === 'text' ? { type: 'text', text: block.text }
     : block.type === 'image' ? { type: 'image', source: { type: 'base64', data: block.data,
       media_type: block.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' } }
@@ -55,6 +55,69 @@ function userContent(content: string | Message['content']): SDKUserMessage['mess
   const text = blocks.filter(block => block.type === 'text').map(block => block.text).join('');
   if (text.trimStart().startsWith('/')) fail('SDK slash commands are unsupported. Use Pi commands instead.');
   return blocks;
+}
+
+function historyContent(messages: Message[], knownIds: Set<string>, allowRejectedSdk: boolean): ReturnType<typeof userContent> {
+  const pending = new Map<string, string>();
+  const images: { type: 'image'; data: string; mimeType: string }[] = [];
+  const rows: unknown[] = [];
+  let started = false, completed = false;
+  for (const message of messages) {
+    let rejected = false;
+    if (message.role === 'user') {
+      if (pending.size) fail('Cannot recover SDK history with unresolved Pi tool calls.');
+      started = true; completed = false;
+    } else if (message.role === 'assistant') {
+      if (!started || completed || pending.size || typeof message.provider !== 'string' || !message.provider ||
+        typeof message.api !== 'string' || !message.api) fail('Incomplete cross-provider history.');
+      const localError = message.errorMessage === 'Claude SDK session is no longer available. Start a new Pi session.' ||
+        message.errorMessage === 'This provider requires a fresh session or one new user message in its known live history.';
+      rejected = allowRejectedSdk && message.provider === 'claude-sdk' && message.api === 'claude-sdk' &&
+        message.stopReason === 'error' && localError && message.content.length === 1 &&
+        message.content[0].type === 'text' && message.content[0].text === message.errorMessage &&
+        (['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens'] as const).every(key => message.usage[key] === 0) &&
+        Object.values(message.usage.cost).every(value => value === 0);
+      if ((message.provider === 'claude-sdk' || message.api === 'claude-sdk') && !rejected) {
+        fail('Cannot recover uncheckpointed SDK responses or interrupted SDK tools.');
+      }
+      const calls = message.content.filter(block => block.type === 'toolCall');
+      if (calls.length ? message.stopReason !== 'toolUse' : !rejected && !['stop', 'length'].includes(message.stopReason)) {
+        fail('Incomplete cross-provider history.');
+      }
+      for (const call of calls) {
+        if (typeof call.id !== 'string' || !call.id || typeof call.name !== 'string' || !call.name ||
+          !call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments) || knownIds.has(call.id)) {
+          fail('Invalid cross-provider tool-call identity.');
+        }
+        knownIds.add(call.id); pending.set(call.id, call.name);
+      }
+      completed = !calls.length;
+    } else if (message.role === 'toolResult') {
+      if (completed || !pending.has(message.toolCallId) || pending.get(message.toolCallId) !== message.toolName || typeof message.isError !== 'boolean') {
+        fail('Cross-provider Pi tool result does not match an outstanding call.');
+      }
+      pending.delete(message.toolCallId);
+    } else fail('Unsupported cross-provider history message.');
+    const content = (typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content).flatMap<unknown>(block => {
+      if (block.type === 'thinking' && message.role === 'assistant') return [];
+      if (block.type === 'image') {
+        images.push(block);
+        return [{ type: 'text', text: `[Historical image ${images.length}, attached below]` }];
+      }
+      if (block.type === 'text' && typeof block.text === 'string') return [{ type: 'text', text: block.text }];
+      if (block.type === 'toolCall' && message.role === 'assistant') {
+        return [{ type: 'toolCall', id: block.id, name: block.name, arguments: block.arguments }];
+      }
+      return fail('Unsupported cross-provider history content.');
+    });
+    rows.push({ role: message.role, content,
+      ...message.role === 'assistant' ? { provider: message.provider, model: message.model, stopReason: message.stopReason, locallyRejected: rejected } : {},
+      ...message.role === 'toolResult' ? { id: message.toolCallId, name: message.toolName, isError: message.isError } : {},
+    });
+  }
+  if (!completed || pending.size) fail('Cannot recover SDK history with an incomplete Pi turn.');
+  return [{ type: 'text', text: 'Pi history not yet seen by this SDK conversation, as JSON data. Tool calls below already have Pi results; do not replay them. Locally rejected messages were never sent to the SDK. Reasoning and provider signatures are omitted.\n' +
+    JSON.stringify(rows) + '\nEnd of historical context. The current user message follows.\n' }, ...userContent(images)];
 }
 
 export function sdkEnvironment(overrides: Record<string, string> = {}) {
@@ -212,8 +275,17 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
             contentBlocks(result.content);
           }
         } else {
-          if (delta.length !== 1 || delta[0].role !== 'user') fail('This provider requires a fresh session or one new user message in its known live history.');
-          prompt = userContent(delta[0].content);
+          const latest = delta.at(-1);
+          if (!latest || latest.role !== 'user') fail('This provider requires a new user message after completed Pi history.');
+          const history = delta.slice(0, -1);
+          const knownIds = new Set(issued);
+          for (const message of conversation.slice(0, prefix.length)) if (message.role === 'assistant') {
+            for (const block of message.content) if (block.type === 'toolCall') knownIds.add(block.id);
+          }
+          prompt = [...(history.length ? historyContent(history, knownIds, Boolean(saved)) : []), ...userContent(latest.content)];
+        }
+        for (const message of conversation) if (message.role === 'assistant') {
+          for (const block of message.content) if (block.type === 'toolCall') issued.add(block.id);
         }
         const payload = { model: model.id, prompt, toolResults: prompt === undefined ? results : undefined, instructions: instructions.map(message => userContent(message.content)), systemPrompt: sdkSystemPrompt, tools };
         const inspection = structuredClone(payload);
@@ -226,9 +298,6 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
         timer = setTimeout(() => { stopped.reject(new BridgeError('Claude SDK request timed out. Start a new Pi session.')); close(); }, options.timeoutMs ?? 120000);
         completed = false;
         if (!run) {
-          for (const message of conversation) if (message.role === 'assistant') {
-            for (const block of message.content) if (block.type === 'toolCall') issued.add(block.id);
-          }
           const server = createSdkMcpServer({ name: 'pi', tools: [], alwaysLoad: true });
           // Preserve Pi's JSON schemas verbatim; Pi validates before executing.
           server.instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(tool => ({

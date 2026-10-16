@@ -30,6 +30,11 @@ export const localLogin: ApiKeyAuth = {
 
 export default function (pi: ExtensionAPI) {
   let bridge: ReturnType<typeof createBridge> | undefined;
+  let checkpoint: unknown;
+  const restore = (ctx: ExtensionContext) => {
+    bridge?.close();
+    bridge = createBridge(ctx.cwd, undefined, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint });
+  };
   const streamSimple: ReturnType<typeof createBridge>['streamSimple'] = (...args) => {
     if (!bridge) throw new Error('Claude SDK requires an active Pi session.');
     return bridge.streamSimple(...args);
@@ -48,16 +53,15 @@ export default function (pi: ExtensionAPI) {
     api: { stream: streamSimple, streamSimple },
   }));
   pi.on('session_start', (_event, ctx) => {
-    bridge?.close();
     const entry = ctx.sessionManager.getBranch().findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-checkpoint');
-    bridge = createBridge(ctx.cwd, undefined, { persistSession: Boolean(ctx.sessionManager.getSessionFile()),
-      checkpoint: entry?.type === 'custom' ? entry.data : undefined });
+    checkpoint = entry?.type === 'custom' ? entry.data : undefined;
+    restore(ctx);
   });
   pi.on('agent_settled', () => {
-    const checkpoint = bridge?.checkpoint();
-    if (checkpoint) pi.appendEntry('claude-sdk-checkpoint', checkpoint);
+    const next = bridge?.checkpoint();
+    if (next) { checkpoint = next; pi.appendEntry('claude-sdk-checkpoint', next); }
   });
-  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; });
+  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; });
   pi.on('message_end', (event, ctx) => {
     const message = event.message;
     // Pi's lazy auth wrapper reports cancellation before our stream as a setup error.
@@ -67,8 +71,9 @@ export default function (pi: ExtensionAPI) {
     }
   });
   pi.on('model_select', (event, ctx) => {
-    // Picker-only changes must not invalidate a completed native conversation.
     if (event.previousModel?.provider === providerId && event.model.provider !== providerId && !ctx.isIdle()) bridge?.close();
+    // Return through the completed native checkpoint; Pi-only turns become context, never replayed tools.
+    if (event.previousModel?.provider !== providerId && event.model.provider === providerId && ctx.isIdle() && checkpoint) restore(ctx);
   });
   const blockHistoryChange = (_event: unknown, ctx: ExtensionContext) => {
     if (ctx.model?.provider !== providerId) return;
