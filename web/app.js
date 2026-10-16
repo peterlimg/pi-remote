@@ -1119,19 +1119,27 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   updateControls();
   updateScrollButton();
 }
+let activityLabelAt = 0;
 function updateActivity() {
-  const state = cache.get(selected), activity = $('agent-activity');
+  const state = cache.get(selected), activity = $('agent-activity'), now = Date.now();
   const active = connected && state?.status === 'working';
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected)) {
-    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Piecing it together…'];
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected || now >= activityLabelAt)) {
+    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
+      'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
+      'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
+      'Contemplating…', 'Deliberating…', 'Musing…', 'Ruminating…', 'Turning the gears…', 'Untangling it…',
+      'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
+      'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
+      .filter(label => label !== $('activity-label').textContent);
     $('activity-label').textContent = labels[Math.floor(Math.random() * labels.length)];
+    activityLabelAt = now + 8000;
     activity.dataset.sessionId = selected;
   }
   activity.hidden = !active;
   if (!active) return;
   const message = state.messages?.findLast(message => message.role === 'assistant');
-  const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, Date.now() - message.timestamp) : 0;
-  const showTime = elapsed >= 30000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
+  const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, now - message.timestamp) : 0;
+  const showTime = elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
     && !state.tools?.some(tool => tool.status === 'working');
   $('activity-time').hidden = !showTime;
   $('activity-time').textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
