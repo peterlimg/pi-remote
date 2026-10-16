@@ -37,6 +37,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     host = await startHost({ dir, config, port: 0, roots: [dir], publicUrl: 'http://127.0.0.1:8787', relayUrl: '' });
     const port = host.http.address().port, id = sessionKey(file), instanceId = randomUUID();
     const state = initialState({ ...readSession(file), instanceId }, readSession(file).messages);
+    state.status = 'working';
     lock = acquireLock(join(dir, 'locks'), id, { file, instanceId });
     agent = await socket(`ws://127.0.0.1:${port}/bridge`, config.bridgeToken);
     agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state }));
@@ -56,7 +57,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     const transcript = page.locator('#transcript'), messages = transcript.locator('article.message');
     await expect(messages.first()).toContainText('Message 550');
     await expect(transcript.getByRole('button', { name: /Load (older|newer) messages|Return to latest messages/ })).toHaveCount(0);
-    await expect(transcript.getByRole('status')).toHaveCount(0);
+    await expect(transcript.getByRole('status')).toMatchAriaSnapshot('- status: Working…');
     const firstNumber = () => messages.first().innerText().then(text => Number(text.match(/Message (\d+)/)[1]));
     const history = host.service.history.bind(host.service);
     host.service.history = async (...args) => {
@@ -70,7 +71,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     });
     await expect.poll(() => typeof releaseHistory).toBe('function');
     await expect(transcript.getByText(/^Loading(?: messages)?…$/)).toHaveCount(1);
-    const loading = transcript.getByRole('status');
+    const loading = transcript.getByRole('status').filter({ hasText: /^Loading…$/ });
     await expect(loading).toHaveText('Loading…');
     await expect(loading).toBeVisible();
     await expect(transcript).toHaveAttribute('aria-busy', 'true');
@@ -93,7 +94,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     const beforeScroll = await transcript.evaluate(node => node.scrollTop);
     const message = { role: 'assistant', content: 'A new live reply', timestamp: Date.now() };
     append('live-reply', { type: 'message', message });
-    applyEvent(state, { type: 'message_end', message }); state.revision++;
+    applyEvent(state, { type: 'message_end', message }); state.status = 'working'; state.revision++;
     agent.ws.send(JSON.stringify({ type: 'snapshot', state }));
     await expect.poll(() => frames.filter(frame => frame.type === 'patch').length).toBeGreaterThan(0);
     expect(await page.evaluate(() => window.historyAnchor.isConnected)).toBe(true);
@@ -124,6 +125,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     expect(await messages.count()).toBeLessThanOrEqual(200);
     await page.getByRole('button', { name: 'Go to thread bottom' }).click();
     await expect(messages.last()).toContainText('A new live reply');
+    await expect(transcript.locator(':scope > #agent-activity:last-child')).toBeInViewport();
     expect(await messages.count()).toBeLessThanOrEqual(100);
     const patches = frames.filter(frame => frame.type === 'patch');
     expect(patches.every(frame => frame.patch.order.length <= 100)).toBe(true);

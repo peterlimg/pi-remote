@@ -5,13 +5,14 @@ import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
+const activityIndicator = $('agent-activity');
 let historyWindow, historyRequest, historyError = '', historyGeneration = 0, historyScrollTop = 0;
 function atThreadBottom() {
   const box = $('transcript');
   return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
 }
 function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
-// Shrinking the transcript (activity row, taller composer) keeps scrollTop, hiding the last message.
+// Keep the latest message visible when the composer or inline activity changes height.
 let pinnedToBottom = true, transcriptHeight = 0, historyTouch;
 function scrollHistory(delta) {
   const box = $('transcript');
@@ -45,11 +46,13 @@ $('transcript').addEventListener('touchmove', event => {
   if (Math.abs(dy) > Math.abs(dx)) scrollHistory(-dy);
 }, { passive: true });
 $('transcript').addEventListener('toggle', updateScrollButton, true);
-new ResizeObserver(() => {
+const transcriptObserver = new ResizeObserver(() => {
   transcriptHeight = $('transcript').clientHeight;
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
   updateScrollButton();
-}).observe($('transcript'));
+});
+transcriptObserver.observe($('transcript'));
+transcriptObserver.observe(activityIndicator);
 $('scroll-bottom').addEventListener('click', () => {
   if (historyWindow) showLatest();
   $('transcript').scrollTop = $('transcript').scrollHeight;
@@ -1100,7 +1103,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     }
   }
   if (historyRequest?.direction === 'after') fragment.append(loading);
-  box.replaceChildren(fragment);
+  updateActivity();
+  box.replaceChildren(fragment, activityIndicator);
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
   for (const { outgoing, messageId } of matched) {
@@ -1121,8 +1125,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
 }
 let activityLabelAt = 0;
 function updateActivity() {
-  const state = cache.get(selected), activity = $('agent-activity'), now = Date.now();
-  const active = connected && state?.status === 'working';
+  const state = cache.get(selected), activity = activityIndicator, now = Date.now();
+  const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
+  const active = connected && !historyWindow?.newer && state?.status === 'working';
   if (active && (activity.hidden || activity.dataset.sessionId !== selected || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
@@ -1130,8 +1135,8 @@ function updateActivity() {
       'Contemplating…', 'Deliberating…', 'Musing…', 'Ruminating…', 'Turning the gears…', 'Untangling it…',
       'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
       'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
-      .filter(label => label !== $('activity-label').textContent);
-    $('activity-label').textContent = labels[Math.floor(Math.random() * labels.length)];
+      .filter(text => text !== label.textContent);
+    label.textContent = labels[Math.floor(Math.random() * labels.length)];
     activityLabelAt = now + 8000;
     activity.dataset.sessionId = selected;
   }
@@ -1141,8 +1146,8 @@ function updateActivity() {
   const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, now - message.timestamp) : 0;
   const showTime = elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
     && !state.tools?.some(tool => tool.status === 'working');
-  $('activity-time').hidden = !showTime;
-  $('activity-time').textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
+  time.hidden = !showTime;
+  time.textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
 }
 setInterval(() => { if (!document.hidden) updateActivity(); }, 1000);
 function updateControls() {
