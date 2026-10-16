@@ -21,11 +21,15 @@ function ownedSessions(dir, pid) {
 // The CLI queues this guarded operation so its caller's own turn can finish first.
 export async function restartAndResume(config = loadConfig(), dir = dataDir(), { idleOnly = true } = {}) {
   const before = await hostStatus(config, 'GET', dir, { idleOnly });
-  if (before) {
-    // Upgrade hosts predating the shutdown restore list, without adopting terminal sessions.
+  if (before && !before.closing && !Number.isSafeInteger(before.busyWorkers)) {
+    // Modern hosts own this snapshot; concurrent restart jobs must not overwrite it.
     const ids = ownedSessions(dir, before.pid).map(item => item.id), file = join(dir, 'resume-sessions.json');
-    writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
-    renameSync(file + '.tmp', file);
+    const current = await hostStatus(config, 'GET', dir, { idleOnly });
+    if (current?.pid === before.pid && !current.closing) {
+      const temp = file + '.' + randomUUID() + '.tmp';
+      writeFileSync(temp, JSON.stringify(ids), { mode: 0o600 });
+      renameSync(temp, file);
+    }
   }
   return restartHost(config, dir, { idleOnly });
 }
@@ -99,7 +103,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   try {
     if (process.argv[2] === '--run') {
       await runQueuedRestart(loadConfig(), dataDir());
-      console.log('Pi Remote restarted; session restoration starts automatically.');
+      console.log(`Pi Remote restarted (job ${process.pid}); session restoration starts automatically.`);
     } else if (process.argv.length === 2) {
       const dir = dataDir(), logPath = join(dir, 'restart.log');
       loadConfig(dir);

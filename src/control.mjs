@@ -43,9 +43,9 @@ export async function hostStatus(config = loadConfig(), method = 'GET', dir = da
   return status;
 }
 
-export async function ensureHost(config = loadConfig(), dir = dataDir()) {
+export async function ensureHost(config = loadConfig(), dir = dataDir(), { idleOnly = false } = {}) {
   dir = resolve(dir);
-  const running = await hostStatus(config, 'GET', dir);
+  const running = await hostStatus(config, 'GET', dir, { idleOnly });
   if (running) {
     if (running.closing) throw new Error('Pi Remote is stopping. Try again shortly.');
     return running;
@@ -75,7 +75,7 @@ export async function ensureHost(config = loadConfig(), dir = dataDir()) {
   } catch (error) {
     // A concurrent start may have won the existing exclusive service lock.
     for (let attempt = 0; attempt < 100; attempt++) {
-      const running = await hostStatus(config);
+      const running = await hostStatus(config, 'GET', dir, { idleOnly });
       if (running && !running.closing) return running;
       if (error.code !== 'ELOCKED') break;
       let owner;
@@ -111,7 +111,7 @@ export async function stopHost(config = loadConfig(), { idleOnly = false } = {})
   while (Date.now() < deadline) {
     if (stopping && !processExists(stopping.pid)) return true;
     await delay(100);
-    try { if (!await hostStatus(config)) return true; }
+    try { if (!await hostStatus(config, 'GET', dataDir(), { idleOnly })) return true; }
     catch (error) {
       // An accepted DELETE can outlive individual status requests while workers close.
       if ((error.cause ?? error).name !== 'TimeoutError' && !shutdownDisconnect(error)) throw error;
@@ -128,8 +128,9 @@ export async function restartHost(config = loadConfig(), dir = dataDir(), { idle
   // Even an unsuccessful stop wait may have delivered DELETE. Never skip startup.
   const deadline = Date.now() + 30000;
   for (;;) {
-    try { return await ensureHost(config, dir); }
+    try { return await ensureHost(config, dir, { idleOnly }); }
     catch (error) {
+      if (error.code === 'EHOSTAUTH') throw error;
       if (Date.now() >= deadline) throw new AggregateError(stopError ? [stopError, error] : [error],
         'Pi Remote restart failed. Check ' + join(dir, 'host.log') + ': ' + error.message, { cause: error });
       await delay(250);

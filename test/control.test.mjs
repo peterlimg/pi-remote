@@ -177,7 +177,15 @@ test('restart-and-resume upgrades an old host and starts a replacement after a s
       reset = true;
       throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
     }
-    return fetch(url, options);
+    const response = await fetch(url, options);
+    if (options.method === 'GET' && response.ok) {
+      const status = await response.clone().json();
+      if (status.pid === process.pid) {
+        delete status.busyWorkers; delete status.managedSessions; // The simulated old host has neither capability.
+        return new Response(JSON.stringify(status), { status: response.status, headers: response.headers });
+      }
+    }
+    return response;
   });
   let restarted;
   try { restarted = await restartAndResume(config, dir); }

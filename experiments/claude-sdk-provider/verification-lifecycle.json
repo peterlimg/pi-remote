@@ -18,14 +18,16 @@
     "failure": "Restart must wait for a tool permission, not terminate its worker."
   },
   "green": {
-    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-Xgvsa2/result.json",
-    "trace": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-Xgvsa2/trace.zip",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-slWgPs/result.json",
+    "trace": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-slWgPs/trace.zip",
     "pass": true,
     "observedLifecycleTransitions": 16,
     "checks": [
       "Real host, WebSocket authentication, mobile browser, restart CLI and detached restart jobs",
       "Restart waits while permission, tool execution, checkpoint saving or final settlement is outstanding",
       "Atomic idle-only stop refuses a busy worker without beginning shutdown",
+      "Concurrent queued restart jobs preserve the host-owned restoration snapshot",
+      "Safe-mode authentication failures refuse shutdown and startup without forced cleanup",
       "In-flight input does not discard outstanding tool IDs",
       "Checkpoint and settlement receipts work in either order",
       "Two complete host replacements restore the same stored conversation and tool results",

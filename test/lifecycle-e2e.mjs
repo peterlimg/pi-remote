@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, devices, expect } from '@playwright/test';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
-import { hostStatus, stopHost } from '../src/control.mjs';
+import { hostStatus, stopHost, ensureHost } from '../src/control.mjs';
 import { restartAndResume } from '../scripts/restart-and-resume.mjs';
 import { sessionKey } from '../src/locks.mjs';
 
@@ -77,11 +77,16 @@ try {
   await send('seed');
   await expect.poll(async () => (await state()).phase).toBe('ready');
   const originalHistory = readFileSync(file, 'utf8');
+  const invalid = { ...config, bridgeToken: 'wrong-fixture-token' };
+  await assert.rejects(ensureHost(invalid, scratch, { idleOnly: true }), { code: 'EHOSTAUTH' });
+  await assert.rejects(stopHost(invalid, { idleOnly: true }), { code: 'EHOSTAUTH' });
+  assert.equal(host.status().closing, false);
+  result.safeRestartRefusesAuthenticationMismatch = true;
   result.stage = 'permission';
   await send('pending');
   await expect(page.locator('#dialog')).toContainText('Allow replay probe?');
   assert.equal((await state()).phase, 'input');
-  const oldPid = host.status().pid, job = restart();
+  const oldPid = host.status().pid, job = restart(), concurrentJob = restart();
   await delay(500);
   assert(job.stdout || job.child.exitCode === null, 'The restart CLI must run, not silently skip its entry point.');
   assert.equal(host.status().closing, false, 'Restart must wait for a tool permission, not terminate its worker.');
@@ -116,6 +121,12 @@ try {
   result.stage = 'restart-and-restore';
   await expect.poll(async () => { try { const s = await hostStatus(config); return s && s.pid !== oldPid && !s.closing; } catch { return false; } }, { timeout: 15000 }).toBe(true);
   assert.equal(await job.done, 0, job.stderr);
+  assert.equal(await concurrentJob.done, 0, concurrentJob.stderr);
+  await expect.poll(() => {
+    const log = readFileSync(join(scratch, 'restart.log'), 'utf8');
+    return [job, concurrentJob].every(item => log.includes(`restarted (job ${item.queuedPid})`));
+  }, { timeout: 15000 }).toBe(true);
+  result.concurrentRestartJobsCompleted = true;
   await openAfterRestart();
   const previous = text().timestamp;
   await send('recall');
