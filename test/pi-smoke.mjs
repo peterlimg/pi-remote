@@ -14,12 +14,22 @@ const dir = mkdtempSync(join(tmpdir(), 'pi-remote-real-'));
 const config = loadConfig(dir), host = await startHost({ dir, config, port: 0, roots: [dir] });
 config.port = host.http.address().port; writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
 const file = join(dir, 'real.jsonl');
-writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n');
+writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n' +
+  JSON.stringify({ type: 'session_info', id: 'fixture-name', parentId: null, name: 'Real Pi fixture' }) + '\n');
 const trust = join(dir, 'trust-test.ts');
-const receivedImage = join(dir, 'received-image.json');
+const receivedImage = join(dir, 'received-image.json'), progressRequest = join(dir, 'progress-request.json');
 writeFileSync(trust, `import { writeFileSync } from 'node:fs';
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
+  pi.registerProvider('remote-progress-fixture', {
+    api: 'remote-progress-fixture', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:1',
+    models: [{ id: 'progress', name: 'Progress fixture', reasoning: false, input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200000, maxTokens: 1000 }],
+    streamSimple: (_model, context) => {
+      writeFileSync(${JSON.stringify(progressRequest)}, JSON.stringify(context));
+      throw new Error('Fixture stopped at the provider boundary. No external model calls.');
+    }
+  });
   for (const name of ['smoke-usage', 'usage']) pi.registerCommand(name, { handler: async (_args, ctx) => {
     await ctx.ui.select('Provider usage\\n5-hour limit: [██░░] 75% left', ['Close']);
   } });
@@ -78,7 +88,11 @@ try {
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.socket);
-  const worker = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions', '-e', trust] });
+  const worker = new RpcWorker(file, dir, { bin: '/usr/bin/env', prefix: [
+    'PI_CODING_AGENT_DIR=' + join(dir, 'worker-agent'), process.execPath, entry,
+    '--no-extensions', '-e', resolve('extension/index.ts'), '-e', trust,
+    '--provider', 'remote-progress-fixture', '--model', 'progress'
+  ] });
   try {
     let dialog;
     worker.on('event', event => { if (event.type === 'extension_ui_request' && event.method === 'select') dialog = event; });
@@ -92,6 +106,13 @@ try {
     assert.ok(usage.contextUsage.contextWindow > 0);
     assert.equal(usage.providerUsage.title, 'Provider usage\n5-hour limit: [██░░] 75% left');
     assert.equal(dialog, undefined); // The read-only query closes its own dialog before publishing events.
+    await worker.command({ type: 'prompt', text: 'Check the composer focus styles.' });
+    await until(() => existsSync(progressRequest), 25000);
+    const request = readFileSync(progressRequest, 'utf8');
+    for (const phrase of ['before the first tool call', 'every few tool calls', 'before long commands',
+      'Do not expose private reasoning', 'Check the composer focus styles.']) {
+      assert.ok(request.includes(phrase), 'Real Pi provider request must include: ' + phrase);
+    }
   } finally { await worker.close(); }
   const bare = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions'] });
   try {
@@ -100,7 +121,7 @@ try {
     assert.equal(usage.providerUsage, undefined);
     assert.match(usage.providerMessage, /No provider usage extension/);
   } finally { await bare.close(); }
-  console.log('Real Pi smoke passed: extension load, registration, remote command discovery/execution, image delivery, remote off/on, dialog command receipt, context usage and read-only provider report. No model calls.');
+  console.log('Real Pi smoke passed: extension load, registration, remote commands, image delivery, remote off/on, dialogs, usage and mobile progress guidance at the real provider boundary. No external model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

@@ -55,6 +55,29 @@ export default function remoteExtension(pi: any) {
       context.ui.setStatus(EXTENSION_INPUT, event.text); context.ui.setStatus(EXTENSION_INPUT, undefined);
     } else if (state) noteExtensionInput(state, event.text);
   });
+  pi.on('before_agent_start', (event: any, context: any) => {
+    if (process.env.PI_REMOTE_WORKER !== '1' && !enabled) return;
+    let guidance = [
+      'The user is reading Pi Remote on a phone. For tasks needing tools, write one short, plain-language sentence in assistant text before the first tool call. Say what you will check or do.',
+      'During multi-step work, write a brief result or next-step update every few tool calls and before long commands such as tests. Do not wait for all tool work to finish before writing to the user.',
+      'Keep progress updates to one short sentence. Do not expose private reasoning, dump commands, invent progress, or claim success before verification.'
+    ].join('\n');
+    if (context.model?.provider === 'claude-sdk') {
+      const branch = context.sessionManager.getBranch();
+      const recorded = branch.map((entry: any) => entry.message).filter((message: any) => message?.role === 'system')
+        .map((message: any) => (message.sections?.pi_remote_progress || (typeof message.content === 'string' ? message.content : ''))
+          .match(/<pi_remote_progress>\n([\s\S]*?)\n<\/pi_remote_progress>/)?.[1]).findLast(Boolean);
+      // SDK checkpoints freeze the prompt: retain recorded guidance and leave older conversations unchanged.
+      if (recorded) guidance = recorded;
+      else if (branch.some((entry: any) => entry.message?.role === 'assistant' && entry.message.provider === 'claude-sdk')) return;
+    }
+    if (event.systemPromptOptions?.sections && !event.systemPromptOptions.forceSystemPrompt) {
+      event.systemPromptOptions.sections.pi_remote_progress = guidance;
+    } else {
+      // Older Pi versions do not support named prompt sections.
+      return { systemPrompt: event.systemPrompt + '\n\n<pi_remote_progress>\n' + guidance + '\n</pi_remote_progress>' };
+    }
+  });
   if (process.env.PI_REMOTE_WORKER === '1') return;
   const connect = (epoch: number) => {
     if (stopped || !enabled || generation !== epoch) return;
