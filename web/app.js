@@ -1374,7 +1374,7 @@ function renderModels() {
       button.append(el('strong', model.name || model.id, 'picker-option-label'));
       if (current) button.append(el('span', 'Current', 'picker-current'));
       button.disabled = !!picker.busy;
-      button.addEventListener('click', () => chooseModel(picker, key));
+      button.addEventListener('click', event => chooseModel(picker, key, event.detail === 0));
       group.append(button);
     }
     fragment.append(group);
@@ -1414,13 +1414,14 @@ function pickerBusy(picker, busy, message) {
   $('picker-help').classList.toggle('picker-error', !busy);
   $('picker-help').textContent = message;
 }
-async function chooseModel(picker, key) {
+// Restoring focus after a tap makes iOS draw a focus ring on the trigger, so only keyboard picks restore it.
+async function chooseModel(picker, key, keyboard) {
   if (settingsPicker !== picker || picker.busy) return;
-  if (key === picker.current) { closePicker(true); return; }
+  if (key === picker.current) { closePicker(keyboard); return; }
   pickerBusy(picker, true, 'Switching model…');
   try {
     await switchModel(picker.id, key);
-    if (settingsPicker === picker) closePicker(true);
+    if (settingsPicker === picker) closePicker(keyboard);
   } catch (e) {
     if (settingsPicker === picker) pickerBusy(picker, false, e.message);
   }
@@ -1433,16 +1434,16 @@ function openReasoning(id) {
     button.setAttribute('aria-pressed', String(current));
     button.append(el('strong', name, 'picker-option-label'));
     if (current) button.append(el('span', 'Current', 'picker-current'));
-    button.addEventListener('click', () => chooseReasoning(picker, level));
+    button.addEventListener('click', event => chooseReasoning(picker, level, event.detail === 0));
     $('picker-options').append(button);
   }
   $('picker-help').textContent = '';
   if (matchMedia('(pointer: fine)').matches) $('picker-options').querySelector('[aria-pressed=true]')?.focus();
 }
-async function chooseReasoning(picker, level) {
+async function chooseReasoning(picker, level, keyboard) {
   const id = picker.id;
   if (settingsPicker !== picker || changingReasoning.has(id)) return;
-  if (level === cache.get(id)?.thinkingLevel) { closePicker(true); return; }
+  if (level === cache.get(id)?.thinkingLevel) { closePicker(keyboard); return; }
   changingReasoning.add(id); notice(''); pickerBusy(picker, true, 'Changing reasoning…'); updateControls();
   let applied = false;
   try {
@@ -1455,7 +1456,7 @@ async function chooseReasoning(picker, level) {
       ? 'Reload this Pi terminal with /reload to enable reasoning changes.' : e.message);
   } finally {
     changingReasoning.delete(id); updateControls();
-    if (applied && settingsPicker === picker) closePicker(true);
+    if (applied && settingsPicker === picker) closePicker(keyboard);
   }
 }
 $('model').addEventListener('click', () => settingsPicker?.kind === 'model' ? closePicker() : openModels(selected, $('model')));
