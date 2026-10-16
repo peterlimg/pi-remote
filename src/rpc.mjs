@@ -93,13 +93,13 @@ export class RpcWorker extends EventEmitter {
       });
     });
   }
-  async providerUsage() {
+  async providerUsage(command) {
     if (this.usageQuery) return this.usageQuery;
     this.usageQuery = (async () => {
       let report;
       this.captureUsage = value => { report = { title: value.title, message: value.message }; };
       try {
-        await this.request('prompt', { message: '/usage', streamingBehavior: 'steer' });
+        await this.request('prompt', { message: '/' + command, streamingBehavior: 'steer' });
         if (!report) throw new Error('The usage extension returned no report. Try /usage in Pi.');
         return report;
       } finally { this.captureUsage = undefined; }
@@ -110,12 +110,13 @@ export class RpcWorker extends EventEmitter {
     if (command.type === 'getUsage') {
       const { contextUsage } = await this.request('get_session_stats');
       if (!command.includeProvider) return { contextUsage };
-      const { commands } = await this.request('get_commands');
-      // Never submit /usage to the model when no extension owns the command.
-      if (!commands.some(item => item.name === 'usage' && item.source === 'extension')) {
+      const { commands } = await this.request('get_commands'), { model } = await this.request('get_state');
+      const name = model?.provider === 'claude-sdk' ? 'claude-usage' : 'usage';
+      // Never submit the command to the model when no extension owns it.
+      if (!commands.some(item => item.name === name && item.source === 'extension')) {
         return { contextUsage, providerMessage: 'No provider usage extension is installed in this session.' };
       }
-      try { return { contextUsage, providerUsage: await this.providerUsage() }; }
+      try { return { contextUsage, providerUsage: await this.providerUsage(name) }; }
       catch (error) { return { contextUsage, providerMessage: error.message }; }
     }
     if (command.type === 'getCommands') return this.request('get_commands');

@@ -52,6 +52,32 @@ export default function (pi: ExtensionAPI) {
     models,
     api: { stream: streamSimple, streamSimple },
   }));
+  // Rows use pi-usage's "Label: [bar] N% left (reset)" shape so the host's existing parser renders them.
+  pi.registerCommand('claude-usage', {
+    description: 'Show Claude plan limits for the SDK experiment',
+    handler: async (_args, ctx) => {
+      let lines: string[] = [];
+      try {
+        const report = await bridge?.usage();
+        const limits = report?.rate_limits;
+        const windows: [string, { utilization: number | null; resets_at: string | null } | null | undefined][] = limits ? [
+          ['5-hour', limits.five_hour], ['Weekly', limits.seven_day], ['Weekly Opus', limits.seven_day_opus],
+          ['Weekly Sonnet', limits.seven_day_sonnet], ...(limits.model_scoped ?? []).map((item): [string, typeof item] => [`Weekly ${item.display_name}`, item]),
+        ] : [];
+        for (const [label, window] of windows) {
+          if (window?.utilization == null) continue;
+          const left = Math.max(0, Math.min(100, Math.round(100 - window.utilization)));
+          const filled = Math.round(left / 10);
+          const reset = window.resets_at ? ` (resets ${new Date(window.resets_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })})` : '';
+          lines.push(`${label}: [${'█'.repeat(filled)}${'░'.repeat(10 - filled)}] ${left}% left${reset}`);
+        }
+        if (!lines.length) lines = [report ? 'Plan limits are not available for this Claude login.' : 'Send a message first, then check again.'];
+      } catch {
+        lines = ['Could not read Claude plan limits.'];
+      }
+      await ctx.ui.select(['Provider usage', ...lines].join('\n'), ['Close']);
+    },
+  });
   pi.on('session_start', (_event, ctx) => {
     const entry = ctx.sessionManager.getBranch().findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-checkpoint');
     checkpoint = entry?.type === 'custom' ? entry.data : undefined;

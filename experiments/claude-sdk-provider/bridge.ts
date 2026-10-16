@@ -524,7 +524,9 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
     })();
     return stream;
   }
-  return { streamSimple, close, checkpoint: () => {
+  // The query only exists after the first turn; before that there is nothing to ask.
+  const usage = () => run?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
+  return { streamSimple, close, usage, checkpoint: () => {
     if (!state.persistSession || closed || !completed || !sdkSessionId || !sdkMessageId || !configuration) return undefined;
     return { version: 1 as const, sdkSessionId, sdkMessageId, configuration, prefix: [...prefix], reported: structuredClone(reported) };
   } };

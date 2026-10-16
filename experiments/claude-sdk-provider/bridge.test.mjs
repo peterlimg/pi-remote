@@ -202,7 +202,7 @@ for (const plan of [{ unqualifiedName: 'not-a-pi-tool' }, { unqualifiedResult: '
 
 test('Opus uses its requested SDK model and the same Pi-owned tool bridge', async () => {
   let provider;
-  extension({ registerProvider: p => { provider = p; }, on: () => {} });
+  extension({ registerProvider: p => { provider = p; }, registerCommand: () => {}, on: () => {} });
   const opus = provider.getModels().find(m => m.id === 'claude-opus-5-5');
   assert(opus);
   assert.deepEqual(opus.cost, anthropicProvider().getModels().find(m => m.id === opus.id).cost);
@@ -559,7 +559,7 @@ test('unexpected failures are sanitized and API credentials cannot silently chan
 test('Pi native auth cancellation is normalized without starting an SDK query', async () => {
   const handlers = new Map();
   const models = createModels();
-  extension({ registerProvider: p => models.setProvider(p), on: (name, handler) => handlers.set(name, handler) });
+  extension({ registerProvider: p => models.setProvider(p), registerCommand: () => {}, on: (name, handler) => handlers.set(name, handler) });
   const controller = new AbortController(); controller.abort();
   const setupError = await models.streamSimple(models.getModels()[0], context([user]), { ...options, signal: controller.signal }).result();
   const handler = handlers.get('message_end');
@@ -588,10 +588,14 @@ test('Pi loads the package without local copies of host-provided dependencies', 
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
-test('extension registers native ambient auth without a fake key and closes on lifecycle changes', () => {
+test('extension registers native ambient auth without a fake key and closes on lifecycle changes', async () => {
   const handlers = new Map();
   let provider;
-  extension({ registerProvider: p => { provider = p; }, on: (name, handler) => { handlers.set(name, handler); } });
+  let command;
+  extension({ registerProvider: p => { provider = p; }, registerCommand: (name, options) => { if (name === 'claude-usage') command = options; }, on: (name, handler) => { handlers.set(name, handler); } });
+  let dialog;
+  await command.handler('', { ui: { select: async title => { dialog = title; } } });
+  assert.match(dialog, /^Provider usage\nSend a message first/);
   assert.equal(provider.id, 'claude-sdk');
   assert.deepEqual(provider.getModels().map(m => m.id), ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']);
   assert.equal(provider.auth.apiKey.login, undefined);
