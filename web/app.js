@@ -238,7 +238,7 @@ function connection(text) {
 }
 function disconnect() {
   closePicker(); supportsUsage = false;
-  listRequest++; legacyList = undefined;
+  listRequest++; legacyList = undefined; projectRequest = undefined;
   const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
@@ -309,6 +309,7 @@ function connect() {
       connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
+      loadProjects();
       if (listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
         const id = selected;
@@ -379,6 +380,7 @@ function logout() {
   imageDrafts.clear(); sending.clear(); submissions.clear();
   clearThreadImages(); clearThreadVideos();
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
+  projectList = undefined; renderProjects();
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
@@ -1664,10 +1666,10 @@ $('search').addEventListener('blur', event => { if (!$('search').value && event.
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
 // Pinned projects stay on top, then the rest most recent first (the host's order). The sheet fits about five; scroll or search for more.
-let projectList = [], pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
+let projectList, projectRequest, pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
 function renderProjects(focusPin) {
   const query = $('project-search').value.trim().toLowerCase();
-  const matches = projectList.filter(project => !isBlank(project.cwd) && displayPaths(project.cwd).toLowerCase().includes(query));
+  const matches = (projectList || []).filter(project => !isBlank(project.cwd) && displayPaths(project.cwd).toLowerCase().includes(query));
   const pinned = matches.filter(project => pinnedProjects.includes(project.cwd));
   const recent = matches.filter(project => !pinnedProjects.includes(project.cwd));
   $('project-options').replaceChildren(...[...pinned, ...recent].map(project => {
@@ -1689,20 +1691,31 @@ function renderProjects(focusPin) {
     row.append(button, pin);
     return row;
   }));
-  if (projectList.length) $('project-status').textContent = matches.length ? '' : 'No matching projects';
+  if (projectList) $('project-status').textContent = matches.length ? '' : projectList.length ? 'No matching projects' : 'No projects yet.';
   if (focusPin) [...$('project-options').querySelectorAll('.project-pin')].find(pin => pin.dataset.cwd === focusPin)?.focus();
 }
-async function openProjects() {
+async function loadProjects() {
+  if (projectRequest) return;
+  const ws = socket, current = projectRequest = request('projects');
+  try {
+    const projects = await current;
+    if (socket !== ws) return;
+    projectList = projects;
+    // Do not replace controls during session creation or keyboard navigation.
+    if ($('project-picker').open && !$('new-project').disabled && !$('project-options').contains(document.activeElement)) renderProjects();
+  } catch (e) {
+    if (socket === ws && $('project-picker').open && !$('new-project').disabled && !projectList) $('project-status').textContent = e.message;
+  } finally {
+    if (projectRequest === current) projectRequest = undefined;
+  }
+}
+function openProjects() {
   const dialog = $('project-picker');
-  projectList = []; $('project-search').value = ''; renderProjects(); $('project-status').textContent = 'Loading projects…';
+  $('project-search').value = ''; renderProjects();
+  if (!projectList) $('project-status').textContent = 'Loading projects…';
   // Focus the sheet, not its close button, so Safari draws no focus ring on open.
   dialog.showModal(); dialog.focus();
-  try {
-    const projects = await request('projects');
-    if (!dialog.open) return;
-    projectList = projects; renderProjects();
-    if (!projects.length) $('project-status').textContent = 'No projects yet.';
-  } catch (e) { if (dialog.open) $('project-status').textContent = e.message; }
+  loadProjects();
 }
 // Without a project, the host starts the session in a new folder it creates.
 async function startInProject(project) {
