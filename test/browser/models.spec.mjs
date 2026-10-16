@@ -26,6 +26,7 @@ test('/model switches only the selected session without sending a prompt', async
         if (fail) { reply('Model authentication is not configured', false); return; }
         const state = states.find(s => s.id === packet.sessionId);
         state.model = `${packet.command.provider}/${packet.command.modelId}`;
+        state.modelName = { 'test/first': 'Claude Sonnet 4.6', 'test/org/second': 'Anthropic: Claude Opus 4.6 (batch)' }[state.model];
         ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: commands.length, state }));
         reply({ model: state.model });
       }
@@ -51,30 +52,30 @@ test('/model switches only the selected session without sending a prompt', async
   await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#model')).toHaveText('org/second');
+  await expect(page.locator('#model')).toHaveText('Opus 4.6');
   expect(commands.map(p => ({ sessionId: p.sessionId, command: p.command }))).toEqual([
     { sessionId: 'Alpha', command: { type: 'setModel', provider: 'test', modelId: 'org/second' } }
   ]);
   await prompt.fill('/model test/first');
   await page.locator('#send').click();
-  await expect(page.locator('#model')).toHaveText('first');
+  await expect(page.locator('#model')).toHaveText('Sonnet 4.6');
   await expect(prompt).toHaveValue('');
   fail = true;
   await prompt.fill('Keep this draft');
-  await page.getByRole('button', { name: 'Switch model: first' }).click();
+  await page.getByRole('button', { name: 'Switch model: Claude Sonnet 4.6' }).click();
   await page.getByRole('searchbox', { name: 'Search models' }).press('Enter');
   expect(commands).toHaveLength(2);
   await expect(prompt).toHaveValue('Keep this draft');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#picker-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
-  await expect(page.locator('#model')).toHaveText('first');
+  await expect(page.locator('#model')).toHaveText('Sonnet 4.6');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
   await expect(page.locator('#model')).toBeFocused();
   await expect(prompt).toHaveValue('Keep this draft');
-  await page.getByRole('button', { name: 'Switch model: first' }).click();
+  await page.getByRole('button', { name: 'Switch model: Claude Sonnet 4.6' }).click();
   await expect(picker).toBeVisible();
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();

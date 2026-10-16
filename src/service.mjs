@@ -171,7 +171,7 @@ export class SessionService extends EventEmitter {
       if (command.type === 'setModel' || command.type === 'setThinkingLevel') {
         const item = this.live.get(id);
         if (item) {
-          if (command.type === 'setModel') { item.state.model = result.model; item.state.contextUsage = undefined; }
+          if (command.type === 'setModel') { item.state.model = result.model; item.state.modelName = result.modelName; item.state.contextUsage = undefined; }
           item.state.thinkingLevel = result.thinkingLevel;
           item.state.revision++; this.changed(id);
         }
@@ -278,7 +278,7 @@ export class SessionService extends EventEmitter {
       lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
       if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
       const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
-        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, thinkingLevel: info.thinkingLevel }) };
+        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, modelName: info.model?.name, thinkingLevel: info.thinkingLevel }) };
       item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
       this.trackWorker(nextId, item, true);
       return { sessionId: nextId };
@@ -318,6 +318,7 @@ export class SessionService extends EventEmitter {
       item.state.messages = history.messages;
       item.state.historyTruncated = history.historyTruncated;
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
+      item.state.modelName = rpcState?.model?.name;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
       item.agentActive = !!rpcState?.isStreaming;
       item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';

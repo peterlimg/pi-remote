@@ -34,7 +34,7 @@ export function applyEvent(state, event) {
   }
   state.updatedAt = Date.now(); state.revision++;
   if (event.type === 'model_select') {
-    state.model = `${event.model.provider}/${event.model.id}`;
+    state.model = `${event.model.provider}/${event.model.id}`; state.modelName = event.model.name;
     state.fastMode = false;
   }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;

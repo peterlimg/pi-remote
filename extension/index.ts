@@ -26,7 +26,7 @@ export default function remoteExtension(pi: any) {
     state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [firstRequest] : []);
     state.messages = messages.slice(-100);
     state.historyTruncated = messages.length > 100;
-    state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+    state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined; state.modelName = ctx.model?.name;
     state.thinkingLevel = pi.getThinkingLevel?.() ?? ctx.thinkingLevel;
     state.contextUsage = ctx.getContextUsage?.();
     state.revision++;
@@ -119,7 +119,7 @@ export default function remoteExtension(pi: any) {
             const model = ctx.modelRegistry.getAvailable().find((item: any) => item.provider === command.provider && item.id === command.modelId);
             if (!model) throw new Error('Model is not available in this session');
             if (!await pi.setModel(model)) throw new Error('Model authentication is not configured');
-            return { model: `${model.provider}/${model.id}`, thinkingLevel: pi.getThinkingLevel?.() };
+            return { model: `${model.provider}/${model.id}`, modelName: model.name, thinkingLevel: pi.getThinkingLevel?.() };
           }
           if (command.type === 'setThinkingLevel') {
             if (!pi.setThinkingLevel || !pi.getThinkingLevel) throw new Error('Update Pi and reload this terminal to change reasoning effort.');

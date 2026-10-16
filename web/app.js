@@ -1155,10 +1155,13 @@ function updateControls() {
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity();
-  const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
-  // claude-opus-5-5[-20260101] → Opus 5.5; other ids only lose a trailing date.
-  $('model').textContent = modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
-    (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
+  const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
+  // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,
+  // where claude-opus-5-5[-20260101] → Opus 5.5 and other ids only lose a trailing date.
+  $('model').textContent = state?.modelName
+    ? state.modelName.replace(/^[^:]+:\s*/, '').replace(/^Claude (SDK )?/, '').replace(/\s*\([^)]*\)$/, '')
+    : modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
+      (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
   $('model').title = modelName ? `Switch model: ${modelName}` : '';
   $('model').setAttribute('aria-label', modelName ? `Switch model: ${modelName}` : 'Choose a model');
   $('model').disabled = !live;
