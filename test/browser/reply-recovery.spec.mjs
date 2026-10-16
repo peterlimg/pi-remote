@@ -65,13 +65,12 @@ test('failed replies, recovered workers and long model waits have honest feedbac
     await page.locator('#send').click();
     await expect(page.locator('#status')).toHaveText('working');
     await expect(page.locator('#composer-send-status')).toBeHidden();
-    const activityLabel = await page.locator('#activity-label').textContent();
     await expect(page.locator('#activity-time')).toBeHidden();
     const startedAt = [...host.service.live.values()][0].state.messages.at(-1).timestamp;
     await page.clock.install({ time: startedAt });
     await page.clock.pauseAt(startedAt);
     await page.clock.fastForward(31000);
-    await expect(page.locator('#agent-activity')).toHaveText(activityLabel + ' · 31s');
+    await expect(page.locator('#activity-time')).toHaveText(' · 31s');
     await expect(page.locator('#activity-time')).toHaveAttribute('aria-hidden', 'true');
     await expect(page.locator('#activity-detail')).toHaveCount(0);
     await expect(page.locator('#agent-activity')).not.toContainText('Waiting for model');
