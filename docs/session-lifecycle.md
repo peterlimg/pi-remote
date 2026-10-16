@@ -1,0 +1,80 @@
+# Managed session lifecycle
+
+The phone's `idle` label is presentation, not permission to restart a worker. Pi can emit `agent_end` before queued work settles or the SDK checkpoint is written.
+
+`src/session-lifecycle.mjs` owns restart readiness for host-managed RPC workers. Its interface is `send(event)` and a read-only `snapshot`. It has no filesystem, process, browser, credential, or SDK dependencies. `SessionService` feeds actual RPC events through it and exposes transitions for diagnostics and E2E assertions.
+
+```mermaid
+stateDiagram-v2
+    [*] --> starting
+    starting --> suspended: idle worker restored
+    suspended --> running: request accepted
+    ready --> running: request accepted
+    running --> tools: complete tool-call batch
+    tools --> running: all results recorded
+    tools --> input: permission requested
+    input --> tools: permission answered
+    running --> checkpointing: agent_end
+    checkpointing --> ready: checkpoint saved AND agent settled
+    checkpointing --> blocked: failure AND agent settled
+    ready --> stopped: safe restart
+    stopped --> starting: worker restored
+    tools --> stopped: forced interruption
+```
+
+## State contract
+
+| Phase | Meaning | Restart-safe? |
+| --- | --- | --- |
+| `starting` | Worker handshake or restoration is unfinished. | No |
+| `suspended` | A cold worker has no active operation. SDK history is checked separately when it is used. | Yes |
+| `running` | A request was accepted or the agent is working. | No |
+| `tools` | One or more tool results are outstanding. Permission and execution are both unfinished work. | No |
+| `input` | An open dialog overlays the underlying phase. Closing it restores that phase. | No |
+| `checkpointing` | The run ended but required receipts are missing. | No |
+| `ready` | The agent settled; SDK workers also acknowledged saving their checkpoint. | Yes |
+| `blocked` | A failed turn has settled. Recovery still needs investigation; no tool results are invented. | Yes, but not automatically SDK-resumable |
+| `stopped` | The worker exited. Unknown tool outcomes remain recorded as blocked recovery. | No live worker remains |
+
+For an SDK turn, `checkpointing.waitFor` starts with `settled` and `checkpoint`. Either receipt may arrive first. Receiving only one cannot make the worker `ready`. Other providers require `settled` but not the SDK-specific checkpoint receipt.
+
+The SDK extension sends a one-shot `claude-sdk-checkpoint` status only **after** `pi.appendEntry()` stores its checkpoint. A missing checkpoint produces an unavailable receipt rather than pretending the turn is recoverable. The status carries no conversation content, credentials, native session ID, or tool arguments.
+
+New input during a running tool does not reset its pending tool IDs. A late startup snapshot cannot roll a running session back to idle. Outstanding RPC requests and startup/restoration work also block a restart.
+
+Restart-safe and SDK-resumable are different capabilities. Stopping an already failed, quiescent worker cannot undo its tools, but it does not resolve an unknown tool result. Native checkpoint, history, configuration, and tool-result validation remain in the SDK provider. There is no automatic tool replay or permissive history fallback.
+
+## Safe restart path
+
+```text
+node scripts/restart-and-resume.mjs
+  queue a detached job and return immediately
+  wait for all managed workers to be restart-safe
+  request an idle-only stop
+    busy now? refuse without stopping anything
+    still safe? stop admission, save the restore list, close workers
+  start the replacement host
+  restore the same session files
+```
+
+The immediate CLI response says **queued**, not restarted. Check `~/.pi/remote/restart.log` and host status separately. If sessions do not settle within five minutes, the job exits with an explanation and leaves the host running. Do not wait for that job from inside an agent tool: the tool's own turn must finish first.
+
+The authenticated loopback control endpoint reports `busyWorkers` and `managedSessions` snapshots without prompts or tool arguments. `DELETE /_pi/remote` with `X-Pi-Remote-Idle-Only: 1` checks readiness in the host before closing connections. New commands are refused once shutdown starts.
+
+A running pre-lifecycle host has no atomic idle-stop capability. Its one-time upgrade path checks host-owned sessions through the existing authenticated loopback protocol and waits for completed SDK responses to have a later checkpoint. That compatibility path retains the older host's limitations; subsequent restarts use the lifecycle barrier.
+
+Explicit `stop`, direct process termination, and the low-level force-restart helper remain force operations. They can interrupt tools. If a tool's outcome is unknown afterward, recovery stays blocked rather than running it again.
+
+## Verification
+
+From the repository root, with its existing Playwright dependencies and Chromium installed:
+
+```sh
+npm run test:lifecycle
+```
+
+This is an E2E test of the real host, WebSocket authentication, mobile Chromium, restart CLI, detached jobs, filesystem persistence, and replacement-host restoration. The Pi/SDK peer is a deterministic RPC replay fixture, so no login, provider credits, or model calls are required. It does not claim live SDK inference or physical Safari coverage.
+
+The replay gates permission, tool completion, checkpoint saving, and final settlement independently. It checks both receipt orders, in-flight input, generic-provider settlement, rejected requests, two complete host restarts, unchanged history, no completed-tool replay, and fail-closed recovery after a forced interruption. Its artifact includes the observed lifecycle transition trace. CI runs it once in the browser job.
+
+For a historical-controller counterexample, `PI_TEST_RESTART_SCRIPT` can point this E2E at a captured older restart script. The test must detect a host stopping while permission or tool work is outstanding. Live SDK acceptance remains a separate check and must not be inferred from the replay test.

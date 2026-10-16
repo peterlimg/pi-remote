@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-16",
+  "scope": "Host-owned session lifecycle and safe full-host restart; protocol-replay E2E, not live SDK inference",
+  "runtime": {
+    "node": "26.5.0",
+    "platform": "darwin-arm64",
+    "browser": "Playwright Chromium with iPhone 13 viewport"
+  },
+  "commands": [
+    "npm run check",
+    "cd experiments/claude-sdk-provider && npm run check",
+    "npm run test:lifecycle"
+  ],
+  "red": {
+    "controller": "scripts/restart-and-resume.mjs captured from f6ae28c, using the current control transport",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-WyRgpe/result.json",
+    "stage": "permission",
+    "failure": "Restart must wait for a tool permission, not terminate its worker."
+  },
+  "green": {
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-Xgvsa2/result.json",
+    "trace": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-Xgvsa2/trace.zip",
+    "pass": true,
+    "observedLifecycleTransitions": 16,
+    "checks": [
+      "Real host, WebSocket authentication, mobile browser, restart CLI and detached restart jobs",
+      "Restart waits while permission, tool execution, checkpoint saving or final settlement is outstanding",
+      "Atomic idle-only stop refuses a busy worker without beginning shutdown",
+      "In-flight input does not discard outstanding tool IDs",
+      "Checkpoint and settlement receipts work in either order",
+      "Two complete host replacements restore the same stored conversation and tool results",
+      "Original history bytes remain unchanged and completed tools execute once",
+      "A non-SDK provider settles without an SDK checkpoint receipt",
+      "A rejected RPC request does not leave the restart barrier permanently busy",
+      "A forced interruption retains an unknown tool outcome and refuses automatic replay"
+    ]
+  },
+  "liveSdk": {
+    "status": "blocked",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-restart-lhiikt",
+    "sdkVersion": "0.3.296",
+    "piVersion": "1.3.0",
+    "authentication": "Local first-party Claude login remained valid",
+    "apiResponse": "API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going.",
+    "limit": "No live full-host SDK inference acceptance was established. No billing or authentication workaround was applied."
+  },
+  "diagnosticRunsExcludedFromAcceptance": [
+    {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-r8sAzf/result.json",
+      "reason": "Captured legacy CLI was invoked through macOS /tmp rather than its canonical /private/tmp path, so its entry-point guard skipped execution."
+    },
+    {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-PhwICF/result.json",
+      "reason": "Expanded replay reached the independent forced-stop case with the rejected dispatch's browser retry state; the cases now reopen the page between them."
+    }
+  ],
+  "notRun": [
+    "Unit tests or the full repository suite locally",
+    "Physical iPhone or Safari",
+    "Hard-crash or power-loss acceptance",
+    "Production conversation prompts or replay",
+    "Production native compaction"
+  ],
+  "safety": "Pi still owns validation, permissions and execution. Unknown tool results remain blocked. Checkpoint, history, configuration and authentication protections were not relaxed."
+}

@@ -25,7 +25,8 @@ export async function startHost(options = {}) {
     catch (error) { console.error(line.trimEnd(), 'Could not write host.log:', error.message); }
   };
   const status = () => ({ protocol: 1, pid: process.pid, publicUrl, relayUrl,
-    relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing });
+    relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
+    busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
     if (req.url !== '/_pi/remote') { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');
@@ -34,6 +35,9 @@ export async function startHost(options = {}) {
       res.writeHead(403); res.end('Forbidden'); return;
     }
     if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
+    if (req.method === 'DELETE' && req.headers['x-pi-remote-idle-only'] === '1' && service.busyWorkers) {
+      res.writeHead(409, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(status())); return;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status()));
     if (req.method === 'DELETE') void close('DELETE /_pi/remote').catch(() => {}); // close logs shutdown failures.

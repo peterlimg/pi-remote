@@ -10,6 +10,7 @@ import { CommandJournal, requestKey, validateCommand, commandList, modelList } f
 import { RpcWorker } from './rpc.mjs';
 import { send } from './config.mjs';
 import { HistoryReader } from './history.mjs';
+import { createSessionLifecycle } from './session-lifecycle.mjs';
 
 function inside(file, dir) {
   const rel = relative(canonical(dir), canonical(file));
@@ -19,8 +20,8 @@ function inside(file, dir) {
 export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
-    this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map();
-    this.restoreIds = new Set(); this.restoreWarnings = [];
+    this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map(); this.starting = new Set();
+    this.restoreIds = new Set(); this.restoreWarnings = []; this.restoring = new Set();
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.historyReader = new HistoryReader();
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
@@ -45,10 +46,11 @@ export class SessionService extends EventEmitter {
     try {
       const ids = JSON.parse(readFileSync(join(this.dir, 'resume-sessions.json'), 'utf8'));
       if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid session restore list');
-      this.restoreIds = new Set(ids); this.restoreLoaded = true;
+      this.restoreIds = new Set(ids); this.restoreLoaded = true; this.restoring = new Set(ids);
       await Promise.all([...this.restoreIds].map(async id => {
         try { await this.startWorker(id); }
         catch (error) { this.restoreWarnings.push(`Could not restore ${id}: ${error.message}`); }
+        finally { this.restoring.delete(id); }
       }));
     } catch (error) {
       if (error.code === 'ENOENT') this.restoreLoaded = true;
@@ -198,8 +200,21 @@ export class SessionService extends EventEmitter {
     return { ...result, model };
   }
   async dispatch(id, requestId, command) {
+    if (this.stopping) throw new Error('Pi Remote is stopping');
     const item = this.live.get(id);
-    if (item?.worker) return item.worker.command(command);
+    if (item?.worker) {
+      if (['prompt', 'steer', 'followUp'].includes(command.type) && !command.text.trimStart().startsWith('/')) {
+        this.advance(id, item, { type: 'request_started' });
+      }
+      try { return await item.worker.command(command); }
+      catch (error) {
+        try {
+          const state = await item.worker.request('get_state');
+          if (!state.isStreaming) this.advance(id, item, { type: 'request_rejected' });
+        } catch { /* A worker exit owns the final lifecycle transition. */ }
+        throw error;
+      }
+    }
     if (!item?.socket || item.socket.readyState !== 1) throw new Error('Session is not connected. Resume a saved session first.');
     if (command.images?.length && !item.state.supportsImages) throw new Error('Restart this Pi terminal to enable image uploads.');
     const responseId = randomUUID();
@@ -211,11 +226,27 @@ export class SessionService extends EventEmitter {
       send(item.socket, { type: 'command', id: responseId, sessionId: id, requestId, command });
     });
   }
+  get managedSessions() {
+    return [...this.live].filter(([, item]) => item.worker).map(([id, item]) => ({ id, ...item.lifecycle.snapshot,
+      requests: item.worker.pending.size, restartSafe: item.lifecycle.snapshot.restartSafe && !item.worker.pending.size }));
+  }
+  get busyWorkers() {
+    const busy = new Set(this.restoring);
+    for (const [id, item] of this.live) if (item.worker && (!item.lifecycle.snapshot.restartSafe || item.worker.pending.size)) busy.add(id);
+    return this.starting.size + busy.size;
+  }
+  advance(id, item, event) {
+    const before = item.lifecycle.snapshot, after = item.lifecycle.send(event);
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      this.emit('lifecycle', { id, event: event.type, from: before.phase, to: after.phase,
+        pendingTools: after.pendingTools, waitFor: after.waitFor, blocked: after.blocked, restartSafe: after.restartSafe });
+    }
+    return after;
+  }
   trackWorker(id, item, discardEmpty = false) {
     const { worker, lock } = item;
     worker.on('event', event => {
-      if (event.type === 'agent_start') item.agentActive = true;
-      if (event.type === 'agent_end' || event.type === 'agent_settled') item.agentActive = false;
+      this.advance(id, item, event);
       if (event.type === 'extension_ui_request') {
         if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
           item.state.dialog = event; item.state.status = 'waiting';
@@ -227,6 +258,7 @@ export class SessionService extends EventEmitter {
     });
     worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
     worker.once('exit', () => {
+      this.advance(id, item, { type: 'worker_exit' });
       lock.release(); item.worker = undefined; item.state.dialog = undefined;
       this.scan();
       if (discardEmpty && !this.catalog.has(id)) this.live.delete(id);
@@ -267,22 +299,28 @@ export class SessionService extends EventEmitter {
     });
   }
   async startFresh(cwd, sessionDir) {
+    if (this.stopping) throw new Error('Pi Remote is stopping');
     const worker = new RpcWorker(undefined, cwd, { ...this.workerOptions, sessionDir });
+    const startup = { worker, lifecycle: createSessionLifecycle() };
+    this.starting.add(startup);
     let lock;
     try {
       const info = await worker.request('get_state');
+      if (this.stopping) throw new Error('Pi Remote is stopping');
       if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
       const path = canonical(info.sessionFile);
       if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
       const nextId = sessionKey(path);
       lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
       if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-      const item = { worker, lock, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
+      const item = { worker, lock, lifecycle: startup.lifecycle, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
         model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, modelName: info.model?.name, thinkingLevel: info.thinkingLevel }) };
+      this.advance(nextId, item, { type: 'restore', provider: info.model?.provider, streaming: !!info.isStreaming });
       item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
       this.trackWorker(nextId, item, true);
       return { sessionId: nextId };
     } catch (e) { await worker.close(); lock?.release(); throw e; }
+    finally { this.starting.delete(startup); }
   }
   async resume(id, requestId) {
     requestKey(requestId);
@@ -298,13 +336,14 @@ export class SessionService extends EventEmitter {
     const saved = this.catalog.get(id);
     if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
     const actual = await this.view(id);
+    if (this.stopping) throw new Error('Pi Remote is stopping');
     if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
     const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
     let worker;
     try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
     catch (e) { lock.release(); throw e; }
     if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-    const item = { worker, lock, state: initialState(actual, actual.messages) };
+    const item = { worker, lock, lifecycle: createSessionLifecycle(), state: initialState(actual, actual.messages) };
     item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
     this.trackWorker(id, item);
     try {
@@ -320,8 +359,8 @@ export class SessionService extends EventEmitter {
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
       item.state.modelName = rpcState?.model?.name;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
-      item.agentActive = !!rpcState?.isStreaming;
-      item.state.status = item.state.dialog ? 'waiting' : item.agentActive ? 'working' : 'idle';
+      this.advance(id, item, { type: 'restore', provider: rpcState?.model?.provider, streaming: !!rpcState?.isStreaming });
+      item.state.status = item.state.dialog ? 'waiting' : rpcState?.isStreaming ? 'working' : 'idle';
       delete item.state.error;
       this.restoreIds.delete(id);
       this.changed(id); return { resumed: true };
@@ -341,9 +380,10 @@ export class SessionService extends EventEmitter {
         if (dialog.method === 'select' && !dialog.options.includes(answer.value)) throw new Error('Invalid option');
         response.value = answer.value;
       }
+      this.advance(id, item, { type: 'input_closed' });
       item.worker.process.stdin.write(JSON.stringify(response) + '\n');
       item.state.dialog = undefined;
-      item.state.status = item.agentActive ? 'working' : 'idle'; this.changed(id);
+      item.state.status = item.lifecycle.snapshot.restartSafe ? 'idle' : 'working'; this.changed(id);
       return { accepted: true };
     });
   }
@@ -360,7 +400,8 @@ export class SessionService extends EventEmitter {
     }
     this.stopping = true;
     await this.historyReader.close();
-    await Promise.all([...this.live.values()].filter(x => x.worker).map(x => x.worker.close()));
+    const workers = new Set([...this.live.values(), ...this.starting].filter(item => item.worker).map(item => item.worker));
+    await Promise.all([...workers].map(worker => worker.close()));
     for (const item of this.live.values()) if (item.socket) item.socket.close();
     for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('Service stopped')); }
     this.pending.clear();

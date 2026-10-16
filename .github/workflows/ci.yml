@@ -31,11 +31,17 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/2
+      - run: npm run test:lifecycle
+        if: matrix.shard == 1
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: mobile-browser-results-${{ matrix.shard }}
-          path: test-results/
+          path: |
+            test-results/
+            ${{ runner.temp }}/pi-lifecycle-e2e-*/
   pi-smoke:
     runs-on: ubuntu-latest
     steps:

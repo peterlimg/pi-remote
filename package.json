@@ -15,7 +15,8 @@
     "relay": "node bin/pi-remote.mjs relay",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "check": "tsc --noEmit && node scripts/check.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:lifecycle": "node test/lifecycle-e2e.mjs"
   },
   "dependencies": {
     "markdown-it": "15.0.1",

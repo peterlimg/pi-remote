@@ -83,9 +83,13 @@ export default function (pi: ExtensionAPI) {
     checkpoint = entry?.type === 'custom' ? entry.data : undefined;
     restore(ctx);
   });
-  pi.on('agent_settled', () => {
+  pi.on('agent_settled', (_event, ctx) => {
     const next = bridge?.checkpoint();
     if (next) { checkpoint = next; pi.appendEntry('claude-sdk-checkpoint', next); }
+    if (process.env.PI_REMOTE_WORKER === '1' && ctx.model?.provider === providerId) {
+      ctx.ui.setStatus('claude-sdk-checkpoint', next ? 'saved' : 'unavailable');
+      ctx.ui.setStatus('claude-sdk-checkpoint', undefined);
+    }
   });
   pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; });
   pi.on('message_end', (event, ctx) => {

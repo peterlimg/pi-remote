@@ -31,6 +31,16 @@ Saved conversations now also create SDK transcripts under Claude Code's session 
 
 Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, changed prompt/tool sets, and recovery after interrupted tools remain unsupported.
 
+## Managed lifecycle and safe host restarts
+
+The host now has an explicit managed-session state machine, with a [state diagram and contract](../../docs/session-lifecycle.md). `agent_end` is not restart-safe. SDK turns need both final settlement and a saved-checkpoint receipt, in either order. Pending tool IDs survive in-flight input, dialogs block a restart, and generic Pi providers need settlement without an SDK checkpoint.
+
+The reported failures were not deleted chats: the SDK agent ran the host-restart script from a still-running `bash` call. The host stopped before the call's result was recorded. The existing recovery guard correctly refused to replay that command. The restart script now queues a detached job, waits for lifecycle readiness, and uses an atomic idle-only stop on updated hosts. Explicit force-stop paths still interrupt work and can leave an unknown tool outcome blocked.
+
+`npm run test:lifecycle` runs the real host, mobile browser, restart CLI/jobs and filesystem against a deterministic Pi RPC replay peer. It covers permission/tool/checkpoint/settlement gates, both receipt orders, in-flight input, generic-provider turns, rejected requests, complete host replacement, unchanged history, no tool replay, and blocked recovery after forced interruption. It requires no SDK login or model calls and runs in browser CI. This is protocol-replay E2E evidence, not live SDK inference. See [lifecycle verification](verification-lifecycle.json).
+
+Live SDK validation on October 16 was separately blocked by an SDK API response: `API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going.` Local Claude authentication still reported a first-party login. No billing configuration or authentication workaround was applied. This records the response for the tested workspace; it is not a general policy determination. Live full-host SDK acceptance remains blocked on that prerequisite.
+
 ## Cross-provider handoff and recovery
 
 A conversation can begin with another Pi provider or leave SDK Claude for completed successful turns with another model and return. Returning to SDK Claude resumes its last completed native checkpoint. Only the new Pi turns are appended as explicitly labeled historical JSON data, followed by the current user message. Historical tool calls are not sent as executable SDK calls or pending MCP results. Pi keeps its original audit history unchanged, and a new completed checkpoint fingerprints the entire accepted prefix so the same foreign turns are not imported again. Imported turns also enter the SDK's native transcript and follow its separate retention rules.

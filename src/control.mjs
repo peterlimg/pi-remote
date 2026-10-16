@@ -21,11 +21,11 @@ async function stopUncontrollable(config, dir) {
   return false;
 }
 
-export async function hostStatus(config = loadConfig(), method = 'GET', dir = dataDir()) {
+export async function hostStatus(config = loadConfig(), method = 'GET', dir = dataDir(), { idleOnly = false } = {}) {
   let response;
   try {
     response = await fetch('http://127.0.0.1:' + config.port + '/_pi/remote', {
-      method, headers: { Authorization: 'Bearer ' + config.bridgeToken },
+      method, headers: { Authorization: 'Bearer ' + config.bridgeToken, ...(idleOnly ? { 'X-Pi-Remote-Idle-Only': '1' } : {}) },
       signal: AbortSignal.timeout(2000), redirect: 'error'
     });
   } catch (error) {
@@ -33,7 +33,9 @@ export async function hostStatus(config = loadConfig(), method = 'GET', dir = da
     throw new Error('Cannot reach Pi Remote: ' + error.message, { cause: error });
   }
   if (!response.ok) {
-    if (response.status === 403 && await stopUncontrollable(config, dir)) return null;
+    if (response.status === 409 && idleOnly) throw Object.assign(new Error('Pi sessions are still working or saving checkpoints.'), { code: 'ERESTARTBUSY' });
+    if (response.status === 403 && idleOnly) throw Object.assign(new Error('Cannot authenticate a safe Pi Remote restart.'), { code: 'EHOSTAUTH' });
+    if (response.status === 403 && !idleOnly && await stopUncontrollable(config, dir)) return null;
     throw new Error('Cannot control the service on port ' + config.port + '. Stop it once with: kill $(lsof -tiTCP:' + config.port + ' -sTCP:LISTEN), then run /pi-remote again.');
   }
   const status = await response.json();
@@ -96,11 +98,11 @@ function shutdownDisconnect(error) {
   return false;
 }
 
-export async function stopHost(config = loadConfig()) {
+export async function stopHost(config = loadConfig(), { idleOnly = false } = {}) {
   const deadline = Date.now() + 30000;
   let stopping;
   try {
-    stopping = await hostStatus(config, 'DELETE');
+    stopping = await hostStatus(config, 'DELETE', dataDir(), { idleOnly });
     if (!stopping) return false;
   } catch (error) {
     // DELETE may have been accepted before the connection was reset.
@@ -119,9 +121,10 @@ export async function stopHost(config = loadConfig()) {
   throw new Error('Pi Remote is still stopping after 30 seconds. Check /pi-remote status.');
 }
 
-export async function restartHost(config = loadConfig(), dir = dataDir()) {
+export async function restartHost(config = loadConfig(), dir = dataDir(), { idleOnly = false } = {}) {
   let stopError;
-  try { await stopHost(config); } catch (error) { stopError = error; }
+  try { await stopHost(config, { idleOnly }); }
+  catch (error) { if (['ERESTARTBUSY', 'EHOSTAUTH'].includes(error.code)) throw error; stopError = error; }
   // Even an unsuccessful stop wait may have delivered DELETE. Never skip startup.
   const deadline = Date.now() + 30000;
   for (;;) {
