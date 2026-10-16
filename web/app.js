@@ -1156,7 +1156,9 @@ function updateControls() {
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity();
   const modelName = state?.model?.slice(state.model.indexOf('/') + 1) || '';
-  $('model').textContent = modelName;
+  // claude-opus-5-5[-20260101] → Opus 5.5; other ids only lose a trailing date.
+  $('model').textContent = modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
+    (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
   $('model').title = modelName ? `Switch model: ${modelName}` : '';
   $('model').setAttribute('aria-label', modelName ? `Switch model: ${modelName}` : 'Choose a model');
   $('model').disabled = !live;

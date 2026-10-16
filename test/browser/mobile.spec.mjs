@@ -211,7 +211,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   state.model = 'anthropic/claude-sonnet-4-5'; state.thinkingLevel = 'off';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
   await expect(shell.locator('.tool-status')).toHaveText('error');
-  await expect(page.locator('#model')).toHaveText('claude-sonnet-4-5');
+  await expect(page.locator('#model')).toHaveText('Sonnet 4.5');
   await expect(page.getByRole('button', { name: 'Reasoning effort' })).toHaveText('Off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(group.locator('.tool-activity-error')).toHaveCount(0);
