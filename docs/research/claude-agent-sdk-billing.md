@@ -78,6 +78,42 @@ node --experimental-strip-types /tmp/pi-sdk-session-check-20261018/probe.mjs cap
 
 Successful probes consume the account's allowance; SDK cost estimates are not billing statements. The negative checks exit nonzero because they require a successful marker and instead receive the exact native rejection. The focused `test:recovery` E2E also passed separately without model calls. No production prompt, recovery decision, or session history was modified by this investigation.
 
+## Minimized SDK reproduction on October 18
+
+Further isolation reduced the full Pi failure to **67 characters of public documentation text**, with no Pi conversation, tool declarations, MCP server, or agent loop:
+
+```text
+providers (docs/custom-provider.md), pi packages (docs/packages.md)
+```
+
+In the tested Team workspace, each reference alone returns the requested marker. Combining them in the system prompt produces the same native extra-usage API 400. Listing the filenames without their topic labels also succeeds. This is a request-content-sensitive rejection, not evidence that custom prompts or Pi tools are inherently unsupported.
+
+| Controlled request | Observed result |
+| --- | --- |
+| Original full SDK-facing Pi system prompt, 33,005 characters | Rejected |
+| Neutral system text of the same character length | Accepted |
+| Original prompt with only its documentation-reference section omitted | Accepted, diagnostic only; not a proposed production change |
+| The 1,417-character documentation-reference section alone | Rejected |
+| `providers (docs/custom-provider.md)` alone | Accepted |
+| `pi packages (docs/packages.md)` alone | Accepted |
+| Both references together, as above | Rejected |
+
+The original Pi prompt and all 14 tool declarations have identical hashes in the last completed checkpoint, failed recovery, and fresh failed SDK session. The successful original native transcript and the fresh failure both identify Claude Code 2.1.296. Tests with the installed Claude Code 2.1.302 executable still rejected the full prompt. An isolated SDK 0.3.302 with Claude Code 2.1.302 also rejected the full prompt and a small documentation-only reproduction. Neither a newer runtime nor an SDK upgrade was demonstrated to fix the restriction.
+
+The shareable [live SDK reproducer](../../experiments/claude-sdk-provider/billing-repro.mjs) tests the first reference, the combination, and the second reference in separate fresh SDK queries. All have the same model, fixed user message, safe local-login environment, disabled tools/settings discovery, and no native transcript persistence. It uses the bridge's environment safety check but does not create the Pi bridge or run a Pi agent. Its prompts and saved results contain no private conversation or credentials.
+
+```sh
+node --experimental-strip-types experiments/claude-sdk-provider/billing-repro.mjs
+```
+
+This consumes allowance for successful requests. It is an opt-in live reproduction, not a CI test. **It should exit nonzero while this bug is present:** both controls must return `SDK_SESSION_OK`, and it then requires the combined request to work too. A terminal SDK `result` with subtype `success` is not sufficient: these rejected runs can have an earlier assistant event carrying `error: unknown` and the actual API 400, so the reproducer checks the response itself.
+
+The final three-query reproducer confirmed the same sequence on both versions: first reference accepted, combined references rejected with the exact extra-usage message, second reference accepted. SDK 0.3.296 / Claude Code 2.1.296 results are at `/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-billing-repro-BuumGi/result.json`; SDK 0.3.302 / Claude Code 2.1.302 results are at `/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-billing-repro-ZpGxny/result.json`. The newer-version run used an isolated copy of the same script with only its SDK import, version lookup, and supported executable path changed. Both reproductions exited 1 on the intended assertion. The script's syntax check and repository whitespace check passed.
+
+Private isolation artifacts remain under `/tmp/pi-sdk-session-check-20261018/prompt-isolation/`. The full captured prompt remains private. The newer package was extracted under `/tmp/pi-sdk-current-test.ylmhld/`, without upgrading the installed provider.
+
+This narrows an upstream-facing eligibility/billing failure to a small, shareable input. It does **not** reveal Anthropic's internal matching rule, explain which server/account behavior changed since October 16, or establish the behavior on other accounts. The official plan page continues to advertise subscription access. An account/request-specific explanation or correction from Anthropic is still needed. No production instructions, tool permissions, authentication identity, or billing settings were rewritten to evade the rejection; no historical action was replayed.
+
 ## Evidence and reproduction
 
 Private local evidence: `/tmp/pi-sdk-billing-check.GdTkgH/` contains filtered `metadata.json`, `bundled.json`, `installed.json`, `rpc-recovery.json`, `prepared-chat.json`, and their diagnostic scripts. It contains no exported authentication secrets. The scripts were diagnostic work, not a runtime patch.

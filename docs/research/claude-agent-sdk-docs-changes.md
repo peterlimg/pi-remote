@@ -46,7 +46,7 @@ The local [billing investigation](claude-agent-sdk-billing.md) records real API 
 
 The current help page supports neither a blanket requirement to buy extra usage nor a claim that Anthropic publicly resumed the paused SDK billing change. The API's rejection and the advertised plan access need account/request-specific reconciliation. Do not infer a particular classifier from prompt-sensitive results, or discard required instructions merely to obtain a successful diagnostic response.
 
-A native SDK-agent mode is a separate architecture worth evaluating if the user wants Claude Code's agent rather than Pi's tools and extensions. It is not proven to remove this rejection, preserve Pi capabilities, or safely resume existing Pi conversations.
+A later [minimized reproduction](claude-agent-sdk-billing.md#minimized-sdk-reproduction-on-october-18) triggers the same rejection with two ordinary documentation references in a 67-character system prompt, while each reference alone succeeds. It needs no Pi conversation, tools, or agent loop. The SDK's latest version also rejected the full prompt and a small documentation-only case. This is evidence for an account/request-specific eligibility problem, not a reason to remove Pi's supported capabilities or migrate to a different agent architecture. Anthropic's internal rule and the reason it changed remain unverified.
 
 ## Retrieval and verification
 
