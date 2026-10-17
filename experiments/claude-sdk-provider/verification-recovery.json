@@ -75,6 +75,34 @@
     ],
     "limit": "This corrects the explanation, not workspace billing. No funding or authentication changes, retry of the production SDK request, or successful live inference."
   },
+  "billingRoutingFollowUp": {
+    "date": "2026-10-17",
+    "sdkVersion": "0.3.296",
+    "account": { "apiProvider": "firstParty", "subscription": "team", "planLimitsAvailable": true, "extraUsageEnabled": false },
+    "directSdk": [
+      { "cliVersion": "2.1.296", "pass": true, "toolsExposed": 0, "evidence": "/tmp/pi-sdk-billing-check.GdTkgH/bundled.json" },
+      { "cliVersion": "2.1.302", "pass": true, "toolsExposed": 0, "evidence": "/tmp/pi-sdk-billing-check.GdTkgH/installed.json" }
+    ],
+    "realBridge": { "command": "PI_SDK_TEST_MODEL=claude-sonnet-5-5 node live.mjs allow", "pass": true, "syntheticExecutions": 2, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-provider-live-oKauVk/evidence.json" },
+    "realRpcRecovery": {
+      "piVersion": "1.3.0", "model": "claude-sonnet-5-5", "effort": "high", "pass": true,
+      "fixture": "Synthetic incomplete Pi history, not an interrupted native MCP callback",
+      "toolExecutions": 0, "priorMarkerRecalled": true, "newNativeCheckpoint": true, "originalFixtureHistoryPreserved": true,
+      "evidence": "/tmp/pi-sdk-billing-check.GdTkgH/rpc-recovery.json"
+    },
+    "originalChat": { "recoveryPrepared": true, "newDiagnosticModelPrompts": 0, "pastToolsReplayed": 0, "historyPreserved": true, "nextReplyVerified": false },
+    "billingOrAuthenticationChanged": false,
+    "earlierRejectionCauseEstablished": false,
+    "qualifiedErrorRegression": {
+      "red": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-Yj8vwr/result.json",
+      "green": [
+        { "piVersion": "1.2.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-vB0e0y/result.json" },
+        { "piVersion": "1.3.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-UVFjyR/result.json" }
+      ],
+      "checks": "The public response reports a restriction on this request and suggests checking SDK entitlement; it no longer claims all SDK requests require extra usage or recommends adding funds."
+    },
+    "conclusion": "The current SDK route works with extra usage disabled. The earlier response is not proof that paid extra usage must be enabled; request-specific failure and the original long chat remain unverified."
+  },
   "commands": [
     "npm run check",
     "npm run test:recovery",
@@ -91,7 +119,7 @@
     "nativeCompactionEnabled": false
   },
   "limits": [
-    "Live SDK inference and the real model's recovery response were not rerun; prior workspace extra-usage blocking remains a separate prerequisite",
+    "Initial protocol-replay acceptance did not run live inference. Later isolated SDK/RPC successes are recorded in billingRoutingFollowUp; full-host SDK acceptance and the original long chat remain unverified",
     "A valid saved completed checkpoint and unchanged configuration are required",
     "Summary and terminal-command context are unsupported by this recovery operation",
     "Only Pi-saved history enters the new context; unobserved SDK-only state is not resumed and previous transcripts retain their existing retention policy",

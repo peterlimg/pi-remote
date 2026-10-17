@@ -192,7 +192,8 @@ try {
   assert.equal(billing.stopReason, 'error');
   assert.match(billing.errorMessage, /workspace extra usage/i);
   assert.match(billing.errorMessage, /workspace admin/i);
-  assert.doesNotMatch(billing.errorMessage, /login|new session|SYNTHETIC_PRIVATE_DETAIL/);
+  assert.match(billing.errorMessage, /check SDK entitlement/i);
+  assert.doesNotMatch(billing.errorMessage, /login|new session|SYNTHETIC_PRIVATE_DETAIL|requires workspace extra usage for SDK requests|add extra usage/);
   assert.deepEqual(billing.content, [{ type: 'text', text: billing.errorMessage }]);
   assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
   result.billingPrerequisiteShownWithoutPrivateDetailsOrLoginAdvice = true;

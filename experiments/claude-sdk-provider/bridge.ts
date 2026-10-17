@@ -425,7 +425,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
           if (event.type === 'assistant' && event.error) {
             const text = event.message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
             if (text.includes('Third-party apps now draw from extra usage, not plan limits.') && text.includes('Ask your workspace admin to add more')) {
-              fail('Claude requires workspace extra usage for SDK requests. Ask your workspace admin to add extra usage.');
+              fail('Claude rejected this SDK request with a workspace extra usage restriction. Ask your workspace admin to check SDK entitlement and usage settings.');
             }
             fail(`Claude SDK reported ${event.error}. Check Claude Code for details.`);
           }
