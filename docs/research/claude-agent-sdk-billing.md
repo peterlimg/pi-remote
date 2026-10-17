@@ -33,16 +33,50 @@ The real RPC recovery check appended a synthetic user/tool-use tail to its own s
 
 SDK-reported costs in these checks are estimates, not billing statements. A successful request while extra usage is disabled does not establish which included credit or allowance funded it.
 
-## What this rules out
+## What the earlier scratch checks established
 
-- There is no missing SDK integration to add. Both the direct SDK and the Pi bridge currently work.
+- There is no missing SDK integration to add. Both the direct SDK and the Pi bridge succeeded with isolated, small system prompts.
 - The bundled CLI version alone does not explain the earlier rejection; both tested versions succeeded.
 - The current account does not have a blanket requirement to enable paid extra usage before any SDK request can work.
 - Small-context native recovery is supported by a real SDK/RPC check, not only protocol replay.
 
-The cause of the earlier request-specific rejection is **not established**. These small scratch checks do not prove that the original long conversation now completes successfully. Do not guess at entitlement flags, impersonate another application, switch credentials, or enable paid usage to force a pass.
+Those small scratch checks did not establish the cause of the request-specific rejection or prove that the original conversation could complete. The full-prompt checks below narrow the triggering input. Do not guess at entitlement flags, impersonate another application, switch credentials, or enable paid usage to force a pass.
 
 The affected original chat was prepared for another explicit SDK context recovery after the failed request. Only its recovery decision was appended. No diagnostic model prompt was sent there, no old tool was rerun, and the missing command result remains unknown.
+
+## October 18 full-prompt reproduction
+
+The phone's latest `hi` reached a new native SDK context and received the same API 400. It did not fail the stale recovery-approval guard. The native transcript recorded zero input/output tokens and no tool calls for that rejected response. The older stale-approval error remains visible history; the current recovery E2E accepts that known local rejection and completed foreign-provider turns.
+
+A private copy of the affected session reproduced the exact extra-usage error through installed Pi 1.3.0, normal resources, and the installed provider. A diagnostic preflight blocked all tool execution. The original session and personal settings remained byte-for-byte unchanged.
+
+Controlled direct SDK checks then held the captured recovery input, model, local login, output cap, and tool availability constant, changing only the system prompt:
+
+| SDK request | Result |
+| --- | --- |
+| Captured recovery text and image, minimal diagnostic system prompt, no tools | Requested marker returned |
+| Identical recovery input, full Pi system prompt, no tools | Exact extra-usage API rejection |
+| Tiny fresh input, full Pi system prompt, no tools | Same API rejection |
+| Approximately 145,000 input tokens of synthetic history, minimal system prompt | Requested marker returned |
+| Existing live Pi bridge check, small system prompt and synthetic MCP tool | Two Pi-owned calls and follow-up recall passed |
+
+The captured full system prompt was 33,005 characters. These checks isolate its content or structure as a trigger in this environment, rather than interrupted history, image presence, MCP execution, a blanket SDK-login failure, or the tested input sizes. They do not identify a particular prompt passage, establish Anthropic's intended billing policy, or prove an entitlement change is required. The successful calls still reported extra usage disabled. No credentials or billing settings changed, and no other application's identity was asserted.
+
+Repeated `/sdk-recover` or a fresh chat with the same full system prompt does not address this reproduced rejection. No runtime workaround was applied. In particular, replacing Pi's instructions with the diagnostic prompt would discard required behavior and is not a production fix.
+
+Private evidence is under `/tmp/pi-sdk-session-check-20261018/`. `rpc-copy.json`, `captured-simple.json`, `captured-system.json`, and `captured-small.json` contain filtered outcomes. `private-payload.json` and `copied-session.jsonl` contain private conversation data and must not be shared. The diagnostic scripts preserve the comparison:
+
+```sh
+# Exact real-Pi reproduction on a private session copy; expected to reject.
+node /tmp/pi-sdk-session-check-20261018/rpc-copy.mjs
+# Same captured recovery input, differing only in the system prompt.
+node --experimental-strip-types /tmp/pi-sdk-session-check-20261018/probe.mjs captured-simple
+node --experimental-strip-types /tmp/pi-sdk-session-check-20261018/probe.mjs captured-system
+# Small input still rejects with the full system prompt.
+node --experimental-strip-types /tmp/pi-sdk-session-check-20261018/probe.mjs captured-small
+```
+
+Successful probes consume the account's allowance; SDK cost estimates are not billing statements. The negative checks exit nonzero because they require a successful marker and instead receive the exact native rejection. The focused `test:recovery` E2E also passed separately without model calls. No production prompt, recovery decision, or session history was modified by this investigation.
 
 ## Evidence and reproduction
 
