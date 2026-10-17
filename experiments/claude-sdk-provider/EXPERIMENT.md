@@ -23,6 +23,8 @@ The checkpoint fingerprint now covers both the canonical Pi prompt and the SDK-f
 
 `npm run test:recovery` now starts with a normal Pi prompt and covers this boundary, late extension instructions, custom prompts/sections, rejection retries, old-checkpoint migration and unchanged Pi tool permissions. The previous short custom test prompt could not reproduce the documentation-index rejection.
 
+The installed `b07002c` provider also passed through opentunnel with normal project resources and all 14 Pi tools declared. SDK Opus used Pi's real `read` once, returned the scratch marker and recalled it after reload without another tool call. The checkpoint matched the projected preset/append fingerprint; Pi's canonical prompt, personal settings and shared host PID stayed unchanged. The owned test worker was closed. See `portablePromptFollowUp` in [recorded evidence](verification-recovery.json).
+
 ## Everyday controls
 
 The expanded provider passed strict TypeScript checking and 30 offline tests. Live SDK checks covered image inputs and tool results, model and effort changes, independent title generation, and completed-checkpoint recovery. CLI discovery listed all three models with thinking and image support; Sonnet with High returned `SDK_COMMON_CLI_OK`. The real Pi RPC/mobile fixture selected High through the reasoning picker, restarted its own worker, recovered the saved SDK conversation without repeating tools, exercised Allow/Deny/Stop, and retained the conversation on reload. See [current results](verification-common.json).
