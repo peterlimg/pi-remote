@@ -1,6 +1,6 @@
 # Durable execution and interrupted SDK recovery
 
-Investigated October 16, 2026. The initial design and read-only evidence follow below. The implemented [`/sdk-recover` operation](../../experiments/claude-sdk-provider/EXPERIMENT.md#explicit-recovery-after-interruption) provides an operator-approved **new SDK context** from the same Pi chat, with mandatory tool review. It preserves the old native transcript rather than attempting the in-place native continuation discussed here. It does not implement a durable executor or reconstruct unrecorded command output. The restart lifecycle fix remains in place.
+Investigated October 16, 2026. The initial design and read-only evidence follow below. The implemented [`/sdk-recover` operation](../../experiments/claude-sdk-provider/EXPERIMENT.md#explicit-recovery-after-interruption) provides an operator-approved **new SDK context** from the same Pi chat, using Pi's existing tool validation and permission policy rather than an additional recovery-wide approval mode. It preserves the old native transcript rather than attempting the in-place native continuation discussed here. It does not implement a durable executor or reconstruct unrecorded command output. The restart lifecycle fix remains in place.
 
 ## Finding
 
@@ -67,7 +67,7 @@ On reopen:
 | Interrupted tool explicitly reviewed as replay-safe | Permit replay under that tool's policy, through Pi's normal execution controls. |
 | Identity, branch, configuration, or receipt mismatch | Refuse recovery and preserve the evidence. |
 
-An `interrupted` error restores honest conversation context. It does not mean the command did nothing, or grant the model permission to retry it. Effectful follow-up tools must require operator review while an unknown operation remains unresolved.
+An `interrupted` error restores honest conversation context. It does not mean the command did nothing or authorize automatic replay. New tool calls follow Pi's normal validation and permission policy. The explicit recovery decision is not a reconstructed completion receipt, and an operator-requested retry must not be mislabeled as receipt reuse.
 
 Some operations have independently checkable goals. A restart job can verify the expected host generation and revision, for example. Record that as reconciliation evidence, not as the original shell command's recovered exit status. Prefer such typed, verifiable operations over trying to infer arbitrary shell behavior.
 

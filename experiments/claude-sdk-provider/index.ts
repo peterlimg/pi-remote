@@ -32,9 +32,7 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let bridge: ReturnType<typeof createBridge> | undefined;
   let checkpoint: unknown;
   let recovery: RecoveryPlan | undefined;
-  let reviewTools = false;
   let activeSession: string | undefined;
-  let reviewQueue: Promise<void> = Promise.resolve();
   const restore = (ctx: ExtensionContext) => {
     bridge?.close();
     bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery,
@@ -79,30 +77,20 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
         const confirmed = await ctx.ui.confirm('Recover SDK conversation?',
           `This starts a new SDK context from saved Pi history. It does not resume the old native SDK context or retry past commands.\n\n` +
           `${plan.interrupted.length} tool result(s) are missing. Their effects remain unknown; no success or exit status will be invented.\n\n` +
-          'This does not delete or rewind Pi history or previous native SDK transcripts. Every subsequent tool call in this Pi conversation will require approval, including after restart. Continue?');
+          'This does not delete or rewind Pi history or previous native SDK transcripts. New tools follow your normal Pi permission policy. Continue?');
         if (!confirmed) return;
         const current = prepareRecovery(checkpoint, recoveryMessages(ctx));
         if (!ctx.isIdle() || activeSession !== originalSession || current.checkpointHash !== plan.checkpointHash || JSON.stringify(current.history) !== JSON.stringify(plan.history)) {
           ctx.ui.notify('The conversation changed during confirmation. Request recovery again.', 'warning'); return;
         }
         pi.appendEntry('claude-sdk-recovery', plan);
-        recovery = plan; reviewTools = true;
+        recovery = plan;
         restore(ctx);
-        ctx.ui.notify('Recovery requested. Send a new message. The next SDK context will use saved Pi history; tools require approval.', 'info');
+        ctx.ui.notify('Recovery requested. Send a new message. The next SDK context will use saved Pi history and your normal Pi permission policy.', 'info');
       } catch (error) {
         ctx.ui.notify(error instanceof Error ? error.message : 'Could not prepare SDK recovery.', 'error');
       }
     },
-  });
-  pi.on('tool_call', async (event, ctx) => {
-    if (!reviewTools) return;
-    if (!ctx.hasUI) return { block: true, reason: 'This recovered conversation requires interactive tool approval.' };
-    const originalSession = activeSession;
-    // Parallel tool batches must not replace one another's confirmation dialogs.
-    const decision = reviewQueue.then(() => ctx.ui.confirm('Review tool after SDK recovery',
-      `Prior tool effects may be unknown. This new call has not executed.\n\n${event.toolName}\n${JSON.stringify(event.input, null, 2)}\n\nAllow this call?`));
-    reviewQueue = decision.then(() => undefined, () => undefined);
-    if (!await decision || activeSession !== originalSession) return { block: true, reason: 'Tool execution was not approved after SDK recovery.' };
   });
   // Rows use pi-usage's "Label: [bar] N% left (reset)" shape so the host's existing parser renders them.
   pi.registerCommand('claude-usage', {
@@ -132,12 +120,10 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   });
   pi.on('session_start', (_event, ctx) => {
     activeSession = ctx.sessionManager.getSessionFile();
-    reviewQueue = Promise.resolve();
     const branch = ctx.sessionManager.getBranch();
     const entry = branch.findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-checkpoint');
     const decision = branch.findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-recovery');
     checkpoint = entry?.type === 'custom' ? entry.data : undefined;
-    reviewTools = Boolean(decision);
     const plan = decision?.type === 'custom' ? decision.data as RecoveryPlan : undefined;
     const started = plan && branch.some(row => row.type === 'custom' && row.customType === 'claude-sdk-recovery-started' && (row.data as { id?: unknown })?.id === plan.id);
     recovery = plan && !started && (!entry || branch.indexOf(decision!) > branch.indexOf(entry)) ? plan : undefined;
@@ -151,7 +137,7 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       ctx.ui.setStatus('claude-sdk-checkpoint', undefined);
     }
   });
-  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; reviewTools = false; activeSession = undefined; });
+  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; activeSession = undefined; });
   pi.on('message_end', (event, ctx) => {
     const message = event.message;
     // Pi's lazy auth wrapper reports cancellation before our stream as a setup error.

@@ -3,6 +3,7 @@
   "scope": "Explicit operator-approved recovery into a new native SDK context in the same Pi chat, not in-place native continuation or a durable executor",
   "command": "/sdk-recover",
   "verification": {
+    "initialImplementation": true,
     "kind": "Real Pi RPC, production extension and bridge, MCP, filesystem persistence and synthetic tool effects; external SDK protocol replay",
     "modelCalls": false,
     "claudeLoginRequired": false,
@@ -103,6 +104,38 @@
     },
     "conclusion": "The current SDK route works with extra usage disabled. The earlier response is not proof that paid extra usage must be enabled; request-specific failure and the original long chat remain unverified."
   },
+  "normalPermissionsAndPendingHandoff": {
+    "approvalGuardRemoved": true,
+    "oneTimeRecoveryConfirmationRetained": true,
+    "red": [
+      { "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-AWXXjz/result.json", "failure": "Recovered chats must retain normal Pi tool permissions without an extra approval prompt." },
+      { "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-zA8rDf/result.json", "failure": "SDK history changed after recovery approval. Request recovery again." }
+    ],
+    "green": [
+      { "piVersion": "1.2.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-wcKU01/result.json" },
+      { "piVersion": "1.3.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-9wlzew/result.json" }
+    ],
+    "checks": [
+      "A new foreign-provider tool call after recovery approval runs under normal Pi permission policy without a recovery prompt",
+      "Completed foreign turns and an exact zero-work stale-approval rejection are imported before the first recovered SDK request",
+      "Original approved hashes, checkpoint identity, configuration and interrupted identities remain bound",
+      "Incomplete foreign turns and new unapproved SDK responses reject before SDK startup",
+      "New SDK tool calls do not prompt after recovery or worker restart",
+      "Normal Pi permission denial and required-argument validation still prevent execution",
+      "Historical calls are not replayed and duplicate tool-use IDs still reject"
+    ],
+    "liveSdkRpc": {
+      "piVersion": "1.3.0", "sdkVersion": "0.3.296", "model": "claude-sonnet-5-5", "effort": "high",
+      "evidence": "/tmp/pi-sdk-recovery-handoff.EIVTDh/rpc-recovery.json", "pass": true,
+      "fixture": "Synthetic incomplete Pi history, followed by synthetic completed foreign text and an exact local guard failure; real SDK inference and Pi RPC",
+      "toolExecutions": 0, "priorMarkerRecalled": true, "newNativeCheckpoint": true, "historyPreserved": true,
+      "limit": "Not a real native MCP crash, production conversation prompt, or physical phone verification."
+    },
+    "diagnosticRunExcluded": {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-39KnHl/result.json",
+      "reason": "Pi legitimately coerced numeric input into the declared string type; the invalid-argument fixture now omits the required field."
+    }
+  },
   "commands": [
     "npm run check",
     "npm run test:recovery",
@@ -114,7 +147,9 @@
     "oldNativeTranscriptRewoundOrDeleted": false,
     "missingExitStatusOrSuccessInvented": false,
     "historicalToolsAutomaticallyReplayed": false,
-    "subsequentToolsRequireApprovalAcrossModelsAndRestarts": true,
+    "subsequentToolsRequireApprovalAcrossModelsAndRestarts": false,
+    "normalPiPermissionPolicyAndValidationPreserved": true,
+    "oneTimeRecoveryConfirmationRetained": true,
     "configurationHistoryIdentityAuthenticationGuardsRetained": true,
     "nativeCompactionEnabled": false
   },

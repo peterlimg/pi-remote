@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +27,10 @@ const records = () => existsSync(process.env.PI_RECOVERY_EVENTS) ? readFileSync(
 const entries = () => readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8').trim().split('\n').map(JSON.parse);
 const effects = () => records().filter(row => row.type === 'execution').map(row => row.label);
 const last = () => entries().findLast(entry => entry.message?.role === 'assistant')?.message;
+const appendMessage = (rows, message) => {
+  const entry = { type: 'message', id: randomUUID(), parentId: rows.at(-1).id, timestamp: new Date().toISOString(), message };
+  rows.push(entry); return entry;
+};
 const cli = process.env.PI_SDK_TEST_PI || fileURLToPath(new URL('./bundle/cli.js', import.meta.resolve('@earendil-works/pi-coding-agent')));
 const result = { fixture: 'real Pi RPC, extension, bridge and MCP; SDK protocol replay without model calls',
   piVersion: execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), node: process.version, pass: false };
@@ -47,7 +51,10 @@ function start(file = sessionFile, systemPrompt = 'Recovery E2E. Use only the sy
 async function send(text, images) {
   const before = settled;
   await worker.request('prompt', { message: text, ...(images ? { images } : {}) });
-  await until(() => settled > before, 'turn settlement');
+  await until(() => {
+    assert(!dialogs.some(dialog => dialog.title === 'Review tool after SDK recovery'), 'Recovered chats must retain normal Pi tool permissions without an extra approval prompt.');
+    return settled > before;
+  }, 'turn settlement');
   return last();
 }
 async function answer(confirmed) {
@@ -111,6 +118,15 @@ try {
     ['checkpoint', rows => { rows.findLast(e => e.customType === 'claude-sdk-recovery').data.checkpointHash = '0'.repeat(64); }],
     ['late-input', rows => { rows.push({ type: 'message', id: 'late-user', parentId: rows.at(-1).id, timestamp: new Date().toISOString(),
       message: { role: 'user', content: 'LATE_INPUT', timestamp: Date.now() } }); }],
+    ['unapproved-sdk', rows => {
+      appendMessage(rows, { role: 'user', content: 'Unapproved SDK work', timestamp: Date.now() });
+      appendMessage(rows, { ...failed, stopReason: 'stop', errorMessage: undefined, content: [{ type: 'text', text: 'UNAPPROVED_SDK_RESPONSE' }] });
+    }],
+    ['incomplete-foreign', rows => {
+      appendMessage(rows, { role: 'user', content: 'Unfinished foreign work', timestamp: Date.now() });
+      appendMessage(rows, { ...failed, provider: 'recovery-control', api: 'recovery-control', stopReason: 'toolUse', errorMessage: undefined,
+        content: [{ type: 'toolCall', id: 'control-pending', name: 'probe', arguments: { label: 'pending-foreign' } }] });
+    }],
     ['configuration', () => {}],
   ];
   for (const [name, mutate] of negatives) {
@@ -136,6 +152,17 @@ try {
   await worker.close(); delete process.env.PI_RECOVERY_BAD_INIT;
   result.unexpectedNativeIdentityRejected = true;
   await start();
+  result.stage = 'foreign-turn-before-recovery';
+  await worker.command({ type: 'setModel', provider: 'recovery-control', modelId: 'plain' });
+  assert.equal((await send('foreign turn')).stopReason, 'stop');
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign']);
+  await worker.command({ type: 'setModel', provider: 'claude-sdk', modelId: 'claude-haiku-5-5' });
+  await worker.close();
+  const history = entries(), rejection = 'SDK history changed after recovery approval. Request recovery again.';
+  const oldGuard = [appendMessage(history, { role: 'user', content: 'Previous SDK return attempt', timestamp: Date.now() }),
+    appendMessage(history, { ...failed, errorMessage: rejection, content: [{ type: 'text', text: rejection }] })];
+  appendFileSync(sessionFile, oldGuard.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  await start();
   const recovered = await send('recall');
   assert.equal(recovered.stopReason, 'stop', recovered.errorMessage);
   assert.match(recovered.content.filter(block => block.type === 'text').map(block => block.text).join(''), /RECOVERED/);
@@ -144,7 +171,7 @@ try {
   assert(readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8').startsWith(original));
   const queries = records().filter(row => row.type === 'query' && !row.invalidInit);
   const recoveredPrompt = records().find(row => row.type === 'prompt' && row.recovered && row.session === queries[1]?.session);
-  assert(recoveredPrompt?.marker && recoveredPrompt.unknown && !recoveredPrompt.leakedSignature);
+  assert(recoveredPrompt?.marker && recoveredPrompt.unknown && recoveredPrompt.foreign && recoveredPrompt.localRejection && !recoveredPrompt.leakedSignature);
   assert.equal(recoveredPrompt.images, 1);
   assert.equal(queries.length, 2);
   assert.notEqual(queries[0].session, queries[1].session);
@@ -152,36 +179,38 @@ try {
   assert.equal(queries[1].resumedAt, false);
   assert.equal(entries().findLast(e => e.customType === 'claude-sdk-recovery-started').data.sdkSessionId, queries[1].session);
   assert.equal(entries().findLast(e => e.customType === 'claude-sdk-recovery-session').data.sdkSessionId, queries[1].session);
-  assert.deepEqual(effects(), ['seed', 'orphan']);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign']);
+  result.completedForeignTurnAfterApprovalImported = true;
   result.historyRetainedWithoutToolReplay = true;
   result.explicitNewNativeContext = true;
   result.unknownEffectsAndImagesRetained = true;
   result.signaturesOmitted = true;
-  result.stage = 'deny-historical-action';
-  const attempted = send('attempt-repeat');
-  await answer(false); await attempted;
-  assert.deepEqual(effects(), ['seed', 'orphan']);
-  result.historicalActionRequiresApproval = true;
-  result.stage = 'allow-new-action';
-  const allowed = send('allow-new');
-  await answer(true); await allowed;
-  assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
-  result.approvedNewActionExecutesOnce = true;
+  result.stage = 'normal-tool-policy';
+  assert.equal((await send('allow-new')).stopReason, 'stop');
+  assert.equal(dialogs.length, 0);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed']);
+  assert.equal((await send('deny-new')).stopReason, 'stop');
+  assert.equal(records().findLast(row => row.type === 'result' && row.label === 'policy-denied').error, true);
+  assert.equal((await send('invalid-new')).stopReason, 'stop');
+  assert.equal(records().findLast(row => row.type === 'result' && row.label === 'invalid').error, true);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed']);
+  result.newToolsUseNormalPiPermissions = true;
+  result.normalPermissionDenialAndValidationPreserved = true;
   result.stage = 'restart-recovered-worker';
   await worker.close(); await start();
   const followup = await send('followup');
   assert.equal(followup.stopReason, 'stop', followup.errorMessage);
   const latest = records().filter(row => row.type === 'query').at(-1);
   assert.equal(latest.resumed, true);
-  const deniedAgain = send('attempt-repeat');
-  await answer(false); await deniedAgain;
-  assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
-  result.checkpointAndApprovalSurviveWorkerRestart = true;
+  assert.equal((await send('after-restart')).stopReason, 'stop');
+  assert.equal(dialogs.length, 0);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
+  result.checkpointAndNormalPermissionsSurviveWorkerRestart = true;
   result.stage = 'reused-call-id';
   const reused = await send('reuse-id');
   assert.equal(reused.stopReason, 'error');
   assert.match(reused.errorMessage, /repeated a previously issued tool-call ID/);
-  assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
   result.duplicateIdsRemainRejected = true;
   await worker.close();
   result.stage = 'billing-rejection';
@@ -195,7 +224,7 @@ try {
   assert.match(billing.errorMessage, /check SDK entitlement/i);
   assert.doesNotMatch(billing.errorMessage, /login|new session|SYNTHETIC_PRIVATE_DETAIL|requires workspace extra usage for SDK requests|add extra usage/);
   assert.deepEqual(billing.content, [{ type: 'text', text: billing.errorMessage }]);
-  assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
   result.billingPrerequisiteShownWithoutPrivateDetailsOrLoginAdvice = true;
   result.pass = true;
 } catch (error) { result.error = error.message; throw error; }

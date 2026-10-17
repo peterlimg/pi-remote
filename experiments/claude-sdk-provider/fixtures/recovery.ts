@@ -5,6 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
+import { createProvider, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
 import install, { localLogin } from '../index.ts';
 
 const log = value => appendFileSync(process.env.PI_RECOVERY_EVENTS!, JSON.stringify(value) + '\n');
@@ -39,6 +41,7 @@ function replayQuery(args) {
       const content = next.value.message.content;
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
+        foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools: ['mcp__pi__probe'], apiKeySource: 'none' };
@@ -47,16 +50,18 @@ function replayQuery(args) {
           message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going. SYNTHETIC_PRIVATE_DETAIL' }] } };
         continue;
       }
-      let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'attempt-repeat' ? 'orphan' : text === 'allow-new' ? 'allowed' : undefined;
+      let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'allow-new' ? 'allowed'
+        : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart' : undefined;
       if (label || text === 'reuse-id') {
         const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
           .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
         const id = text === 'reuse-id' ? old.id : 'toolu_' + randomUUID();
         label ??= 'orphan';
-        const pending = client.callTool({ name: 'probe', arguments: { label }, _meta: { 'claudecode/toolUseId': id } });
+        const input = text === 'invalid-new' ? {} : { label };
+        const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
         void pending.catch(() => {});
         const blocks = text.startsWith('seed') ? [{ type: 'thinking', thinking: 'private reasoning', signature: 'RECOVERY_PRIVATE_SIGNATURE' }] : [];
-        yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input: { label } }], 'tool_use');
+        yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use');
         const result = await pending;
         log({ type: 'result', label, error: result.isError === true });
       }
@@ -77,9 +82,29 @@ function replayQuery(args) {
 }
 export default function (pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
+  const { compat: _compat, ...metadata } = getBuiltinModels('anthropic').find(model => model.id === 'claude-haiku-5-5');
+  const controlStream = (model, context) => {
+    const tool = context.messages.at(-1).role !== 'toolResult';
+    const message = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
+      content: tool ? [{ type: 'toolCall', id: 'control_' + randomUUID(), name: 'probe', arguments: { label: 'foreign' } }] : [{ type: 'text', text: 'FOREIGN_DONE' }],
+      stopReason: tool ? 'toolUse' : 'stop', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: 'start', partial: message });
+    stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(); return stream;
+  };
+  pi.registerProvider(createProvider({ id: 'recovery-control', name: 'Isolated recovery control',
+    auth: { apiKey: { name: 'Replay control', resolve: async () => ({ auth: {}, source: 'isolated replay' }) } },
+    models: [{ ...metadata, provider: 'recovery-control', api: 'recovery-control', id: 'plain', name: 'Recovery control' }],
+    api: { stream: controlStream, streamSimple: controlStream } }));
   // Test authentication only; no native CLI or model service is used by this peer.
   localLogin.resolve = async () => ({ auth: {}, source: 'isolated SDK replay' });
   install(pi, replayQuery);
+  pi.on('tool_call', event => {
+    if (event.toolName === 'probe' && event.input.label === 'policy-denied') {
+      return { block: true, reason: 'Denied by the normal Pi permission policy.' };
+    }
+  });
   pi.registerTool({ name: 'probe', label: 'Recovery probe', description: 'Record one synthetic effect.',
     parameters: Type.Object({ label: Type.String() }, { additionalProperties: false }),
     execute: async (id, { label }, signal) => {
