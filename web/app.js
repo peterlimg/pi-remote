@@ -1127,8 +1127,8 @@ let activityLabelAt = 0;
 function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
-  const active = connected && !historyWindow?.newer && state?.status === 'working';
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected || now >= activityLabelAt)) {
+  const active = connected && !historyWindow?.newer && state?.status === 'working', compacting = state?.compacting === true;
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
       'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
@@ -1136,15 +1136,17 @@ function updateActivity() {
       'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
       'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
       .filter(text => text !== label.textContent);
-    label.textContent = labels[Math.floor(Math.random() * labels.length)];
+    label.textContent = compacting ? 'Compacting conversation…' : labels[Math.floor(Math.random() * labels.length)];
+    const announcement = compacting ? 'Compacting conversation…' : 'Working…', status = activity.querySelector('.sr-only');
+    if (status.textContent !== announcement) status.textContent = announcement;
     activityLabelAt = now + 8000;
-    activity.dataset.sessionId = selected;
+    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting);
   }
   activity.hidden = !active;
   if (!active) return;
   const message = state.messages?.findLast(message => message.role === 'assistant');
   const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, now - message.timestamp) : 0;
-  const showTime = elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
+  const showTime = !compacting && elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
     && !state.tools?.some(tool => tool.status === 'working');
   time.hidden = !showTime;
   time.textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
@@ -1192,6 +1194,7 @@ function updateControls() {
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
   $('resume').disabled = !connected || !resumable;
   $('composer-hint').textContent = !connected ? '' :
+    live && state.compacting ? 'Summarizing earlier messages. New messages will wait.' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
   $('composer-hint').hidden = !$('composer-hint').textContent;

@@ -11,6 +11,7 @@ Users send instructions to the selected session, retain separate drafts while sw
 - `messages-images`: preview, remove, and send attached images.
 - `messages-videos`: preview, remove, and upload original videos for the agent to inspect as local files.
 - `messages-abort`: request cancellation of a running turn.
+- `messages-compaction`: explain when Pi is summarizing earlier messages and new messages must wait.
 
 ## How to get to it (user POV)
 
@@ -30,6 +31,7 @@ Preconditions: authenticated fresh fixture. Subscribe to browser WebSocket frame
 - **Desktop keys.** Run `npm run test:browser -- test/browser/mobile.spec.mjs --grep 'desktop Enter' --trace on`. It creates a non-touch desktop context, types `first line`, presses `Shift+Enter` and then `Enter`, and verifies a prompt command. `Alt+Enter` also emits `prompt`; it does not force a follow-up queue.
 - **Images.** For the existing bounded UI proof, run `npm run test:browser -- test/browser/images.spec.mjs --grep 'image picker previews' --trace on`. The user handles are `page.getByLabel('Attach images and videos', { exact: true }).setInputFiles(...)` and `page.getByRole('button', { name: 'Remove image.png' })`. Use the spec's actual in-memory PNG, and require a decoded preview, preserved draft on rejection, and clearing only on acceptance. It mocks `/ws`; it does not prove a real agent received image bytes.
 - **Videos.** Run `npm run test:browser -- test/browser/videos.spec.mjs --trace on`. The first test uses the real host and simulated bridge: select the WebM fixture, check the decoded preview, remove it, reattach, switch sessions, send, and reload. It compares the stored bytes with the original, checks that the conversation hides the path, reloads, and plays the video from its thumbnail. It also checks that leaving the conversation releases the playback data. This thumbnail check requires `ffmpeg` on PATH. The second test mocks `/ws` for interrupted uploads, rejected commands, mixed image/video messages, and retry behavior. Capture `video-draft.png`, `video-sent.png`, the conversation snapshot and trace from the test output.
+- **Compaction.** Run `npm run test:browser -- test/browser/compaction.spec.mjs --trace on`. It sends compaction events from a simulated Pi RPC child through the real host and browser socket. Require `Compacting conversation…`, the explanation that new messages wait, and a visible abort control. Reload during compaction, then check that the notice clears on retry, cancellation, and failure. It captures narrow-phone and desktop views; no live model summarization is invoked.
 - **Abort.** On a fresh working Alpha with an empty composer, `await page.getByRole('button', { name: 'Abort turn' }).click()`. The fixture appends `aborted` and returns idle; require `#transcript` to contain that text and `#abort` hidden. Capture the outbound `abort` command. This proves command transport, not cancellation of model work.
 
 ## Gotchas

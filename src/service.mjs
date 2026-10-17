@@ -259,7 +259,7 @@ export class SessionService extends EventEmitter {
     worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
     worker.once('exit', () => {
       this.advance(id, item, { type: 'worker_exit' });
-      lock.release(); item.worker = undefined; item.state.dialog = undefined;
+      lock.release(); item.worker = undefined; item.state.dialog = undefined; item.state.compacting = false;
       this.scan();
       if (discardEmpty && !this.catalog.has(id)) this.live.delete(id);
       else item.state.status = 'saved';
@@ -314,9 +314,10 @@ export class SessionService extends EventEmitter {
       lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
       if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
       const item = { worker, lock, lifecycle: startup.lifecycle, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
-        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, modelName: info.model?.name, thinkingLevel: info.thinkingLevel }) };
-      this.advance(nextId, item, { type: 'restore', provider: info.model?.provider, streaming: !!info.isStreaming });
-      item.state.status = 'idle'; this.live.set(nextId, item); this.changed(nextId);
+        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, modelName: info.model?.name, thinkingLevel: info.thinkingLevel,
+        compacting: !!info.isCompacting }) };
+      this.advance(nextId, item, { type: 'restore', provider: info.model?.provider, streaming: !!info.isStreaming || !!info.isCompacting });
+      item.state.status = info.isStreaming || info.isCompacting ? 'working' : 'idle'; this.live.set(nextId, item); this.changed(nextId);
       this.trackWorker(nextId, item, true);
       return { sessionId: nextId };
     } catch (e) { await worker.close(); lock?.release(); throw e; }
@@ -359,8 +360,9 @@ export class SessionService extends EventEmitter {
       item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
       item.state.modelName = rpcState?.model?.name;
       item.state.thinkingLevel = rpcState?.thinkingLevel;
-      this.advance(id, item, { type: 'restore', provider: rpcState?.model?.provider, streaming: !!rpcState?.isStreaming });
-      item.state.status = item.state.dialog ? 'waiting' : rpcState?.isStreaming ? 'working' : 'idle';
+      item.state.compacting = !!rpcState?.isCompacting;
+      this.advance(id, item, { type: 'restore', provider: rpcState?.model?.provider, streaming: !!rpcState?.isStreaming || !!rpcState?.isCompacting });
+      item.state.status = item.state.dialog ? 'waiting' : rpcState?.isStreaming || rpcState?.isCompacting ? 'working' : 'idle';
       delete item.state.error;
       this.restoreIds.delete(id);
       this.changed(id); return { resumed: true };

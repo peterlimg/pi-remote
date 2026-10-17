@@ -198,7 +198,7 @@ export default function remoteExtension(pi: any) {
   });
   for (const name of ['agent_start', 'agent_end', 'message_start', 'message_update', 'message_end',
     'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'ui_prompt_start', 'ui_prompt_end', 'agent_settled',
-    'model_select', 'thinking_level_select']) {
+    'model_select', 'thinking_level_select', 'session_before_compact', 'session_compact', 'session_compact_failed']) {
     pi.on(name, (event: any) => {
       // Pi Remote's own QR and setup screens ask nothing of the phone; don't flag them as needing input.
       if (!state || (controlling && event.type === 'ui_prompt_start')) return;

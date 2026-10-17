@@ -39,9 +39,14 @@ export function applyEvent(state, event) {
   }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
   if (event.type === 'agent_start') { running.set(state, true); state.status = 'working'; }
-  if (event.type === 'agent_end' || event.type === 'agent_settled') { running.delete(state); state.status = 'idle'; }
+  if (event.type === 'agent_settled') state.compacting = false;
+  if (event.type === 'agent_end' || event.type === 'agent_settled') { running.delete(state); state.status = state.compacting ? 'working' : 'idle'; }
+  if (['compaction_start', 'session_before_compact'].includes(event.type)) { state.compacting = true; state.status = 'working'; }
+  if (['compaction_end', 'session_compact', 'session_compact_failed'].includes(event.type)) {
+    state.compacting = false; state.status = running.get(state) ? 'working' : 'idle';
+  }
   if (event.type === 'ui_prompt_start') state.status = 'waiting';
-  if (event.type === 'ui_prompt_end') state.status = running.get(state) ? 'working' : 'idle';
+  if (event.type === 'ui_prompt_end') state.status = running.get(state) || state.compacting ? 'working' : 'idle';
   if (['message_start', 'message_update', 'message_end'].includes(event.type) && event.message && shown(event.message)) {
     const m = event.message;
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');

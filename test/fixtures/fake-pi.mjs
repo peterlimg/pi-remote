@@ -1,7 +1,7 @@
 import { JsonLines } from '../../src/rpc.mjs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 const out = value => process.stdout.write(JSON.stringify(value) + '\n');
 const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
@@ -68,6 +68,19 @@ const parser = new JsonLines(command => {
     }
     if (command.message === 'compact context') contextUsage = { tokens: null, contextWindow: 200000, percent: null };
     out({ type: 'agent_start' });
+    if (command.message === 'hold compaction') {
+      out({ type: 'agent_end' });
+      out({ type: 'compaction_start', reason: 'threshold' });
+      const timer = setInterval(() => {
+        const file = join(process.cwd(), 'compaction-result.json');
+        if (!existsSync(file)) return;
+        clearInterval(timer);
+        const result = JSON.parse(readFileSync(file, 'utf8'));
+        out({ type: 'compaction_end', reason: 'threshold', ...result });
+        out({ type: result.willRetry ? 'agent_start' : 'agent_settled' });
+      }, 25);
+      return;
+    }
     if (command.message === 'stream response') {
       const timestamp = Date.now();
       const update = assistantMessageEvent => out({ type: 'message_update', assistantMessageEvent });
