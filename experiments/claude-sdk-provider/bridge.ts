@@ -422,7 +422,13 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
           }
           if (event.type === 'system' && (event.subtype === 'compact_boundary' || event.subtype === 'status' && event.status === 'compacting') ||
             event.type === 'conversation_reset') fail('SDK context management changed its history. Start a new Pi session.');
-          if (event.type === 'assistant' && event.error) fail(`Claude SDK reported ${event.error}. Check Claude Code login and start a new session.`);
+          if (event.type === 'assistant' && event.error) {
+            const text = event.message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
+            if (text.includes('Third-party apps now draw from extra usage, not plan limits.') && text.includes('Ask your workspace admin to add more')) {
+              fail('Claude requires workspace extra usage for SDK requests. Ask your workspace admin to add extra usage.');
+            }
+            fail(`Claude SDK reported ${event.error}. Check Claude Code for details.`);
+          }
           if (event.type === 'assistant' && !event.parent_tool_use_id) sdkMessageId = event.uuid;
           if (event.type === 'user' && !event.parent_tool_use_id && Array.isArray(event.message.content)) {
             for (const block of event.message.content) if (block.type === 'tool_result' && unqualified.has(block.tool_use_id)) {

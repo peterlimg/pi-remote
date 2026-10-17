@@ -49,6 +49,32 @@
     ],
     "limit": "Preflight only. No recovery decision applied to existing conversations, no native query, and no tool execution."
   },
+  "billingErrorFollowUp": {
+    "date": "2026-10-17",
+    "liveObservation": {
+      "kind": "Read-only Pi/native transcript inspection of the operator-approved recovery and subsequent user message",
+      "newNativeIdentityAccepted": true,
+      "nativeToolCalls": 0,
+      "outputTokens": 0,
+      "sdkErrorCode": "unknown",
+      "actualError": "API 400 requiring workspace extra usage for third-party apps",
+      "piHistoryRewritten": false,
+      "newDiagnosticModelRequests": 0
+    },
+    "red": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-KNk74Y/result.json",
+    "green": [
+      { "piVersion": "1.2.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-oLSzZd/result.json" },
+      { "piVersion": "1.3.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-k6CGg2/result.json" }
+    ],
+    "checks": [
+      "The exact native billing response matches the new fixed public message",
+      "Real Pi RPC serialized assistant content and errorMessage both identify workspace extra usage",
+      "The message directs the operator to the workspace admin instead of login or a new session",
+      "Arbitrary native error details do not appear in the public response",
+      "Synthetic effects and personal settings remain unchanged"
+    ],
+    "limit": "This corrects the explanation, not workspace billing. No funding or authentication changes, retry of the production SDK request, or successful live inference."
+  },
   "commands": [
     "npm run check",
     "npm run test:recovery",

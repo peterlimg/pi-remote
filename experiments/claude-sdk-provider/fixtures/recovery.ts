@@ -42,6 +42,11 @@ function replayQuery(args) {
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools: ['mcp__pi__probe'], apiKeySource: 'none' };
+      if (text === 'billing-rejection') {
+        yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going. SYNTHETIC_PRIVATE_DETAIL' }] } };
+        continue;
+      }
       let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'attempt-repeat' ? 'orphan' : text === 'allow-new' ? 'allowed' : undefined;
       if (label || text === 'reuse-id') {
         const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)

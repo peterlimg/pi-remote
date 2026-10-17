@@ -183,6 +183,19 @@ try {
   assert.match(reused.errorMessage, /repeated a previously issued tool-call ID/);
   assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
   result.duplicateIdsRemainRejected = true;
+  await worker.close();
+  result.stage = 'billing-rejection';
+  const billingFile = join(evidence, 'billing.jsonl');
+  writeFileSync(billingFile, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: project }) + '\n');
+  await start(billingFile);
+  const billing = await send('billing-rejection');
+  assert.equal(billing.stopReason, 'error');
+  assert.match(billing.errorMessage, /workspace extra usage/i);
+  assert.match(billing.errorMessage, /workspace admin/i);
+  assert.doesNotMatch(billing.errorMessage, /login|new session|SYNTHETIC_PRIVATE_DETAIL/);
+  assert.deepEqual(billing.content, [{ type: 'text', text: billing.errorMessage }]);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'allowed']);
+  result.billingPrerequisiteShownWithoutPrivateDetailsOrLoginAdvice = true;
   result.pass = true;
 } catch (error) { result.error = error.message; throw error; }
 finally {
