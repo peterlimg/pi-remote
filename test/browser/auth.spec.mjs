@@ -5,7 +5,8 @@ const key = 'pi-remote-token';
 
 test('manual login survives reopening and sign out clears it across tabs', async ({ page, context }) => {
   await page.goto('/');
-  await page.locator('#token').fill(token);
+  await expect(page.locator('#login .hint')).toHaveText('Run /pi-remote inside Pi on your computer, then scan the QR code or paste the private login link here.');
+  await page.getByLabel('Private login link').fill(new URL('/#token=' + token, page.url()).href);
   await page.locator('#login-form button').click();
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   expect(new URL(page.url()).hash).toBe('');
