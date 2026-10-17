@@ -83,20 +83,23 @@ async function legacyIdle(config, dir, pid) {
 }
 
 async function runQueuedRestart(config, dir) {
-  const first = await hostStatus(config, 'GET', dir, { idleOnly: true });
   const deadline = Date.now() + 5 * 60 * 1000;
+  let first;
   while (Date.now() < deadline) {
-    const current = await hostStatus(config, 'GET', dir, { idleOnly: true });
-    if (first && current && current.pid !== first.pid && !current.closing) return current;
-    const idle = !current || !current.closing && (Number.isSafeInteger(current.busyWorkers)
-      ? current.busyWorkers === 0 : await legacyIdle(config, dir, current.pid));
-    if (idle) {
-      try { return await restartAndResume(config, dir, { idleOnly: true }); }
-      catch (error) { if (error.code !== 'ERESTARTBUSY') throw error; }
+    try {
+      const current = await hostStatus(config, 'GET', dir, { idleOnly: true });
+      if (first === undefined) first = current;
+      else if (current && (!first || current.pid !== first.pid) && !current.closing) return current;
+      const idle = !current || !current.closing && (Number.isSafeInteger(current.busyWorkers)
+        ? current.busyWorkers === 0 : await legacyIdle(config, dir, current.pid));
+      if (idle) return await restartAndResume(config, dir, { idleOnly: true });
+    } catch (error) {
+      if (!['ERESTARTBUSY', 'EHOSTTIMEOUT'].includes(error.code)) throw error;
+      if (error.code === 'EHOSTTIMEOUT') console.warn(`Restart job ${process.pid}: host status timed out; retrying safely.`);
     }
     await delay(250);
   }
-  throw new Error('Restart was not performed: sessions are still active or saving checkpoints. Run again after they finish.');
+  throw new Error('Restart was not performed: sessions are active, saving checkpoints, or the host did not respond in time. Run again after they settle.');
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
@@ -115,5 +118,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       child.unref();
       console.log(`Restart queued (pid ${child.pid}); waiting for settled sessions and saved checkpoints. Log: ${logPath}`);
     } else throw new Error('Usage: node scripts/restart-and-resume.mjs');
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (error) { console.error(`Restart job ${process.pid}: ${error.message}`); process.exitCode = 1; }
 }

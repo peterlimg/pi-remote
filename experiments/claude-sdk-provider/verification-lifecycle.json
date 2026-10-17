@@ -56,6 +56,34 @@
       "reason": "Expanded replay reached the independent forced-stop case with the rejected dispatch's browser retry state; the cases now reopen the page between them."
     }
   ],
+  "controlTimeoutFollowUp": {
+    "trigger": "Queued restart job 67509 exited after a two-second host-status timeout while the original host was still alive and answering longer status requests.",
+    "controlRequestTimeoutMs": 10000,
+    "queuedReadinessDeadlineMs": 300000,
+    "red": {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-ZbfEvx/result.json",
+      "stage": "restart-status-timeout",
+      "failure": "A queued restart must survive a transient host status timeout.",
+      "limit": "Ten-second transport timeout already applied, queued-controller retries not yet fixed."
+    },
+    "green": {
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-airnso/result.json",
+      "trace": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-airnso/trace.zip",
+      "pass": true,
+      "checks": [
+        "A real HTTP status response delayed past the ten-second client timeout does not abandon either queued job",
+        "Timeouts are not interpreted as idle, absent, or restarted hosts",
+        "The idle-only barrier still defers permission, tools, checkpoints and settlement",
+        "Authentication mismatch still refuses rather than retrying or forcing cleanup",
+        "Both queued jobs eventually complete and restoration preserves history without tool replay",
+        "Retry and failure logs identify their job PID"
+      ]
+    },
+    "diagnosticRunsExcludedFromAcceptance": [
+      { "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-2GOK66/result.json", "reason": "The original two-second transport timeout failed an ordinary seed status read before fault injection." },
+      { "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-lifecycle-e2e-zzcu1F/result.json", "reason": "The original short timeout again failed the seed read, before reaching the queued-job assertion." }
+    ]
+  },
   "notRun": [
     "Unit tests or the full repository suite locally",
     "Physical iPhone or Safari",

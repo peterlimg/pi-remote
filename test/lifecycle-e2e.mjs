@@ -12,7 +12,7 @@ import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { hostStatus, stopHost, ensureHost } from '../src/control.mjs';
 import { restartAndResume } from '../scripts/restart-and-resume.mjs';
-import { sessionKey } from '../src/locks.mjs';
+import { sessionKey, processExists } from '../src/locks.mjs';
 
 const evidence = mkdtempSync(join(tmpdir(), 'pi-lifecycle-e2e-'));
 const scratch = join(evidence, 'scratch'), sessions = join(scratch, 'sessions'), project = join(scratch, 'project');
@@ -86,8 +86,23 @@ try {
   await send('pending');
   await expect(page.locator('#dialog')).toContainText('Allow replay probe?');
   assert.equal((await state()).phase, 'input');
+  const [handleRequest] = host.http.listeners('request');
+  assert.equal(host.http.listeners('request').length, 1);
+  let delayedStatus = false;
+  host.http.removeListener('request', handleRequest);
+  host.http.on('request', (request, response) => {
+    if (!delayedStatus && request.method === 'GET' && request.url === '/_pi/remote') {
+      delayedStatus = true;
+      setTimeout(() => handleRequest(request, response), 10300);
+    } else handleRequest(request, response);
+  });
   const oldPid = host.status().pid, job = restart(), concurrentJob = restart();
-  await delay(500);
+  result.stage = 'restart-status-timeout';
+  await expect.poll(() => delayedStatus).toBe(true);
+  await delay(10500);
+  assert([job, concurrentJob].every(item => item.queuedPid && processExists(item.queuedPid)),
+    'A queued restart must survive a transient host status timeout.');
+  result.transientStatusTimeoutDoesNotAbandonRestart = true;
   assert(job.stdout || job.child.exitCode === null, 'The restart CLI must run, not silently skip its entry point.');
   assert.equal(host.status().closing, false, 'Restart must wait for a tool permission, not terminate its worker.');
   await assert.rejects(hostStatus(config, 'DELETE', scratch, { idleOnly: true }), { code: 'ERESTARTBUSY' });

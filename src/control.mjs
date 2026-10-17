@@ -26,10 +26,11 @@ export async function hostStatus(config = loadConfig(), method = 'GET', dir = da
   try {
     response = await fetch('http://127.0.0.1:' + config.port + '/_pi/remote', {
       method, headers: { Authorization: 'Bearer ' + config.bridgeToken, ...(idleOnly ? { 'X-Pi-Remote-Idle-Only': '1' } : {}) },
-      signal: AbortSignal.timeout(2000), redirect: 'error'
+      signal: AbortSignal.timeout(10000), redirect: 'error'
     });
   } catch (error) {
     if (error.cause?.code === 'ECONNREFUSED') return null;
+    if (error.name === 'TimeoutError') throw Object.assign(new Error('Pi Remote control request timed out.', { cause: error }), { code: 'EHOSTTIMEOUT' });
     throw new Error('Cannot reach Pi Remote: ' + error.message, { cause: error });
   }
   if (!response.ok) {
@@ -124,7 +125,7 @@ export async function stopHost(config = loadConfig(), { idleOnly = false } = {})
 export async function restartHost(config = loadConfig(), dir = dataDir(), { idleOnly = false } = {}) {
   let stopError;
   try { await stopHost(config, { idleOnly }); }
-  catch (error) { if (['ERESTARTBUSY', 'EHOSTAUTH'].includes(error.code)) throw error; stopError = error; }
+  catch (error) { if (['ERESTARTBUSY', 'EHOSTAUTH'].includes(error.code) || idleOnly && error.code === 'EHOSTTIMEOUT') throw error; stopError = error; }
   // Even an unsuccessful stop wait may have delivered DELETE. Never skip startup.
   const deadline = Date.now() + 30000;
   for (;;) {

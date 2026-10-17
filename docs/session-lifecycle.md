@@ -57,7 +57,7 @@ node scripts/restart-and-resume.mjs
   restore the same session files
 ```
 
-The immediate CLI response says **queued**, not restarted. Check `~/.pi/remote/restart.log` and host status separately. If sessions do not settle within five minutes, the job exits with an explanation and leaves the host running. Do not wait for that job from inside an agent tool: the tool's own turn must finish first.
+The immediate CLI response says **queued**, not restarted. Check `~/.pi/remote/restart.log` and host status separately. Control requests allow ten seconds for a response. A transient `EHOSTTIMEOUT`, including the first preflight request, is retried within the existing five-minute readiness deadline; it is never interpreted as an idle or absent host. Retry and failure logs include the job PID. If sessions do not settle or the host remains unresponsive, the job exits with an explanation and leaves the host running. Do not wait for that job from inside an agent tool: the tool's own turn must finish first.
 
 The authenticated loopback control endpoint reports `busyWorkers` and `managedSessions` snapshots without prompts or tool arguments. `DELETE /_pi/remote` with `X-Pi-Remote-Idle-Only: 1` checks readiness in the host before closing connections. New commands are refused once shutdown starts. Modern hosts alone write their restore list; concurrent restart jobs cannot overwrite it. Safe-mode authentication failures refuse the operation throughout shutdown polling and startup, without forced cleanup.
 
@@ -75,6 +75,6 @@ npm run test:lifecycle
 
 This is an E2E test of the real host, WebSocket authentication, mobile Chromium, restart CLI, detached jobs, filesystem persistence, and replacement-host restoration. The Pi/SDK peer is a deterministic RPC replay fixture, so no login, provider credits, or model calls are required. It does not claim live SDK inference or physical Safari coverage.
 
-The replay gates permission, tool completion, checkpoint saving, and final settlement independently. It checks both receipt orders, in-flight input, generic-provider settlement, rejected requests, concurrent restart jobs, authentication refusal, two complete host restarts, unchanged history, no completed-tool replay, and fail-closed recovery after a forced interruption. Its artifact includes the observed lifecycle transition trace. CI runs it once in the browser job.
+The replay gates permission, tool completion, checkpoint saving, and final settlement independently. It delays one real HTTP status response beyond the ten-second client timeout and requires both queued restart jobs to survive, remain blocked by permission, and later complete. It also checks both receipt orders, in-flight input, generic-provider settlement, rejected requests, concurrent restart jobs, authentication refusal, two complete host restarts, unchanged history, no completed-tool replay, and fail-closed recovery after a forced interruption. Its artifact includes the observed lifecycle transition trace. CI runs it once in the browser job.
 
 For a historical-controller counterexample, `PI_TEST_RESTART_SCRIPT` can point this E2E at a captured older restart script. The test must detect a host stopping while permission or tool work is outstanding. Live SDK acceptance remains a separate check and must not be inferred from the replay test.
