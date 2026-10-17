@@ -136,6 +136,53 @@
       "reason": "Pi legitimately coerced numeric input into the declared string type; the invalid-argument fixture now omits the required field."
     }
   },
+  "portablePromptFollowUp": {
+    "date": "2026-10-18",
+    "sdkVersion": "0.3.296",
+    "canonicalPiPromptUnchanged": true,
+    "sdkPreset": "claude_code",
+    "generatedSectionsKeptPiSide": ["preamble", "docs"],
+    "operatorSectionsAndToolGuidancePreserved": true,
+    "red": {
+      "piVersion": "1.2.0",
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-HFgyPE/result.json",
+      "failure": "The normal Pi prompt retained the known rejected documentation clauses at the SDK boundary."
+    },
+    "green": [
+      { "piVersion": "1.2.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-45IAfR/result.json" },
+      { "piVersion": "1.3.0", "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-ulSL15/result.json" }
+    ],
+    "checks": [
+      "Normal Pi prompt retains canonical documentation in Pi but omits the generated index from the SDK append",
+      "Global/project rules, skills, appended instructions and late extension/tool guidance survive verbatim",
+      "Explicit custom prompts and operator-defined docs sections survive",
+      "Unaccounted opaque context rewrites reject before SDK startup",
+      "Known zero-work billing and local rejections retry without a checkpoint or extra recovery approval",
+      "Provider rejections are not mislabeled as requests never sent to the SDK",
+      "Foreign-provider error records remain historical context without tool replay",
+      "Unknown SDK failures remain blocked",
+      "The next user request can restore a closed bridge within the same Pi worker",
+      "Old-format checkpoints require confirmed sdk-recover and a new native context",
+      "Migrated checkpoints resume normally after a worker restart",
+      "Existing argument validation, permission denial, interruption, history and duplicate-ID guards still pass"
+    ],
+    "liveMobile": {
+      "fixture": "Real Pi RPC, SDK Opus, isolated local host and mobile Chromium; synthetic read-only probe",
+      "piVersion": "1.3.0", "pass": true,
+      "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-reconnect-bRTcUc/result.json",
+      "oneNativeSession": true, "toolExecutions": 1,
+      "refreshFollowUp": true, "idleProviderRoundTrip": true,
+      "callResultIdsMatched": true, "workerClosed": true,
+      "limit": "Isolated configuration, not the installed opentunnel host or physical Safari."
+    },
+    "billingOrAuthenticationChanged": false,
+    "limits": [
+      "Requires Pi's structured prompt-options and transcript-sections API; verified with Pi 1.2.0 and 1.3.0",
+      "Opaque inherited Pi base prompts must be made portable by their caller; arbitrary subagent inheritance is not implemented",
+      "The upstream content-sensitive rejection remains reproducible through the direct SDK reproduction",
+      "No original conversation was rewritten, recovered or used for diagnostic model requests"
+    ]
+  },
   "commands": [
     "npm run check",
     "npm run test:recovery",

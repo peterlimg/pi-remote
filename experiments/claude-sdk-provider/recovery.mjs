@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { crc32, deflateSync } from 'node:zlib';
 import { RpcWorker } from '../../src/rpc.mjs';
+import { getCurrentSystemPrompt, getCurrentTools } from '@earendil-works/pi-ai';
 
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-recovery-e2e-')), project = join(evidence, 'project');
 for (const dir of [project, join(evidence, 'agent'), join(evidence, 'claude')]) mkdirSync(dir, { recursive: true });
@@ -16,8 +17,11 @@ Object.assign(process.env, { PI_CODING_AGENT_DIR: join(evidence, 'agent'), CLAUD
   PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_RECOVERY_EVENTS: join(evidence, 'events.jsonl'),
   PI_RECOVERY_SESSION: join(evidence, 'session.jsonl'), PI_RECOVERY_GATE: join(evidence, 'complete-orphan'),
   PI_RECOVERY_MARKER: 'RECOVERY_' + randomUUID() });
-mkdirSync(join(project, '.pi'));
+mkdirSync(join(project, '.pi/skills/portable'), { recursive: true });
 writeFileSync(join(project, '.pi/settings.json'), JSON.stringify({ compaction: { enabled: false }, retry: { enabled: false } }));
+writeFileSync(join(evidence, 'agent/AGENTS.md'), 'PORTABLE_GLOBAL_POLICY: preserve this operator instruction.');
+writeFileSync(join(project, 'AGENTS.md'), 'PORTABLE_PROJECT_POLICY: preserve this project instruction.');
+writeFileSync(join(project, '.pi/skills/portable/SKILL.md'), '---\nname: portable\ndescription: PORTABLE_SKILL verification fixture.\n---\nUse only when requested.\n');
 writeFileSync(process.env.PI_RECOVERY_SESSION, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: project }) + '\n');
 const sessionFile = process.env.PI_RECOVERY_SESSION;
 const settingsFile = join(homedir(), '.pi/agent/settings.json');
@@ -40,11 +44,11 @@ async function until(check, label, timeout = 12000) {
   const deadline = Date.now() + timeout;
   while (!await check()) { if (Date.now() > deadline) throw new Error('Timed out: ' + label); await delay(20); }
 }
-function start(file = sessionFile, systemPrompt = 'Recovery E2E. Use only the synthetic probe when requested.') {
+function start(file = sessionFile, systemPrompt) {
   process.env.PI_RECOVERY_SESSION = file;
-  worker = new RpcWorker(process.env.PI_RECOVERY_SESSION, project, { bin: process.execPath, prefix: [cli, '-ne', '-ns', '-np', '-nc', '--no-mcp',
-    '--tools', 'probe', '-e', fileURLToPath(new URL('./fixtures/recovery.ts', import.meta.url)), '--model', 'claude-sdk/claude-haiku-5-5',
-    '--thinking', 'off', '--system-prompt', systemPrompt] });
+  worker = new RpcWorker(process.env.PI_RECOVERY_SESSION, project, { bin: process.execPath, prefix: [cli, '-ne', '-np', '--no-mcp',
+    '--tools', 'read,probe', '-e', fileURLToPath(new URL('./fixtures/recovery.ts', import.meta.url)), '--model', 'claude-sdk/claude-haiku-5-5',
+    '--thinking', 'off', '--append-system-prompt', 'PORTABLE_APPEND', ...(systemPrompt ? ['--system-prompt', systemPrompt] : [])] });
   worker.on('event', event => { if (event.type === 'agent_settled') settled++; if (event.type === 'extension_ui_request' && event.method === 'confirm') dialogs.push(event); });
   return worker.request('get_state');
 }
@@ -78,6 +82,12 @@ try {
   assert.equal((await send('seed', [{ type: 'image', data: png, mimeType: 'image/png' }])).stopReason, 'stop');
   await until(() => entries().some(e => e.customType === 'claude-sdk-checkpoint'), 'completed checkpoint');
   assert.deepEqual(effects(), ['seed']);
+  const firstQuery = records().find(row => row.type === 'query');
+  for (const key of ['portable', 'globalPolicy', 'projectPolicy', 'skill', 'append', 'toolGuidance', 'guideline', 'latePolicy']) assert.equal(firstQuery[key], true, key);
+  assert.equal(firstQuery.piDocs, false);
+  assert.match(getCurrentSystemPrompt(entries().map(entry => entry.message).filter(Boolean)), /providers \(docs\/custom-provider\.md\)/);
+  result.portablePromptPreservesInstructionsSkillsAndLateToolGuidance = true;
+  result.piTranscriptRetainsCanonicalPrompt = true;
   result.stage = 'interrupted-tool';
   await worker.request('prompt', { message: 'interrupt' });
   await until(() => effects().includes('orphan'), 'one interrupted effect');
@@ -226,6 +236,79 @@ try {
   assert.deepEqual(billing.content, [{ type: 'text', text: billing.errorMessage }]);
   assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
   result.billingPrerequisiteShownWithoutPrivateDetailsOrLoginAdvice = true;
+  result.stage = 'retry-rejected-request';
+  const rejectedHistory = readFileSync(billingFile, 'utf8');
+  const unknownFile = join(evidence, 'unknown-error.jsonl');
+  const unknown = entries();
+  const unknownMessage = unknown.findLast(entry => entry.message?.role === 'assistant').message;
+  unknownMessage.errorMessage = 'Unknown SDK failure'; unknownMessage.content = [{ type: 'text', text: unknownMessage.errorMessage }];
+  writeFileSync(unknownFile, unknown.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  await worker.close(); await start(unknownFile);
+  const beforeUnknown = records().filter(row => row.type === 'query').length;
+  assert.equal((await send('must remain blocked')).stopReason, 'error');
+  assert.equal(records().filter(row => row.type === 'query').length, beforeUnknown);
+  await worker.close(); await start(billingFile);
+  assert.equal((await send('billing-rejection')).stopReason, 'error');
+  await worker.command({ type: 'setModel', provider: 'recovery-control', modelId: 'plain' });
+  assert.equal((await send('foreign-rejection')).stopReason, 'error');
+  await worker.command({ type: 'setModel', provider: 'claude-sdk', modelId: 'claude-haiku-5-5' });
+  assert.equal((await send('recall')).stopReason, 'stop');
+  assert(readFileSync(billingFile, 'utf8').startsWith(rejectedHistory));
+  const importedRejections = records().filter(row => row.type === 'prompt').at(-1);
+  assert.equal(importedRejections.providerRejection, true);
+  assert.equal(importedRejections.foreignFailure, true);
+  assert.equal(dialogs.length, 0);
+  assert.equal((await send('billing-rejection')).stopReason, 'error');
+  assert.equal((await send('recall')).stopReason, 'stop', 'A rejected request must not poison the bridge in the same worker.');
+  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, true);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
+  result.knownNoWorkRejectionsRetryWithoutRecoveryOrHistoryLoss = true;
+  result.unknownSdkFailuresRemainBlocked = true;
+  result.stage = 'legacy-prompt-checkpoint';
+  await worker.close();
+  const legacy = entries(), legacyMessages = legacy.map(entry => entry.message).filter(Boolean);
+  const legacyConfiguration = digest(JSON.stringify({ cwd: project, sessionId: legacy[0].id,
+    systemPrompt: getCurrentSystemPrompt(legacyMessages), tools: getCurrentTools(legacyMessages), maxTokens: 16000 }));
+  legacy.findLast(entry => entry.customType === 'claude-sdk-checkpoint').data.configuration = legacyConfiguration;
+  const legacyFile = join(evidence, 'legacy-prompt.jsonl');
+  writeFileSync(legacyFile, legacy.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+  await start(legacyFile);
+  const beforeMigration = records().filter(row => row.type === 'query').length;
+  const needsMigration = await send('do not silently change the native prompt');
+  assert.equal(needsMigration.stopReason, 'error');
+  assert.match(needsMigration.errorMessage, /previous prompt format.*sdk-recover/i);
+  assert.equal(records().filter(row => row.type === 'query').length, beforeMigration);
+  const migration = worker.command({ type: 'prompt', text: '/sdk-recover' });
+  await answer(true); await migration;
+  assert.equal((await send('recall')).stopReason, 'stop');
+  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, false);
+  assert.notEqual(entries().findLast(entry => entry.customType === 'claude-sdk-checkpoint').data.configuration, legacyConfiguration);
+  await worker.close(); await start(legacyFile);
+  assert.equal((await send('followup')).stopReason, 'stop');
+  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, true);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
+  result.legacyPromptRequiresApprovedContextResetWithoutToolReplay = true;
+  await worker.close();
+  for (const mode of ['rewrite', 'docs', 'custom']) {
+    result.stage = 'portable-' + mode;
+    const file = join(evidence, mode + '.jsonl');
+    writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: project }) + '\n');
+    if (mode === 'rewrite') process.env.PI_RECOVERY_REWRITE = '1';
+    if (mode === 'docs') process.env.PI_RECOVERY_DOC_OVERRIDE = '1';
+    await start(file, mode === 'custom' ? 'PORTABLE_CUSTOM_PROMPT' : undefined);
+    const queriesBefore = records().filter(row => row.type === 'query').length;
+    const response = await send('verify prompt ownership');
+    if (mode === 'rewrite') {
+      assert.equal(response.stopReason, 'error');
+      assert.match(response.errorMessage, /preserve.*prompt|prompt.*preserve/i);
+      assert.equal(records().filter(row => row.type === 'query').length, queriesBefore);
+    } else {
+      assert.equal(response.stopReason, 'stop', response.errorMessage);
+      assert.equal(records().filter(row => row.type === 'query').at(-1)[mode === 'docs' ? 'customDocs' : 'customPrompt'], true);
+    }
+    await worker.close(); delete process.env.PI_RECOVERY_REWRITE; delete process.env.PI_RECOVERY_DOC_OVERRIDE;
+  }
+  result.opaqueRewritesFailClosedAndExplicitPromptOverridesArePreserved = true;
   result.pass = true;
 } catch (error) { result.error = error.message; throw error; }
 finally {

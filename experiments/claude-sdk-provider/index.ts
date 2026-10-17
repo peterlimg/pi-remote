@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createProvider, type ApiKeyAuth, type Message, type Model } from '@earendil-works/pi-ai';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
-import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { BeforeAgentStartEvent, ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createBridge, prepareRecovery, sdkEnvironment, type RecoveryPlan } from './bridge.ts';
 
 const exec = promisify(execFile);
@@ -33,9 +33,10 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let checkpoint: unknown;
   let recovery: RecoveryPlan | undefined;
   let activeSession: string | undefined;
+  let promptSource: Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> | undefined;
   const restore = (ctx: ExtensionContext) => {
     bridge?.close();
-    bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery,
+    bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery, promptSource: () => promptSource,
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },
       onRecoverySession: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-session', { id, sdkSessionId }); } });
   };
@@ -129,6 +130,13 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
     recovery = plan && !started && (!entry || branch.indexOf(decision!) > branch.indexOf(entry)) ? plan : undefined;
     restore(ctx);
   });
+  pi.on('before_agent_start', (event, ctx) => {
+    promptSource = event;
+    if (ctx.model?.provider === providerId && bridge?.closed) restore(ctx);
+  });
+  pi.on('turn_start', (_event, ctx) => {
+    if (promptSource) promptSource = { systemPrompt: ctx.getSystemPrompt(), systemPromptOptions: promptSource.systemPromptOptions };
+  });
   pi.on('agent_settled', (_event, ctx) => {
     const next = bridge?.checkpoint();
     if (next) { checkpoint = next; pi.appendEntry('claude-sdk-checkpoint', next); }
@@ -137,7 +145,7 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       ctx.ui.setStatus('claude-sdk-checkpoint', undefined);
     }
   });
-  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; activeSession = undefined; });
+  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; activeSession = undefined; promptSource = undefined; });
   pi.on('message_end', (event, ctx) => {
     const message = event.message;
     // Pi's lazy auth wrapper reports cancellation before our stream as a setup error.

@@ -31,21 +31,32 @@ function replayQuery(args) {
   const previous = existsSync(process.env.PI_RECOVERY_EVENTS!) ? readFileSync(process.env.PI_RECOVERY_EVENTS!, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   let turn = previous.findLast(row => row.type === 'native-complete' && row.session === session)?.turn ?? 0;
   const invalidInit = process.env.PI_RECOVERY_BAD_INIT === '1';
-  log({ type: 'query', session, resumed: Boolean(args.options.resume), resumedAt: Boolean(args.options.resumeSessionAt), invalidInit });
+  const sdkPrompt = typeof args.options.systemPrompt === 'string' ? args.options.systemPrompt : args.options.systemPrompt?.append ?? '';
+  const piDocs = sdkPrompt.includes('providers (docs/custom-provider.md)') && sdkPrompt.includes('pi packages (docs/packages.md)');
+  log({ type: 'query', session, resumed: Boolean(args.options.resume), resumedAt: Boolean(args.options.resumeSessionAt), invalidInit,
+    portable: args.options.systemPrompt?.preset === 'claude_code', piDocs,
+    globalPolicy: sdkPrompt.includes('PORTABLE_GLOBAL_POLICY'), projectPolicy: sdkPrompt.includes('PORTABLE_PROJECT_POLICY'),
+    skill: sdkPrompt.includes('PORTABLE_SKILL'), append: sdkPrompt.includes('PORTABLE_APPEND'),
+    toolGuidance: sdkPrompt.includes('PORTABLE_TOOL_GUIDE'), guideline: sdkPrompt.includes('PORTABLE_GUIDELINE'),
+    latePolicy: sdkPrompt.includes('PORTABLE_LATE_POLICY'), customDocs: sdkPrompt.includes('PORTABLE_DOC_OVERRIDE'),
+    customPrompt: sdkPrompt.includes('PORTABLE_CUSTOM_PROMPT') });
   const stream = (async function* () {
     const [left, right] = InMemoryTransport.createLinkedPair();
     await args.options.mcpServers.pi.instance.connect(left); await client.connect(right);
+    const tools = (await client.listTools()).tools.map(tool => 'mcp__pi__' + tool.name);
     const source = args.prompt[Symbol.asyncIterator]();
     for (;;) {
       const next = await source.next(); if (next.done) return;
       const content = next.value.message.content;
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
+      const request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
-        leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length });
-      yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools: ['mcp__pi__probe'], apiKeySource: 'none' };
-      if (text === 'billing-rejection') {
+        leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,
+        providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"') });
+      yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
+      if (piDocs || request === 'billing-rejection') {
         yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
           message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going. SYNTHETIC_PRIVATE_DETAIL' }] } };
         continue;
@@ -85,13 +96,17 @@ export default function (pi) {
   const { compat: _compat, ...metadata } = getBuiltinModels('anthropic').find(model => model.id === 'claude-haiku-5-5');
   const controlStream = (model, context) => {
     const tool = context.messages.at(-1).role !== 'toolResult';
+    const foreignFailure = JSON.stringify(context.messages.at(-1).content).includes('foreign-rejection');
     const message = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
-      content: tool ? [{ type: 'toolCall', id: 'control_' + randomUUID(), name: 'probe', arguments: { label: 'foreign' } }] : [{ type: 'text', text: 'FOREIGN_DONE' }],
-      stopReason: tool ? 'toolUse' : 'stop', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+      content: foreignFailure ? [] : tool ? [{ type: 'toolCall', id: 'control_' + randomUUID(), name: 'probe', arguments: { label: 'foreign' } }] : [{ type: 'text', text: 'FOREIGN_DONE' }],
+      stopReason: foreignFailure ? 'error' : tool ? 'toolUse' : 'stop', ...(foreignFailure ? { errorMessage: 'The control provider rejected this request.' } : {}),
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
     const stream = createAssistantMessageEventStream();
     stream.push({ type: 'start', partial: message });
-    stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(); return stream;
+    if (foreignFailure) stream.push({ type: 'error', reason: 'error', error: message });
+    else stream.push({ type: 'done', reason: message.stopReason, message });
+    stream.end(); return stream;
   };
   pi.registerProvider(createProvider({ id: 'recovery-control', name: 'Isolated recovery control',
     auth: { apiKey: { name: 'Replay control', resolve: async () => ({ auth: {}, source: 'isolated replay' }) } },
@@ -100,6 +115,17 @@ export default function (pi) {
   // Test authentication only; no native CLI or model service is used by this peer.
   localLogin.resolve = async () => ({ auth: {}, source: 'isolated SDK replay' });
   install(pi, replayQuery);
+  pi.on('before_agent_start', event => {
+    event.systemPromptOptions.promptGuidelines.push('PORTABLE_GUIDELINE');
+    event.systemPromptOptions.toolGuidelines.probe = ['PORTABLE_TOOL_GUIDE'];
+    event.systemPromptOptions.sections.late_policy = 'PORTABLE_LATE_POLICY';
+    if (process.env.PI_RECOVERY_DOC_OVERRIDE === '1') event.systemPromptOptions.sections.docs = 'PORTABLE_DOC_OVERRIDE';
+  });
+  pi.on('context_with_system', event => {
+    if (process.env.PI_RECOVERY_REWRITE === '1') return { messages: [
+      { role: 'system', content: 'PORTABLE_OPAQUE_REWRITE', timestamp: 0 }, ...event.messages.filter(message => message.role !== 'system'),
+    ] };
+  });
   pi.on('tool_call', event => {
     if (event.toolName === 'probe' && event.input.label === 'policy-denied') {
       return { block: true, reason: 'Denied by the normal Pi permission policy.' };
