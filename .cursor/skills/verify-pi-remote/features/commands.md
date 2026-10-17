@@ -1,6 +1,6 @@
 # Commands
 
-Typing `/` or tapping the `/` shortcut beside the model selector discovers the selected session's commands, templates, and skills. Users can complete a command by touch or keyboard and send it with arguments. `/new` opens a separate session; `/model` chooses a model for only the selected session.
+Typing `/` or tapping the `/` shortcut beside the model selector discovers the selected session's commands, templates, and skills. Users can complete a command by touch or keyboard and send it with arguments. `/new` opens a separate session; `/model` chooses a model for only the selected session. `/compact [instructions]` summarizes earlier messages to free context.
 
 ## Sub-features
 
@@ -23,7 +23,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 
 Preconditions: authenticated baseline. Alpha exposes `/review`, Beta exposes `/deploy`; both expose `/summarize` and `/skill:debug`. Model and reasoning controls need a capable session and are not seeded in the baseline.
 
-- **Discover.** Open Alpha; `await page.getByRole('button', { name: 'Open slash commands' }).tap()`. Require Message focused with value `/`. Escape closes the menu; tapping the shortcut reopens it without sending. Set `const menu = page.getByRole('listbox', { name: 'Pi commands' })`; require five options and `#prompt` attribute `aria-expanded="true"`.
+- **Discover.** Open Alpha; `await page.getByRole('button', { name: 'Open slash commands' }).tap()`. Require Message focused with value `/`. Escape closes the menu; tapping the shortcut reopens it without sending. Set `const menu = page.getByRole('listbox', { name: 'Pi commands' })`; require six options and `#prompt` attribute `aria-expanded="true"`.
 - **Touch complete.** `await page.locator('#prompt').fill('/rvw'); await menu.getByRole('option', { name: /\/review/ }).tap()`. Require `#prompt` value `/review ` and the menu hidden. Completion must not emit a prompt command.
 - **Arguments.** `await page.locator('#prompt').pressSequentially('src/app.js'); await page.getByRole('button', { name: 'Send message' }).click()`. Require transcript text `/review src/app.js` and a successful command result. This proves transport, not that a code review actually ran.
 - **Per-session discovery.** Return to the list, open Beta, fill `/`, require the `/deploy` option visible and `/review` absent. Fill `/does-not-exist`; require `#command-help` to contain `No matching commands`. Fill `Explain /review`; require the menu hidden.

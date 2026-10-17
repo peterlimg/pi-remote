@@ -127,7 +127,14 @@ export default function remoteExtension(pi: any) {
             state.thinkingLevel = pi.getThinkingLevel(); state.revision++; publish();
             return { thinkingLevel: state.thinkingLevel };
           }
-          if (command.type === 'abort') {
+          if (command.type === 'compact') {
+            if (!ctx.compact) throw new Error('Update Pi and reload this terminal to compact remotely.');
+            const current = state;
+            ctx.compact({ customInstructions: command.customInstructions, onError: (error: any) => {
+              if (state !== current) return;
+              state.error = error.message; state.revision++; publish();
+            } });
+          } else if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();
           } else pi.sendUserMessage(command.images?.length ? [...(command.text.trim() ? [{ type: 'text', text: command.text }] : []), ...command.images] : command.text,

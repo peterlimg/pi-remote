@@ -40,7 +40,8 @@ test('saved session resume is allowed by default, rejects existing owners, runs 
     { name: 'review', description: 'Review changes', source: 'extension' },
     ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, description: undefined, source: 'extension' })),
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
-    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+    { name: 'model', description: 'Switch model for this session', source: 'remote' },
+    { name: 'compact', description: 'Summarize earlier messages to free context', source: 'remote' }
   ]);
   assert.deepEqual(await service.getModels(id), { current: 'test/first', models: [
     { provider: 'test', id: 'first', name: 'First' }, { provider: 'test', id: 'org/second', name: 'Second' }
@@ -189,7 +190,8 @@ test('remote /new creates an independent session in the same working directory',
     { name: 'review', description: 'Review changes', source: 'extension' },
     ...['usage', 'usage-settled', 'usage-working', 'fast'].map(name => ({ name, description: undefined, source: 'extension' })),
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
-    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+    { name: 'model', description: 'Switch model for this session', source: 'remote' },
+    { name: 'compact', description: 'Summarize earlier messages to free context', source: 'remote' }
   ]);
   assert.equal((await service.newSession(oldId, requestId)).value.sessionId, id);
   assert.equal(service.live.size, 2);

@@ -135,6 +135,10 @@ export class RpcWorker extends EventEmitter {
       const state = await this.request('get_state');
       return { thinkingLevel: state.thinkingLevel };
     }
+    if (command.type === 'compact') {
+      await this.request('compact', { customInstructions: command.customInstructions }, { background: true });
+      return { accepted: true };
+    }
     if (command.type === 'abort') {
       await this.request('clear_queue');
       await this.request('abort');

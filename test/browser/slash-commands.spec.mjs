@@ -2,6 +2,22 @@ import { test, expect } from '@playwright/test';
 
 const url = '/#token=browser-test-token-only-123456789012345';
 
+test('/compact is discoverable and completes without sending a prompt', async ({ page }) => {
+  const sent = [];
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
+    const packet = JSON.parse(payload.toString());
+    if (packet.op === 'command') sent.push(packet.command);
+  }));
+  await page.goto(url);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.locator('#prompt').fill('/compact');
+  const compact = page.getByRole('option', { name: /\/compact/ });
+  await expect(compact).toBeVisible({ timeout: 2000 });
+  await compact.tap();
+  await expect(page.locator('#prompt')).toHaveValue('/compact ');
+  expect(sent).toHaveLength(0);
+});
+
 test('slash menu filters session commands, completes on touch and keeps arguments', async ({ page }) => {
   const sent = [];
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
@@ -12,7 +28,7 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
   await prompt.fill('/');
-  await expect(menu.getByRole('option')).toHaveCount(5);
+  await expect(menu.getByRole('option')).toHaveCount(6);
   await expect(prompt).toHaveAttribute('aria-expanded', 'true');
   await prompt.fill('/rvw');
   await expect(menu.getByRole('option')).toHaveCount(1);
@@ -58,7 +74,7 @@ test('slash shortcut opens and reopens commands without sending or replacing a m
   await expect(prompt).toHaveValue('/');
   await expect(prompt).toBeFocused();
   await expect(shortcut).toHaveAttribute('aria-expanded', 'true');
-  await expect(menu.getByRole('option')).toHaveCount(5);
+  await expect(menu.getByRole('option')).toHaveCount(6);
   await prompt.press('Escape');
   await expect(shortcut).toHaveAttribute('aria-expanded', 'false');
   await shortcut.tap();
@@ -87,7 +103,7 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     const prompt = page.locator('#prompt'), menu = page.getByRole('listbox');
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(5);
+    await expect(menu.getByRole('option')).toHaveCount(6);
     await prompt.press('ArrowDown');
     await expect(menu.getByRole('option', { selected: true })).toContainText('/summarize');
     await prompt.press('Tab');
@@ -95,7 +111,8 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await expect(prompt).toBeFocused();
     await expect(menu).toBeHidden();
     await prompt.fill('/');
-    await expect(menu.getByRole('option')).toHaveCount(5);
+    await expect(menu.getByRole('option')).toHaveCount(6);
+    await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');
     await prompt.press('ArrowUp');

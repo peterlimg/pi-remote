@@ -195,7 +195,8 @@ test('actual extension registers, reattaches after host restart and releases own
     { name: 'skill:debug', description: 'Debug a failure', source: 'skill' },
     { name: 'summarize', description: 'Summarize changes', source: 'prompt' },
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
-    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+    { name: 'model', description: 'Switch model for this session', source: 'remote' },
+    { name: 'compact', description: 'Summarize earlier messages to free context', source: 'remote' }
   ]);
   const client = await socket('ws://127.0.0.1:' + config.port + '/ws', config.clientToken, 'http://127.0.0.1:' + config.port);
   t.after(() => client.ws.terminate());

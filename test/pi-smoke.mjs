@@ -15,12 +15,25 @@ const config = loadConfig(dir), host = await startHost({ dir, config, port: 0, r
 config.port = host.http.address().port; writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
 const file = join(dir, 'real.jsonl');
 writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n' +
-  JSON.stringify({ type: 'session_info', id: 'fixture-name', parentId: null, name: 'Real Pi fixture' }) + '\n');
+  [
+    { type: 'session_info', id: 'fixture-name', parentId: null, name: 'Real Pi fixture' },
+    { type: 'message', id: 'old-question', parentId: 'fixture-name', message: { role: 'user', content: 'Earlier task to summarize.', timestamp: 1 } },
+    { type: 'message', id: 'recent-question', parentId: 'old-question', message: { role: 'user', content: 'Keep the recent task.', timestamp: 2 } }
+  ].map(entry => JSON.stringify(entry)).join('\n') + '\n');
+for (const name of ['agent', 'worker-agent']) {
+  mkdirSync(join(dir, name));
+  writeFileSync(join(dir, name, 'settings.json'), JSON.stringify({ compaction: { keepRecentTokens: 1 } }));
+}
 const trust = join(dir, 'trust-test.ts');
 const receivedImage = join(dir, 'received-image.json'), progressRequest = join(dir, 'progress-request.json');
 writeFileSync(trust, `import { writeFileSync } from 'node:fs';
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
+  pi.on('session_before_compact', event => ({ compaction: {
+    summary: 'Fixture summary: ' + (event.customInstructions || 'default'),
+    firstKeptEntryId: event.preparation.firstKeptEntryId,
+    tokensBefore: event.preparation.tokensBefore
+  } }));
   pi.registerProvider('remote-progress-fixture', {
     api: 'remote-progress-fixture', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:1',
     models: [{ id: 'progress', name: 'Progress fixture', reasoning: false, input: ['text'],
@@ -84,6 +97,14 @@ try {
   assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text: '', images })).ok, true);
   await until(() => existsSync(receivedImage));
   assert.deepEqual(JSON.parse(readFileSync(receivedImage, 'utf8')).images, images);
+  assert.ok((await host.service.getCommands(id)).some(command => command.name === 'compact' && command.source === 'remote'));
+  const compactRequest = randomUUID(), compactCommand = { type: 'prompt', text: '/compact Focus on the bridge' };
+  assert.equal((await host.service.command(id, compactRequest, compactCommand)).ok, true);
+  await until(() => readFileSync(file, 'utf8').includes('Fixture summary: Focus on the bridge'));
+  assert.equal((await host.service.command(id, compactRequest, compactCommand)).ok, true);
+  assert.equal(readFileSync(file, 'utf8').split('\n').filter(line => line.includes('"type":"compaction"')).length, 1);
+  assert.equal((await host.service.command(id, randomUUID(), { type: 'prompt', text: '/compact' })).ok, true);
+  await until(() => /Already compacted/.test(host.service.read(id).error || ''));
   child.stdin.write(JSON.stringify({ id: 'off', type: 'prompt', message: '/remote off' }) + '\n');
   await until(() => [...host.service.live.values()][0]?.state.status === 'disconnected');
   child.stdin.write(JSON.stringify({ id: 'on', type: 'prompt', message: '/remote on' }) + '\n');
@@ -113,6 +134,14 @@ try {
       'Do not expose private reasoning', 'Check the composer focus styles.']) {
       assert.ok(request.includes(phrase), 'Real Pi provider request must include: ' + phrase);
     }
+    await until(() => worker.pending.size === 0);
+    const faults = [];
+    worker.on('fault', error => faults.push(error.message));
+    assert.deepEqual(await worker.command({ type: 'compact', customInstructions: 'Focus on the worker' }), { accepted: true });
+    await until(() => readFileSync(file, 'utf8').includes('Fixture summary: Focus on the worker'));
+    await until(() => worker.pending.size === 0);
+    await worker.command({ type: 'compact' });
+    await until(() => faults.some(message => /Already compacted/.test(message)));
   } finally { await worker.close(); }
   const bare = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions'] });
   try {
@@ -121,7 +150,7 @@ try {
     assert.equal(usage.providerUsage, undefined);
     assert.match(usage.providerMessage, /No provider usage extension/);
   } finally { await bare.close(); }
-  console.log('Real Pi smoke passed: extension load, registration, remote commands, image delivery, remote off/on, dialogs, usage and mobile progress guidance at the real provider boundary. No external model calls.');
+  console.log('Real Pi smoke passed: extension load, registration, remote commands, bridge/worker compaction with simulated summaries, image delivery, remote off/on, dialogs, usage and mobile progress guidance at the real provider boundary. No external model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
   throw e;

@@ -12,7 +12,8 @@ export function commandList(commands, includeRemote = false) {
     .map(({ name, description, source }) => ({ name, description, source }));
   if (includeRemote) list.push(
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
-    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+    { name: 'model', description: 'Switch model for this session', source: 'remote' },
+    { name: 'compact', description: 'Summarize earlier messages to free context', source: 'remote' }
   );
   return list;
 }
@@ -21,6 +22,10 @@ export function modelList(models) {
   return models.map(({ provider, id, name }) => ({ provider, id, name }));
 }
 export function validateCommand(command) {
+  if (command?.type === 'compact') {
+    if (command.customInstructions !== undefined && (typeof command.customInstructions !== 'string' || command.customInstructions.length > 50000)) throw new Error('Compaction instructions must be text of at most 50000 characters.');
+    return { type: 'compact', customInstructions: command.customInstructions?.trim() || undefined };
+  }
   if (command?.type === 'setThinkingLevel') {
     if (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(command.level)) throw new Error('Invalid reasoning effort');
     return { type: 'setThinkingLevel', level: command.level };
@@ -36,6 +41,7 @@ export function validateCommand(command) {
     const text = command.text.trim();
     if (images.length && text.startsWith('/')) throw new Error('Send images with a message, not a slash command.');
     if (text === '/') throw new Error('Choose a command from the menu.');
+    if (/^\/compact(?:\s|$)/.test(text)) return { type: 'compact', customInstructions: text.slice(8).trim() || undefined };
     if (text.startsWith('/') && terminalCommands.has(text.slice(1).split(/\s/, 1)[0])) {
       throw new Error(`${text.split(/\s/, 1)[0]} is only available in the Pi terminal, not through the remote prompt API.`);
     }

@@ -174,7 +174,8 @@ test('session summaries distinguish unnamed work without sending full conversati
 test('new session is discoverable but cannot be sent as a prompt', () => {
   assert.deepEqual(commandList([], true), [
     { name: 'new', description: 'Start a new session in this project', source: 'remote' },
-    { name: 'model', description: 'Switch model for this session', source: 'remote' }
+    { name: 'model', description: 'Switch model for this session', source: 'remote' },
+    { name: 'compact', description: 'Summarize earlier messages to free context', source: 'remote' }
   ]);
   assert.deepEqual(commandList([], false), []);
   assert.throws(() => validateCommand({ type: 'prompt', text: '/new' }), /terminal/);
