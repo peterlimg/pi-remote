@@ -123,8 +123,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .list-pagination button { padding-inline: 8px; font-size: 12px; }
 #list-page { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
 #list-retry { width: 100%; }
-.session-group h3 { display: flex; gap: 8px; align-items: baseline; margin: 16px 10px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
-.session-group + .session-group { margin-top: 16px; }
 .session { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
 .session-indicators { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .session-type-icon { display: grid; place-items: center; width: 16px; height: 20px; color: var(--muted); font-size: 12px; line-height: 1; }

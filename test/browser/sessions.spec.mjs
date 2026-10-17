@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
-test('working sessions keep their order across updates, search and reconnect until reload', async ({ page }, testInfo) => {
+test('sessions stay newest first across updates, search, reconnect and reload', async ({ page }, testInfo) => {
   let client, scroll, connections = 0, time = Date.now();
   const states = ['Alpha', 'Beta'].map((name, i) => ({ id: name, title: `Task ${name}`, cwd: '/projects/app',
     status: 'working', updatedAt: time - i * 60000, messages: [] }));
@@ -36,7 +36,7 @@ test('working sessions keep their order across updates, search and reconnect unt
     await expect(row.locator('time')).toHaveAttribute('datetime', new Date(time).toISOString());
   };
   await update(states[1], 'Beta full-page update');
-  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
   await expect(page.getByRole('button', { name: /Task Beta/ }).locator('.session-icon')).toHaveAttribute('data-unread', '');
   await update(states[0], 'Alpha full-page update');
   await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
@@ -52,23 +52,23 @@ test('working sessions keep their order across updates, search and reconnect unt
   await expect(titles).toHaveText(['Task Beta']);
   await update(states[1], 'Beta filtered update');
   await page.getByRole('searchbox', { name: 'Search sessions' }).fill('');
-  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
   await page.getByRole('searchbox', { name: 'Search sessions' }).blur();
   await update(states[1], 'Beta diff update');
-  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
 
   const fresh = { id: 'Gamma', title: 'Task Gamma', cwd: '/projects/app', status: 'working', updatedAt: time += 60000, messages: [] };
   service.catalog.set(fresh.id, fresh); publish();
-  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
+  await expect(titles).toHaveText(['Task Gamma', 'Task Beta', 'Task Alpha']);
   client.close({ code: 1012, reason: 'Reconnect test' });
   await expect.poll(() => connections).toBe(2);
   await update(states[0], 'Alpha reconnect update');
-  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
-  await page.screenshot({ path: testInfo.outputPath('stable-session-order-mobile.png') });
+  await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
+  await page.screenshot({ path: testInfo.outputPath('recent-session-order-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await update(states[1], 'Beta desktop update');
-  await expect(titles).toHaveText(['Task Gamma', 'Task Alpha', 'Task Beta']);
-  await page.screenshot({ path: testInfo.outputPath('stable-session-order-desktop.png') });
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
+  await page.screenshot({ path: testInfo.outputPath('recent-session-order-desktop.png') });
   await page.reload();
   await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
 });
@@ -111,17 +111,18 @@ test('same-project sessions show their tasks, previews, status and activity with
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
-  const online = page.getByRole('region', { name: 'Online', exact: true });
-  const saved = page.getByRole('region', { name: 'Saved & offline', exact: true });
-  await expect(online.locator('.session')).toHaveCount(3);
-  await expect(saved.locator('.session')).toHaveCount(17);
+  const savedIcon = page.locator('.session-icon[data-status=saved]');
+  const online = page.locator('.session').filter({ hasNot: savedIcon });
+  const saved = page.locator('.session').filter({ has: savedIcon });
+  await expect(online).toHaveCount(3);
+  await expect(saved).toHaveCount(17);
   await expect(page.locator('.session')).toHaveCount(20);
   await expect(page.locator('#list-page')).toBeHidden();
   expect(requests).toHaveLength(0); // No eager fetch of the remaining pages.
   await expect(page.locator('.brand h2')).toHaveText('Sessions');
   await expect(page.locator('.brand .badge')).toHaveCount(0);
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
-  const login = online.getByRole('button', { name: /Fix login timing out/ });
+  const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
   await expect(login.locator('.session-icon svg')).toHaveCSS('animation-name', 'connection-spin');
@@ -129,7 +130,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(login.locator('.session-icon svg')).toHaveCSS('height', '18px');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
-  await expect(saved.locator('.session').first().locator('.session-preview')).toHaveCount(0);
+  await expect(saved.first().locator('.session-preview')).toHaveCount(0);
   const noOverflow = async () => expect(await page.evaluate(() => {
     const sidebar = document.getElementById('sidebar');
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
@@ -174,7 +175,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   publish();
   await expect(page.locator('#title')).toHaveText('Fix login timing out after the browser reconnects');
   await page.locator('#back').click();
-  await expect(online.locator('.session').nth(1)).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
   await expect(login.locator('.session-preview')).toHaveText('You: Now check logout');
 });

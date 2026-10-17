@@ -120,7 +120,6 @@ const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'M
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 const submissions = new Map();
-const sessionSortTimes = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 const hashParams = new URLSearchParams(location.hash.slice(1)), hashToken = hashParams.get('token');
@@ -388,7 +387,6 @@ function logout() {
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
-  sessionSortTimes.clear();
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   renderList();
   renderImages();
@@ -406,9 +404,8 @@ function age(date) {
   if (minutes < 10080) return Math.floor(minutes / 1440) + 'd';
   return shortDate.format(date);
 }
-const isOnline = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
 // Must match the host's order so merged rows land where the host expects.
-const listOrder = (a, b) => Number(isOnline(b)) - Number(isOnline(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+const listOrder = (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
@@ -423,15 +420,13 @@ function receiveList(packet) {
     const byId = new Map(packet.reset ? [] : sessions.map(item => [item.id, item]));
     for (const id of packet.removed) byId.delete(id);
     for (const item of packet.changes) byId.set(item.id, item);
-    rows = [...byId.values()].sort(listOrder);
+    rows = [...byId.values()];
   } else {
     // Whole pages: the first push after connecting, and hosts that predate scroll windows (always 20 rows).
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
-  // Live activity must not reshuffle rows the user is trying to tap.
-  for (const item of rows) if (!sessionSortTimes.has(item.id)) sessionSortTimes.set(item.id, item.updatedAt);
-  sessions = rows; allowResume = packet.allowResume === true;
+  sessions = rows.sort(listOrder); allowResume = packet.allowResume === true;
   listMatched = packet.matched ?? sessions.length;
   showApp();
   markSeen();
@@ -473,58 +468,47 @@ function renderList() {
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
-  for (const [label, items] of [
-    ['Online', matches.filter(isOnline)],
-    ['Saved & offline', matches.filter(item => !isOnline(item))]
-  ]) {
-    if (!items.length) continue;
-    const group = el('section', undefined, 'session-group');
-    group.setAttribute('aria-label', label);
-    const heading = el('h3', label);
-    heading.append(el('span', String(items.length), 'badge'));
-    group.append(heading);
-    for (const item of items.sort((a, b) => sessionSortTimes.get(b.id) - sessionSortTimes.get(a.id) || a.id.localeCompare(b.id))) {
-      const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
-      button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
-      const icon = statusIcon(item.status);
-      if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
-      const indicators = el('span', undefined, 'session-indicators');
-      indicators.append(icon);
-      const typeIcon = sessionTypeIcon(item);
-      if (typeIcon) indicators.append(typeIcon);
-      button.append(indicators);
-      const body = el('div', undefined, 'session-body');
-      const top = el('div', undefined, 'session-top');
-      const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
-      const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
-      top.append(title);
-      body.append(top);
-      if (item.preview && item.preview !== item.title) {
-        body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
-      }
-      const meta = el('div', undefined, 'session-meta');
-      // Ready and Saved are the resting states; only label what needs attention.
-      if (!['idle', 'saved'].includes(item.status)) {
-        const status = el('span', statusLabels[item.status] || item.status, 'session-state');
-        status.dataset.status = item.status;
-        meta.append(status);
-      }
-      if (!isBlank(item.cwd)) {
-        const project = el('span', projectName(item.cwd), 'session-project');
-        project.title = displayPaths(item.cwd);
-        meta.append(project);
-      }
-      const date = new Date(item.updatedAt);
-      if (Number.isFinite(date.getTime())) {
-        const time = el('time', age(date), 'session-time');
-        time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
-        meta.append(time);
-      }
-      body.append(meta);
-      button.append(body);
-      button.addEventListener('click', () => selectSession(item.id)); group.append(button);
+  for (const item of matches) {
+    const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
+    button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
+    const icon = statusIcon(item.status);
+    if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
+    const indicators = el('span', undefined, 'session-indicators');
+    indicators.append(icon);
+    const typeIcon = sessionTypeIcon(item);
+    if (typeIcon) indicators.append(typeIcon);
+    if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
+    button.append(indicators);
+    const body = el('div', undefined, 'session-body');
+    const top = el('div', undefined, 'session-top');
+    const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
+    const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
+    top.append(title);
+    body.append(top);
+    if (item.preview && item.preview !== item.title) {
+      body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
     }
-    fragment.append(group);
+    const meta = el('div', undefined, 'session-meta');
+    // Ready and Saved are the resting states; only label what needs attention.
+    if (!['idle', 'saved'].includes(item.status)) {
+      const status = el('span', statusLabels[item.status] || item.status, 'session-state');
+      status.dataset.status = item.status;
+      meta.append(status);
+    }
+    if (!isBlank(item.cwd)) {
+      const project = el('span', projectName(item.cwd), 'session-project');
+      project.title = displayPaths(item.cwd);
+      meta.append(project);
+    }
+    const date = new Date(item.updatedAt);
+    if (Number.isFinite(date.getTime())) {
+      const time = el('time', age(date), 'session-time');
+      time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
+      meta.append(time);
+    }
+    body.append(meta);
+    button.append(body);
+    button.addEventListener('click', () => selectSession(item.id)); fragment.append(button);
   }
   $('sessions').replaceChildren(fragment);
   moreObserver.disconnect();

@@ -73,12 +73,11 @@ export class SessionService extends EventEmitter {
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker });
-    const online = item => ['working', 'waiting', 'idle', 'starting'].includes(item.status);
     const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
-      .sort((a, b) => Number(online(b)) - Number(online(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+      .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     return { matches, total: all.size };
   }
-  // Projects in list order: running first, then most recently used. Each names its newest session as the source for `new`.
+  // Projects in most-recently-used order. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
     for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
