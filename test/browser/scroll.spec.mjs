@@ -73,13 +73,16 @@ test('the bottom button returns to the latest message and resumes following repl
   await expect(activity).toBeHidden();
 });
 
-test('a taller viewport keeps a compact live thread at the bottom without loading history', async ({ page }) => {
+test('resizing and returning through loaded history keep the live bottom visible', async ({ page }, testInfo) => {
   const state = { id: 'compact', title: 'Compact live thread', cwd: '/project', status: 'working', historyTruncated: true, messages: [
     { id: 'progress', role: 'assistant', text: 'Earlier progress\n\n'.repeat(10) },
     { id: 'latest', role: 'assistant', text: 'The latest progress update.' }
   ] };
   const historyRequests = [];
+  let client, version = 0, releaseHistory;
+  const snapshot = () => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
   await page.routeWebSocket('**/ws', ws => {
+    client = ws;
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
       if (packet.type === 'auth') {
@@ -87,10 +90,18 @@ test('a taller viewport keeps a compact live thread at the bottom without loadin
         ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
         return;
       }
-      if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
-      if (packet.op === 'history') historyRequests.push(packet);
-      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: packet.op === 'history'
-        ? { messages: [{ id: 'older', role: 'assistant', text: 'Saved older progress.' }], older: false, newer: false, tip: 'latest' } : [] }));
+      if (packet.op === 'watch') snapshot();
+      if (packet.op === 'history') {
+        historyRequests.push(packet);
+        const older = historyRequests.length === 1;
+        const respond = () => ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: {
+          messages: [{ id: older ? 'older' : 'late', role: 'assistant', text: older ? 'Saved older progress.' : 'Late older history.' }],
+          older, newer: false, tip: 'latest'
+        } }));
+        if (older) respond(); else releaseHistory = respond;
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
     });
   });
   await page.setViewportSize({ width: 390, height: 700 });
@@ -117,10 +128,28 @@ test('a taller viewport keeps a compact live thread at the bottom without loadin
   await transcript.evaluate(node => { node.scrollTop = 0; });
   await expect(transcript).toContainText('Saved older progress.');
   await expect(button).toBeVisible();
-  await button.click();
+  await transcript.evaluate(node => { node.scrollTop = 0; });
+  await expect.poll(() => historyRequests.length).toBe(2);
+  await expect(transcript.locator('.history-loading')).toBeVisible();
+  state.messages.push({ id: 'newest', role: 'assistant', text: 'A reply while reading history.' }); snapshot();
+  await expect.poll(async () => {
+    await transcript.evaluate(node => { node.scrollTop = node.scrollHeight; });
+    return button.isHidden();
+  }).toBe(true);
+  await expect(transcript).toContainText('A reply while reading history.');
+  await expect(transcript).toHaveAttribute('aria-busy', 'false');
+  await expect(transcript.locator('.history-loading')).toHaveCount(0);
+  releaseHistory();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(transcript).not.toContainText('Late older history.');
+  expect(historyRequests).toHaveLength(2);
+  expect(historyRequests.every(packet => packet.before)).toBe(true);
+  state.messages.push({ id: 'following', role: 'assistant', text: 'Following live again.' }); snapshot();
+  await expect(transcript).toContainText('Following live again.');
   await expect(button).toBeHidden();
   await expect(page.locator('#agent-activity')).toBeInViewport();
   await expect.poll(gap).toBeLessThan(1);
+  await page.screenshot({ path: testInfo.outputPath('returned-to-live.png') });
 });
 
 test('dragging the composer cannot scroll the page after sending or resizing', async ({ page }) => {

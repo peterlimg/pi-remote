@@ -119,11 +119,15 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
       expect(await transcript.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`history-${width}.png`) });
     }
-    // Scroll forwards through evicted pages, then jump back to the live tail.
+    // Return through already-loaded pages without using the bottom shortcut.
+    while (!(await messages.last().innerText()).includes('A new live reply')) {
+      const last = await messages.last().getAttribute('data-message-id');
+      await transcript.evaluate(node => { node.scrollTop = node.scrollHeight; });
+      await expect(messages.last()).not.toHaveAttribute('data-message-id', last);
+      expect(await messages.count()).toBeLessThanOrEqual(200);
+    }
     await transcript.evaluate(node => { node.scrollTop = node.scrollHeight; });
-    await expect.poll(firstNumber).toBeGreaterThan(0);
-    expect(await messages.count()).toBeLessThanOrEqual(200);
-    await page.getByRole('button', { name: 'Go to thread bottom' }).click();
+    await expect(page.getByRole('button', { name: 'Go to thread bottom' })).toBeHidden();
     await expect(messages.last()).toContainText('A new live reply');
     await expect(transcript.locator(':scope > #agent-activity:last-child')).toBeInViewport();
     expect(await messages.count()).toBeLessThanOrEqual(100);
@@ -153,8 +157,9 @@ test('wheel, keyboard and touch can page collapsed history without idle controls
     writeFileSync(file, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
     host = await startHost({ dir, config, port: 0, roots: [dir], publicUrl: 'http://127.0.0.1:8787', relayUrl: '' });
     const history = host.service.history.bind(host.service);
-    let attempts = 0;
+    let attempts = 0, forwardReads = 0;
     host.service.history = (...args) => {
+      if (args[1]?.after) forwardReads++;
       if (++attempts === 1) throw new Error('Temporary history read failure');
       return history(...args);
     };
@@ -179,12 +184,15 @@ test('wheel, keyboard and touch can page collapsed history without idle controls
     await expect(tools.first()).toHaveAttribute('data-tool-id', 't0');
     await transcript.hover(); await page.mouse.wheel(0, 100);
     await expect(tools.first()).toHaveAttribute('data-tool-id', 't100');
+    expect(forwardReads).toBe(0);
     expect(await tools.count()).toBeLessThanOrEqual(200);
     await expect(transcript.getByRole('button', { name: /Load (older|newer) messages|Return to latest messages/ })).toHaveCount(0);
     await expect(transcript.getByRole('status')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Go to thread bottom' }).click();
+    await page.mouse.wheel(0, 100);
     await expect(tools.first()).toHaveAttribute('data-tool-id', 't210');
+    await expect(page.getByRole('button', { name: 'Go to thread bottom' })).toBeHidden();
     expect(await tools.count()).toBe(100);
+    expect(forwardReads).toBe(0);
   } finally {
     await host?.close(); rmSync(dir, { recursive: true, force: true });
   }

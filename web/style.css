@@ -198,7 +198,6 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 #transcript > .hint { font: 17px/1.65 var(--sans); }
 /* Use the transcript padding for progress without shifting messages. */
 .history-loading { margin: calc(-1 * var(--transcript-gap)) auto 0; color: var(--muted); font: 14px/var(--transcript-gap) var(--sans); text-align: center; }
-.history-loading.after { margin: 0 auto calc(-1 * var(--transcript-gap)); }
 .message.user { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .message.user .message-text { max-width: 85%; padding: 12px 16px; border-radius: 20px; background: var(--user); line-height: 1.5; white-space: pre-wrap; }
 .message.user .thread-images { justify-content: flex-end; }

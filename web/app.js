@@ -6,7 +6,7 @@ import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 const $ = id => document.getElementById(id);
 const activityIndicator = $('agent-activity');
-let historyWindow, historyRequest, historyError = '', historyGeneration = 0, historyScrollTop = 0;
+let historyWindow, historyRequest, historyForward = [], historyError = '', historyGeneration = 0, historyScrollTop = 0;
 function atThreadBottom() {
   const box = $('transcript');
   return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
@@ -17,7 +17,7 @@ let pinnedToBottom = true, transcriptHeight = 0, historyTouch;
 function scrollHistory(delta) {
   const box = $('transcript');
   if (delta < 0 && box.scrollTop < 400) loadHistory('before');
-  else if (delta > 0 && historyWindow?.newer && box.scrollHeight - box.scrollTop - box.clientHeight < 400) loadHistory('after');
+  else if (delta > 0 && (historyWindow || historyRequest) && box.scrollHeight - box.scrollTop - box.clientHeight < 400) loadHistory('after');
 }
 $('transcript').addEventListener('scroll', () => {
   const box = $('transcript');
@@ -156,7 +156,7 @@ const el = (tag, text, className) => {
   return node;
 };
 function resetScrollback() {
-  historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyError = ''; historyScrollTop = 0; historyTouch = undefined;
+  historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyForward = []; historyError = ''; historyScrollTop = 0; historyTouch = undefined;
 }
 function showLatest() {
   resetScrollback();
@@ -188,23 +188,39 @@ function mergeHistory(before, after) {
 }
 async function loadHistory(direction) {
   const state = cache.get(selected);
-  if (!supportsHistory || !connected || !state || historyRequest) return;
-  if (direction === 'before' ? !(historyWindow?.older ?? state.historyTruncated) : !historyWindow?.newer) return;
-  const messages = [...(historyWindow?.messages || state.messages)], cursor = direction === 'before' ? messages[0] : messages.at(-1);
+  if (!state) return;
+  if (direction === 'after') {
+    if (!historyWindow) {
+      if (historyRequest && atThreadBottom()) showLatest();
+      return;
+    }
+    const messages = historyWindow.messages;
+    const combined = mergeHistory(messages, mergeHistory(historyForward, state.messages));
+    if (combined.length === messages.length) {
+      if (atThreadBottom()) showLatest();
+      return;
+    }
+    const anchor = readingAnchor(), next = combined.slice(0, messages.length + 100);
+    historyRequest = undefined; historyError = '';
+    historyForward = combined.slice(next.length);
+    historyWindow = { ...historyWindow, messages: next.slice(-200), older: historyWindow.older || next.length > 200 };
+    renderConversation(state, { anchor, historyChanged: true });
+    if (!historyForward.length && atThreadBottom()) showLatest();
+    return;
+  }
+  if (!supportsHistory || !connected || historyRequest || !(historyWindow?.older ?? state.historyTruncated)) return;
+  const messages = [...(historyWindow?.messages || state.messages)], cursor = messages[0];
   if (!cursor) return;
   const current = historyRequest = { sessionId: selected, generation: historyGeneration, direction };
   historyError = '';
   renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
   try {
-    const page = await request('history', { sessionId: selected, [direction]: cursor.id, expectedTip: historyWindow?.tip });
+    const page = await request('history', { sessionId: selected, before: cursor.id, expectedTip: historyWindow?.tip });
     if (historyRequest !== current || selected !== current.sessionId || historyGeneration !== current.generation) return;
-    if (direction === 'after' && !page.messages.length) { showLatest(); return; }
-    const anchor = readingAnchor();
-    let combined = direction === 'before' ? mergeHistory(page.messages, messages) : mergeHistory(messages, page.messages);
-    if (direction === 'after' && !page.newer) combined = mergeHistory(combined, cache.get(selected).messages);
-    historyWindow = { messages: direction === 'before' ? combined.slice(0, 200) : combined.slice(-200), tip: page.tip,
-      older: direction === 'before' ? page.older : historyWindow.older || combined.length > 200,
-      newer: direction === 'before' || page.newer };
+    const anchor = readingAnchor(), combined = mergeHistory(page.messages, messages);
+    // Keep evicted newer records in memory for the return scroll.
+    historyForward = mergeHistory(combined.slice(200), historyForward);
+    historyWindow = { messages: combined.slice(0, 200), tip: page.tip, older: page.older };
     historyRequest = undefined;
     renderConversation(cache.get(selected), { anchor, historyChanged: true });
   } catch (error) {
@@ -917,9 +933,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   if (state.error || $('notice').dataset.sessionId === state.id) notice(state.error, state.id);
   $('transcript').setAttribute('aria-busy', String(!!historyRequest));
+  if ((historyWindow || historyRequest) && !historyChanged) historyForward = mergeHistory(historyForward, state.messages);
   if (historyWindow && !historyChanged) {
     // Live patches update controls, not the historical DOM or the reader's scroll position.
-    historyWindow.newer = true;
     renderDialog(state); updateControls(); updateScrollButton(); return;
   }
   if (historyWindow) state = { ...state, messages: historyWindow.messages, tools: [] };
@@ -1016,9 +1032,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     activity.node.append(detail);
   };
-  const loading = historyRequest && el('p', 'Loading…', 'history-loading ' + historyRequest.direction);
+  const loading = historyRequest && el('p', 'Loading…', 'history-loading');
   loading?.setAttribute('role', 'status');
-  if (historyRequest?.direction === 'before') fragment.append(loading);
+  if (loading) fragment.append(loading);
   if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
@@ -1144,7 +1160,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
-  if (historyRequest?.direction === 'after') fragment.append(loading);
   updateActivity();
   box.replaceChildren(fragment, activityIndicator);
   clearThreadVideos(keepVideos);
@@ -1169,7 +1184,7 @@ let activityLabelAt = 0;
 function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
-  const active = connected && !historyWindow?.newer && state?.status === 'working', compacting = state?.compacting === true;
+  const active = connected && !historyWindow && state?.status === 'working', compacting = state?.compacting === true;
   if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
