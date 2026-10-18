@@ -6,7 +6,7 @@ test('unread dots mark agent replies since the thread was last on screen and sur
   const state = { id: 'a', title: 'Fix login', cwd: '/projects/Rill', status: 'idle', updatedAt: 1000,
     messages: [{ role: 'user', text: 'Fix login' }, { role: 'assistant', text: 'Looking.' }] };
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map([[state.id, state]]), live: new Map(), warnings: [], allowResume: true });
+    { catalog: new Map([[state.id, state]]), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
   let client;
   const publish = () => client.send(JSON.stringify({ type: 'sessions', ...service.list() }));
   const reply = (role, text) => { state.messages.push({ role, text }); state.updatedAt += 1000; publish(); };

@@ -7,7 +7,7 @@ test('sessions stay newest first across updates, search, reconnect and reload', 
   const states = ['Alpha', 'Beta'].map((name, i) => ({ id: name, title: `Task ${name}`, cwd: '/projects/app',
     status: 'working', updatedAt: time - i * 60000, messages: [] }));
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
   const publish = () => {
     const update = scroll.active ? scroll.update() : service.list();
     if (update) client.send(JSON.stringify({ type: 'sessions', ...update }));
@@ -87,7 +87,7 @@ test('same-project sessions show their tasks, previews, status and activity with
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
   let scroll, failList = false;
   const requests = [];
   // Mirrors the host channel: whole pages until the phone scrolls or searches, then diffs.

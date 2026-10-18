@@ -414,7 +414,7 @@ function age(date) {
   return shortDate.format(date);
 }
 // Must match the host's order so merged rows land where the host expects.
-const listOrder = (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+const listOrder = (a, b) => !!b.pinned - !!a.pinned || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
@@ -493,6 +493,10 @@ function renderList() {
     const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
     const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
     top.append(title);
+    if (item.pinned) {
+      const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.title = 'Pinned';
+      pin.innerHTML = pinSvg; top.append(pin);
+    }
     body.append(top);
     if (item.preview && item.preview !== item.title) {
       body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
@@ -525,7 +529,20 @@ function renderList() {
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
+  renderPinChoice();
 }
+const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
+function renderPinChoice() {
+  const pinned = !!sessions.find(item => item.id === selected)?.pinned;
+  $('session-pin').setAttribute('aria-pressed', String(pinned));
+  $('session-pin-label').textContent = pinned ? 'Unpin session' : 'Pin to top';
+}
+$('session-pin').addEventListener('click', async () => {
+  const id = selected, pinned = !sessions.find(item => item.id === id)?.pinned;
+  document.querySelector('.session-info').open = false;
+  try { await request('pin', { sessionId: id, pinned }); }
+  catch (e) { notice(e.message, id); }
+});
 function sessionTypeIcon(item) {
   const choice = sessionIcons.get(item.id);
   const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');

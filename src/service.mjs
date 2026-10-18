@@ -29,6 +29,9 @@ export class SessionService extends EventEmitter {
     mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
     // Scratch sessions in system temp folders are not projects worth offering for a new session.
     this.tempDirs = [...new Set([tmpdir(), '/tmp'].map(canonical))];
+    // Pinned sessions sort first for every phone; ids of deleted sessions just never match.
+    try { this.pins = new Set(JSON.parse(readFileSync(join(dir, 'pinned-sessions.json'), 'utf8')).filter(id => typeof id === 'string')); }
+    catch { this.pins = new Set(); }
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -74,11 +77,20 @@ export class SessionService extends EventEmitter {
   matches(query = '') {
     if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
     query = query.trim().toLowerCase();
-    const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume }]));
-    for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker });
+    const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
+    for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker, pinned: this.pins.has(id) });
     const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
-      .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+      .sort((a, b) => b.pinned - a.pinned || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     return { matches, total: all.size };
+  }
+  pin(id, pinned) {
+    if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id) || typeof pinned !== 'boolean') throw new Error('Invalid pin');
+    if (pinned) this.pins.add(id); else this.pins.delete(id);
+    const file = join(this.dir, 'pinned-sessions.json');
+    writeFileSync(file + '.tmp', JSON.stringify([...this.pins]), { mode: 0o600 });
+    renameSync(file + '.tmp', file);
+    this.emit('list');
+    return { pinned };
   }
   // Projects in most-recently-used order. Each names its newest session as the source for `new`.
   projects() {
