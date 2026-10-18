@@ -56,6 +56,23 @@
     "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-provider-live-CBaoZP/evidence.json",
     "limit": "Real SDK with synthetic tools; malformed retry coverage above uses the external SDK replay peer."
   },
+  "productionInstallation": {
+    "commit": "d0ea432", "pass": true,
+    "fixture": "Installed opentunnel host, normal Pi resources, SDK Haiku Medium and mobile Chromium; scratch markup write/edit/read",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-haiku-edit-production-kcZrjM/result.json",
+    "opentunnelAssetsMatched": true,
+    "exactScratchWriteEditAndReadPassed": true,
+    "onlyRequestedToolsExecuted": true,
+    "callResultIdsMatched": true,
+    "refreshAndRecallPassed": true,
+    "oneNativeSession": true,
+    "naturalMalformedInputs": 0,
+    "ownedWorkerClosed": true,
+    "sharedHostUnchanged": true,
+    "personalSettingsUnchanged": true,
+    "initialNavigationFailure": "The verification searched for a run ID absent from the generated title. Reopening by the saved title passed; no write or edit was repeated.",
+    "limit": "Valid live SDK tool flow. The malformed/correction cases use protocol replay, and no diagnostic model prompt was sent to the original failed chat."
+  },
   "limits": [
     "The already-failed user turn is not automatically replayed or repaired; its uncheckpointed work still requires confirmed sdk-recover",
     "Tool arguments publish after full JSON/message validation rather than incremental previews; text and thinking still stream",
