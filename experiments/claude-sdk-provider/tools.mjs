@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RpcWorker } from '../../src/rpc.mjs';
+import { buildSessionProjection, convertToLlm } from '@earendil-works/pi-coding-agent';
+import { getCurrentSystemMessage, getCurrentTools } from '@earendil-works/pi-ai';
 
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-tools-e2e-')), project = join(evidence, 'project');
 for (const path of [project, join(evidence, 'agent'), join(evidence, 'claude')]) mkdirSync(path);
@@ -38,13 +40,29 @@ async function send(message) {
 }
 console.log('Evidence: ' + evidence);
 try {
-  for (const mode of process.argv.slice(2).length ? process.argv.slice(2) : ['first', 'checkpoint', 'restart', 'remove', 'stop', 'old-guard', 'queued-input', 'permission', 'validation', 'environment', 'instructions', 'missing-result', 'history']) {
+  for (const mode of process.argv.slice(2).length ? process.argv.slice(2) : ['first', 'checkpoint', 'restart', 'remove', 'stop', 'old-guard', 'queued-input', 'permission', 'validation', 'environment', 'instructions', 'missing-result', 'history', 'reorder', 'reorder-override', 'reorder-override-drop', 'reorder-content']) {
     result.stage = mode;
-    process.env.PI_RECOVERY_TOOL_CASE = mode;
+    process.env.PI_RECOVERY_TOOL_CASE = mode; process.env.PI_RECOVERY_REORDER = '';
     process.env.PI_RECOVERY_SESSION = join(evidence, mode + '.jsonl');
     writeFileSync(process.env.PI_RECOVERY_SESSION, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: project }) + '\n');
     const offset = records().length, current = () => records().slice(offset), effects = () => current().filter(row => row.type === 'execution').map(row => row.label);
     await start();
+    if (mode.startsWith('reorder')) {
+      assert.equal((await send('seed')).stopReason, 'stop');
+      const context = () => convertToLlm(buildSessionProjection(entries().slice(1)).entries.flatMap(row => row.messages));
+      const previous = context(); await worker.close(); worker = undefined;
+      process.env.PI_RECOVERY_REORDER = '1'; await start();
+      const response = await send('followup'), currentContext = context();
+      assert.deepEqual(getCurrentTools(currentContext), getCurrentTools(previous));
+      assert.notEqual(getCurrentSystemMessage(currentContext).sections.tools, getCurrentSystemMessage(previous).sections.tools);
+      const blocked = mode !== 'reorder';
+      assert.equal(response.stopReason, blocked ? 'error' : 'stop', response.errorMessage);
+      assert.deepEqual(effects(), ['seed']);
+      const queries = current().filter(row => row.type === 'query'); assert.equal(queries.length, blocked ? 1 : 2);
+      if (blocked) assert.match(response.errorMessage, /environment, or output limit changed/); else assert.equal(queries[1].resumed, false);
+      result.cases.push({ mode, pass: true, declarationsUnchanged: true, freshContext: !blocked, blocked, noReplay: true });
+      await worker.close(); worker = undefined; continue;
+    }
     const seeded = ['checkpoint', 'old-guard'].includes(mode);
     if (seeded) assert.equal((await send('seed')).stopReason, 'stop');
     let response = await send('dynamic-tools');

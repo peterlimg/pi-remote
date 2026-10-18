@@ -229,6 +229,14 @@ export default function (pi) {
     pi.sendUserMessage('Acknowledge all completed child notices. Do not restart work or call tools.');
   } });
   pi.on('before_agent_start', event => {
+    if (process.env.PI_RECOVERY_TOOL_CASE?.startsWith('reorder')) {
+      Object.assign(event.systemPromptOptions.toolSnippets, { probe: 'Record the requested probe.', extra: 'Run the extra capability.' });
+      event.systemPromptOptions.selectedTools = process.env.PI_RECOVERY_REORDER === '1' ? ['extra', 'probe'] : ['probe', 'extra'];
+      if (process.env.PI_RECOVERY_TOOL_CASE === 'reorder-override' || process.env.PI_RECOVERY_TOOL_CASE === 'reorder-override-drop' && process.env.PI_RECOVERY_REORDER !== '1') {
+        event.systemPromptOptions.sections.tools = 'OPERATOR_TOOL_POLICY_' + process.env.PI_RECOVERY_REORDER;
+      }
+      if (process.env.PI_RECOVERY_TOOL_CASE === 'reorder-content' && process.env.PI_RECOVERY_REORDER === '1') event.systemPromptOptions.toolSnippets.probe = 'CHANGED_TOOL_INSTRUCTION';
+    }
     event.systemPromptOptions.promptGuidelines.push('PORTABLE_GUIDELINE');
     event.systemPromptOptions.toolGuidelines.probe = ['PORTABLE_TOOL_GUIDE'];
     event.systemPromptOptions.sections.late_policy = 'PORTABLE_LATE_POLICY';
@@ -283,7 +291,7 @@ export default function (pi) {
       pi.setActiveTools(pi.getActiveTools().filter(name => name !== 'extra'));
     } });
     pi.on('session_start', (_event, ctx) => {
-      if (!ctx.sessionManager.getBranch().some(row => row.message?.role === 'system' && row.message.toolsAdded?.some(tool => tool.name === 'extra'))) {
+      if (!process.env.PI_RECOVERY_TOOL_CASE?.startsWith('reorder') && !ctx.sessionManager.getBranch().some(row => row.message?.role === 'system' && row.message.toolsAdded?.some(tool => tool.name === 'extra'))) {
         pi.setActiveTools(pi.getActiveTools().filter(name => name !== 'extra'));
       }
     });

@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-18",
+  "sourceBase": "d6ae617",
+  "status": "Existing child-hook API verified as a loader; SDK retained continuation remains blocked. Parent generated-tool-guidance reload defect fixed.",
+  "sdkWorkerContinuationPassed": false,
+  "parentGuidanceReloadFixPassed": true,
+  "fullProviderParityEstablished": false,
+  "versions": { "sdk": "0.3.296", "piSubagents": "0.78.0", "livePi": "1.3.0", "focusedPi": ["1.2.0", "1.3.0"] },
+  "liveWorkflow": {
+    "fixture": "Owned host/projects/sessions/runtime records, mobile Chromium, real model services, normal personal resources/logins and builtin worker with default High thinking/tools/acceptance. No custom profiles or copied credentials.",
+    "case": "retained-standard-worker",
+    "contract": [
+      "A foreground worker actually reads a private value without disclosing it to its parent in the first report",
+      "It edits one module, reads it back, runs node --check and appends exactly one counted effect",
+      "The owned parent process is replaced, then the exact retained run is inspected and resumed",
+      "Resume must recall the child-only value without tools or a parent-only value, preserve all earlier audit entries and not repeat the effect",
+      "The parent must receive the automatic notice and retain both actual values after another restart",
+      "Normal skill/documentation reads remain permitted; the parent cannot read child task files"
+    ],
+    "withoutHooks": {
+      "initialArtifact": "pi-provider-parity-RI0KrD/result.json",
+      "codex": "passed the complete workflow",
+      "sdkHaiku": "Created/completed the normal foreground worker with no child checkpoint, then parent restart rejected generated tool-list reordering before resume.",
+      "afterParentFixArtifact": "pi-provider-parity-XzOSAP/result.json",
+      "afterParentFixSdkHaiku": "Reached actual child resume, which rejected uncheckpointed SDK history before another SDK request. SDK-3 is reproduced, not inferred only from source."
+    },
+    "existingApiExperiment": {
+      "flag": "PI_PARITY_CHILD_HOOKS=1, test observer only; not enabled by the SDK provider",
+      "api": "pi-subagents/required-child-extensions, loaded from the already registered tool's public sourceInfo.path and package export",
+      "sdkExtension": "The already loaded SDK extension, discovered through its command's public source metadata",
+      "prototypeArtifact": "pi-provider-parity-CyV5yt/result.json",
+      "finalSdkArtifact": "pi-provider-parity-W4KhkT/result.json",
+      "sdkChildCheckpointBeforeResume": true,
+      "sdkHaikuResume": "Blocked by the configuration guard after background resume changes preamble and adds ponytail; tools remain identical. No instruction was dropped or fingerprint bypassed.",
+      "codexPrototype": "Actual child resume succeeded, but an overstrict harness assertion rejected a legitimate read of the subagents skill. The assertion now forbids only child task-file access.",
+      "correctedCodexArtifact": "pi-provider-parity-CchLaE/result.json",
+      "correctedCodexPassed": true,
+      "otherMatrixRows": "skipped, not passed",
+      "conclusion": "The existing API can load child-owned provider hooks and save a checkpoint without changing pi-subagents. This does not prove that all production policies can safely use its parent-wide, single-registration contract, or that SDK continuation succeeds."
+    },
+    "allRunsPersonalSettingsUnchanged": true,
+    "allOwnedParentWorkersClosed": true,
+    "noOriginalChatPromptedOrRecovered": true,
+    "noPiSubagentsSourceOrVersionChanged": true
+  },
+  "parentGuidanceReloadFix": {
+    "liveRedArtifact": "pi-provider-parity-RI0KrD/result.json",
+    "finding": "Parent tool declarations and every non-tool section matched after restart, but generated tool guidance had the same lines in a different order. The old handoff required declarations to differ and rejected this legitimate regeneration.",
+    "focusedRedArtifact": "pi-sdk-tools-e2e-FAfkv1/result.json",
+    "setupFailureRetained": { "artifact": "pi-sdk-tools-e2e-VevMkT/result.json", "finding": "Custom fixture tools had no rendered snippets, so no generated ordering change existed. The fixture now uses Pi's public prompt-options API to render and reorder those tool snippets." },
+    "implementation": "Reuse the existing fresh-context tool handoff for order-only regeneration when declarations and the exact multiset of generated guidance lines match, the old configuration reconstructs exactly and all non-tool instructions match. No new prompt-content or general-configuration handoff is enabled.",
+    "positive": "reorder changes generated guidance with identical declarations and executes the seed effect once",
+    "negative": "reorder-override, reorder-override-drop and reorder-content reject changed/removed operator text or changed generated content before another SDK request",
+    "focusedResults": { "casesPerVersion": 17, "1.2.0": "pi-sdk-tools-e2e-5bojsN/result.json", "1.3.0": "pi-sdk-tools-e2e-hP6auI/result.json", "allPassed": true },
+    "liveProgressProof": "After this fix, XzOSAP reaches the child guard and CyV5yt reaches the changed-child-prompt guard instead of failing at parent restart. The final order-only implementation repeats that result in W4KhkT with a saved child checkpoint. These are not successful SDK continuations."
+  },
+  "preNarrowingRegressionsPi13": {
+    "recovery": "pi-sdk-recovery-e2e-2Q7LJ3/result.json",
+    "malformed": "pi-sdk-malformed-e2e-7X31IO/result.json",
+    "cancel": "pi-sdk-cancel-e2e-C7bphc/result.json",
+    "notices": "pi-sdk-notices-e2e-M1tU27/result.json",
+    "fork": "pi-sdk-fork-e2e-nEaZYM/result.json",
+    "clone": "pi-sdk-clone-e2e-M0Gvrt/result.json",
+    "compaction": "pi-sdk-compaction-context-DYXyCR/result.json",
+    "tree": "pi-sdk-tree-e2e-ghxNDu/result.json",
+    "allPassed": true
+  },
+  "finalHistoryChecksPi13": {
+    "clone": { "artifact": "pi-sdk-clone-e2e-978hIi/result.json", "cases": ["new-tools", "instructions", "environment"] },
+    "fork": { "artifact": "pi-sdk-fork-e2e-L48a2c/result.json", "cases": ["new-tools-before", "new-tools-branch", "instructions", "environment"] },
+    "compaction": { "artifact": "pi-sdk-compaction-context-H2NiE3/result.json", "cases": ["tools-after", "instructions", "null-config"] },
+    "tree": { "artifact": "pi-sdk-tree-e2e-bqo83v/result.json", "cases": ["new-tools-before", "new-tools-branch", "instructions", "environment", "null-config"] },
+    "allPassed": true
+  },
+  "checks": ["root TypeScript/check script", "SDK TypeScript", "harness syntax", "whitespace"],
+  "notDone": [
+    "SDK-3 retained resume remains red",
+    "No general prompt, environment or output-limit handoff",
+    "No production default for required SDK child extensions",
+    "No custom denyExtensions/other-host-registration compatibility proof",
+    "No full all-green parity run, full local/unit suites, physical Safari or overnight stress"
+  ],
+  "unitTestsAddedOrRun": false,
+  "privacy": "Only reviewed artifact basenames and bounded findings are committed. Raw prompts, child files, sessions, traces, tool payloads and native transcripts remain private."
+}

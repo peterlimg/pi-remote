@@ -260,6 +260,12 @@ function nonToolPrompt(messages: Message[], source?: PromptSource): string {
   return getSystemMessageText({ ...current, sections });
 }
 
+function toolGuidanceReordered(before: Message[], after: Message[]): boolean {
+  const previous = getCurrentSystemMessage(before)?.sections?.tools, current = getCurrentSystemMessage(after)?.sections?.tools;
+  return typeof previous === 'string' && typeof current === 'string' && previous !== current &&
+    isDeepStrictEqual(previous.split('\n').sort(), current.split('\n').sort());
+}
+
 type BridgeOptions = { persistSession?: boolean; checkpoint?: unknown; recovery?: unknown; compaction?: unknown; compactionSource?: () => Message[];
   clone?: unknown; cloneSource?: () => Message[]; tree?: unknown; treeSource?: () => Message[]; configurationSource?: (configuration: string, accepted: number) => Message[] | undefined;
   onRecoveryStart?: (id: string, sdkSessionId: string) => void; onRecoverySession?: (id: string, sdkSessionId: string) => void;
@@ -446,7 +452,8 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
             const ownerConfig = hash(JSON.stringify(previousSource ? { ...previousConfig, sessionId: options.sessionId, sdkSystemPrompt: projectSdkPrompt(accepted, previousTools, previousSource) }
               : { ...previousConfig, sessionId: options.sessionId }));
             if (end < 0 || previousHash !== transition.configuration || config !== ownerConfig &&
-              (isDeepStrictEqual(previousTools, tools) || nonToolPrompt(accepted, previousSource) !== nonToolPrompt(context.messages, source))) fail(SDK_CONFIGURATION_RESTRICTION);
+              (isDeepStrictEqual(previousTools, tools) && !toolGuidanceReordered(accepted, context.messages) ||
+                nonToolPrompt(accepted, previousSource) !== nonToolPrompt(context.messages, source))) fail(SDK_CONFIGURATION_RESTRICTION);
           }
         }
         let toolUpdate = false;
@@ -462,7 +469,9 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
           const previousSource = source ? { ...source, systemPrompt: previousPrompt } : undefined;
           const previousConfig = { ...configSource, systemPrompt: previousPrompt, tools: previousTools };
           const previousHash = hash(JSON.stringify(source ? { ...previousConfig, sdkSystemPrompt: projectSdkPrompt(previous, previousTools, previousSource) } : previousConfig));
-          toolUpdate = end >= 0 && previousHash === configuration && !isDeepStrictEqual(previousTools, tools) &&
+          // Pi can reorder generated tool guidance on reload without changing declarations.
+          toolUpdate = end >= 0 && previousHash === configuration &&
+            (!isDeepStrictEqual(previousTools, tools) || toolGuidanceReordered(previous, context.messages)) &&
             nonToolPrompt(previous, previousSource) === nonToolPrompt(context.messages, source);
           if (!toolUpdate && (!previousFormat || !recovering)) fail(SDK_CONFIGURATION_RESTRICTION);
         }

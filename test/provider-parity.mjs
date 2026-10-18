@@ -20,14 +20,29 @@ const selected = process.env.PI_PARITY_CASES?.split(',');
 const autoCompaction = process.env.PI_PARITY_COMPACTION_AUTO === '1';
 const queuedFork = process.env.PI_PARITY_FORK_QUEUED === '1';
 const treeSummary = process.env.PI_PARITY_TREE_SUMMARY === '1', queuedTree = process.env.PI_PARITY_TREE_QUEUED === '1';
+const childHooks = process.env.PI_PARITY_CHILD_HOOKS === '1';
 const evidence = mkdtempSync(join(tmpdir(), 'pi-provider-parity-')), sessions = join(evidence, 'sessions');
 mkdirSync(sessions); process.env.PI_SUBAGENTS_TEMP_ROOT = join(evidence, 'subagent-runtime');
 const bin = process.env.PI_PARITY_BIN || 'pi', auditFile = join(evidence, 'audit.jsonl'), observer = join(evidence, 'observer.ts');
 writeFileSync(observer, `import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
 const log=row=>appendFileSync(${JSON.stringify(auditFile)},JSON.stringify(row)+'\\n');
 export default function(pi){
  pi.on('project_trust',()=>({trusted:'yes'}));
+ let required;
+ pi.on('session_start',async(_e,ctx)=>{
+  if(!${childHooks})return;
+  required?.dispose();
+  const subagents=pi.getAllTools().find(t=>t.name==='subagents_enable'||t.name==='subagent');
+  const sdk=pi.getCommands().find(c=>c.name==='claude-usage'&&c.source==='extension');
+  if(!subagents||!sdk)throw new Error('Required SDK/subagents resources unavailable.');
+  const module=await import(pathToFileURL(createRequire(subagents.sourceInfo.path).resolve('pi-subagents/required-child-extensions')).href);
+  required=module.registerRequiredChildExtensions({sessionId:ctx.sessionManager.getSessionId(),extensions:[{id:'sdk-context-verification',path:sdk.sourceInfo.path}]});
+  log({type:'child-hook-registration',session:ctx.sessionManager.getSessionId()});
+ });
+ pi.on('session_shutdown',()=>{required?.dispose();required=undefined;});
  pi.registerCommand('parity-tree',{description:'Owned tree-navigation verification',handler:async(args,ctx)=>{
   const {target,...options}=JSON.parse(args);
   try{const result=await ctx.navigateTree(target,options);log({type:'tree-result',target,...result,leafId:ctx.sessionManager.getLeafId()});}
@@ -89,7 +104,7 @@ function checkMessages(messages) {
   }
 }
 const result = { fixture: 'Real phone UI, Pi, normal personal/project resources, builtin worker profiles and model services; no model/agent mocks or credential copies',
-  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', treeMode: { summary: treeSummary, queued: queuedTree }, loadouts: {}, cases: [], pass: false };
+  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', treeMode: { summary: treeSummary, queued: queuedTree }, childHooks, loadouts: {}, cases: [], pass: false };
 let browser, context, page, worker, file, id, project, events = [], models, currentTarget;
 async function until(check, label, ms = 180000) {
   const end = Date.now() + ms;
@@ -167,7 +182,7 @@ try {
     project = join(evidence, currentTarget.replaceAll('/', '-')); mkdirSync(project);
     const policy = 'POLICY_' + randomUUID(), memory = 'MEMORY_' + randomUUID(), a = 'A_' + randomUUID(), b = 'B_' + randomUUID();
     const childValues = ['FG_' + randomUUID(), 'ASYNC_A_' + randomUUID(), 'ASYNC_B_' + randomUUID()];
-    writeFileSync(join(project, 'AGENTS.md'), `This is an isolated provider parity fixture. The loaded project policy marker is ${policy}.\nOnly this directory contains test data. Do not edit global settings, credentials, other repositories or files outside this directory. Do not commit or push fixture data. Only the foreground coding worker may edit worker-edit.mjs when its task explicitly requests it; all other child work and input files are read-only. Children must not delegate further.\n`);
+    writeFileSync(join(project, 'AGENTS.md'), `This is an isolated provider parity fixture. The loaded project policy marker is ${policy}.\nOnly this directory contains test data. Do not edit global settings, credentials, other repositories or files outside this directory. Do not commit or push fixture data. Only the foreground coding worker may edit worker-edit.mjs when its task explicitly requests it, and the retained-worker task may append its one requested line to retained-effects.log; all other child work and input files are read-only. Children must not delegate further.\n`);
     for (const [index, name] of ['foreground.txt', 'async-a.txt', 'async-b.txt'].entries()) writeFileSync(join(project, name), childValues[index]);
     await newSession('core');
     await step('instructions-and-messages', async () => {
@@ -234,6 +249,62 @@ try {
       const calls = parentCalls().length;
       assert((await send('Without tools, repeat the FG_ value the worker actually read.')).includes(childValues[0]));
       assert.equal(parentCalls().length, calls);
+    });
+    await step('retained-standard-worker', async () => {
+      await newSession('retained');
+      const secret = 'WORKER_ONLY_' + randomUUID(), parent = 'PARENT_ONLY_' + randomUUID();
+      const markerFile = join(project, 'retained-marker.txt'), code = join(project, 'worker-edit.mjs'), effects = join(project, 'retained-effects.log');
+      writeFileSync(markerFile, secret + '\n'); writeFileSync(code, 'export const completed = false;\n'); writeFileSync(effects, '');
+      const parentId = JSON.parse(readFileSync(file, 'utf8').split('\n')[0]).id;
+      if (childHooks) assert(audit().some(row => row.type === 'child-hook-registration' && row.session === parentId), 'The existing API must actually register the child extension.');
+      await send(`Remember ${parent} in the parent only. Do not use tools or share this value with a child. Reply PARENT_READY.`);
+      const task = `Work only in ${project}. Read ${markerFile} and remember its exact value privately. Do not print that value in this first completion report; a later explicit recall request may authorize printing it. Use edit to change only completed = false to completed = true in ${code}, then read it back. Append exactly ${JSON.stringify('worker-effect\n')} to ${effects} once and validate the module with node --check. No commits, staging, external requests or further delegation. Return your normal completion report with FIRST_PASS_DONE, without the private marker. Do not modify other task files; ordinary runtime metadata is allowed.`;
+      const first = await send(`Launch exactly one builtin worker with fresh context, async false, output false, model ${currentTarget}. Keep its normal profile, default thinking, tools and acceptance; do not create custom agents or change extensions. Give it only this task: ${JSON.stringify(task)}. Do not read or edit its files in the parent or pass private parent facts. On failure stop without retrying or switching models.`);
+      assert(first.includes('FIRST_PASS_DONE') && !first.includes(secret));
+      const seed = messagesAt(file).findLast(m => m.role === 'toolResult' && m.toolName === 'subagent' && m.details?.results?.some(r => r.agent === 'worker'));
+      const child = seed?.details.results.find(r => r.agent === 'worker'), runId = seed?.details.runId;
+      assert(child?.sessionFile && runId); assert.equal(child.exitCode, 0, child.error);
+      assert(!JSON.stringify(seed.content).includes(secret), 'The parent must not learn the child-only value from its first report.');
+      checkChildren(new Set(), 1);
+      assert.equal(readFileSync(code, 'utf8'), 'export const completed = true;\n'); assert.equal(readFileSync(effects, 'utf8'), 'worker-effect\n');
+      const originalChild = readFileSync(child.sessionFile, 'utf8').trim().split('\n').map(JSON.parse);
+      const checkpoint = rows => rows.findLast(r => r.customType === 'claude-sdk-checkpoint')?.data;
+      const detail = { provider: currentTarget, checkpointBeforeResume: Boolean(checkpoint(originalChild)), resumed: false };
+      (result.workerResumes ||= []).push(detail);
+      await reopen(file);
+      const resumeMessage = 'Without tools, file reads or edits, recall the exact WORKER_ONLY_ value you previously read. This explicitly authorizes printing it now. Include any PARENT_ONLY_ value only if it was actually present in your child conversation, otherwise say PARENT_ABSENT. Do not repeat previous work.';
+      const before = events.length;
+      await send(`Use subagent action status once for exact run ${runId}, then action resume with id ${runId} and message ${JSON.stringify(resumeMessage)}. Keep the retained worker contract. Do not launch a fresh child, change models/profiles/extensions or read worker/task files. Normal skill documentation reads are allowed. Yield after the resume receipt and acknowledge its actual automatic completion notice. On failure report it without retrying or switching models.`);
+      await until(() => {
+        const rows = readFileSync(child.sessionFile, 'utf8').trim().split('\n').map(JSON.parse), added = rows.slice(originalChild.length);
+        const failure = added.find(r => r.message?.role === 'assistant' && r.message.stopReason === 'error');
+        if (failure) throw new Error('Resumed worker: ' + failure.message.errorMessage);
+        const denied = events.slice(before).find(e => e.type === 'message_end' && e.message.role === 'toolResult' && e.message.toolName === 'subagent' && e.message.isError);
+        if (denied) throw new Error('Resume rejected: ' + textOf(denied.message));
+        return textOf(added.findLast(r => r.message?.role === 'assistant')?.message).includes(secret);
+      }, 'retained worker recall', 240000);
+      const all = readFileSync(child.sessionFile, 'utf8').trim().split('\n').map(JSON.parse), added = all.slice(originalChild.length);
+      const answer = textOf(added.findLast(r => r.message?.role === 'assistant').message);
+      assert(answer.includes(secret) && !answer.includes(parent));
+      assert(!added.some(r => r.message?.role === 'assistant' && r.message.content.some(b => b.type === 'toolCall')));
+      assert.equal(readFileSync(effects, 'utf8'), 'worker-effect\n'); assert.equal(readFileSync(code, 'utf8'), 'export const completed = true;\n');
+      for (const row of originalChild) assert.deepEqual(all.find(r => r.id === row.id), row);
+      checkMessages(all.flatMap(r => r.message ? [r.message] : []));
+      if (currentTarget.startsWith('claude-sdk/')) {
+        assert(checkpoint(originalChild) && checkpoint(all)); assert.equal(checkpoint(all).piSessionId, all[0].id);
+        if (added.some(row => row.message?.role === 'system' && Object.keys(row.message.sections || {}).some(key => key !== 'tools'))) {
+          assert.notEqual(checkpoint(all).sdkSessionId, checkpoint(originalChild).sdkSessionId, 'Changed instructions require a fresh native context, not silent reuse.');
+        }
+      }
+      assert(!parentCalls().some(call => ['read', 'edit', 'write', 'bash'].includes(call.name) &&
+        ['retained-marker.txt', 'worker-edit.mjs', 'retained-effects.log', child.sessionFile].some(path => JSON.stringify(call.arguments).includes(path))), 'The parent must not access child task files; normal skill/documentation reads remain allowed.');
+      assert(parentCalls().filter(call => call.name === 'subagent' && call.arguments.action === 'resume').every(call => !JSON.stringify(call.arguments).includes(parent)));
+      await until(() => textOf(last()).includes(secret), 'resumed worker completion notice', 60000);
+      const count = parentCalls().length; await reopen(file);
+      const recall = await send('Without tools, repeat the PARENT_ONLY_ value from your own first message and the WORKER_ONLY_ value from the completed worker notice.');
+      assert(recall.includes(parent) && recall.includes(secret)); assert.equal(parentCalls().length, count);
+      detail.resumed = true;
+      result.loadouts[currentTarget] = audit().find(r => r.type === 'loadout' && r.session === parentId).tools.sort();
     });
     await step('parallel-background-workers-and-notices', async () => {
       await newSession('background'); const before = new Set(childArtifacts()), gate = join(project, 'background-release');

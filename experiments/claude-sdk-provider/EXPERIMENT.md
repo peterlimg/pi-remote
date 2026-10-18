@@ -85,6 +85,12 @@ An already-recorded exact, zero-usage configuration rejection can also continue 
 
 The real mobile check starts with a non-SDK tool selection, switches to Haiku Max before prompting, enables once and launches one fresh SDK child. The child is constrained to zero tools and its actual SDK transcript, model and exit status are checked. Its result was reopened by stable parent-session ID after a navigation-only selector failure, without another prompt or child launch. A no-network preflight of the reported saved chat also passed without modifying it. See [recorded evidence](verification-tools.json). Physical Safari, forked child contexts and asynchronous child completion are not covered by this live check.
 
+## Retained worker continuation
+
+The shared `retained-standard-worker` journey now tests the normal High worker after replacing its parent. The borrowed foreground route does not save a child checkpoint and cannot safely resume. Test-only `PI_PARITY_CHILD_HOOKS=1` loads the existing SDK hooks through pi-subagents' public API and does save that checkpoint without changing the extension. The subsequent background resume changes real prompt sections and remains blocked. This is not an authentication failure and does not justify dropping current instructions or enabling blanket required extensions. See [workflow boundaries](../../docs/sdk-worker-continuation.md) and [reviewed evidence](verification-worker-continuation.json).
+
+The investigation also reproduces a parent reload defect: generated tool guidance can reorder while declarations stay identical. That now uses the existing fresh-context tool handoff; operator overrides and non-tool/configuration changes remain protected. Offline `test:tools` includes order-only regeneration and rejection of changed/removed operator text or changed generated content.
+
 ## Shared provider acceptance
 
 The [shared provider E2E](../../docs/provider-parity.md) runs the same real phone/Pi journeys with normal personal resources and builtin `worker` agents on Codex and Claude SDK. It checks actual file changes, child transcripts, permissions, switching, Stop, automatic completion notices, reload and owned-worker restart. Unsupported operations remain failing contracts rather than omitted scenarios. Results are in [the parity evidence](verification-parity.json); maintain the open items in the [provider gap tracker](../../docs/provider-gaps.md).
