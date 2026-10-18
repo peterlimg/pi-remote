@@ -1,27 +1,27 @@
 # Remaining provider parity gaps
 
-Canonical open-items list after `20f2e25`. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
+Canonical open-items list, updated for Pi-owned SDK parent compaction. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
 
 ## Confirmed limitations
 
 | ID | Open item | Scope and evidence |
 | --- | --- | --- |
-| SDK-1 | Compaction is not integrated into the production provider. | The Pi compaction hook cancels for **every `claude-sdk` model**, native automatic/idle compaction is disabled, and unexpected native compact events reject continuation. The latest Haiku matrix result was `Compaction cancelled`, not a new summary-memory failure. See the distinction below. |
+| SDK-1 | Parent manual/threshold compaction is implemented; remaining compaction scope needs verification. | Real Codex, SDK Haiku and SDK Opus checks passed using Pi's normal summarizer and a validated fresh-SDK handoff. Borrowed foreground-worker compaction, overflow/length recovery and partial publication crashes remain unproven. SDK-native automatic compaction stays disabled intentionally. See [implementation and evidence](sdk-compaction.md). |
 | SDK-2 | Cloning, forks and tree navigation are blocked. | The same provider-wide history guard blocks these operations. The shared test confirmed a cancelled SDK clone while Codex created a new session. Safe SDK checkpoint/history lineage remains to be implemented. |
 | SDK-3 | Durable foreground-child continuation is incomplete. | Fresh standard foreground workers now work, including real edits and validation. Borrowed foreground SDK bridges close on completion and do not persist child-local provider checkpoints. Resuming retained/completed children needs their own provider session hooks and E2E coverage. Normal parent-chat reload and completed-checkpoint restart already work. |
 | SDK-4 | General instruction/configuration changes cannot transparently reuse a native query. | Validated tool declarations plus the generated `tools` section can change through a handoff. Other prompt, environment and output-limit changes remain guarded. Any broader handoff must preserve operator instructions and verify accepted history rather than weaken the fingerprint checks. |
 | SDK-5 | The upstream prompt-sensitive request rejection is unresolved. | Structured prompt projection mitigates the recorded generated-documentation trigger. It is not an upstream fix, and opaque/custom/inherited prompts can still be rejected. See the [billing/request-content investigation](research/claude-agent-sdk-billing.md). No billing change or credential workaround is justified by this response alone. |
 | CODEX-1 | Stop can be recorded as an error rather than cancellation. | The real Codex first-turn Stop returned `stopReason=error` with `This operation was aborted`. The next message succeeded without replay. This is a cancellation-status defect, not an SDK failure or proof that Stop cannot continue. |
 
-## Compaction is two separate issues
+## Compaction status and earlier ACK_0 findings
 
-### The current all-model integration guard
+### Pi-owned parent compaction
 
-The latest shared matrix called Pi's ordinary compaction command. The installed provider cancelled it through `blockHistoryChange` in [index.ts](../experiments/claude-sdk-provider/index.ts). That condition checks the provider name, not Haiku, Opus or Sonnet. Git history dates this guard to `7aac7e81` on October 14, before the latest parity work.
+The provider now accepts Pi's manual and threshold compaction after checking accepted history and matched tool results. Pi generates the summary once; a durable receipt binds the old source, new projection and configuration before another SDK context opens. Original audit entries and previous native transcripts remain preserved. See [the compaction design and verification](sdk-compaction.md).
 
-[bridge.ts](../experiments/claude-sdk-provider/bridge.ts) also sets `autoCompactEnabled: false` and `idleCompaction: false`, and rejects unexpected native compaction status/boundary events. The matrix therefore did **not** run a native summarizer or reproduce `ACK_0`. This is an existing integration restriction exposed by the new test, not a newly discovered model-compaction regression.
+The earlier parity result `Compaction cancelled` came from the all-model hook introduced in `7aac7e81` on October 14. It was a pre-existing integration restriction, not a new `ACK_0` reproduction. That blanket Pi-compaction block has been replaced by the validated handoff. Fork/tree guards remain.
 
-Simply removing the hook is insufficient. SDK context ownership, checkpoint lineage, Pi projection changes, context telemetry and failure recovery still need coordinated handling. Pi's `compact()` also aborts before its compaction hook, so it is not a safe in-flight SDK compaction shortcut.
+[bridge.ts](../experiments/claude-sdk-provider/bridge.ts) still disables SDK-native automatic/idle compaction and rejects unexpected native compaction events. This is deliberate: Pi is the single compaction owner for the new path. It does not enable or claim to fix the native Haiku failure below.
 
 ### The earlier native automatic-compaction memory failure
 
@@ -37,7 +37,7 @@ The [compaction research](research/claude-agent-sdk-compaction.md) and [sanitize
 
 So the **observed `ACK_0` counterexamples were Haiku runs**, while one Opus configuration passed. That does not prove only Haiku can fail, that Haiku always fails, or that production Opus compaction is ready. The passing Opus configuration differs from the production bundled executable and was not a full Coding Agent/RPC/phone compaction flow.
 
-Before closing SDK-1, satisfy the research document's [remaining E2E gate](research/claude-agent-sdk-compaction.md#remaining-e2e-acceptance-gate): useful memory retention, model switching, queued input exactly once, unchanged tool identities/effects, checkpoint recovery across compaction, correct native context/usage reporting and unchanged hook/tool/permission isolation. Preserve the Haiku counterexamples rather than enabling every model globally.
+The new parent implementation is verified separately in [compaction-context evidence](../experiments/claude-sdk-provider/verification-compaction-context.json). Preserve the Haiku counterexamples. The research document's [native-compaction E2E gate](research/claude-agent-sdk-compaction.md#remaining-e2e-acceptance-gate) still applies before enabling SDK-native compaction; it is not evidence for that unimplemented alternative.
 
 ## Coverage gaps, not confirmed failures
 
@@ -51,7 +51,7 @@ These workflows still need shared realistic verification. Earlier narrow checks 
 - Long-running/overnight background work, hard crashes, dropped native resume anchors and partial checkpoint/projection publication.
 - Physical Safari. Mobile Chromium and WebKit checks are not physical-device proof.
 
-The latest shared matrix exercised Haiku and Codex. It does not establish the same complete journeys on Sonnet and Opus. No all-green full parity run is recorded, and full local/unit suites were not run for this work.
+The baseline full matrix exercised Haiku and Codex. New compaction-only checks also cover Opus, not its other complete journeys. Sonnet compaction and complete parity remain unverified. No all-green full parity run is recorded, and full local/unit suites were not run for this work.
 
 ## Safety boundaries to keep
 

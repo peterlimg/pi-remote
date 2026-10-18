@@ -1,5 +1,7 @@
 # Safe Claude SDK compaction integration
 
+Subsequent provider work chose [Pi-owned compaction with a validated SDK context handoff](../sdk-compaction.md), rather than the native-compaction implementation candidate discussed below. The parent manual/threshold path has separate live/replay evidence. SDK-native automatic compaction remains disabled, and the historical Haiku/Opus findings below are unchanged.
+
 Research with isolated live experiments. Production provider code, personal configuration, and active conversations were not changed. The experiments called the real SDK with synthetic data and consumed Claude plan usage. No unit tests were added or run.
 
 Inspected versions: Claude Agent SDK `0.3.296`, Pi `1.2.0`, provider implementation at `351cd6c`.

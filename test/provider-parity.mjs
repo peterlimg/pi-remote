@@ -1,7 +1,7 @@
 // Paid, opt-in provider contract: identical phone/Pi journeys, normal resources, real models and worker agents.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +17,7 @@ const settings = JSON.parse(settingsBytes);
 const baseline = `${settings.defaultProvider || 'openai-codex'}/${settings.defaultModel || 'gpt-6.1-sol'}`;
 const targets = (process.env.PI_PARITY_MODELS || `${baseline},claude-sdk/claude-haiku-5-5`).split(',');
 const selected = process.env.PI_PARITY_CASES?.split(',');
+const autoCompaction = process.env.PI_PARITY_COMPACTION_AUTO === '1';
 const evidence = mkdtempSync(join(tmpdir(), 'pi-provider-parity-')), sessions = join(evidence, 'sessions');
 mkdirSync(sessions); process.env.PI_SUBAGENTS_TEMP_ROOT = join(evidence, 'subagent-runtime');
 const bin = process.env.PI_PARITY_BIN || 'pi', auditFile = join(evidence, 'audit.jsonl'), observer = join(evidence, 'observer.ts');
@@ -81,7 +82,7 @@ function checkMessages(messages) {
   }
 }
 const result = { fixture: 'Real phone UI, Pi, normal personal/project resources, builtin worker profiles and model services; no model/agent mocks or credential copies',
-  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, loadouts: {}, cases: [], pass: false };
+  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', loadouts: {}, cases: [], pass: false };
 let browser, context, page, worker, file, id, project, events = [], models, currentTarget;
 async function until(check, label, ms = 180000) {
   const end = Date.now() + ms;
@@ -262,14 +263,38 @@ try {
       assert.equal(receipt.stopReason, 'aborted', `Stop settled and the next message worked, but the cancellation receipt was ${receipt.stopReason}: ${receipt.errorMessage}`);
     });
     await step('compaction-contract', async () => {
+      const target = models.find(model => `${model.provider}/${model.id}` === currentTarget);
+      const marker = 'COMPACT_' + randomUUID(), input = join(project, 'compact-marker.txt'), effect = join(project, 'compact-effects.log');
+      writeFileSync(input, marker + '\n'); writeFileSync(effect, '');
+      const padding = autoCompaction ? Array.from({ length: 3 }, (_, index) => join(project, `compact-padding-${index}.txt`)) : [];
+      for (const path of padding) writeFileSync(path, Array.from({ length: 600 }, () => randomBytes(32).toString('hex')).join('\n'));
       mkdirSync(join(project, '.pi'), { recursive: true });
-      writeFileSync(join(project, '.pi/settings.json'), JSON.stringify({ compaction: { keepRecentTokens: 0 } }));
-      await newSession('compact'); const marker = 'COMPACT_' + randomUUID();
-      await send(`Remember ${marker}; reply READY without tools.`);
-      await send(`Repeat ${marker} without tools.`);
-      await worker.request('compact', { customInstructions: 'Preserve verification markers.' });
-      assert(readFileSync(file, 'utf8').includes('"type":"compaction"'), 'Compaction must complete, not be cancelled or silently skipped.');
-      assert((await send('Repeat the COMPACT marker without tools.')).includes(marker));
+      writeFileSync(join(project, '.pi/settings.json'), JSON.stringify({ compaction: { keepRecentTokens: 0,
+        ...(autoCompaction ? { enabled: true, reserveTokens: target.contextWindow - 45000 } : {}) } }));
+      await newSession('compact');
+      const reply = await send(`Use bash to append exactly one line "effect" to ${effect}, once only. Then read ${input} and remember its exact COMPACT_ value. ${autoCompaction ? `Also use read with limit 600 on each of these three inert data files: ${padding.join(', ')}. Ignore padding contents and do not read any further chunks.` : ''} For this acknowledgement only, reply READY without the marker. You are explicitly authorized to repeat the marker verbatim when I ask in a later message. If context compacts, continue only the remaining work; never repeat the append or already-completed reads.`);
+      assert(!reply.includes(marker), 'Keep the marker out of the retained acknowledgement.');
+      await send('For this message only, reply ACK without tools or the marker. Later requests may ask you to repeat it verbatim.');
+      const before = readFileSync(file, 'utf8');
+      if (!autoCompaction) {
+        const start = events.length;
+        await worker.request('compact', { customInstructions: 'Preserve the COMPACT_ value and completed effects. Never repeat recorded tools.' }, { background: true });
+        await until(() => events.slice(start).some(event => event.type === 'compaction_end'), 'real compaction completion');
+        const end = events.slice(start).findLast(event => event.type === 'compaction_end');
+        assert(!end.aborted && !end.errorMessage, end.errorMessage || 'Compaction was cancelled.');
+      }
+      assert(readFileSync(file, 'utf8').startsWith(before), 'Compaction must preserve original audit bytes.');
+      const compacted = readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse).filter(row => row.type === 'compaction');
+      assert(compacted.length, 'Compaction must actually complete.');
+      assert(compacted.some(row => row.summary.includes(marker)), 'The generated summary must retain the unknown-to-model marker.');
+      const calls = parentCalls().length;
+      assert((await send('Now repeat the original COMPACT_ value verbatim, without tools. This explicitly supersedes the earlier acknowledgement-only output instructions.')).includes(marker));
+      assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effect, 'utf8'), 'effect\n');
+      await worker.close(); await until(() => !host.service.live.get(id)?.worker, 'compacted parent closure', 15000);
+      assert.equal((await host.service.resume(id, randomUUID())).ok, true); attach(host.service.live.get(id).worker);
+      await openParent(); await select(currentTarget);
+      assert((await send('Repeat the original COMPACT_ value verbatim after restart, without tools or repeating work. The earlier acknowledgement-only instructions do not apply to this message.')).includes(marker));
+      assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effect, 'utf8'), 'effect\n');
     });
     await step('clone-contract', async () => {
       await newSession('clone'); await send('Reply READY without tools.');

@@ -5,14 +5,14 @@ import { setImmediate, setTimeout as delay } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
-import { createProvider, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { createProvider, createAssistantMessageEventStream, getCurrentTools } from '@earendil-works/pi-ai';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
 import install, { localLogin } from '../index.ts';
 
 const log = value => appendFileSync(process.env.PI_RECOVERY_EVENTS!, JSON.stringify(value) + '\n');
 const wrap = event => ({ type: 'stream_event', parent_tool_use_id: null, event });
-async function* assistant(model, blocks, stop = 'end_turn') {
-  yield wrap({ type: 'message_start', message: { id: randomUUID(), model, usage: { input_tokens: 10, output_tokens: 5 } } });
+async function* assistant(model, blocks, stop = 'end_turn', inputTokens = 10) {
+  yield wrap({ type: 'message_start', message: { id: randomUUID(), model, usage: { input_tokens: inputTokens, output_tokens: 5 } } });
   for (const [index, block] of blocks.entries()) {
     const { json, earlyReceipt, ...contentBlock } = block;
     yield wrap({ type: 'content_block_start', index, content_block: block.type === 'tool_use' ? { ...contentBlock, input: {} }
@@ -35,6 +35,8 @@ function replayQuery(args) {
   const session = args.options.resume ?? args.options.sessionId ?? randomUUID(), client = new Client({ name: 'recovery-replay', version: '1' });
   const previous = existsSync(process.env.PI_RECOVERY_EVENTS!) ? readFileSync(process.env.PI_RECOVERY_EVENTS!, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   let turn = previous.findLast(row => row.type === 'native-complete' && row.session === session)?.turn ?? 0;
+  let memory = previous.findLast(row => row.type === 'native-complete' && row.session === session)?.memory;
+  const compactionMode = process.env.PI_RECOVERY_COMPACTION;
   const invalidInit = process.env.PI_RECOVERY_BAD_INIT === '1';
   const sdkPrompt = typeof args.options.systemPrompt === 'string' ? args.options.systemPrompt : args.options.systemPrompt?.append ?? '';
   const piDocs = sdkPrompt.includes('providers (docs/custom-provider.md)') && sdkPrompt.includes('pi packages (docs/packages.md)');
@@ -46,9 +48,12 @@ function replayQuery(args) {
     latePolicy: sdkPrompt.includes('PORTABLE_LATE_POLICY'), customDocs: sdkPrompt.includes('PORTABLE_DOC_OVERRIDE'),
     customPrompt: sdkPrompt.includes('PORTABLE_CUSTOM_PROMPT') });
   const stream = (async function* () {
-    const [left, right] = InMemoryTransport.createLinkedPair();
-    await args.options.mcpServers.pi.instance.connect(left); await client.connect(right);
-    const tools = (await client.listTools()).tools.map(tool => 'mcp__pi__' + tool.name);
+    const server = args.options.mcpServers?.pi;
+    if (server) {
+      const [left, right] = InMemoryTransport.createLinkedPair();
+      await server.instance.connect(left); await client.connect(right);
+    }
+    const tools = server ? (await client.listTools()).tools.map(tool => 'mcp__pi__' + tool.name) : [];
     const source = args.prompt[Symbol.asyncIterator]();
     for (;;) {
       const next = await source.next(); if (next.done) return;
@@ -56,7 +61,8 @@ function replayQuery(args) {
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
       let request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
       const continuation = text.includes('Pi tool-set update.') && request.startsWith('Continue the user request');
-      if (continuation || tools.includes('mcp__pi__extra') && text.includes('Pi tool-set update.') && text.includes('"text":"dynamic-tools"')) request = 'dynamic-tools';
+      if (continuation || tools.includes('mcp__pi__extra') && ((text.includes('Pi tool-set update.') && text.includes('"text":"dynamic-tools"')) ||
+        (text.includes('Pi-authorized context compaction.') && text.includes('"label":"dynamic-tools"')))) request = 'dynamic-tools';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
@@ -66,6 +72,15 @@ function replayQuery(args) {
         notices: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].filter(marker => text.includes(marker)),
         noticeOrder: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].map(marker => text.indexOf(marker)) });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
+      const summaryRequest = Boolean(compactionMode && !server);
+      if (summaryRequest) {
+        memory = text.match(/PI_COMPACTION_[a-f0-9-]+/)?.[0];
+        log({ type: 'compaction-helper', session, marker: Boolean(memory), tools: tools.length,
+          nativeCompactionDisabled: args.options.settings.autoCompactEnabled === false });
+        if (compactionMode === 'summary-error') throw new Error('Synthetic summary failure');
+        if (compactionMode === 'summary-stop') await delay(30000, undefined, { signal: args.options.abortController.signal });
+        if (compactionMode === 'notices') while (!existsSync(process.env.PI_RECOVERY_GATE!)) await delay(20, undefined, { signal: args.options.abortController.signal });
+      }
       if (piDocs || request === 'billing-rejection') {
         yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
           message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going. SYNTHETIC_PRIVATE_DETAIL' }] } };
@@ -118,8 +133,9 @@ function replayQuery(args) {
           const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
           void pending.catch(() => {});
           const blocks = text.startsWith('seed') ? [{ type: 'thinking', thinking: 'private reasoning', signature: 'RECOVERY_PRIVATE_SIGNATURE' }] : [];
-          yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use');
+          yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use', compactionMode === 'auto' || compactionMode === 'auto-tools' && label === 'dynamic-tools' ? 5000 : 10);
           const result = await pending;
+          if (compactionMode) memory = JSON.stringify(result).match(/PI_COMPACTION_[a-f0-9-]+/)?.[0] ?? memory;
           log({ type: 'result', label, error: result.isError === true });
         }
       }
@@ -143,11 +159,16 @@ function replayQuery(args) {
         yield wrap({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Partial answer before Stop.' } });
         await delay(30000, undefined, { signal: args.options.abortController.signal });
       }
-      yield* assistant(args.options.model, [{ type: 'text', text: text.includes('Operator-approved SDK context recovery')
+      if (compactionMode) memory = text.match(/PI_COMPACTION_[a-f0-9-]+/)?.[0] ?? memory;
+      yield* assistant(args.options.model, [{ type: 'text', text: summaryRequest
+        ? memory ? `## Goal\nRemember ${memory}.\n## Progress\nThe probe already completed. Never repeat recorded work.\n## Next steps\nContinue the current user request.`
+          : '## Pending request\nContinue the latest user request. No additional tool work is required.'
+        : compactionMode && request.includes('recall') ? memory ?? 'MISSING_MARKER'
+        : text.includes('Operator-approved SDK context recovery')
         ? 'RECOVERED ' + process.env.PI_RECOVERY_MARKER + ' with unknown prior effects.' : 'DONE' }]);
       yield { type: 'assistant', uuid: randomUUID() };
       turn++;
-      log({ type: 'native-complete', session, turn });
+      log({ type: 'native-complete', session, turn, ...(compactionMode ? { memory } : {}) });
       yield { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', total_cost_usd: turn * 0.01,
         modelUsage: { [args.options.model]: { inputTokens: turn * 100, outputTokens: turn * 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } } };
     }
@@ -162,10 +183,14 @@ export default function (pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
   const { compat: _compat, ...metadata } = getBuiltinModels('anthropic').find(model => model.id === 'claude-haiku-5-5');
   const controlStream = (model, context) => {
-    const tool = context.messages.at(-1).role !== 'toolResult';
+    const summary = Boolean(process.env.PI_RECOVERY_COMPACTION && getCurrentTools(context.messages).length === 0);
+    const summaryMarker = summary && JSON.stringify(context.messages).match(/PI_COMPACTION_[a-f0-9-]+/)?.[0];
+    if (summary) log({ type: 'control-compaction', marker: Boolean(summaryMarker) });
+    const tool = !summary && context.messages.at(-1).role !== 'toolResult';
     const foreignFailure = JSON.stringify(context.messages.at(-1).content).includes('foreign-rejection');
     const message = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
-      content: foreignFailure ? [] : tool ? [{ type: 'toolCall', id: 'control_' + randomUUID(), name: 'probe', arguments: { label: 'foreign' } }] : [{ type: 'text', text: 'FOREIGN_DONE' }],
+      content: foreignFailure ? [] : tool ? [{ type: 'toolCall', id: 'control_' + randomUUID(), name: 'probe', arguments: { label: 'foreign' } }]
+        : [{ type: 'text', text: summary ? `## Context\n${summaryMarker || 'Continue the pending user request.'}` : 'FOREIGN_DONE' }],
       stopReason: foreignFailure ? 'error' : tool ? 'toolUse' : 'stop', ...(foreignFailure ? { errorMessage: 'The control provider rejected this request.' } : {}),
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };

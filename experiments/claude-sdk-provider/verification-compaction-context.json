@@ -1,0 +1,111 @@
+{
+  "date": "2026-10-18",
+  "sourceBase": "6689b49",
+  "feature": "Pi-owned SDK parent-session compaction with validated native-context handoff",
+  "pass": true,
+  "fullProviderParityEstablished": false,
+  "versions": { "sdk": "0.3.296", "replayPi": ["1.2.0", "1.3.0"], "livePi": "1.3.0" },
+  "ownership": {
+    "summarizer": "Pi default compaction pipeline through the selected provider",
+    "nativeSdkAutoAndIdleCompaction": false,
+    "oldNativeContext": "closed after Pi persists compaction and the SDK receipt",
+    "newNativeContext": "summary and retained Pi messages as labeled JSON data, never executable historical calls",
+    "originalPiAudit": "preserved",
+    "newTools": "unchanged Pi schemas, validation, permissions and execution",
+    "nativeAck0FailureClaimedFixed": false
+  },
+  "red": {
+    "artifact": "pi-sdk-compaction-context-c7dDCO/result.json",
+    "error": "Compaction cancelled",
+    "fixture": "real Pi RPC/default compactor and provider; external SDK replay only"
+  },
+  "replayE2E": {
+    "artifactPi12": "pi-sdk-compaction-context-OC4Ril/result.json",
+    "artifactPi13": "pi-sdk-compaction-context-B2gUND/result.json",
+    "allPassed": true,
+    "casesPerVersion": 23,
+    "cases": [
+      "manual", "checkpoint-gap", "repeated", "repeat-before-response", "auto", "auto-tools",
+      "summary-error", "summary-stop", "receipt-gap", "source-tamper", "projection-tamper",
+      "invalid-receipt", "config-receipt", "instructions", "missing-result", "unknown-error",
+      "away-no-checkpoint", "foreign-before", "compact-away", "foreign-after", "notices", "tools-after", "cancel-after"
+    ],
+    "checkpointGap": "Owned RPC worker SIGKILL after durable receipt, before its first post-compaction SDK response; marker recall then succeeded after restart",
+    "receiptGap": "Controlled truncation before receipt publication; continuation rejected without another SDK request. This is not a power-loss/partial-filesystem-write proof.",
+    "assertions": [
+      "Original audit bytes preserved",
+      "Every new call has its real Pi result; counted effects never replay",
+      "Unmatched calls and unknown SDK work cannot be hidden by compaction, including while another provider is selected",
+      "Source, summary/projection, instructions and receipt corruption reject before SDK startup",
+      "Summary errors and Stop leave prior history usable",
+      "Queued notice order survives the compaction boundary",
+      "Tool activation at the automatic boundary and activation/Stop after compaction work",
+      "Summary usage remains in Pi session totals"
+    ]
+  },
+  "liveManual": {
+    "artifact": "pi-provider-parity-7OtbDu/result.json",
+    "pass": true,
+    "fixture": "real models, normal personal/project resources, Pi RPC, isolated host and mobile Chromium; no model mocks or credential copies",
+    "cases": [
+      { "model": "openai-codex/gpt-6.1-sol", "pass": true, "compactions": 1, "lastSummaryRetainsMarker": true, "effectLines": 1 },
+      { "model": "claude-sdk/claude-haiku-5-5", "pass": true, "compactions": 1, "lastSummaryRetainsMarker": true, "effectLines": 1 },
+      { "model": "claude-sdk/claude-opus-5-5", "pass": true, "compactions": 1, "lastSummaryRetainsMarker": true, "effectLines": 1 }
+    ]
+  },
+  "liveAutomatic": {
+    "artifact": "pi-provider-parity-hXdUsz/result.json",
+    "pass": true,
+    "fixture": "same real provider contract with bounded inert padding reads and a project-local 45K threshold",
+    "nativeSdkAutoCompactionEnabled": false,
+    "cases": [
+      { "model": "openai-codex/gpt-6.1-sol", "pass": true, "compactions": 1, "lastSummaryRetainsMarker": true, "effectLines": 1 },
+      { "model": "claude-sdk/claude-haiku-5-5", "pass": true, "compactions": 2, "lastSummaryRetainsMarker": true, "effectLines": 1 },
+      { "model": "claude-sdk/claude-opus-5-5", "pass": true, "compactions": 2, "lastSummaryRetainsMarker": true, "effectLines": 1 }
+    ],
+    "partialTurnSummary": "For SDK runs, the first between-tool summary did not itself contain the marker because the matching tool batch/result was retained. The subsequent summary contained it; no-tool recall and restart then passed."
+  },
+  "liveAssertions": [
+    "Marker obtained through a real read, not supplied in the user prompt",
+    "Acknowledgements omit the marker so retained ACK text cannot satisfy recall",
+    "A generated summary actually retains the marker",
+    "Exactly one counted filesystem effect",
+    "Recall without additional tools before and after replacing only the owned worker",
+    "Original audit bytes retained and tool-call/result IDs match",
+    "Personal settings unchanged and owned parent workers closed"
+  ],
+  "retainedFailures": [
+    {
+      "artifact": "pi-sdk-compaction-context-y4xzxR/result.json",
+      "finding": "The replay peer wrongly required a marker in every split-summary request; a pending-user prefix need not contain it. Fixture corrected to require it in the relevant history, not invent it in every prefix."
+    },
+    {
+      "artifacts": ["pi-sdk-compaction-context-tXGMEa/result.json", "pi-sdk-compaction-context-BK3EJE/result.json"],
+      "finding": "Repeated identical summaries made Pi's event identify an older compaction entry. The adapter now binds the latest persisted entry and checks the event's summary."
+    },
+    {
+      "artifact": "pi-provider-parity-31BlEq/result.json",
+      "finding": "First live automatic Haiku recall refused to reveal the marker because the earlier no-print acknowledgement instruction sounded permanent. The latest summary did retain the value. Clarified one-turn output restrictions and explicit later authorization passed on all three models; this was not another ACK_0 summary loss."
+    }
+  ],
+  "safetyRegressionsPi13": {
+    "allPassed": true,
+    "recoveryAndApprovalGuards": "pi-sdk-recovery-e2e-Sc6P37/result.json",
+    "runtimeToolsPermissionsAndValidation": "pi-sdk-tools-e2e-UxlNfS/result.json",
+    "stopAndContinue": "pi-sdk-cancel-e2e-BACSYt/result.json",
+    "malformedArguments": "pi-sdk-malformed-e2e-3pwkhQ/result.json",
+    "noticeGrouping": "pi-sdk-notices-e2e-y6V9k9/result.json"
+  },
+  "unchanged": ["SDK version", "authentication and credential routing", "billing settings", "personal settings", "original user conversations"],
+  "notVerified": [
+    "Borrowed foreground-worker compaction without provider-local hooks",
+    "Overflow/length recovery context edits",
+    "Power loss, partial filesystem writes or every publication crash boundary",
+    "Physical Safari and overnight stress",
+    "Sonnet live compaction and other full provider journeys in this change",
+    "Lossless retention of all historical details"
+  ],
+  "unitTestsAddedOrRun": false,
+  "fullLocalSuiteRun": false,
+  "privacy": "Artifacts are local temporary-directory basenames. Raw system prompts, browser traces, sessions, native transcripts and tool payloads remain private."
+}
