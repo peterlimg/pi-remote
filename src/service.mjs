@@ -18,6 +18,12 @@ function inside(file, dir) {
   return !!rel && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
 }
 
+function isHelperSession(state) {
+  // Children can have readable names, but keep their generated run directory.
+  return /[\\/][a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}[\\/]run-\d+[\\/]session\.jsonl$/i.test(state.file || '') ||
+    /^subagent-.+-[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}(?:-\d+)?$/i.test(state.title || '');
+}
+
 export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
@@ -73,15 +79,16 @@ export class SessionService extends EventEmitter {
     return { sessions: matches.slice(offset, offset + 20), total, matched: matches.length, offset, requestOffset, query,
       warnings: this.warnings, allowResume: this.allowResume };
   }
-  // All sessions matching a search, in list order (the phone sorts the same way).
-  matches(query = '') {
+  // Helpers stay searchable; only the default browsing list hides them.
+  matches(query = '', includeHelpers = false) {
     if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker, pinned: this.pins.has(id) });
-    const matches = [...all.values()].filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
+    const visible = [...all.values()].filter(item => includeHelpers || query || !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
+    const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
-    return { matches, total: all.size };
+    return { matches, total: visible.length };
   }
   pin(id, pinned) {
     if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id) || typeof pinned !== 'boolean') throw new Error('Invalid pin');
@@ -95,7 +102,7 @@ export class SessionService extends EventEmitter {
   // Projects in most-recently-used order. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) {
+    for (const item of this.matches('', true).matches) {
       if (projects.has(item.cwd) || this.tempDirs.some(dir => inside(item.cwd, dir))) continue;
       projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
     }
