@@ -22,6 +22,7 @@
     "test:subagents": "node subagents.mjs",
     "test:notices": "node notices.mjs",
     "test:compaction": "node compaction-context.mjs",
+    "test:clone": "node clone.mjs",
     "experiment:compact-sdk": "node --experimental-strip-types compaction.mjs",
     "experiment:compact-pi": "node --experimental-strip-types compaction-pi.mjs"
   },

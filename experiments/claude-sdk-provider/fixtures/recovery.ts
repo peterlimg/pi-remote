@@ -37,6 +37,7 @@ function replayQuery(args) {
   let turn = previous.findLast(row => row.type === 'native-complete' && row.session === session)?.turn ?? 0;
   let memory = previous.findLast(row => row.type === 'native-complete' && row.session === session)?.memory;
   const compactionMode = process.env.PI_RECOVERY_COMPACTION;
+  const contextTest = Boolean(compactionMode || process.env.PI_RECOVERY_CLONE);
   const invalidInit = process.env.PI_RECOVERY_BAD_INIT === '1';
   const sdkPrompt = typeof args.options.systemPrompt === 'string' ? args.options.systemPrompt : args.options.systemPrompt?.append ?? '';
   const piDocs = sdkPrompt.includes('providers (docs/custom-provider.md)') && sdkPrompt.includes('pi packages (docs/packages.md)');
@@ -72,9 +73,9 @@ function replayQuery(args) {
         notices: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].filter(marker => text.includes(marker)),
         noticeOrder: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].map(marker => text.indexOf(marker)) });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
-      const summaryRequest = Boolean(compactionMode && !server);
+      const summaryRequest = contextTest && !server;
       if (summaryRequest) {
-        memory = text.match(/PI_COMPACTION_[a-f0-9-]+/)?.[0];
+        memory = text.match(/PI_(?:COMPACTION|CLONE)_[a-f0-9-]+/)?.[0];
         log({ type: 'compaction-helper', session, marker: Boolean(memory), tools: tools.length,
           nativeCompactionDisabled: args.options.settings.autoCompactEnabled === false });
         if (compactionMode === 'summary-error') throw new Error('Synthetic summary failure');
@@ -124,10 +125,11 @@ function replayQuery(args) {
           : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart'
           : request === 'cancel-after-tools' ? 'cancel-completed' : request === 'cancel-in-tool' ? 'cancel-running'
           : request === 'dynamic-tools' && !tools.includes('mcp__pi__extra') ? 'dynamic-tools' : undefined;
-        if (label || text === 'reuse-id') {
+        if (label || text === 'reuse-id' || request === 'reuse-seed-id') {
           const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
-            .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
-          const id = text === 'reuse-id' ? old.id : 'toolu_' + randomUUID();
+            .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : [])
+            .find(block => block.type === 'toolCall' && block.arguments.label === (request === 'reuse-seed-id' ? 'seed' : 'orphan'));
+          const id = text === 'reuse-id' || request === 'reuse-seed-id' ? old.id : 'toolu_' + randomUUID();
           label ??= 'orphan';
           const input = text === 'invalid-new' ? {} : { label };
           const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
@@ -135,7 +137,7 @@ function replayQuery(args) {
           const blocks = text.startsWith('seed') ? [{ type: 'thinking', thinking: 'private reasoning', signature: 'RECOVERY_PRIVATE_SIGNATURE' }] : [];
           yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use', compactionMode === 'auto' || compactionMode === 'auto-tools' && label === 'dynamic-tools' ? 5000 : 10);
           const result = await pending;
-          if (compactionMode) memory = JSON.stringify(result).match(/PI_COMPACTION_[a-f0-9-]+/)?.[0] ?? memory;
+          if (contextTest) memory = JSON.stringify(result).match(/PI_(?:COMPACTION|CLONE)_[a-f0-9-]+/)?.[0] ?? memory;
           log({ type: 'result', label, error: result.isError === true });
         }
       }
@@ -159,16 +161,16 @@ function replayQuery(args) {
         yield wrap({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Partial answer before Stop.' } });
         await delay(30000, undefined, { signal: args.options.abortController.signal });
       }
-      if (compactionMode) memory = text.match(/PI_COMPACTION_[a-f0-9-]+/)?.[0] ?? memory;
+      if (contextTest) memory = [...text.matchAll(/PI_(?:COMPACTION|CLONE)_[a-f0-9-]+/g)].at(-1)?.[0] ?? memory;
       yield* assistant(args.options.model, [{ type: 'text', text: summaryRequest
         ? memory ? `## Goal\nRemember ${memory}.\n## Progress\nThe probe already completed. Never repeat recorded work.\n## Next steps\nContinue the current user request.`
           : '## Pending request\nContinue the latest user request. No additional tool work is required.'
-        : compactionMode && request.includes('recall') ? memory ?? 'MISSING_MARKER'
+        : contextTest && request.includes('recall') ? memory ?? 'MISSING_MARKER'
         : text.includes('Operator-approved SDK context recovery')
         ? 'RECOVERED ' + process.env.PI_RECOVERY_MARKER + ' with unknown prior effects.' : 'DONE' }]);
       yield { type: 'assistant', uuid: randomUUID() };
       turn++;
-      log({ type: 'native-complete', session, turn, ...(compactionMode ? { memory } : {}) });
+      log({ type: 'native-complete', session, turn, ...(contextTest ? { memory } : {}) });
       yield { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', total_cost_usd: turn * 0.01,
         modelUsage: { [args.options.model]: { inputTokens: turn * 100, outputTokens: turn * 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } } };
     }

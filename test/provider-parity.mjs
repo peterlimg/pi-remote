@@ -297,10 +297,49 @@ try {
       assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effect, 'utf8'), 'effect\n');
     });
     await step('clone-contract', async () => {
-      await newSession('clone'); await send('Reply READY without tools.');
-      const before = (await worker.request('get_state')).sessionFile;
+      const marker = 'CLONE_' + randomUUID(), input = join(project, 'clone-marker.txt'), effect = join(project, 'clone-effects.log');
+      const cloneMemory = 'COPY_ONLY_' + randomUUID(), originalMemory = 'ORIGINAL_ONLY_' + randomUUID();
+      writeFileSync(input, marker + '\n'); writeFileSync(effect, '');
+      await newSession('clone');
+      const reply = await send(`Use bash to append exactly one line "effect" to ${effect}, once only. Read ${input} and remember its exact CLONE_ value. For this acknowledgement only, reply READY without the marker. You may repeat the value verbatim when I ask later. Do not repeat completed work.`);
+      assert(!reply.includes(marker));
+      const original = file, bytes = readFileSync(original, 'utf8'), calls = parentCalls().length;
+      const loadout = audit().find(row => row.type === 'loadout' && row.session === JSON.parse(bytes.split('\n')[0]).id);
+      assert(['read', 'bash', 'edit', 'write'].every(name => loadout?.tools?.includes(name)), 'Clones must use the normal parent tools.');
+      result.loadouts[currentTarget] = loadout.tools.sort();
+      const native = path => readFileSync(path, 'utf8').trim().split('\n').map(JSON.parse).findLast(row => row.customType === 'claude-sdk-checkpoint')?.data.sdkSessionId;
+      const originalNative = native(original);
       const cloned = await worker.request('clone'); assert.equal(cloned.cancelled, false, 'Cloning must not be cancelled by the provider.');
-      assert.notEqual((await worker.request('get_state')).sessionFile, before);
+      const copy = (await worker.request('get_state')).sessionFile; assert.notEqual(copy, original);
+      assert.equal(readFileSync(original, 'utf8'), bytes, 'Cloning must leave the original byte-identical.');
+      // RPC replaces its active session; close it before letting the host own either saved file again.
+      const reopen = async path => {
+        await worker.close(); await until(() => !host.service.live.get(id)?.worker, 'cloned worker closure', 15000);
+        file = path; id = sessionKey(path); await host.service.scan();
+        assert.equal((await host.service.resume(id, randomUUID())).ok, true); attach(host.service.live.get(id).worker);
+        models = (await worker.request('get_available_models')).models; await openParent(); await select(currentTarget);
+      };
+      await reopen(copy);
+      assert((await send('Repeat the original CLONE_ value verbatim, without tools or repeating completed work.')).includes(marker));
+      assert((await send(`Remember ${cloneMemory} in this chat. Without tools, repeat that marker and the original CLONE_ value.`)).includes(marker));
+      const copyNative = native(copy), copyBytes = readFileSync(copy, 'utf8');
+      if (currentTarget.startsWith('claude-sdk/')) { assert(originalNative && copyNative); assert.notEqual(copyNative, originalNative); }
+      assert.equal(readFileSync(original, 'utf8'), bytes);
+      await reopen(original);
+      const sourceReply = await send(`Remember ${originalMemory} in this chat. Without tools, repeat that marker and the original CLONE_ value. Do not invent values from other chats.`);
+      assert(sourceReply.includes(marker) && sourceReply.includes(originalMemory) && !sourceReply.includes(cloneMemory));
+      assert.equal(readFileSync(copy, 'utf8'), copyBytes);
+      if (originalNative) assert.equal(native(original), originalNative);
+      const sourceBytes = readFileSync(original, 'utf8');
+      await reopen(copy);
+      const copyReply = await send('Without tools, repeat the original CLONE_ value and this chat\'s COPY_ONLY_ marker. Do not invent values from other chats.');
+      assert(copyReply.includes(marker) && copyReply.includes(cloneMemory) && !copyReply.includes(originalMemory));
+      assert.equal(readFileSync(original, 'utf8'), sourceBytes); if (copyNative) assert.equal(native(copy), copyNative);
+      await reopen(original);
+      const again = await send('Without tools, repeat the original CLONE_ value and this chat\'s ORIGINAL_ONLY_ marker. Do not invent values from other chats.');
+      assert(again.includes(marker) && again.includes(originalMemory) && !again.includes(cloneMemory));
+      assert.equal(parentCalls().length, calls, 'Neither branch may replay tools after cloning or restart.');
+      assert.equal(readFileSync(effect, 'utf8'), 'effect\n');
     });
     await step('recorded-identities-and-usage', async () => {
       for (const name of readdirSync(sessions).filter(name => name.endsWith('.jsonl'))) {

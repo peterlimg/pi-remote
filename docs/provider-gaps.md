@@ -1,13 +1,13 @@
 # Remaining provider parity gaps
 
-Canonical open-items list, updated for Pi-owned SDK parent compaction. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
+Canonical open-items list, updated for Pi-owned parent compaction and completed-branch cloning. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
 
 ## Confirmed limitations
 
 | ID | Open item | Scope and evidence |
 | --- | --- | --- |
 | SDK-1 | Parent manual/threshold compaction is implemented; remaining compaction scope needs verification. | Real Codex, SDK Haiku and SDK Opus checks passed using Pi's normal summarizer and a validated fresh-SDK handoff. Borrowed foreground-worker compaction, overflow/length recovery and partial publication crashes remain unproven. SDK-native automatic compaction stays disabled intentionally. See [implementation and evidence](sdk-compaction.md). |
-| SDK-2 | Cloning, forks and tree navigation are blocked. | The same provider-wide history guard blocks these operations. The shared test confirmed a cancelled SDK clone while Codex created a new session. Safe SDK checkpoint/history lineage remains to be implemented. |
+| SDK-2 | Completed-branch cloning is implemented; earlier forks and tree navigation remain blocked. | An idle saved clone gets its own receipt and fresh native SDK context, preserving the parent and retiring historical calls. Source and clone must retain independent memory across restart. See [cloning scope and evidence](sdk-cloning.md). This does not enable earlier history selection, child-local cloning or a new phone clone control. |
 | SDK-3 | Durable foreground-child continuation is incomplete. | Fresh standard foreground workers now work, including real edits and validation. Borrowed foreground SDK bridges close on completion and do not persist child-local provider checkpoints. Resuming retained/completed children needs their own provider session hooks and E2E coverage. Normal parent-chat reload and completed-checkpoint restart already work. |
 | SDK-4 | General instruction/configuration changes cannot transparently reuse a native query. | Validated tool declarations plus the generated `tools` section can change through a handoff. Other prompt, environment and output-limit changes remain guarded. Any broader handoff must preserve operator instructions and verify accepted history rather than weaken the fingerprint checks. |
 | SDK-5 | The upstream prompt-sensitive request rejection is unresolved. | Structured prompt projection mitigates the recorded generated-documentation trigger. It is not an upstream fix, and opaque/custom/inherited prompts can still be rejected. See the [billing/request-content investigation](research/claude-agent-sdk-billing.md). No billing change or credential workaround is justified by this response alone. |
@@ -47,11 +47,11 @@ These workflows still need shared realistic verification. Earlier narrow checks 
 - Nested delegation and durable/retained/forked child continuation.
 - Images and slash-command dialogs combined with tools, delegation, switching, Stop and restart.
 - Arbitrary inherited/custom prompt changes and their provenance across child contexts.
-- Continuing after tree navigation or cloning once implementation exists; the current clone test checks session creation only.
+- Earlier forks and tree navigation, plus cloning combined with child-local lifecycle, images or slash-dialog workflows beyond the shared parent-clone contract.
 - Long-running/overnight background work, hard crashes, dropped native resume anchors and partial checkpoint/projection publication.
 - Physical Safari. Mobile Chromium and WebKit checks are not physical-device proof.
 
-The baseline full matrix exercised Haiku and Codex. New compaction-only checks also cover Opus, not its other complete journeys. Sonnet compaction and complete parity remain unverified. No all-green full parity run is recorded, and full local/unit suites were not run for this work.
+The baseline full matrix exercised Haiku and Codex. New compaction and cloning checks also cover Opus, not its other complete journeys. Sonnet compaction/cloning and complete parity remain unverified. No all-green full parity run is recorded, and full local/unit suites were not run for this work.
 
 ## Safety boundaries to keep
 

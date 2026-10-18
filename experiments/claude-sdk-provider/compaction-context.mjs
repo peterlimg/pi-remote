@@ -21,7 +21,7 @@ const text = response => response.content.filter(block => block.type === 'text')
 const result = { fixture: 'real Pi RPC/default compactor, projection, SDK provider, MCP and effects; external SDK replay only',
   piVersion: execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), cases: [], pass: false };
 const modes = ['manual', 'checkpoint-gap', 'repeated', 'repeat-before-response', 'auto', 'auto-tools', 'summary-error', 'summary-stop', 'receipt-gap', 'source-tamper',
-  'projection-tamper', 'invalid-receipt', 'config-receipt', 'instructions', 'missing-result', 'unknown-error', 'away-no-checkpoint',
+  'projection-tamper', 'invalid-receipt', 'config-receipt', 'null-config', 'instructions', 'missing-result', 'unknown-error', 'away-no-checkpoint',
   'foreign-before', 'compact-away', 'foreign-after', 'notices', 'tools-after', 'cancel-after'];
 let worker, settled = 0;
 async function until(check, label) {
@@ -95,7 +95,7 @@ try {
     assert(readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8').startsWith(before), 'Original audit entries must remain unchanged.');
     assert.equal(entries().filter(row => row.type === 'compaction').length, 1);
     const receiptIndex = entries().findLastIndex(row => row.type === 'custom' && row.customType === 'claude-sdk-compaction'); assert(receiptIndex >= 0);
-    if (['receipt-gap', 'source-tamper', 'projection-tamper', 'invalid-receipt', 'config-receipt', 'instructions', 'checkpoint-gap'].includes(mode)) {
+    if (['receipt-gap', 'source-tamper', 'projection-tamper', 'invalid-receipt', 'config-receipt', 'null-config', 'instructions', 'checkpoint-gap'].includes(mode)) {
       if (mode === 'checkpoint-gap') { worker.process.kill('SIGKILL'); await worker.exited; }
       else await worker.close();
       worker = undefined; const rows = entries();
@@ -104,6 +104,7 @@ try {
       if (mode === 'projection-tamper') rows.find(row => row.type === 'compaction').summary += '\nTAMPERED_SUMMARY';
       if (mode === 'invalid-receipt') delete rows[receiptIndex].data.state;
       if (mode === 'config-receipt') delete rows[receiptIndex].data.state.configuration;
+      if (mode === 'null-config') rows[receiptIndex].data.state.configuration = null;
       if (mode === 'instructions') writeFileSync(join(project, 'AGENTS.md'), 'CHANGED_OPERATOR_POLICY');
       save(rows); await start();
       if (mode !== 'checkpoint-gap') {

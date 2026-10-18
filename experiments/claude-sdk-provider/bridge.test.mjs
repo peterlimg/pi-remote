@@ -601,6 +601,6 @@ test('extension registers native ambient auth without a fake key and closes on l
   assert.equal(provider.auth.apiKey.login, undefined);
   assert(provider.getModels().every(m => m.reasoning && m.input.join() === 'text,image' && m.maxTokens === 128000));
   assert(handlers.has('session_shutdown') && handlers.has('model_select'));
-  const events = ['session_before_tree', 'session_before_fork'];
+  const events = ['session_before_tree'];
   for (const event of events) assert.deepEqual(handlers.get(event)({}, { model, hasUI: false }), { cancel: true });
 });

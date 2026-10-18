@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-18",
+  "sourceBase": "1a002b8",
+  "feature": "Idle saved SDK branch cloning with independent native contexts",
+  "pass": true,
+  "fullProviderParityEstablished": false,
+  "versions": { "sdk": "0.3.296", "replayPi": ["1.2.0", "1.3.0"], "livePi": "1.3.0" },
+  "red": {
+    "artifact": "pi-sdk-clone-e2e-T8E6NK/result.json",
+    "finding": "The existing SDK history guard cancelled a normal Pi clone."
+  },
+  "retainedDevelopmentFailure": {
+    "artifact": "pi-sdk-clone-e2e-uizZgo/result.json",
+    "finding": "Repeated Pi RPC fork-start events overwrote the first valid clone receipt with a rejected second receipt. Receipt creation is now idempotent for the target session; invalid receipts are never silently repaired."
+  },
+  "replayE2E": {
+    "fixture": "Real Pi clone/RPC/persistence, SDK provider, MCP, permissions, validation and counted effects; only the external SDK peer is replayed",
+    "artifacts": { "1.2.0": "pi-sdk-clone-e2e-Wra5aj/result.json", "1.3.0": "pi-sdk-clone-e2e-7yKEEO/result.json" },
+    "casesPerVersion": 31,
+    "allPassed": true,
+    "cases": [
+      "independent", "checkpoint-gap", "clone-again", "compact-before", "compact-before-activation", "compact-after", "compact-clone-gap",
+      "foreign-before", "clone-away", "foreign-after", "parent-moved", "new-tools", "permission", "validation", "cancel-first",
+      "missing-result", "unknown-error", "no-checkpoint", "pending-user", "earlier-fork", "busy", "receipt-gap", "source-tamper", "prefix-tamper",
+      "invalid-receipt", "null-config", "wrong-target", "config-receipt", "instructions", "environment", "reuse-id"
+    ],
+    "assertions": [
+      "Original file remains byte-identical during cloning and clone-only work",
+      "Source and clone recall independent values after restart",
+      "Different active native session IDs; each subsequently resumes its own checkpoint",
+      "SIGKILL only the owned worker after receipt and before the first clone checkpoint; continuation succeeds after restart",
+      "An unactivated clone can be cloned or compacted while keeping its original configuration owner bound",
+      "Compaction before cloning does not confuse its shorter projection with the old configuration boundary",
+      "Moving the parent after publication does not prevent the clone's own restart",
+      "A rejected busy clone leaves its source running",
+      "Missing/altered receipts, source, configuration or ownership reject before another SDK query",
+      "Unknown SDK work, missing results and pending input cannot be approved by cloning",
+      "New calls preserve normal Pi permissions and argument validation",
+      "Historical call IDs cannot execute again",
+      "Usage totals include copied historical usage and new work without reusing the parent's native reported baseline"
+    ]
+  },
+  "liveSharedContract": {
+    "artifact": "pi-provider-parity-WI1rll/result.json",
+    "fixture": "Real Codex/SDK models, normal personal settings/instructions/extensions, isolated host/projects/sessions and mobile Chromium",
+    "pass": true,
+    "selectedCases": ["clone-contract", "recorded-identities-and-usage"],
+    "otherMatrixRows": "skipped, not passed",
+    "models": [
+      { "model": "openai-codex/gpt-6.1-sol", "pass": true, "parentTools": 14, "effectLines": 1, "toolCalls": 2 },
+      { "model": "claude-sdk/claude-haiku-5-5", "pass": true, "parentTools": 14, "effectLines": 1, "toolCalls": 1 },
+      { "model": "claude-sdk/claude-opus-5-5", "pass": true, "parentTools": 14, "effectLines": 1, "toolCalls": 2 }
+    ],
+    "assertions": [
+      "Identical normal parent tool sets across all three models",
+      "Marker first obtained by an executed tool reading a file, not supplied in the prompt",
+      "One counted filesystem effect before cloning; neither branch repeats tools",
+      "Actual Pi clone through RPC, then both files reopened through mobile UI",
+      "Original bytes unchanged by creating and using the clone",
+      "Each branch learns its own value and retains it without revealing the other branch's value",
+      "Both branches repeat correct memory after replacing their owned workers",
+      "Active SDK native IDs differ between source and clone and stay stable within each branch after restart",
+      "The inherited parent checkpoint remains copied audit data, not the clone's resume target",
+      "Matching call/result IDs and reconciled nonnegative token usage",
+      "Personal settings bytes unchanged; owned workers closed"
+    ],
+    "note": "Haiku used one bash call for the append and file read. Codex and Opus used bash plus read. The observable contract and normal tools were the same; no fixed tool sequence or restricted profile was substituted."
+  },
+  "compactionRegression": {
+    "artifacts": { "1.2.0": "pi-sdk-compaction-context-KRaLYc/result.json", "1.3.0": "pi-sdk-compaction-context-bCfwFt/result.json" },
+    "casesPerVersion": 24,
+    "allPassed": true,
+    "addedCase": "A receipt with accepted SDK work cannot replace its configuration with null. The shared validator rejects it before SDK startup."
+  },
+  "safetyRegressionsPi13": {
+    "allPassed": true,
+    "recovery": "pi-sdk-recovery-e2e-fncMky/result.json",
+    "tools": "pi-sdk-tools-e2e-0L7NYw/result.json",
+    "cancel": "pi-sdk-cancel-e2e-Pyp55e/result.json",
+    "malformed": "pi-sdk-malformed-e2e-J4AjWR/result.json",
+    "notices": "pi-sdk-notices-e2e-sRPSKN/result.json"
+  },
+  "unchanged": ["SDK version", "authentication/credential routing", "billing settings", "personal settings", "original user conversations"],
+  "notVerifiedOrEnabled": [
+    "Earlier forks or tree navigation",
+    "Ephemeral/in-flight cloning or unknown uncheckpointed SDK work",
+    "Child-local clone/resume lifecycle and nested delegation",
+    "Image/slash-dialog combinations with cloning",
+    "Live Sonnet cloning",
+    "Physical Safari",
+    "Every partial-file/power-loss boundary and long-running stress",
+    "A new phone clone control"
+  ],
+  "fullLocalSuiteRun": false,
+  "unitTestsAddedOrRun": false,
+  "privacy": "Artifact paths are local temporary-directory basenames. Raw prompts, sessions, tool payloads, browser traces and native transcripts stay private."
+}

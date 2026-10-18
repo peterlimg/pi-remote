@@ -42,11 +42,11 @@ PI_PARITY_CASES=compaction-contract,recorded-identities-and-usage npm run test:p
 PI_PARITY_COMPACTION_AUTO=1 PI_PARITY_CASES=compaction-contract,recorded-identities-and-usage npm run test:provider-parity
 ```
 
-The replay E2E uses real Pi RPC, its default compactor, projection/persistence, provider and MCP. Only the external SDK peer is replayed. Its 23 cases cover repeated/manual/automatic compaction, tool activation at the automatic boundary, restart, summary error/Stop, missing/altered receipts and history, provider switches, queued notices and later tool activation/Stop. CI runs this test without model credentials.
+The replay E2E uses real Pi RPC, its default compactor, projection/persistence, provider and MCP. Only the external SDK peer is replayed. Its focused cases cover repeated/manual/automatic compaction, tool activation at the automatic boundary, restart, summary error/Stop, missing/altered receipts and history, provider switches, queued notices and later tool activation/Stop. CI runs this test without model credentials.
 
 Separate live mobile Chromium checks passed manual and automatic compaction with Codex GPT-6.1 Sol, SDK Haiku 5.5 and SDK Opus 5.5 on Pi 1.3. Each reads an unknown marker through normal tools, performs one counted filesystem effect, requires the generated summary to retain the marker, recalls it without tools and repeats that check after replacing its own worker. Automatic tests use bounded inert file data and a project-local 45K threshold; manual tests retain no recent token tail. Personal settings and original chats remain untouched.
 
-See [reviewed evidence](../experiments/claude-sdk-provider/verification-compaction-context.json). Raw traces, prompts and sessions stay private. The first live automatic Haiku attempt retained the marker but refused to reveal it after an ambiguous earlier no-print instruction. The retained failure and clarified one-turn instructions are recorded, not presented as another `ACK_0` memory-loss reproduction.
+See [initial reviewed evidence](../experiments/claude-sdk-provider/verification-compaction-context.json). The [cloning verification](../experiments/claude-sdk-provider/verification-clone.json) records the latest 24-case compaction reruns, including rejection of null configuration for accepted SDK work. Raw traces, prompts and sessions stay private. The first live automatic Haiku attempt retained the marker but refused to reveal it after an ambiguous earlier no-print instruction. The retained failure and clarified one-turn instructions are recorded, not presented as another `ACK_0` memory-loss reproduction.
 
 ## Remaining scope
 
