@@ -54,13 +54,15 @@ function replayQuery(args) {
       const next = await source.next(); if (next.done) return;
       const content = next.value.message.content;
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
-      const request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
+      let request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
+      const continuation = text.includes('Pi tool-set update.') && request.startsWith('Continue the user request');
+      if (continuation) request = 'dynamic-tools';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,
         providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"'),
-        cancelled: text.includes('User-cancelled SDK continuation.') });
+        cancelled: text.includes('User-cancelled SDK continuation.'), toolUpdate: text.includes('Pi tool-set update.'), continuation });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
       if (piDocs || request === 'billing-rejection') {
         yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
@@ -103,7 +105,8 @@ function replayQuery(args) {
       } else {
         let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'allow-new' ? 'allowed'
           : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart'
-          : request === 'cancel-after-tools' ? 'cancel-completed' : request === 'cancel-in-tool' ? 'cancel-running' : undefined;
+          : request === 'cancel-after-tools' ? 'cancel-completed' : request === 'cancel-in-tool' ? 'cancel-running'
+          : request === 'dynamic-tools' && !tools.includes('mcp__pi__extra') ? 'dynamic-tools' : undefined;
         if (label || text === 'reuse-id') {
           const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
             .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
@@ -118,6 +121,19 @@ function replayQuery(args) {
           log({ type: 'result', label, error: result.isError === true });
         }
       }
+      if (request === 'dynamic-tools') {
+        const id = 'extra_' + randomUUID(), input = process.env.PI_RECOVERY_TOOL_CASE === 'validation' ? {} : { label: 'new-capability' };
+        const listed = (await client.listTools()).tools.map(tool => tool.name);
+        const permission = await args.options.canUseTool('mcp__pi__extra', input, { toolUseID: id });
+        log({ type: 'dynamic-tools', listed, allowed: permission.behavior === 'allow' });
+        const pending = client.callTool({ name: 'extra', arguments: input, _meta: { 'claudecode/toolUseId': id } });
+        void pending.catch(() => {});
+        yield* assistant(args.options.model, [{ type: 'tool_use', id, name: 'mcp__pi__extra', input }], 'tool_use');
+        await pending;
+      }
+      if (request === 'assert-extra-disabled') log({ type: 'unavailable',
+        listed: (await client.listTools()).tools.map(tool => tool.name),
+        allowed: (await args.options.canUseTool('mcp__pi__extra', {}, { toolUseID: randomUUID() })).behavior === 'allow' });
       if (request.startsWith('cancel-')) {
         log({ type: 'cancel-ready', request });
         yield wrap({ type: 'message_start', message: { id: randomUUID(), model: args.options.model, usage: { input_tokens: 10, output_tokens: 5 } } });
@@ -162,7 +178,8 @@ export default function (pi) {
     models: [{ ...metadata, provider: 'recovery-control', api: 'recovery-control', id: 'plain', name: 'Recovery control' }],
     api: { stream: controlStream, streamSimple: controlStream } }));
   // Test authentication only; no native CLI or model service is used by this peer.
-  localLogin.resolve = async () => ({ auth: {}, source: 'isolated SDK replay' });
+  localLogin.resolve = async () => ({ auth: {}, source: 'isolated SDK replay',
+    ...(['environment', 'old-guard'].includes(process.env.PI_RECOVERY_TOOL_CASE!) ? { env: { PI_SYNTHETIC_SDK_SCOPE: process.env.PI_RECOVERY_REQUEST_SCOPE ?? 'base' } } : {}) });
   install(pi, replayQuery);
   pi.on('before_agent_start', event => {
     event.systemPromptOptions.promptGuidelines.push('PORTABLE_GUIDELINE');
@@ -171,11 +188,16 @@ export default function (pi) {
     if (process.env.PI_RECOVERY_DOC_OVERRIDE === '1') event.systemPromptOptions.sections.docs = 'PORTABLE_DOC_OVERRIDE';
   });
   pi.on('context_with_system', event => {
+    if (event.messages.some(message => message.role === 'toolResult' && message.toolName === 'probe')) {
+      if (process.env.PI_RECOVERY_TOOL_CASE === 'missing-result') return { messages: event.messages.filter(message => message.role !== 'toolResult') };
+      if (process.env.PI_RECOVERY_TOOL_CASE === 'history') return { messages: event.messages.map(message => message.role === 'user' ? { ...message, content: 'TAMPERED' } : message) };
+    }
     if (process.env.PI_RECOVERY_REWRITE === '1') return { messages: [
       { role: 'system', content: 'PORTABLE_OPAQUE_REWRITE', timestamp: 0 }, ...event.messages.filter(message => message.role !== 'system'),
     ] };
   });
   pi.on('tool_call', event => {
+    if (event.toolName === 'extra' && process.env.PI_RECOVERY_TOOL_CASE === 'permission') return { block: true, reason: 'Denied by normal Pi policy.' };
     if (event.toolName === 'probe' && event.input.label === 'policy-denied') {
       return { block: true, reason: 'Denied by the normal Pi permission policy.' };
     }
@@ -184,8 +206,30 @@ export default function (pi) {
     parameters: Type.Object({ label: Type.String() }, { additionalProperties: false }),
     execute: async (id, { label }, signal) => {
       log({ type: 'execution', id, label });
+      if (label === 'dynamic-tools') {
+        pi.setActiveTools([...pi.getActiveTools(), 'extra']);
+        log({ type: 'selection', active: pi.getActiveTools(), available: pi.getAllTools().map(tool => tool.name) });
+        if (['environment', 'old-guard'].includes(process.env.PI_RECOVERY_TOOL_CASE!)) process.env.PI_RECOVERY_REQUEST_SCOPE = 'changed';
+      }
       if (label === 'orphan') while (!existsSync(process.env.PI_RECOVERY_GATE!)) await delay(20, undefined, { signal });
       if (label === 'cancel-running') await delay(30000, undefined, { signal });
       return { content: [{ type: 'text', text: label === 'seed' || label === 'cancel-completed' ? process.env.PI_RECOVERY_MARKER! : 'APPROVED_NEW_EFFECT' }], details: undefined };
     } });
+  if (process.env.PI_RECOVERY_DYNAMIC === '1') {
+    pi.registerTool({ name: 'extra', label: 'Lazy extra capability', description: 'One synthetic tool enabled at runtime.',
+      ...(process.env.PI_RECOVERY_TOOL_CASE === 'instructions' ? { promptGuidelines: ['PROTECTED_DYNAMIC_POLICY'] } : {}),
+      parameters: Type.Object({ label: Type.String() }, { additionalProperties: false }),
+      execute: async (id, { label }) => {
+        log({ type: 'execution', id, label });
+        return { content: [{ type: 'text', text: 'EXTRA_DONE' }], details: undefined };
+      } });
+    pi.registerCommand('hide-extra', { description: 'Deactivate the synthetic extra tool', handler: async () => {
+      pi.setActiveTools(pi.getActiveTools().filter(name => name !== 'extra'));
+    } });
+    pi.on('session_start', (_event, ctx) => {
+      if (!ctx.sessionManager.getBranch().some(row => row.message?.role === 'system' && row.message.toolsAdded?.some(tool => tool.name === 'extra'))) {
+        pi.setActiveTools(pi.getActiveTools().filter(name => name !== 'extra'));
+      }
+    });
+  }
 }

@@ -36,12 +36,12 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let promptSource: Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> | undefined;
   const restore = (ctx: ExtensionContext) => {
     bridge?.close();
-    bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery, promptSource: () => promptSource,
+    bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery, promptSource: () => promptSource, historySource: () => recoveryMessages(ctx, true),
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },
       onRecoverySession: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-session', { id, sdkSessionId }); } });
   };
-  const recoveryMessages = (ctx: ExtensionContext): Message[] => ctx.sessionManager.buildSessionProjection().entries.flatMap(entry => entry.messages).flatMap<Message>(message => {
-    if (message.role === 'system') return [];
+  const recoveryMessages = (ctx: ExtensionContext, includeSystem = false): Message[] => ctx.sessionManager.buildSessionProjection().entries.flatMap(entry => entry.messages).flatMap<Message>(message => {
+    if (message.role === 'system') return includeSystem ? [message] : [];
     if (message.role === 'custom') return [{ role: 'user' as const,
       content: typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content, timestamp: message.timestamp }];
     if (message.role === 'user' || message.role === 'assistant' || message.role === 'toolResult') return [message];

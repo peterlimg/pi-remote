@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-18",
+  "sdkVersion": "0.3.296",
+  "scope": "Pi runtime tool activation through the Claude SDK, including subagents_enable followed by a real Pi subagent",
+  "cause": "The adapter froze prompt and tool declarations for the native SDK query. The loader added subagent and contact_supervisor successfully, then the next request failed its configuration guard before launching a child.",
+  "red": {
+    "command": "PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node tools.mjs",
+    "error": "SDK prompt, tools, environment, or output limit changed. Start a new Pi session.",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-tools-e2e-m2bfb7/result.json"
+  },
+  "green": [
+    { "piVersion": "1.2.0", "cases": 12, "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-tools-e2e-RdBCPf/result.json" },
+    { "piVersion": "1.3.0", "cases": 12, "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-tools-e2e-nQy600/result.json" }
+  ],
+  "cases": [
+    "First-turn activation and new tool execution, without replaying the loader",
+    "Activation after a completed SDK checkpoint",
+    "Worker restart retains the updated tool selection and completed checkpoint",
+    "Removed tools are no longer advertised or permitted",
+    "Stop and continue after a native tool-set handoff",
+    "An old exact zero-work configuration rejection remains historical data",
+    "Pi permission denial prevents the new tool's execution",
+    "Pi argument validation prevents invalid new-tool arguments",
+    "Changed explicit environment remains blocked before SDK startup",
+    "Changed non-tool instructions remain blocked before SDK startup",
+    "Missing results remain blocked before a replacement SDK query",
+    "Changed accepted history remains blocked"
+  ],
+  "live": {
+    "command": "PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node subagents.mjs",
+    "fixture": "Real Pi 1.3, pi-subagents 0.78.0, SDK Haiku Max, isolated host and mobile Chromium; no simulated model",
+    "initialSelection": "Non-SDK tool selection, switched to SDK before the first prompt; no GPT model request",
+    "enableCount": 1,
+    "childLaunchCount": 1,
+    "childModel": "claude-sdk/claude-haiku-5-5:minimal",
+    "childContext": "fresh foreground, explicit SDK provider extension and zero-tool profile",
+    "childExitCode": 0,
+    "childToolCount": 0,
+    "actualChildSdkTranscriptVerified": true,
+    "nativeParentContexts": 2,
+    "callResultIdsMatched": true,
+    "reopenedResult": true,
+    "ownedWorkerClosed": true,
+    "personalSettingsUnchanged": true,
+    "pass": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-subagents-urrJGT/result.json",
+    "verificationNotes": [
+      "The first live setup used an unsupported inline empty frontmatter list. The corrected profile uses a blank scalar list and the same SDK model/protocol.",
+      "A subsequent live check caught the model repeating the loader when the adapter repeated the original user command. The handoff now asks only for remaining work.",
+      "The final live model/tool assertions passed before a navigation-only reload selector matched both parent and child rows. The selector now uses the stable parent ID. Reopen was verified against that existing completed conversation with zero workers, prompts or new model requests; initial-navigation.json preserves the initial failure."
+    ]
+  },
+  "actualReportedChatPreflight": {
+    "historyAccepted": true,
+    "originalChatUnchanged": true,
+    "realSdkRequests": 0,
+    "toolExecutions": 0,
+    "kind": "Production bridge and saved checkpoint/history with the external SDK boundary replaced before network execution; no private input committed"
+  },
+  "regression": {
+    "piVersion": "1.3.0",
+    "cancellation": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-cancel-e2e-MWRo3H/result.json",
+    "recoveryAndPermissions": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-dxghHZ/result.json",
+    "malformedToolJson": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-malformed-e2e-Y0kaI8/result.json",
+    "allPass": true,
+    "typescriptAndSyntaxChecksPass": true
+  },
+  "limits": [
+    "A tool-only handoff starts a new SDK context and cache/usage baseline; the Pi conversation and previous native transcript are preserved",
+    "Only declarations and the generated tools section may change; arbitrary prompt, environment and output-limit changes are still rejected",
+    "Unknown SDK failures and missing results are not silently recovered",
+    "Fresh foreground child verified; forked contexts and asynchronous completion were not live-tested",
+    "No full local suite, unit tests, physical Safari, original-chat diagnostic model request, SDK upgrade, authentication or billing changes"
+  ]
+}
