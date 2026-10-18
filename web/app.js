@@ -25,7 +25,8 @@ $('transcript').addEventListener('scroll', () => {
   pinnedToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 2 + Math.abs(box.clientHeight - transcriptHeight);
   updateScrollButton();
   const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
-  scrollHistory(direction);
+  // Resizing can move the bottom upward without the reader scrolling into history.
+  if (direction > 0 || !pinnedToBottom) scrollHistory(direction);
 }, { passive: true });
 // Collapsed tools can leave no scrolling room; input at the edge must still page history.
 $('transcript').addEventListener('wheel', event => scrollHistory(event.deltaY), { passive: true });

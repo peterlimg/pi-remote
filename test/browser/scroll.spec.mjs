@@ -23,6 +23,7 @@ test('the bottom button returns to the latest message and resumes following repl
   });
   await page.goto(login);
   await page.getByRole('button', { name: /Long thread/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   const button = page.getByRole('button', { name: 'Go to thread bottom' });
   const transcript = page.locator('#transcript');
   const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
@@ -70,6 +71,56 @@ test('the bottom button returns to the latest message and resumes following repl
   }
   state.status = 'idle'; snapshot();
   await expect(activity).toBeHidden();
+});
+
+test('a taller viewport keeps a compact live thread at the bottom without loading history', async ({ page }) => {
+  const state = { id: 'compact', title: 'Compact live thread', cwd: '/project', status: 'working', historyTruncated: true, messages: [
+    { id: 'progress', role: 'assistant', text: 'Earlier progress\n\n'.repeat(10) },
+    { id: 'latest', role: 'assistant', text: 'The latest progress update.' }
+  ] };
+  const historyRequests = [];
+  await page.routeWebSocket('**/ws', ws => {
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready', supportsHistory: true }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+        return;
+      }
+      if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
+      if (packet.op === 'history') historyRequests.push(packet);
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: packet.op === 'history'
+        ? { messages: [{ id: 'older', role: 'assistant', text: 'Saved older progress.' }], older: false, newer: false, tip: 'latest' } : [] }));
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto(login);
+  await page.getByRole('button', { name: /Compact live thread/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  const transcript = page.locator('#transcript');
+  const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
+  await expect(page.locator('#agent-activity')).toBeInViewport();
+  await expect.poll(gap).toBeLessThan(1);
+  expect(await transcript.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+  expect(historyRequests).toHaveLength(0);
+  const button = page.getByRole('button', { name: 'Go to thread bottom' });
+  for (const height of [844, 700, 844]) {
+    await page.setViewportSize({ width: 390, height });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(historyRequests).toHaveLength(0);
+    await expect(button).toBeHidden();
+    await expect(page.locator('#agent-activity')).toBeInViewport();
+    await expect.poll(gap).toBeLessThan(1);
+  }
+  await page.setViewportSize({ width: 390, height: 700 });
+  await expect.poll(gap).toBeLessThan(1);
+  await transcript.evaluate(node => { node.scrollTop = 0; });
+  await expect(transcript).toContainText('Saved older progress.');
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(button).toBeHidden();
+  await expect(page.locator('#agent-activity')).toBeInViewport();
+  await expect.poll(gap).toBeLessThan(1);
 });
 
 test('dragging the composer cannot scroll the page after sending or resizing', async ({ page }) => {
