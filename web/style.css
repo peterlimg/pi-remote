@@ -121,7 +121,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #new-project { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; margin: 8px 16px 0; border-radius: 999px; background: var(--user); color: var(--accent); font-size: 16px; }
 .project-option-name { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-option-path { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#sessions { overflow: auto; flex: 1; min-height: 0; }
+#sessions { overflow: hidden auto; flex: 1; min-height: 0; }
 #list-empty { padding: 8px; }
 .list-pagination { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; margin-top: 8px; }
 .list-pagination button { padding-inline: 8px; font-size: 12px; }
@@ -141,6 +141,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session.active { background: var(--user); }
 .session-top, .session-meta { display: flex; align-items: center; gap: 12px; }
 .session-top { align-items: flex-start; }
+/* Revealed behind a row dragged right; it fills in once release would pin. */
+.session { position: relative; }
+.session.dragging::before { content: attr(data-swipe); position: absolute; top: 0; bottom: 0; right: calc(100% + 4px); display: grid; place-items: center; width: 100px; border-radius: 8px; background: var(--user); color: var(--muted); font-size: 14px; font-weight: 600; }
+.session.pin-ready::before { background: var(--accent); color: #fff; }
 .session-pinned { display: grid; flex-shrink: 0; margin: 4px 0 0 auto; color: var(--muted); }
 .session-pinned svg { fill: currentColor; }
 .session strong.untitled { color: var(--muted); font-weight: 400; }

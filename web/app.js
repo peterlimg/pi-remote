@@ -473,13 +473,15 @@ function loadMore() {
   listLimit += 20; loadList();
 }
 function renderList() {
+  // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
+  if (rowSwipe) { rowSwipe.stale = true; return; }
   const matches = sessions;
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
   for (const item of matches) {
     const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
-    button.type = 'button'; button.setAttribute('aria-current', String(item.id === selected));
+    button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
     const icon = statusIcon(item.status);
     if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
     const indicators = el('span', undefined, 'session-indicators');
@@ -521,7 +523,8 @@ function renderList() {
     }
     body.append(meta);
     button.append(body);
-    button.addEventListener('click', () => selectSession(item.id)); fragment.append(button);
+    // The finger lifting after a swipe must not also open the session.
+    button.addEventListener('click', () => { if (Date.now() - swipedAt > 400) selectSession(item.id); }); fragment.append(button);
   }
   $('sessions').replaceChildren(fragment);
   moreObserver.disconnect();
@@ -537,12 +540,47 @@ function renderPinChoice() {
   $('session-pin').setAttribute('aria-pressed', String(pinned));
   $('session-pin-label').textContent = pinned ? 'Unpin session' : 'Pin to top';
 }
-$('session-pin').addEventListener('click', async () => {
-  const id = selected, pinned = !sessions.find(item => item.id === id)?.pinned;
-  document.querySelector('.session-info').open = false;
-  try { await request('pin', { sessionId: id, pinned }); }
+async function togglePin(id) {
+  try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
   catch (e) { notice(e.message, id); }
-});
+}
+$('session-pin').addEventListener('click', () => { document.querySelector('.session-info').open = false; togglePin(selected); });
+// Swipe a row right to pin or unpin it, like Messages. Vertical drags still scroll the list.
+const pinSwipeDistance = 72;
+let rowSwipe, swipedAt = 0;
+$('sessions').addEventListener('touchstart', event => {
+  const row = event.target.closest('.session'), touch = event.touches[0];
+  rowSwipe = row && event.touches.length === 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
+}, { passive: true });
+$('sessions').addEventListener('touchmove', event => {
+  if (!rowSwipe) return;
+  const touch = event.touches[0], dx = touch.clientX - rowSwipe.x, dy = touch.clientY - rowSwipe.y;
+  if (!rowSwipe.active) {
+    if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { endRowSwipe(); return; }
+    if (dx < 8) return;
+    rowSwipe.active = true; rowSwipe.row.classList.add('dragging');
+  }
+  event.preventDefault();
+  const ready = dx > pinSwipeDistance;
+  if (ready !== rowSwipe.dx > pinSwipeDistance) haptic();
+  rowSwipe.dx = Math.max(0, dx);
+  rowSwipe.row.classList.toggle('pin-ready', ready);
+  rowSwipe.row.style.transform = `translateX(${Math.min(rowSwipe.dx, pinSwipeDistance * 1.5)}px)`;
+}, { passive: false });
+function endRowSwipe() {
+  const swipe = rowSwipe;
+  if (!swipe) return;
+  rowSwipe = undefined;
+  if (swipe.active) {
+    swipe.row.style.transition = 'transform .2s ease-out'; swipe.row.style.transform = ''; swipe.row.classList.remove('pin-ready');
+    swipedAt = Date.now();
+    setTimeout(() => swipe.row.classList.remove('dragging'), 200);
+    if (swipe.dx > pinSwipeDistance) togglePin(swipe.row.dataset.id);
+  }
+  if (swipe.stale) setTimeout(renderList, swipe.active ? 200 : 0);
+}
+$('sessions').addEventListener('touchend', endRowSwipe);
+$('sessions').addEventListener('touchcancel', endRowSwipe);
 function sessionTypeIcon(item) {
   const choice = sessionIcons.get(item.id);
   const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');
