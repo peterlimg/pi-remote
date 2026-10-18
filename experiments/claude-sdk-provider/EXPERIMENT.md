@@ -59,7 +59,7 @@ The real mobile check starts with a non-SDK tool selection, switches to Haiku Ma
 
 ## Shared provider acceptance
 
-The [shared provider E2E](../../docs/provider-parity.md) runs the same real phone/Pi journeys with normal personal resources and builtin `worker` agents on Codex and Claude SDK. It checks actual file changes, child transcripts, permissions, switching, Stop, automatic completion notices, reload and owned-worker restart. Compaction and cloning remain failing contracts rather than omitted scenarios. Results and coverage gaps are in [the parity evidence](verification-parity.json).
+The [shared provider E2E](../../docs/provider-parity.md) runs the same real phone/Pi journeys with normal personal resources and builtin `worker` agents on Codex and Claude SDK. It checks actual file changes, child transcripts, permissions, switching, Stop, automatic completion notices, reload and owned-worker restart. Unsupported operations remain failing contracts rather than omitted scenarios. Results are in [the parity evidence](verification-parity.json); maintain the open items in the [provider gap tracker](../../docs/provider-gaps.md).
 
 That matrix exposed a standard foreground child borrowing its parent's stateful SDK provider. The child's prompt failed the parent's provenance check and closed the parent query. Borrowed Pi session IDs now receive separate ephemeral bridges with their entire child prompt and Pi schemas intact. Tool validation/execution and the normal worker profile remain Pi-owned. A completed or failed child closes only its own bridge. Durable borrowed-child resumes still need child-local provider hooks; arbitrary inherited prompts are not rewritten to bypass upstream rejection.
 

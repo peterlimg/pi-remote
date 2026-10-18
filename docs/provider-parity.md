@@ -41,12 +41,8 @@ Pi loads normal personal extensions, instructions and skills. The harness does n
 
 Parent models use Medium reasoning for comparison. Children use the builtin `worker` and its default High reasoning, tools, context and acceptance settings. Tasks limit edits to one owned module or require read-only work; no custom agent replaces the normal worker. No child commits, stages, delegates further or contacts outside services as part of its task. The harness releases its gate on failure and closes its owned parent workers.
 
-## Current limitations
+## Open gaps
 
-This is a failing contract when a provider lacks a feature, not a smoke test that skips unsupported cases. SDK compaction and cloning are still explicitly blocked. Native Codex can report a user Stop as an `error` receipt (`This operation was aborted`) even when the next message succeeds. See [recorded results](../experiments/claude-sdk-provider/verification-parity.json); do not infer full interchangeability from passing tool/delegation rows.
-
-Foreground Pi children borrow registered providers but not parent session hooks. The SDK adapter now gives each borrowed Pi session its own native bridge, preserving its full prompt and Pi tool schemas. A terminal child response closes only that child's bridge. The parent's query, checkpoint and audit remain separate. These borrowed contexts are ephemeral: durable/retained child resume requires loading the provider's own session hooks. The test covers fresh standard workers, not retained/forked children or every standard role.
-
-Images, slash-command dialogs, nested delegation, custom roles/permission ceilings, arbitrary prompt changes, tree navigation, physical Safari and overnight/background failure recovery are not covered by this new matrix. Earlier focused tests remain separate evidence, not substitutes for these missing combinations.
+Use the [provider gap tracker](provider-gaps.md) for confirmed limitations, unverified workflows and the distinction between the all-model compaction guard and the earlier Haiku `ACK_0` failure. This remains a failing contract when a provider lacks a feature, not a smoke test that skips unsupported cases. The [recorded results](../experiments/claude-sdk-provider/verification-parity.json) are evidence, not an all-green interchangeability claim.
 
 The printed temporary evidence directory contains the result, private audit records, child transcripts, browser trace and failure screenshots. Do not commit its raw contents: normal settings can introduce private instructions and tool payloads. Commit only a reviewed, redacted evidence summary.
