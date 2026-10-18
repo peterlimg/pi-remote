@@ -16,6 +16,7 @@
     "test:handoff": "node handoff.mjs",
     "test:progress": "node progress.mjs",
     "test:recovery": "node recovery.mjs",
+    "test:malformed": "node malformed.mjs",
     "experiment:compact-sdk": "node --experimental-strip-types compaction.mjs",
     "experiment:compact-pi": "node --experimental-strip-types compaction-pi.mjs"
   },

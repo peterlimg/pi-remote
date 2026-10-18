@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { query, createSdkMcpServer, type EffortLevel, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
-  createAssistantMessageEventStream, calculateCost, getCurrentSystemMessage, getCurrentSystemPrompt, getSystemMessageText, getCurrentTools, normalizeContext, parseStreamingJson,
-  type AssistantMessage, type JsonObject, type Message, type Model, type SimpleStreamOptions, type TranscriptContext, type Usage,
+  createAssistantMessageEventStream, calculateCost, getCurrentSystemMessage, getCurrentSystemPrompt, getSystemMessageText, getCurrentTools, normalizeContext,
+  type AssistantMessage, type JsonObject, type Message, type Model, type SimpleStreamOptions, type ToolCall, type TranscriptContext, type Usage,
 } from '@earendil-works/pi-ai';
 import type { BeforeAgentStartEvent } from '@earendil-works/pi-coding-agent';
 
@@ -42,6 +42,7 @@ function rawUsage(current: Record<string, unknown>, model: Model<string>): Usage
   return usage;
 }
 const stoppedTool = (): CallToolResult => ({ content: [{ type: 'text', text: 'Pi stopped this SDK session.' }], isError: true });
+const malformedTool = (): CallToolResult => ({ content: [{ type: 'text', text: 'Tool arguments were not valid JSON. No Pi tool executed. Retry with valid JSON and a new tool-call ID.' }], isError: true });
 const project = (message: Message) => JSON.stringify({ role: message.role, content: message.content,
   ...message.role === 'toolResult' ? { id: message.toolCallId, name: message.toolName, isError: message.isError } : {} });
 function contentBlocks(content: string | Message['content']): CallToolResult['content'] {
@@ -204,6 +205,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
   const calls = new Map<string, Pending>();
   const issued = new Set<string>();
   const unqualified = new Set<string>();
+  const malformed = new Set<string>();
   const prompts: SDKUserMessage[] = [];
   const pendingInputs = new Set<string>();
   const helpers = new Set<{ close(): void }>();
@@ -390,6 +392,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
               close();
               return stoppedTool();
             }
+            if (issued.has(id) && !calls.has(id)) return malformedTool();
             try {
               const entry = remember(id, request.params.name, request.params.arguments ?? {});
               if (entry.handlerStarted) { close(); return stoppedTool(); }
@@ -433,8 +436,9 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
           awaiting = [];
         }
         stream.push({ type: 'start', partial: output });
-        const blocks = new Map<number, { index: number; json: string; ended: boolean; internal?: boolean }>();
-        let unqualifiedAttempts = 0;
+        const blocks = new Map<number, { index: number; json: string; ended: boolean; internal?: boolean; toolCall?: ToolCall }>();
+        const toolReceipts = new Map<string, boolean>();
+        let unqualifiedAttempts = 0, malformedAttempts = 0;
         let currentUsage: Record<string, unknown> = {};
         let reason: string | null = null;
         let messageOpen = false;
@@ -467,9 +471,16 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
           }
           if (event.type === 'assistant' && !event.parent_tool_use_id) sdkMessageId = event.uuid;
           if (event.type === 'user' && !event.parent_tool_use_id && Array.isArray(event.message.content)) {
-            for (const block of event.message.content) if (block.type === 'tool_result' && unqualified.has(block.tool_use_id)) {
-              if (block.is_error !== true) fail('SDK did not reject an unqualified tool call.');
-              unqualified.delete(block.tool_use_id);
+            for (const block of event.message.content) if (block.type === 'tool_result') {
+              toolReceipts.set(block.tool_use_id, block.is_error === true);
+              if (unqualified.has(block.tool_use_id)) {
+                if (block.is_error !== true) fail('SDK did not reject an unqualified tool call.');
+                unqualified.delete(block.tool_use_id);
+              }
+              if (malformed.has(block.tool_use_id)) {
+                if (block.is_error !== true) fail('SDK did not reject malformed tool arguments.');
+                malformed.delete(block.tool_use_id);
+              }
             }
           }
           if (event.type === 'stream_event') {
@@ -478,6 +489,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
             if (raw.type === 'message_start') {
               if (messageOpen) fail('Overlapping SDK model messages are unsupported.');
               if (unqualified.size) fail('SDK did not reject an unqualified tool call.');
+              if (malformed.size) fail('SDK did not reject malformed tool arguments.');
               messageOpen = true; blocks.clear(); reason = null;
               currentUsage = { ...raw.message.usage };
               output.usage = rawUsage(currentUsage, model);
@@ -506,8 +518,10 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
                 if (!block.input || typeof block.input !== 'object' || Array.isArray(block.input)) fail('Malformed SDK tool arguments.');
                 if (typeof block.id !== 'string' || !block.id) fail('Invalid SDK tool-call identity.');
                 if (issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
-                output.content.push({ type: 'toolCall', id: block.id, name, arguments: block.input as JsonObject });
-                stream.push({ type: 'toolcall_start', contentIndex: index, partial: output });
+                // Complete JSON must validate before any Pi tool-call event can be published.
+                blocks.set(raw.index, { index, json: '', ended: false,
+                  toolCall: { type: 'toolCall', id: block.id, name, arguments: block.input as JsonObject } });
+                continue;
               } else if (block.type === 'thinking' || block.type === 'redacted_thinking') {
                 output.content.push(block.type === 'thinking'
                   ? { type: 'thinking', thinking: block.thinking, thinkingSignature: block.signature }
@@ -524,15 +538,13 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
                 else if (raw.delta.type !== 'input_json_delta') fail('Unsupported SDK content delta.');
                 continue;
               }
-              const block = output.content[state.index];
+              const block = state.toolCall ?? output.content[state.index];
               if (raw.type === 'content_block_delta') {
                 if (raw.delta.type === 'text_delta' && block.type === 'text') {
                   block.text += raw.delta.text;
                   stream.push({ type: 'text_delta', contentIndex: state.index, delta: raw.delta.text, partial: output });
                 } else if (raw.delta.type === 'input_json_delta' && block.type === 'toolCall') {
                   state.json += raw.delta.partial_json;
-                  block.arguments = parseStreamingJson(state.json);
-                  stream.push({ type: 'toolcall_delta', contentIndex: state.index, delta: raw.delta.partial_json, partial: output });
                 } else if (raw.delta.type === 'thinking_delta' && block.type === 'thinking') {
                   block.thinking += raw.delta.thinking;
                   stream.push({ type: 'thinking_delta', contentIndex: state.index, delta: raw.delta.thinking, partial: output });
@@ -544,12 +556,21 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
                 if (block.type === 'text') stream.push({ type: 'text_end', contentIndex: state.index, content: block.text, partial: output });
                 if (block.type === 'thinking') stream.push({ type: 'thinking_end', contentIndex: state.index, content: block.thinking, partial: output });
                 if (block.type === 'toolCall') {
-                  if (state.json) block.arguments = JSON.parse(state.json);
+                  try { if (state.json) block.arguments = JSON.parse(state.json); }
+                  catch {
+                    if (++malformedAttempts > 3) fail('SDK repeatedly generated malformed tool arguments. No invalid call was executed.');
+                    if (toolReceipts.get(block.id) === false) fail('SDK did not reject malformed tool arguments.');
+                    issued.add(block.id);
+                    if (toolReceipts.get(block.id) !== true) malformed.add(block.id);
+                    calls.get(block.id)?.task.resolve(malformedTool());
+                    calls.delete(block.id);
+                    state.toolCall = undefined; state.internal = true;
+                    continue;
+                  }
                   if (!block.arguments || typeof block.arguments !== 'object' || Array.isArray(block.arguments)) fail('Malformed SDK tool arguments.');
                   if (issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
                   issued.add(block.id);
                   remember(block.id, block.name, block.arguments);
-                  stream.push({ type: 'toolcall_end', contentIndex: state.index, toolCall: block, partial: output });
                 }
               }
             }
@@ -561,13 +582,20 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
             if (raw.type === 'message_stop') {
               if (!messageOpen || [...blocks.values()].some(block => !block.ended)) fail('Incomplete SDK content stream.');
               messageOpen = false;
-              const toolCalls = output.content.filter(block => block.type === 'toolCall');
+              const toolCalls = [...blocks.values()].flatMap(block => block.toolCall ? [block.toolCall] : []);
               if (toolCalls.length) {
                 if (reason !== 'tool_use' || new Set(toolCalls.map(call => call.id)).size !== toolCalls.length) fail('SDK tool batch was incomplete or truncated.');
                 awaiting = toolCalls.map(call => call.id);
                 // Check ID metadata support; SDK may invoke this batch's handlers sequentially.
                 await Promise.race([Promise.race(awaiting.map(id => calls.get(id)!.ready.promise)), stopped.promise]);
                 options.signal?.throwIfAborted();
+                for (const toolCall of toolCalls) {
+                  const contentIndex = output.content.length;
+                  output.content.push(toolCall);
+                  stream.push({ type: 'toolcall_start', contentIndex, partial: output });
+                  stream.push({ type: 'toolcall_delta', contentIndex, delta: JSON.stringify(toolCall.arguments), partial: output });
+                  stream.push({ type: 'toolcall_end', contentIndex, toolCall, partial: output });
+                }
                 output.stopReason = 'toolUse';
                 break;
               }
@@ -576,6 +604,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query,
           if (event.type === 'result') {
             if (messageOpen || awaiting.length) fail('SDK result arrived before completing its message.');
             if (unqualified.size) fail('SDK did not reject an unqualified tool call.');
+            if (malformed.size) fail('SDK did not reject malformed tool arguments.');
             const totals = zeroUsage();
             for (const usage of Object.values(event.modelUsage)) {
               totals.input += usage.inputTokens; totals.output += usage.outputTokens;

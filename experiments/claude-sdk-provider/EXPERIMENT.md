@@ -109,6 +109,14 @@ The SDK prompt now lists its exact MCP tool names. If it mistakenly uses an unqu
 
 The recorded failure was reproduced in a deterministic offline test before the fix. Strict checking and all 35 offline tests passed with Pi 1.2.0 dependencies. The mobile Chromium UI-contract test also preserved the visible error after reload. The already-closed reported query cannot be recovered; keep that conversation and retry in a fresh session. The full repository suite and Safari were not run.
 
+## Malformed tool arguments
+
+A later Haiku Medium turn successfully searched and wrote an SVG, then produced invalid JSON for an edit. Claude Code recorded its own input-validation error, but the bridge's strict `JSON.parse` threw first and replaced the failure with incorrect login/new-session advice. The earlier checks covered valid JSON and fail-closed malformed batches, not SDK correction after a completed tool effect.
+
+Tool arguments now stay buffered until the complete SDK model message validates. Text and thinking still stream; tool-call start/delta/end events publish only for validated JSON. A malformed call never becomes an executable Pi call. If its MCP handler arrived early, it receives an error without execution; a late handler for that retired ID is also rejected. The SDK must report an error for that exact call before the next model response. It can then propose a corrected call under normal Pi validation and permissions. Missing or successful rejection receipts, reused IDs and more than three malformed attempts fail closed. Prior successful tool calls are not replayed.
+
+`npm run test:malformed` drives real Pi RPC, the production bridge and MCP with an external SDK replay peer. It covers SDK-local rejection, early/late MCP callbacks, mixed valid/invalid batches, follow-up in one query, and the fail-closed cases above. No model account or real user conversation is used. Run `node malformed.mjs local` for the smallest reproducer. An already-failed turn with uncheckpointed work still needs explicit `/sdk-recover` confirmation; the fix does not rewrite that history or rerun its file write. The nine-case E2E passed on Pi 1.2.0 and 1.3.0, the existing recovery/permission E2E passed on 1.3.0, and real Haiku parallel calls, follow-up recall and usage reconciliation passed. See [recorded evidence](verification-malformed.json).
+
 ## Initial Opus 5.5 verification
 
 The same bridge passed with `claude-opus-5-5`: 22 offline tests, strict TypeScript checking, registered CLI discovery and a real prompt, two Pi-owned calls, denial with zero executions, follow-up memory, cancellation, and matching SDK/Pi usage totals. The real RPC/mobile fixture selected Opus, streamed 26 updates, exercised Allow/Deny, settled Stop in 130 ms, and retained the conversation after reload. It closed its owned worker and host. See [Opus results](verification-opus.json).

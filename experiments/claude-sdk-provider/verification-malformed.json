@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-18",
+  "sdkVersion": "0.3.296",
+  "scope": "Keep malformed native SDK tool arguments inside its rejection/correction loop without publishing an executable Pi call",
+  "observedFailure": {
+    "model": "claude-haiku-5-5",
+    "thinking": "medium",
+    "earlierToolResultsSuccessful": true,
+    "savedFileMatchesSuccessfulWrite": true,
+    "invalidEditExecutedByPi": false,
+    "nativeSdkRecordedInputValidationError": true,
+    "bridgeFailure": "JSON.parse threw before the SDK rejection could be consumed; the generic catch emitted incorrect login/new-session advice",
+    "originalChatOrFileModifiedByDiagnostics": false,
+    "privateConversationOrArgumentsIncludedHere": false
+  },
+  "red": {
+    "command": "node malformed.mjs local",
+    "piVersion": "1.2.0",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-malformed-e2e-Wa6uMX/result.json",
+    "failure": "Claude SDK request failed. Check Claude Code login and start a new Pi session.",
+    "expected": "Finish the corrected tool call in the same conversation without repeating the preceding effect"
+  },
+  "green": [
+    { "piVersion": "1.2.0", "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-malformed-e2e-dMG5Cy/result.json" },
+    { "piVersion": "1.3.0", "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-malformed-e2e-bCwGn8/result.json" }
+  ],
+  "cases": [
+    "SDK-local input rejection followed by a valid new call",
+    "Malformed MCP callback arriving before argument validation receives an error without execution",
+    "Malformed MCP callback arriving after argument validation receives an error without execution",
+    "SDK rejection arriving before the final argument chunk is retained and verified",
+    "Mixed invalid and valid calls dispatch only the valid call",
+    "Successful rejection receipt is refused",
+    "Missing rejection receipt is refused before another model response",
+    "Fourth malformed attempt fails closed",
+    "Reuse of the rejected call ID fails closed"
+  ],
+  "assertions": {
+    "malformedPiCallPreviewsOrExecutions": 0,
+    "precedingEffectExecutesOnce": true,
+    "acceptedCorrectionUsesOneNativeQuery": true,
+    "followUpDoesNotRepeatTools": true,
+    "acceptedCorrectionsSaveCheckpoints": true,
+    "personalSettingsUnchanged": true,
+    "normalPiValidationAndPermissionsPreserved": true
+  },
+  "recoveryRegression": {
+    "piVersion": "1.3.0", "pass": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-oQo0Rq/result.json"
+  },
+  "liveValidToolFlow": {
+    "command": "PI_SDK_TEST_MODEL=claude-haiku-5-5 node --experimental-strip-types live.mjs allow",
+    "pass": true, "thinking": "off", "executions": 2,
+    "parallelCallsAndIdsPreserved": true,
+    "followUpRecall": true, "piSdkTokensAndCostsMatched": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-provider-live-CBaoZP/evidence.json",
+    "limit": "Real SDK with synthetic tools; malformed retry coverage above uses the external SDK replay peer."
+  },
+  "limits": [
+    "The already-failed user turn is not automatically replayed or repaired; its uncheckpointed work still requires confirmed sdk-recover",
+    "Tool arguments publish after full JSON/message validation rather than incremental previews; text and thinking still stream",
+    "No full local suite, unit tests, production-chat diagnostic model request or physical Safari check"
+  ]
+}

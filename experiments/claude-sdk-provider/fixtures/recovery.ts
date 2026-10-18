@@ -1,7 +1,7 @@
 // An external SDK replay peer. Pi, its tool pipeline and the provider extension are real.
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
+import { setImmediate, setTimeout as delay } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
@@ -11,16 +11,21 @@ import install, { localLogin } from '../index.ts';
 
 const log = value => appendFileSync(process.env.PI_RECOVERY_EVENTS!, JSON.stringify(value) + '\n');
 const wrap = event => ({ type: 'stream_event', parent_tool_use_id: null, event });
-function* assistant(model, blocks, stop = 'end_turn') {
+async function* assistant(model, blocks, stop = 'end_turn') {
   yield wrap({ type: 'message_start', message: { id: randomUUID(), model, usage: { input_tokens: 10, output_tokens: 5 } } });
   for (const [index, block] of blocks.entries()) {
-    yield wrap({ type: 'content_block_start', index, content_block: block.type === 'tool_use' ? { ...block, input: {} }
+    const { json, earlyReceipt, ...contentBlock } = block;
+    yield wrap({ type: 'content_block_start', index, content_block: block.type === 'tool_use' ? { ...contentBlock, input: {} }
       : block.type === 'thinking' ? { type: 'thinking', thinking: '', signature: '' } : { type: 'text', text: '' } });
-    if (block.type === 'tool_use') yield wrap({ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input) } });
+    if (block.type === 'tool_use') yield wrap({ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json ?? JSON.stringify(block.input) } });
     else if (block.type === 'thinking') {
       yield wrap({ type: 'content_block_delta', index, delta: { type: 'thinking_delta', thinking: block.thinking } });
       yield wrap({ type: 'content_block_delta', index, delta: { type: 'signature_delta', signature: block.signature } });
     } else yield wrap({ type: 'content_block_delta', index, delta: { type: 'text_delta', text: block.text } });
+    if (earlyReceipt) yield { type: 'user', parent_tool_use_id: null, message: { role: 'user', content: [
+      { type: 'tool_result', tool_use_id: block.id, is_error: true, content: 'Tool input could not be parsed as JSON.' },
+    ] } };
+    if (json !== undefined) await setImmediate();
     yield wrap({ type: 'content_block_stop', index });
   }
   yield wrap({ type: 'message_delta', delta: { stop_reason: stop }, usage: { output_tokens: 5 } });
@@ -61,20 +66,55 @@ function replayQuery(args) {
           message: { role: 'assistant', content: [{ type: 'text', text: 'API Error: 400 Third-party apps now draw from extra usage, not plan limits. Ask your workspace admin to add more and keep going. SYNTHETIC_PRIVATE_DETAIL' }] } };
         continue;
       }
-      let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'allow-new' ? 'allowed'
-        : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart' : undefined;
-      if (label || text === 'reuse-id') {
-        const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
-          .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
-        const id = text === 'reuse-id' ? old.id : 'toolu_' + randomUUID();
-        label ??= 'orphan';
-        const input = text === 'invalid-new' ? {} : { label };
-        const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
-        void pending.catch(() => {});
-        const blocks = text.startsWith('seed') ? [{ type: 'thinking', thinking: 'private reasoning', signature: 'RECOVERY_PRIVATE_SIGNATURE' }] : [];
-        yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use');
-        const result = await pending;
-        log({ type: 'result', label, error: result.isError === true });
+      if (request.startsWith('malformed-')) {
+        const mode = request.slice('malformed-'.length);
+        const call = (id, input) => {
+          const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
+          void pending.catch(() => {}); return pending;
+        };
+        const valid = async function* (label, id = 'toolu_' + randomUUID()) {
+          const pending = call(id, { label });
+          yield* assistant(args.options.model, [{ type: 'tool_use', id, name: 'mcp__pi__probe', input: { label } }], 'tool_use');
+          await pending;
+        };
+        yield* valid('before-malformed');
+        let badId;
+        for (let attempt = 0; attempt < (mode === 'repeat' ? 4 : 1); attempt++) {
+          badId = 'bad_' + randomUUID();
+          const json = '{"label">"broken"}', input = { __unparsedToolInput: { raw: json, len: json.length } };
+          log({ type: 'malformed', id: badId, mode });
+          let pending = mode === 'early' ? call(badId, input) : undefined;
+          const mixedId = 'toolu_' + randomUUID(), mixed = mode === 'mixed' ? call(mixedId, { label: 'after-malformed' }) : undefined;
+          yield* assistant(args.options.model, [
+            { type: 'tool_use', id: badId, name: 'mcp__pi__probe', input, json, earlyReceipt: mode === 'early-receipt' },
+            ...(mixed ? [{ type: 'tool_use', id: mixedId, name: 'mcp__pi__probe', input: { label: 'after-malformed' } }] : []),
+          ], 'tool_use');
+          if (mode === 'late') pending = call(badId, input);
+          const rejected = pending ? await pending : { isError: true };
+          if (pending) log({ type: 'malformed-mcp-result', id: badId, isError: rejected.isError === true });
+          if (mode !== 'missing' && mode !== 'early-receipt') yield { type: 'user', parent_tool_use_id: null, message: { role: 'user', content: [
+            { type: 'tool_result', tool_use_id: badId, is_error: mode === 'success' ? false : rejected.isError,
+              content: 'Tool arguments could not be parsed as JSON. No tool executed. Retry with valid JSON.' },
+          ] } };
+          if (mixed) await mixed;
+        }
+        if (mode !== 'mixed') yield* valid('after-malformed', mode === 'duplicate' ? badId : undefined);
+      } else {
+        let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'allow-new' ? 'allowed'
+          : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart' : undefined;
+        if (label || text === 'reuse-id') {
+          const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
+            .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
+          const id = text === 'reuse-id' ? old.id : 'toolu_' + randomUUID();
+          label ??= 'orphan';
+          const input = text === 'invalid-new' ? {} : { label };
+          const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
+          void pending.catch(() => {});
+          const blocks = text.startsWith('seed') ? [{ type: 'thinking', thinking: 'private reasoning', signature: 'RECOVERY_PRIVATE_SIGNATURE' }] : [];
+          yield* assistant(args.options.model, [...blocks, { type: 'tool_use', id, name: 'mcp__pi__probe', input }], 'tool_use');
+          const result = await pending;
+          log({ type: 'result', label, error: result.isError === true });
+        }
       }
       yield* assistant(args.options.model, [{ type: 'text', text: text.includes('Operator-approved SDK context recovery')
         ? 'RECOVERED ' + process.env.PI_RECOVERY_MARKER + ' with unknown prior effects.' : 'DONE' }]);

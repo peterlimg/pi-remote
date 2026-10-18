@@ -70,8 +70,13 @@ jobs:
       - run: npm run test:recovery
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:malformed
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: sdk-recovery-results
-          path: ${{ runner.temp }}/pi-sdk-recovery-e2e-*/
+          path: |
+            ${{ runner.temp }}/pi-sdk-recovery-e2e-*/
+            ${{ runner.temp }}/pi-sdk-malformed-e2e-*/
