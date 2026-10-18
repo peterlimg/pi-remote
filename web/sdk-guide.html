@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An illustrated guide to the Claude SDK provider in Pi Remote: tools, history, checkpoints, context handoffs, verification and remaining worker-resume limits.">
+  <meta name="color-scheme" content="light dark">
+  <title>Claude SDK with Pi in control · Pi Remote</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="sdk-guide.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the guide</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Return to Pi Remote"><img src="/icon.svg" width="28" height="28" alt="">Pi Remote</a>
+    <nav aria-label="Guide shortcuts"><a href="#contents">Contents</a><a href="#remaining">What's still open</a></nav>
+  </header>
+
+  <main id="main">
+    <header class="intro">
+      <h1>Claude SDK, with Pi still in control.</h1>
+      <p class="lead">We built a Claude SDK provider for Pi. You can use Claude through the official Agent SDK while Pi keeps control of your tools, permissions, instructions and saved conversation.</p>
+    </header>
+
+    <section id="overview" aria-labelledby="overview-title">
+      <h2 id="overview-title">One model provider. Pi still runs the work.</h2>
+      <figure class="diagram overview-map">
+        <div class="entry-route">
+          <div class="entry-node"><strong>Your phone or Pi terminal</strong><span>The phone reaches the local host through opentunnel.</span></div>
+          <div class="connector" aria-hidden="true"></div>
+        </div>
+        <div class="ownership">
+          <div class="node pi-node"><span class="node-label">Pi</span><strong>Owns the task</strong><ul><li>Instructions and skills</li><li>Tools and permissions</li><li>Saved chat and audit</li><li>Agents and execution</li></ul></div>
+          <div class="connector sideways" aria-hidden="true"></div>
+          <div class="node adapter-node"><span class="node-label">Our SDK adapter</span><strong>Connects the systems</strong><ul><li>Prompt and tool translation</li><li>Streaming and call IDs</li><li>History validation</li><li>Checkpoints and handoffs</li></ul></div>
+          <div class="connector sideways" aria-hidden="true"></div>
+          <div class="node sdk-node"><span class="node-label">Official Claude SDK</span><strong>Runs model inference</strong><ul><li>SDK-managed Claude Code</li><li>Existing Claude login</li><li>Native model conversation</li><li>Responses and tool proposals</li></ul></div>
+        </div>
+        <div class="diagram-note">A tool proposal travels back to Pi. Only Pi can validate, authorize and execute it.</div>
+        <figcaption>Figure 1. The adapter runs inside Pi, not in your phone. Claude Code's built-in tools and built-in Agent tool are disabled on this path.</figcaption>
+      </figure>
+      <aside class="notice warning"><strong>The provider is still experimental.</strong> Several realistic parent-chat workflows pass. Durable retained-worker continuation does not. There is no all-green full provider-parity run.</aside>
+      <p class="takeaway">The goal is to change the model provider without giving up the normal Pi workflow. We have not reached complete interchangeability yet.</p>
+      <p>The hard part is making two conversation systems agree about what has already happened, especially after Stop, restart, compaction or a branch change.</p>
+      <p class="snapshot">A guide to the work through <a href="https://github.com/peterlimg/pi-remote/commit/9bde5a3"><code>9bde5a3</code></a> · October 18, 2026. This is an implementation snapshot, not a deployment-status page.</p>
+    </section>
+
+    <nav id="contents" class="contents" aria-label="Guide contents">
+      <h2>Choose a question</h2>
+      <ol>
+        <li><a href="#tools">Who actually executes tools?</a></li>
+        <li><a href="#history">Why are there two histories?</a></li>
+        <li><a href="#handoffs">What is a safe context handoff?</a></li>
+        <li><a href="#branches">How do compaction and branches work?</a></li>
+        <li><a href="#instructions">What happens to my instructions?</a></li>
+        <li><a href="#interruptions">What about Stop and errors?</a></li>
+        <li><a href="#workers">Why is worker resume unfinished?</a></li>
+        <li><a href="#evidence">What have we actually verified?</a></li>
+        <li><a href="#remaining">What is still guarded or unknown?</a></li>
+        <li><a href="#glossary">What do these terms mean?</a></li>
+      </ol>
+    </nav>
+
+    <section id="tools" aria-labelledby="tools-title">
+      <h2 id="tools-title">Claude proposes. Pi decides and executes.</h2>
+      <p>The SDK sees Pi's current tool schemas through MCP, the protocol used to expose tools to the SDK. An SDK tool handler waits for Pi's result. It does not run the command itself.</p>
+      <figure class="diagram">
+        <ol class="sequence">
+          <li><span class="actor sdk-actor">Claude</span><div><strong>Proposes a call</strong><p>For example, <code>mcp__pi__edit</code> with JSON arguments and a unique call ID.</p></div></li>
+          <li><span class="actor adapter-actor">Adapter</span><div><strong>Waits for complete, valid JSON</strong><p>Text and thinking can keep streaming. Incomplete tool arguments are not executable previews.</p></div></li>
+          <li><span class="actor pi-actor">Pi</span><div><strong>Checks the schema and permission policy</strong><p>Normal argument validation and Allow/Deny behavior still apply. An invalid or denied call cannot bypass Pi.</p></div></li>
+          <li><span class="actor pi-actor">Pi</span><div><strong>Runs the approved tool and records its result</strong><p>The real filesystem outcome belongs to this execution, not to a model's claim about it.</p></div></li>
+          <li><span class="actor adapter-actor">Adapter</span><div><strong>Matches the result to the exact call ID</strong><p>The waiting SDK handler receives that result, even when parallel calls finish in a different order.</p></div></li>
+          <li><span class="actor sdk-actor">Claude</span><div><strong>Continues from the actual result</strong><p>It can answer, correct a rejected proposal or request another normal Pi tool.</p></div></li>
+        </ol>
+        <figcaption>Figure 2. One executor, one matching result per recorded call. Historical calls never enter this execution path again merely because context is imported.</figcaption>
+      </figure>
+      <details><summary>What changed for malformed tool calls?</summary><p>A real failure wrote a file successfully, then supplied malformed JSON for an edit. The old bridge threw too early and gave misleading login advice. The new path requires the SDK's rejection for that exact invalid call, then permits a corrected call with a fresh ID. It never guesses the intended arguments. Missing rejection receipts, reused IDs and excessive malformed attempts stop the query.</p></details>
+      <p>Pi can also activate more tools during a chat. After <code>subagents_enable</code>, for example, the adapter validates the completed work and replaces the immutable SDK query with one that advertises the new tools. It asks for the remaining work, not a repeat of the loader.</p>
+    </section>
+
+    <section id="history" aria-labelledby="history-title">
+      <h2 id="history-title">One saved chat can span several native SDK conversations.</h2>
+      <p>This is the most useful distinction in the whole design. A <strong>Pi conversation</strong> is the durable chat and audit you navigate. A <strong>native SDK context</strong> is a particular Claude conversation managed by the SDK. They are connected, but they are not the same object.</p>
+      <figure class="diagram">
+        <div class="two-records">
+          <div class="record"><h3>Pi's saved conversation</h3><ol class="ledger"><li>User request</li><li>Assistant tool call</li><li>Actual Pi tool result</li><li>Assistant response</li><li class="metadata">SDK checkpoint metadata</li></ol><p>Also keeps summaries, branch entries, usage and the original audit.</p></div>
+          <div class="record"><h3>The SDK's native transcript</h3><ol class="ledger"><li>SDK-facing instructions</li><li>Model messages</li><li>MCP calls and returned results</li><li>Native session/message anchors</li></ol><p>Stored separately by Claude Code when SDK persistence is enabled.</p></div>
+        </div>
+        <div class="binding"><strong>A completed checkpoint connects them</strong><span>Native IDs + accepted Pi-history hashes + configuration fingerprint + reported usage</span></div>
+        <figcaption>Figure 3. A checkpoint is a verified continuation point, not a backup of every process or proof that an unfinished command succeeded.</figcaption>
+      </figure>
+      <p>On a normal completed-checkpoint restart, the adapter verifies that Pi's accepted history and configuration still match before resuming the corresponding native context. A phone refresh mostly reopens the UI; replacing a Pi worker also tests provider-state restoration.</p>
+      <p>A chat can also contain completed work from another Pi provider. When you return to SDK Claude, the adapter validates those intervening turns and imports them as historical data. It does not run their old tools again.</p>
+      <details><summary>What about models, images, reasoning and usage?</summary><ul class="plain-list"><li>The provider registers experimental Haiku, Sonnet and Opus models. Model availability is not a claim that every model passed the full workflow matrix.</li><li>Pi reasoning controls map to SDK adaptive thinking and effort. Off requests disabled thinking, but an emitted thinking frame does not prove the model used zero reasoning.</li><li>Image attachments and image tool results travel as image blocks. Their focused checks do not establish every image-plus-branching combination.</li><li>Token and cost records preserve Pi's earlier totals across fresh native contexts. Nominal cost estimates are not a subscription balance or proof of the amount charged.</li><li>Titles and other tool-free helper calls use isolated SDK queries, not the foreground chat's state or tools.</li></ul></details>
+      <aside class="notice"><strong>Two stores have separate retention.</strong> Deleting a Pi chat does not automatically delete the SDK transcript. Ephemeral helper queries, such as title generation, are separate and cannot run the foreground chat's tools.</aside>
+    </section>
+
+    <section id="handoffs" aria-labelledby="handoffs-title">
+      <h2 id="handoffs-title">When the context changes, start fresh without repeating the work.</h2>
+      <p>Resuming a native query is right only when its saved context is still right. Compaction, a new branch, a validated tool-set change and recorded cancellation need a different path.</p>
+      <figure class="diagram">
+        <div class="handoff-flow">
+          <div class="node"><span class="step-number">1</span><strong>Validate the old work</strong><p>Check accepted history, owners, configuration, call IDs and matching results.</p></div>
+          <div class="connector sideways" aria-hidden="true"></div>
+          <div class="node"><span class="step-number">2</span><strong>Bind the transition</strong><p>For compaction and branches, persist a receipt linking the source and selected context.</p></div>
+          <div class="connector sideways" aria-hidden="true"></div>
+          <div class="node"><span class="step-number">3</span><strong>Open a fresh SDK context</strong><p>Send current instructions and validated historical data. Execute only genuinely new calls.</p></div>
+        </div>
+        <div class="diagram-note">Old tool call + recorded result = historical data, not a new command.</div>
+        <figcaption>Figure 4. This keeps the Pi chat and audit while replacing the native model context. It is not a rewind of the old native transcript.</figcaption>
+      </figure>
+      <p>A transition receipt records what was approved before the first new SDK checkpoint exists. On restart, missing or altered source, projection, ownership or configuration must reject rather than silently pick an older context.</p>
+      <details><summary>Why not just copy the visible chat into a new query?</summary><p>The visible messages are not enough. A retained tool call may have lost its result. A selected branch may contain different instructions. A copied native ID may belong to the source chat. The adapter validates Pi's structured projection and accepted configuration, retires historical tool IDs and keeps unknown outcomes explicitly unknown. Private reasoning and opaque provider signatures are omitted from imported context, not deleted from the original audit.</p></details>
+    </section>
+
+    <section id="branches" aria-labelledby="branches-title">
+      <h2 id="branches-title">Four history operations, four different meanings.</h2>
+      <p>These are implemented and focused-tested for saved parent conversations. They do not establish child-local lifecycle support or add new phone clone, fork or tree-picker controls.</p>
+
+      <article class="operation" id="compaction">
+        <h3>Compaction keeps a shorter working context.</h3>
+        <p>Pi generates the summary through its normal isolated, tool-free summarizer. The adapter validates the source and receipt, then gives a fresh SDK context the summary plus retained recent history.</p>
+        <figure class="diagram compact-map">
+          <div class="record"><strong>Original Pi audit stays</strong><div class="history-blocks"><span>Earlier messages and tools</span><span>Recent messages and results</span></div></div>
+          <div class="connector" aria-hidden="true"></div>
+          <div class="record"><strong>New model context</strong><div class="history-blocks"><span class="summary-block">Pi's summary of earlier work</span><span>Retained recent history</span></div></div>
+          <figcaption>Figure 5. Manual and threshold compaction share the Pi-owned path. A summary is lossy; preserving tested facts is not a guarantee that every old detail survives.</figcaption>
+        </figure>
+        <p class="scope-note">SDK-native automatic and idle compaction stay disabled. Earlier native Haiku experiments lost remembered facts, often leaving an <code>ACK_0</code> summary. Pi-owned compaction is a separate implementation, not a claim that the native failure is fixed.</p>
+      </article>
+
+      <article class="operation" id="cloning">
+        <h3>A clone makes another chat at the completed tip.</h3>
+        <figure class="diagram">
+          <div class="branch-root"><strong>Completed Pi chat A</strong><span>Validated current history</span></div>
+          <div class="branch-pair"><div><strong>Original chat A</strong><p>Retains its own native checkpoint and memory.</p></div><div><strong>New chat B</strong><p>Copies selected Pi history. Opens independent native context B on its first SDK message.</p></div></div>
+          <figcaption>Figure 6. The source file stays unchanged by creating or using the clone. Later private information in either chat must not leak into the other.</figcaption>
+        </figure>
+        <p>A clone receives an owner-bound receipt in the new Pi file. Copying the parent's checkpoint does not authorize resuming the parent's native query under the new chat's identity.</p>
+      </article>
+
+      <article class="operation" id="forking">
+        <h3>A fork makes another chat from an earlier point.</h3>
+        <figure class="diagram">
+          <p class="example-label">Illustrative history, not a real conversation</p>
+          <ol class="fork-history"><li><strong>Earlier work</strong><span>Read a fact and perform an early file write.</span><span class="status verified">Included in the fork</span></li><li><strong>Selected user request</strong><span>The fork stops before this message. Pi returns it for editing.</span><span class="status guarded">Not submitted automatically</span></li><li><strong>Later work</strong><span>Learn a later private value and perform another write.</span><span class="status neutral">Not imported into the fork</span></li></ol>
+          <div class="effect-note"><strong>Both file writes still exist.</strong> Choosing earlier conversation history does not undo either effect.</div>
+          <figcaption>Figure 7. The original keeps its full history. The new file gets only the selected path and starts an independent native SDK context.</figcaption>
+        </figure>
+        <p>A later completed checkpoint can sometimes prove an earlier queued or tool-boundary point. Only the necessary attested system checkpoint travels as configuration evidence. Omitted later user and assistant text does not travel with it.</p>
+      </article>
+
+      <article class="operation" id="tree">
+        <h3>Tree navigation moves inside the same Pi file.</h3>
+        <figure class="diagram">
+          <div class="branch-root"><strong>One saved Pi conversation</strong><span>Multiple stored paths, one selected path</span></div>
+          <div class="branch-pair"><div><strong>Current path</strong><p>Validate outgoing work. Keep its audit and actual effects.</p></div><div><strong>Selected path</strong><p>Validate destination history. Record the move, then open a fresh native context.</p></div></div>
+          <div class="binding"><strong>Returning is another move</strong><span>Context A → context B → fresh context C. Never rewind native A midway.</span></div>
+          <figcaption>Figure 8. Optional Pi branch summaries deliberately carry information from the abandoned path. Without a summary, omitted later private data must stay out.</figcaption>
+        </figure>
+        <p>The adapter saves navigation intent and then a destination receipt. It cannot silently reuse an old native context after an incomplete move. A failed or stopped summary leaves the original path usable.</p>
+      </article>
+      <aside class="notice warning"><strong>History selection is never filesystem rollback.</strong> Cloning, forking, compaction and tree navigation do not reverse writes, edits, shell commands or external effects. New work must inspect current state when it matters.</aside>
+    </section>
+
+    <section id="instructions" aria-labelledby="instructions-title">
+      <h2 id="instructions-title">Your instructions stay. Proven generated boilerplate takes a different route.</h2>
+      <p>The SDK uses Claude Code's official base preset. The adapter attaches Pi's required instructions rather than pretending that an arbitrary rewritten prompt is equivalent.</p>
+      <figure class="diagram">
+        <div class="two-records"><div class="record"><h3>Preserved for the SDK</h3><ul class="plain-list"><li>Operator and project instructions</li><li>Skills and extension sections</li><li>Current Pi tool schemas and guidance</li><li>Custom, forced and appended prompts</li><li>Explicitly supplied documentation sections</li></ul></div><div class="record"><h3>Kept in Pi's canonical audit</h3><p>Proven generated identity boilerplate and the default documentation-routing index can stay Pi-side while the SDK uses its own preset.</p><p>Operator-written text does not become disposable because it looks similar.</p></div></div>
+        <figcaption>Figure 9. The adapter fingerprints both the original Pi prompt and the SDK-facing projection. Unaccounted rewrites fail before SDK startup.</figcaption>
+      </figure>
+      <p>This projection mitigates a content-sensitive upstream rejection. The same generated documentation combination could trigger an extra-usage-style error even though authentication had not changed. That does not establish a billing fix, explain the upstream enforcement change or justify copying credentials.</p>
+      <details><summary>What did the latest parent reload fix change?</summary><p>Pi can regenerate the tool list in a different order after restart without changing any declaration or non-tool instruction. The old guard rejected it because it expected a declaration change first.</p><p>The fix permits order-only regeneration when the exact guidance lines and declarations match, after reconstructing the old configuration. It still uses a fresh native context. Changed generated content, changed or removed operator overrides and protected configuration changes remain covered by rejection checks. All 17 focused tool cases passed on Pi 1.2 and 1.3.</p></details>
+    </section>
+
+    <section id="interruptions" aria-labelledby="interruptions-title">
+      <h2 id="interruptions-title">Stop is different from an unknown outcome.</h2>
+      <dl class="decisions">
+        <div><dt>Recorded Stop, matched Pi results</dt><dd>The next message can rebuild a fresh native context in the same Pi chat. This is validated cancellation continuation, not native pause/resume.</dd></div>
+        <div><dt>Malformed tool arguments</dt><dd>No invalid Pi call executes. Require the exact SDK rejection and a corrected call with a new ID.</dd></div>
+        <div><dt>Several child completion notices</dt><dd>Forward the complete trailing input group in order. Do not mistake earlier notices for unfinished historical turns.</dd></div>
+        <div><dt>Missing result or unknown SDK work</dt><dd>Stop automatic continuation. Do not invent success or repeat the action just to fill the gap.</dd></div>
+        <div><dt>Explicit recovery, when eligible</dt><dd><code>/sdk-recover</code> needs a valid completed checkpoint and interactive confirmation. It starts a new native context and labels unknown outcomes as unknown. It is not a universal repair command.</dd></div>
+      </dl>
+      <p>A cancelled or failed tool may already have changed something. A recorded error is not proof that no effects occurred. Recovery and continuation preserve that distinction.</p>
+      <details><summary>When is a host restart safe?</summary><p>For SDK turns, the host waits for both final settlement and a saved-checkpoint receipt, with no pending tools or blocking dialogs. Receiving an <code>agent_end</code> event alone is not enough. The restart helper queues a detached job and waits rather than stopping its own still-running shell call. Forced interruption can still leave unknown outcomes.</p></details>
+    </section>
+
+    <section id="workers" aria-labelledby="workers-title">
+      <h2 id="workers-title">Fresh workers work. Durable retained-worker continuation is unfinished.</h2>
+      <p>A worker is a separate Pi agent. It needs its own instructions, tools and provider state. It must not borrow the parent's SDK conversation or inherit private parent memory by accident.</p>
+      <p>Here, foreground means an in-process child borrowing the parent's provider registration. Background resume starts a separate Pi process with its own extension loading. This is about the agent runtime, not whether your phone tab is in the background.</p>
+      <p>The first isolation fix gave borrowed foreground workers independent, temporary SDK bridges. Normal fresh workers can read files, edit code and validate their changes. Parallel background workers and automatic completion notices also passed focused real-provider checks.</p>
+      <figure class="diagram worker-map">
+        <div class="worker-route"><h3>Ordinary borrowed foreground route</h3><ol><li>Start an independent child bridge.</li><li>Complete real work and preserve the child's Pi transcript.</li><li>Close its temporary SDK bridge without a child-owned SDK checkpoint.</li><li class="stop-point"><strong>Retained resume rejects uncheckpointed SDK history.</strong></li></ol></div>
+        <div class="worker-route"><h3>Existing-API experiment</h3><ol><li>Use pi-subagents' required-child-extension API in the isolated test.</li><li>Load the child's own SDK hooks.</li><li>Save a child-owned checkpoint successfully.</li><li class="stop-point"><strong>Resume still rejects changed instructions.</strong> The background context changes its preamble and adds Ponytail.</li></ol></div>
+        <figcaption>Figure 10. We proved checkpoint creation through the existing API. We did not prove successful SDK retained continuation. The ordinary provider does not enable the experiment globally.</figcaption>
+      </figure>
+      <p>The next step must preserve the resumed worker's current instructions and accepted history through a validated fresh-context handoff. Removing Ponytail, ignoring the fingerprint or reusing the old native query under a different prompt would hide the problem.</p>
+      <aside class="notice"><strong>A pi-subagents patch is not proven necessary.</strong> Its existing API can load the hooks and save the checkpoint without a dependency change. Production integration still needs care: requirements apply parent-wide, allow one registration per parent and can conflict with another policy or a non-SDK agent's extension ceiling.</aside>
+      <p>Parent SDK chats do not depend on pi-subagents. That extension matters when you use its worker/delegation workflow.</p>
+    </section>
+
+    <section id="evidence" aria-labelledby="evidence-title">
+      <h2 id="evidence-title">What the evidence actually says.</h2>
+      <p>There are two useful kinds of verification. Neither replaces the other.</p>
+      <div class="evidence-types"><div><h3>Focused replay E2Es</h3><p>Real Pi, RPC, persistence, provider, MCP and filesystem effects. Only the external SDK peer is replayed. These can reliably reproduce corrupt receipts, missing results and precise crash boundaries.</p></div><div><h3>Real-provider journeys</h3><p>Real model services, normal personal resources, normal worker profiles and a mobile browser. They verify actual memory, edits, permissions, Stop and restarts. They cost model usage and cover fewer combinations.</p></div></div>
+      <table class="evidence-table"><caption>Recorded focused coverage, not a full parity score</caption><thead><tr><th scope="col">Behavior</th><th scope="col">Cases</th><th scope="col">Recorded Pi versions</th></tr></thead><tbody><tr><th scope="row">Parent compaction</th><td>24</td><td>1.2 and 1.3</td></tr><tr><th scope="row">Completed-branch clone</th><td>31</td><td>1.2 and 1.3</td></tr><tr><th scope="row">Earlier-message fork</th><td>44</td><td>1.2 and 1.3</td></tr><tr><th scope="row">Tree navigation</th><td>59</td><td>1.2 and 1.3</td></tr><tr><th scope="row">Tool handoff and ordering</th><td>17</td><td>1.2 and 1.3</td></tr></tbody></table>
+      <p>Separate real Codex, SDK Haiku and SDK Opus journeys passed parent compaction, clone, fork and tree contracts. Fresh standard foreground/background worker checks passed for Codex and SDK Haiku. The retained-worker control passed on Codex; SDK retained continuation remains red.</p>
+      <p>The shared parent comparisons used the same normal 14-tool initial loadout. Builtin workers kept their default High reasoning and normal tools. A filtered green result records other rows as skipped, not passed.</p>
+      <p class="scope-note">These counts come from recorded milestone runs. They do not claim that every suite ran against every later commit, that every case called a live model or that any suite proves physical Safari behavior.</p>
+    </section>
+
+    <section id="remaining" aria-labelledby="remaining-title">
+      <h2 id="remaining-title">The honest boundary today.</h2>
+      <dl class="status-list">
+        <div><dt><span class="status verified">Focused-verified</span> Parent history lifecycle</dt><dd>Completed-checkpoint restart, Pi-owned compaction, completed clones, earlier forks and validated tree moves, within the documented cases.</dd></div>
+        <div><dt><span class="status verified">Focused-verified</span> Normal new work</dt><dd>Pi-owned tools, permissions, dynamic tool activation, recorded Stop continuation and selected fresh-worker/background-notice journeys.</dd></div>
+        <div><dt><span class="status blocked">Reproduced gap · SDK-3</span> Retained SDK worker continuation</dt><dd>Missing child-owned state on the temporary route. With hooks loaded, real prompt changes still block resume.</dd></div>
+        <div><dt><span class="status guarded">Guarded · SDK-4</span> Protected configuration changes</dt><dd>General instruction, environment and output-limit changes cannot transparently reuse a native query. Validated tool-only transitions are a narrower exception.</dd></div>
+        <div><dt><span class="status guarded">Mitigated · SDK-5</span> Upstream request rejection</dt><dd>Structured prompt projection handles the proven generated trigger. The upstream issue itself is unresolved.</dd></div>
+        <div><dt><span class="status neutral">Not established</span> Broader parity</dt><dd>Child-local compaction/branches, nested/custom agent combinations, overflow recovery, exhaustive partial-write failures, physical Safari and overnight stress.</dd></div>
+      </dl>
+      <p class="takeaway">We have built the provider and a substantial parent-session lifecycle. The remaining work is making worker lifecycle and broader configuration transitions equally safe, then proving the complete shared workflow matrix.</p>
+      <p>For the changing list of open items, use the <a href="https://github.com/peterlimg/pi-remote/blob/main/docs/provider-gaps.md">canonical provider gap tracker</a>. This guide is a dated explanation.</p>
+    </section>
+
+    <section id="glossary" aria-labelledby="glossary-title">
+      <h2 id="glossary-title">A small glossary.</h2>
+      <dl class="glossary">
+        <div><dt>Provider</dt><dd>The integration Pi uses to talk to a model backend. Here, <code>claude-sdk</code>.</dd></div>
+        <div><dt>Native context</dt><dd>One model conversation managed by the Claude SDK. Replacing it does not necessarily create a new Pi chat.</dd></div>
+        <div><dt>Projection</dt><dd>The selected history Pi presents to the model. The full audit can contain more than the active projection.</dd></div>
+        <div><dt>Checkpoint</dt><dd>A completed continuation point linking native IDs, accepted Pi history and configuration.</dd></div>
+        <div><dt>Receipt</dt><dd>Persisted transition metadata binding a validated source to its new context and owner before a new checkpoint exists.</dd></div>
+        <div><dt>Lifecycle hooks</dt><dd>Extension callbacks at events such as session startup and turn completion. The SDK provider uses them to load and persist its checkpoints.</dd></div>
+        <div><dt>Accepted prefix</dt><dd>The initial part of Pi history the saved SDK state has already accounted for.</dd></div>
+        <div><dt>Fingerprint</dt><dd>A hash used to detect mismatched history or configuration. It is not a guess that two prompts mean the same thing.</dd></div>
+        <div><dt>Replay</dt><dd>For execution, repeating an old action, which context import must never do. For tests, replaying an external SDK peer to exercise real Pi behavior deterministically.</dd></div>
+      </dl>
+    </section>
+
+    <section id="sources" aria-labelledby="sources-title">
+      <h2 id="sources-title">Go one level deeper.</h2>
+      <details><summary>Where the implementation lives</summary><ul class="source-list"><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/experiments/claude-sdk-provider/index.ts"><code>experiments/claude-sdk-provider/index.ts</code></a><span>Provider registration, Pi lifecycle hooks, persistence, recovery and branch integration.</span></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/experiments/claude-sdk-provider/bridge.ts"><code>experiments/claude-sdk-provider/bridge.ts</code></a><span>Official SDK queries, MCP handlers, prompt/history validation, IDs, usage and context replacement.</span></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/test/provider-parity.mjs"><code>test/provider-parity.mjs</code></a><span>The same realistic journeys across providers, with owned resources and explicit skips.</span></li></ul></details>
+      <ul class="reading-list"><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/sdk-compaction.md">Pi-owned compaction</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/sdk-cloning.md">Completed-branch cloning</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/sdk-forks.md">Earlier-message forks</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/sdk-tree.md">Tree navigation</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/sdk-worker-continuation.md">Worker investigation</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/docs/provider-parity.md">Shared verification contract</a></li><li><a href="https://github.com/peterlimg/pi-remote/blob/9bde5a3/experiments/claude-sdk-provider/verification-worker-continuation.json">Latest worker evidence</a></li></ul>
+      <p class="scope-note">The recorded integration pins Agent SDK 0.3.296 with bundled Claude Code 2.1.296. The worker investigation used pi-subagents 0.78.0 unchanged. No credentials, private chats, native transcripts or tool payloads are included in this page.</p>
+    </section>
+  </main>
+  <footer class="page-footer"><p>If you remember one thing, remember this.</p><strong>Pi owns what happened. The SDK supplies a model context that must match it.</strong><a href="#main">Back to the top</a></footer>
+</body>
+</html>
