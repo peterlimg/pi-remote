@@ -1,13 +1,13 @@
 # Remaining provider parity gaps
 
-Canonical open-items list, updated for Pi-owned parent compaction, cloning and earlier-message forks. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
+Canonical open-items list, updated for Pi-owned parent compaction, cloning, earlier-message forks and tree navigation. Keep future gap updates here rather than repeating the list in chat or the README. The [shared E2E contract](provider-parity.md) explains the tests; [recorded parity results](../experiments/claude-sdk-provider/verification-parity.json) distinguish real-model checks, replay checks and skipped workflows.
 
 ## Confirmed limitations
 
 | ID | Open item | Scope and evidence |
 | --- | --- | --- |
 | SDK-1 | Parent manual/threshold compaction is implemented; remaining compaction scope needs verification. | Real Codex, SDK Haiku and SDK Opus checks passed using Pi's normal summarizer and a validated fresh-SDK handoff. Borrowed foreground-worker compaction, overflow/length recovery and partial publication crashes remain unproven. SDK-native automatic compaction stays disabled intentionally. See [implementation and evidence](sdk-compaction.md). |
-| SDK-2 | Cloning and earlier-message forks are implemented; tree navigation remains blocked. | Idle saved branches receive owner-bound receipts and fresh native contexts. Forks use the selected path, exclude later messages, preserve filesystem effects and support queued/tool-boundary points with a later accepted-prefix proof. See [cloning](sdk-cloning.md) and [fork scope/evidence](sdk-forks.md). Child-local lifecycle and new phone controls are not enabled. |
+| SDK-2 | Parent cloning, earlier-message forks and validated tree navigation are implemented; remaining combinations need verification. | Saved branches use owner-bound receipts and fresh native contexts. Tree moves validate both paths, optionally use Pi's normal summary and preserve audit/effects. Queued moves with and without summaries passed real Codex, SDK Haiku and SDK Opus checks. See [cloning](sdk-cloning.md), [forks](sdk-forks.md) and [tree scope/evidence](sdk-tree.md). Child-local lifecycle and new phone controls are not enabled. |
 | SDK-3 | Durable foreground-child continuation is incomplete. | Fresh standard foreground workers now work, including real edits and validation. Borrowed foreground SDK bridges close on completion and do not persist child-local provider checkpoints. Resuming retained/completed children needs their own provider session hooks and E2E coverage. Normal parent-chat reload and completed-checkpoint restart already work. |
 | SDK-4 | General instruction/configuration changes cannot transparently reuse a native query. | Validated tool declarations plus the generated `tools` section can change through a handoff. Other prompt, environment and output-limit changes remain guarded. Any broader handoff must preserve operator instructions and verify accepted history rather than weaken the fingerprint checks. |
 | SDK-5 | The upstream prompt-sensitive request rejection is unresolved. | Structured prompt projection mitigates the recorded generated-documentation trigger. It is not an upstream fix, and opaque/custom/inherited prompts can still be rejected. See the [billing/request-content investigation](research/claude-agent-sdk-billing.md). No billing change or credential workaround is justified by this response alone. |
@@ -19,7 +19,7 @@ Canonical open-items list, updated for Pi-owned parent compaction, cloning and e
 
 The provider now accepts Pi's manual and threshold compaction after checking accepted history and matched tool results. Pi generates the summary once; a durable receipt binds the old source, new projection and configuration before another SDK context opens. Original audit entries and previous native transcripts remain preserved. See [the compaction design and verification](sdk-compaction.md).
 
-The earlier parity result `Compaction cancelled` came from the all-model hook introduced in `7aac7e81` on October 14. It was a pre-existing integration restriction, not a new `ACK_0` reproduction. That blanket Pi-compaction block has been replaced by the validated handoff. The tree-navigation guard remains.
+The earlier parity result `Compaction cancelled` came from the all-model hook introduced in `7aac7e81` on October 14. It was a pre-existing integration restriction, not a new `ACK_0` reproduction. That blanket Pi-compaction block has been replaced by the validated handoff. Tree navigation now has its own validated handoff.
 
 [bridge.ts](../experiments/claude-sdk-provider/bridge.ts) still disables SDK-native automatic/idle compaction and rejects unexpected native compaction events. This is deliberate: Pi is the single compaction owner for the new path. It does not enable or claim to fix the native Haiku failure below.
 
@@ -47,7 +47,7 @@ These workflows still need shared realistic verification. Earlier narrow checks 
 - Nested delegation and durable/retained/forked child continuation.
 - Images and slash-command dialogs combined with tools, delegation, switching, Stop and restart.
 - Arbitrary inherited/custom prompt changes and their provenance across child contexts.
-- Tree navigation and arbitrary abandoned-tree points, plus branching combined with child-local lifecycle, images or slash-dialog workflows beyond the shared parent contracts.
+- Branching combined with child-local lifecycle, images or slash-dialog workflows beyond the shared parent clone/fork/tree contracts.
 - Long-running/overnight background work, hard crashes, dropped native resume anchors and partial checkpoint/projection publication.
 - Physical Safari. Mobile Chromium and WebKit checks are not physical-device proof.
 

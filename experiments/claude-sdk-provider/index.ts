@@ -34,11 +34,13 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let recovery: RecoveryPlan | undefined;
   let compaction: { entryId: string; state: unknown } | undefined, compacting = false;
   let clone: { entryId: string; state: unknown } | undefined;
+  let tree: { entryId: string; sourceId: string | null; state: unknown } | undefined;
+  let treePlan: { oldLeafId: string | null; sourceId: string | null; proof: ReturnType<typeof createBridge>; before: Message[] } | undefined;
   let activeSession: string | undefined;
   let ownerId: string | undefined, ownerCwd: string;
   const borrowed = new Map<string, ReturnType<typeof createBridge>>();
   let promptSource: Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> | undefined;
-  const branchBridge = (ctx: ExtensionContext, saved: Pick<ReturnType<typeof readBranch>, 'checkpoint' | 'recovery' | 'compaction' | 'clone'>,
+  const branchBridge = (ctx: ExtensionContext, saved: Pick<ReturnType<typeof readBranch>, 'checkpoint' | 'recovery' | 'compaction' | 'clone' | 'tree'>,
     entries = () => ctx.sessionManager.getBranch()) => createBridge(ctx.cwd, createQuery, {
       persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint: saved.checkpoint, recovery: saved.recovery,
       compaction: saved.compaction ? saved.compaction.state ?? null : undefined,
@@ -53,6 +55,18 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
         if (end < 0) throw new Error('SDK clone source is unavailable.');
         return projectionMessages(branch.slice(0, end), true);
       },
+      tree: saved.tree ? saved.tree.state ?? null : undefined,
+      treeSource: () => {
+        const branch = entries(), end = branch.findIndex(entry => entry.id === saved.tree?.entryId);
+        if (end < 0) throw new Error('SDK tree source is unavailable.');
+        if (saved.tree?.sourceId === null) return [];
+        const source = branch.findIndex(entry => entry.id === saved.tree?.sourceId);
+        if (source < 0 || source >= end) throw new Error('Invalid SDK tree source.');
+        const selected = branch.slice(0, source + 1);
+        if ((saved.tree?.state as { configuration?: unknown } | null)?.configuration === null && selected.some(row => row.type === 'message' &&
+          row.message.role === 'assistant' && (row.message.provider === providerId || row.message.api === providerId))) throw new Error('SDK tree configuration is missing.');
+        return projectionMessages(selected, true);
+      },
       configurationSource: (configuration, accepted) => {
         const branch = entries();
         const end = branch.findLastIndex(row => row.type === 'custom' && row.customType === 'claude-sdk-checkpoint' &&
@@ -61,12 +75,14 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
         return end < 0 ? undefined : projectionMessages(branch.slice(0, end), true);
       },
       promptSource: () => promptSource, historySource: () => projectionMessages(entries(), true),
+      retiredToolIds: () => ctx.sessionManager.getEntries().flatMap(row => row.type === 'message' && row.message.role === 'assistant'
+        ? row.message.content.filter(block => block.type === 'toolCall').map(block => block.id) : []),
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },
       onRecoverySession: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-session', { id, sdkSessionId }); } });
   const restore = (ctx: ExtensionContext) => {
     ownerId = ctx.sessionManager.getSessionId(); ownerCwd = ctx.cwd;
     bridge?.close();
-    bridge = branchBridge(ctx, { checkpoint, recovery, compaction, clone });
+    bridge = branchBridge(ctx, { checkpoint, recovery, compaction, clone, tree });
   };
   const projectionMessages = (branch: SessionEntry[], includeSystem = false): Message[] =>
     convertToLlm(buildSessionProjection(branch).entries.flatMap(entry => entry.messages)).filter(message => includeSystem || message.role !== 'system');
@@ -167,14 +183,19 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       state: data?.entryId === compact.id && receipt && branch.indexOf(receipt) > branch.indexOf(compact) ? data.state : null } : undefined;
     const copy = branch.findLast(row => row.type === 'custom' && row.customType === 'claude-sdk-clone');
     const copied = copy?.type === 'custom' ? copy.data as { sessionId?: unknown; state?: unknown } | null : undefined;
-    const clone = copy?.type === 'custom' && (!entry || branch.indexOf(copy) > branch.indexOf(entry)) && (!receipt || branch.indexOf(copy) > branch.indexOf(receipt))
+    let clone = copy?.type === 'custom' && (!entry || branch.indexOf(copy) > branch.indexOf(entry)) && (!receipt || branch.indexOf(copy) > branch.indexOf(receipt))
       ? { entryId: copy.id, state: copied?.state } : undefined;
     if (clone) compaction = undefined;
-    if (compaction || clone) checkpoint = undefined;
+    const navigation = branch.findLast(row => row.type === 'custom' && row.customType === 'claude-sdk-tree');
+    const navigated = navigation?.type === 'custom' ? navigation.data as { sourceId?: unknown; state?: unknown } | null : undefined;
+    const tree = navigation && [entry, copy, receipt, compact].every(row => !row || branch.indexOf(navigation) > branch.indexOf(row))
+      ? { entryId: navigation.id, sourceId: navigated?.sourceId as string | null, state: navigated?.state } : undefined;
+    if (tree) { clone = undefined; compaction = undefined; }
+    if (compaction || clone || tree) checkpoint = undefined;
     if (checkpoint && typeof checkpoint === 'object' && !('piSessionId' in checkpoint)) {
       const configuration = (checkpoint as { configuration?: unknown }).configuration;
       const owners = lineage.flatMap(row => {
-        if (row.type !== 'custom' || !['claude-sdk-clone', 'claude-sdk-compaction'].includes(row.customType)) return [];
+        if (row.type !== 'custom' || !['claude-sdk-clone', 'claude-sdk-compaction', 'claude-sdk-tree'].includes(row.customType)) return [];
         const state = (row.data as { state?: { configuration?: unknown; sourceSessionId?: unknown } } | null)?.state;
         return state && state.configuration === configuration && typeof state.sourceSessionId === 'string' ? [state.sourceSessionId] : [];
       });
@@ -183,13 +204,27 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
     const plan = decision?.type === 'custom' ? decision.data as RecoveryPlan : undefined;
     const started = plan && branch.some(row => row.type === 'custom' && row.customType === 'claude-sdk-recovery-started' && (row.data as { id?: unknown })?.id === plan.id);
     const recovery = plan && !started && (!entry || branch.indexOf(decision!) > branch.indexOf(entry)) ? plan : undefined;
-    return { checkpoint, compaction, clone, recovery, copySessionId: copied?.sessionId };
+    return { checkpoint, compaction, clone, tree, recovery, copySessionId: copied?.sessionId };
+  };
+  const loadBranch = (ctx: ExtensionContext) => {
+    const branch = ctx.sessionManager.getBranch(), all = ctx.sessionManager.getEntries(), saved = readBranch(branch, all);
+    if (!saved.tree && !saved.clone && !saved.compaction) {
+      const native = (saved.checkpoint as { sdkSessionId?: unknown } | undefined)?.sdkSessionId;
+      const retired = all.some(row => {
+        if (row.type !== 'custom' || row.customType !== 'claude-sdk-tree-start' || branch.some(entry => entry.id === row.id)) return false;
+        const data = row.data as { sdkSessionIds?: unknown[]; sourceId?: unknown } | null;
+        if (!data || !Array.isArray(data.sdkSessionIds) || !data.sdkSessionIds.every(id => typeof id === 'string') ||
+          data.sourceId !== null && typeof data.sourceId !== 'string') return true;
+        return typeof native === 'string' ? data.sdkSessionIds.includes(native) : data.sourceId === null || branch.some(entry => entry.id === data.sourceId);
+      });
+      if (retired) { saved.checkpoint = undefined; saved.tree = { entryId: '', sourceId: null, state: null }; }
+    }
+    ({ checkpoint, compaction, clone, tree, recovery } = saved); compacting = false;
+    restore(ctx); return saved;
   };
   pi.on('session_start', (event, ctx) => {
     activeSession = ctx.sessionManager.getSessionFile();
-    const branch = ctx.sessionManager.getBranch(), saved = readBranch(branch);
-    ({ checkpoint, compaction, clone, recovery } = saved); compacting = false;
-    restore(ctx);
+    const branch = ctx.sessionManager.getBranch(), saved = loadBranch(ctx);
     if (event.reason === 'fork' && saved.copySessionId !== ctx.sessionManager.getSessionId()) {
       let state: unknown = null;
       try {
@@ -213,7 +248,7 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       }
       pi.appendEntry('claude-sdk-clone', { sessionId: ctx.sessionManager.getSessionId(), state });
       clone = { entryId: ctx.sessionManager.getLeafId()!, state };
-      checkpoint = undefined; recovery = undefined; compaction = undefined;
+      checkpoint = undefined; recovery = undefined; compaction = undefined; tree = undefined;
       restore(ctx);
     }
   });
@@ -226,15 +261,16 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   });
   pi.on('agent_settled', (_event, ctx) => {
     const next = bridge?.checkpoint();
-    if (next) { checkpoint = next; compaction = undefined; clone = undefined; pi.appendEntry('claude-sdk-checkpoint', next); }
+    if (next) { checkpoint = next; compaction = undefined; clone = undefined; tree = undefined; pi.appendEntry('claude-sdk-checkpoint', next); }
     if (process.env.PI_REMOTE_WORKER === '1' && ctx.model?.provider === providerId) {
       ctx.ui.setStatus('claude-sdk-checkpoint', next ? 'saved' : 'unavailable');
       ctx.ui.setStatus('claude-sdk-checkpoint', undefined);
     }
   });
   pi.on('session_shutdown', () => {
+    treePlan?.proof.close(); treePlan = undefined;
     for (const child of borrowed.values()) child.close(); borrowed.clear();
-    bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; compaction = undefined; clone = undefined; compacting = false;
+    bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; compaction = undefined; clone = undefined; tree = undefined; compacting = false;
     activeSession = undefined; ownerId = undefined; promptSource = undefined;
   });
   pi.on('message_end', (event, ctx) => {
@@ -276,22 +312,76 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       const state = bridge.prepareCompaction(projectionMessages(branch.slice(0, end), true), recoveryMessages(ctx));
       const receipt = { entryId: entry.id, state };
       pi.appendEntry('claude-sdk-compaction', receipt);
-      checkpoint = undefined; recovery = undefined; clone = undefined; compaction = receipt;
+      checkpoint = undefined; recovery = undefined; clone = undefined; tree = undefined; compaction = receipt;
       restore(ctx);
     } catch (error) {
       console.error('[claude-sdk:compaction] Checkpoint rejected:', error);
       const entry = ctx.sessionManager.getBranch().findLast(row => row.type === 'compaction');
-      if (entry) { compaction = { entryId: entry.id, state: null }; clone = undefined; checkpoint = undefined; recovery = undefined; restore(ctx); }
+      if (entry) { compaction = { entryId: entry.id, state: null }; clone = undefined; tree = undefined; checkpoint = undefined; recovery = undefined; restore(ctx); }
       else bridge?.close();
       ctx.ui.notify('SDK compaction checkpoint could not be recorded. Start a fresh session before continuing.', 'error');
     }
   });
-  const blockHistoryChange = (_event: unknown, ctx: ExtensionContext) => {
-    if (ctx.model?.provider !== providerId) return;
-    if (ctx.hasUI) ctx.ui.notify('Claude SDK experiment does not support branching or forks. Start a new session.', 'warning');
-    return { cancel: true };
-  };
-  pi.on('session_before_tree', blockHistoryChange);
+  pi.on('session_before_tree', (event, ctx) => {
+    treePlan?.proof.close(); treePlan = undefined;
+    const source = ctx.sessionManager.getBranch(), all = ctx.sessionManager.getEntries();
+    const selected = ctx.sessionManager.getBranch(event.preparation.targetId), target = selected.at(-1);
+    const sdk = (entries: SessionEntry[]) => entries.some(row => row.type === 'message' && row.message.role === 'assistant' && row.message.provider === providerId);
+    if (!sdk(source) && !sdk(selected) && !checkpoint && !clone && !compaction && !tree) return;
+    try {
+      if (!ctx.sessionManager.getSessionFile() || target?.id !== event.preparation.targetId) throw new Error('Invalid SDK tree point.');
+      if (target.type === 'custom_message' || target.type === 'message' && target.message.role === 'user') selected.pop();
+      const sourceId = selected.at(-1)?.id ?? null, sessionId = ctx.sessionManager.getSessionId();
+      // Pi has already checked idle before entering this hook; its summary controller now makes ctx.isIdle() false.
+      const outgoing = projectionMessages(source, true);
+      if (!sdk(source) && !checkpoint && !clone && !compaction) {
+        bridge!.prepareCompaction(outgoing);
+        const accepted = tree && (tree.state as { prefix?: unknown[] } | null)?.prefix?.length;
+        if (outgoing.at(-1)?.role !== 'assistant' && outgoing.filter(message => message.role !== 'system').length !== accepted) throw new Error('Incomplete outgoing history.');
+      } else bridge!.prepareClone(outgoing, sessionId, `${sessionId}:tree`);
+      for (const candidate of [undefined, ...all.filter(row => row.type === 'custom' && row.customType === 'claude-sdk-checkpoint').reverse()]) {
+        const branch = candidate ? ctx.sessionManager.getBranch(candidate.id) : selected;
+        if (sourceId !== null && !branch.some(row => row.id === sourceId)) continue;
+        const saved = readBranch(branch, all);
+        if (sdk(branch) && !saved.checkpoint && !saved.compaction && !saved.clone && !saved.tree) continue;
+        const proof = branchBridge(ctx, saved, () => branch), before = projectionMessages(branch, true), messages = projectionMessages(selected, true);
+        try {
+          proof.prepareTree(before, messages, sessionId);
+          treePlan = { oldLeafId: event.preparation.oldLeafId, sourceId, proof, before }; break;
+        } catch { proof.close(); }
+      }
+      if (!treePlan) throw new Error('No completed SDK proof for the selected tree history.');
+      // A durable intent prevents an older native checkpoint resuming if navigation publishes no receipt.
+      pi.appendEntry('claude-sdk-tree-start', { sourceId, sdkSessionIds: [...new Set(all.flatMap(row => row.type === 'custom' && row.customType === 'claude-sdk-checkpoint'
+        ? [(row.data as { sdkSessionId?: unknown })?.sdkSessionId] : []).filter(id => typeof id === 'string'))] });
+    } catch (error) {
+      treePlan?.proof.close(); treePlan = undefined;
+      console.error('[claude-sdk:tree] Preparation rejected:', error);
+      ctx.ui.notify('Cannot navigate SDK history safely. Finish or recover the interrupted turn, or choose a validated history point.', 'warning');
+      return { cancel: true };
+    }
+  });
+  pi.on('session_tree', (event, ctx) => {
+    const plan = treePlan; treePlan = undefined;
+    if (!plan) { loadBranch(ctx); return; }
+    let state: unknown = null;
+    try {
+      if (event.oldLeafId !== plan.oldLeafId) throw new Error('SDK tree source changed.');
+      const branch = ctx.sessionManager.getBranch(), boundary = plan.sourceId === null ? 0 : branch.findIndex(row => row.id === plan.sourceId) + 1;
+      const selected = branch.slice(0, boundary), tail = branch.slice(boundary);
+      if ((selected.at(-1)?.id ?? null) !== plan.sourceId || tail.some(row => row.type !== 'label' && row.id !== event.summaryEntry?.id) ||
+        event.summaryEntry && !tail.some(row => row.type === 'branch_summary' && row.id === event.summaryEntry!.id &&
+          row.parentId === plan.sourceId && row.summary === event.summaryEntry!.summary)) throw new Error('SDK tree target changed.');
+      state = plan.proof.prepareTree(plan.before, projectionMessages(selected, true), ctx.sessionManager.getSessionId(), recoveryMessages(ctx, true));
+      pi.appendEntry('claude-sdk-tree', { sourceId: plan.sourceId, state });
+      loadBranch(ctx);
+    } catch (error) {
+      console.error('[claude-sdk:tree] Checkpoint rejected:', error);
+      tree = { entryId: '', sourceId: plan.sourceId, state: null }; checkpoint = undefined; recovery = undefined; clone = undefined; compaction = undefined;
+      restore(ctx);
+      ctx.ui.notify('SDK tree checkpoint could not be recorded. Start a fresh session before continuing.', 'error');
+    } finally { plan.proof.close(); }
+  });
   pi.on('session_before_fork', (event, ctx) => {
     const history = recoveryMessages(ctx, true);
     if (ctx.model?.provider !== providerId && !history.some(message => message.role === 'assistant' && message.provider === providerId)) return;

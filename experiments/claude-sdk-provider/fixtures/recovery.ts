@@ -125,11 +125,11 @@ function replayQuery(args) {
           : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart'
           : request === 'cancel-after-tools' ? 'cancel-completed' : request === 'cancel-in-tool' ? 'cancel-running'
           : request === 'dynamic-tools' && !tools.includes('mcp__pi__extra') ? 'dynamic-tools' : undefined;
-        if (label || text === 'reuse-id' || request === 'reuse-seed-id') {
+        if (label || text === 'reuse-id' || request === 'reuse-seed-id' || request === 'reuse-later-id') {
           const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
             .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : [])
-            .find(block => block.type === 'toolCall' && block.arguments.label === (request === 'reuse-seed-id' ? 'seed' : 'orphan'));
-          const id = text === 'reuse-id' || request === 'reuse-seed-id' ? old.id : 'toolu_' + randomUUID();
+            .find(block => block.type === 'toolCall' && block.arguments.label === (request === 'reuse-seed-id' ? 'seed' : request === 'reuse-later-id' ? 'after-restart' : 'orphan'));
+          const id = text === 'reuse-id' || request === 'reuse-seed-id' || request === 'reuse-later-id' ? old.id : 'toolu_' + randomUUID();
           label ??= 'orphan';
           const input = text === 'invalid-new' ? {} : { label };
           const pending = client.callTool({ name: 'probe', arguments: input, _meta: { 'claudecode/toolUseId': id } });
@@ -216,6 +216,13 @@ export default function (pi) {
   pi.registerCommand('sdk-record-notices', { description: 'Record synthetic notices without starting a turn', handler: async () => recordNotices() });
   pi.registerCommand('sdk-fork-at', { description: 'Exercise Pi branching at an exact entry', handler: async (id, ctx) => {
     await ctx.fork(id.trim(), { position: 'at' });
+  } });
+  pi.registerCommand('sdk-tree', { description: 'Exercise Pi tree navigation', handler: async (args, ctx) => {
+    const { target, ...options } = JSON.parse(args);
+    try {
+      const result = await ctx.navigateTree(target, options);
+      log({ type: 'tree-result', target, ...result, leafId: ctx.sessionManager.getLeafId() });
+    } catch (error) { log({ type: 'tree-result', target, error: error.message, leafId: ctx.sessionManager.getLeafId() }); }
   } });
   pi.registerCommand('sdk-notify', { description: 'Deliver a batch of synthetic child completion notices', handler: async () => {
     recordNotices();

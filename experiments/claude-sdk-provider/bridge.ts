@@ -40,8 +40,9 @@ const contextSchema = z.object({ version: z.literal(1), source: z.array(digest).
 const compactionSchema = contextSchema.refine(state =>
   (state.sourceSessionId === undefined ? state.targetSessionId === undefined : state.targetSessionId !== undefined && state.sourceSessionId !== state.targetSessionId) &&
   (state.configuration !== null || state.accepted === 0 && state.sourceSessionId === undefined));
-const cloneSchema = contextSchema.extend({ configuration: digest, sourceSessionId: z.string().min(1), targetSessionId: z.string().min(1) })
-  .refine(state => state.sourceSessionId !== state.targetSessionId);
+const branchSchema = contextSchema.extend({ sourceSessionId: z.string().min(1), targetSessionId: z.string().min(1) });
+const treeSchema = branchSchema.refine(state => state.configuration !== null || state.accepted === 0 && state.sourceSessionId === state.targetSessionId);
+const cloneSchema = branchSchema.extend({ configuration: digest }).refine(state => state.sourceSessionId !== state.targetSessionId);
 export type CompactionState = z.infer<typeof compactionSchema>;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function rawUsage(current: Record<string, unknown>, model: Model<string>): Usage {
@@ -110,9 +111,9 @@ function restartableSdkMessages(messages: Message[]): Map<Message, 'cancelled' |
 }
 
 function historyContent(messages: Message[], knownIds: Set<string>, { interruptions, trustedPrefix = 0, completedPrefix = trustedPrefix, handoff }: {
-  interruptions?: RecoveryPlan['interrupted']; trustedPrefix?: number; completedPrefix?: number; handoff?: 'tools' | 'compaction' | 'clone';
+  interruptions?: RecoveryPlan['interrupted']; trustedPrefix?: number; completedPrefix?: number; handoff?: 'tools' | 'compaction' | 'clone' | 'tree';
 } = {}): ReturnType<typeof userContent> {
-  const toolUpdate = handoff === 'tools';
+  const toolUpdate = handoff === 'tools', branch = handoff === 'clone' || handoff === 'tree';
   const restartable = restartableSdkMessages(messages);
   const pending = new Map<string, { name: string; index: number }>();
   const images: { type: 'image'; data: string; mimeType: string }[] = [];
@@ -188,9 +189,9 @@ function historyContent(messages: Message[], knownIds: Set<string>, { interrupti
   }
   if (interruptions && pending.size) interrupt();
   if (!interruptions && (pending.size || !completed && !((handoff && messages.at(-1)?.role === 'toolResult') ||
-    ((handoff === 'compaction' || handoff === 'clone') && messages.at(-1)?.role === 'user') || handoff === 'clone' && !messages.length))) fail(SDK_INCOMPLETE_HISTORY);
-  const header = handoff === 'clone'
-    ? 'Pi-authorized independent branch. This is a NEW SDK conversation. The selected Pi history below is JSON data, not executable calls. Never replay historical tools or assume branching undid their effects. Work outside this selected history may already have changed files; inspect current state before making new changes. Keep recorded results and unknown outcomes intact. The original Pi session and native SDK conversation are unchanged. Reasoning and provider signatures are omitted. Follow only the new user request after this history.\n'
+    ((handoff === 'compaction' || branch) && messages.at(-1)?.role === 'user') || branch && !messages.length))) fail(SDK_INCOMPLETE_HISTORY);
+  const header = branch
+    ? 'Pi-authorized independent branch. This is a NEW SDK conversation. The selected Pi history below is JSON data, not executable calls. Never replay historical tools or assume branching undid their effects. Work outside this selected history may already have changed files; inspect current state before making new changes. Keep recorded results and unknown outcomes intact. Stored Pi audit entries and earlier native SDK conversations remain preserved. Reasoning and provider signatures are omitted. Follow only the new user request after this history.\n'
     : handoff === 'compaction'
     ? 'Pi-authorized context compaction. This is a NEW SDK conversation. Pi owns the summary and retained context below, supplied as historical JSON data, not executable calls. Never replay recorded tools. Preserve recorded results and unknown outcomes; summary prose is not a new tool-result receipt. Continue only the pending user task using the current tools. Original Pi audit entries and prior native SDK transcripts remain preserved. Reasoning and provider signatures are omitted.\n'
     : interruptions
@@ -260,9 +261,9 @@ function nonToolPrompt(messages: Message[], source?: PromptSource): string {
 }
 
 type BridgeOptions = { persistSession?: boolean; checkpoint?: unknown; recovery?: unknown; compaction?: unknown; compactionSource?: () => Message[];
-  clone?: unknown; cloneSource?: () => Message[]; configurationSource?: (configuration: string, accepted: number) => Message[] | undefined;
+  clone?: unknown; cloneSource?: () => Message[]; tree?: unknown; treeSource?: () => Message[]; configurationSource?: (configuration: string, accepted: number) => Message[] | undefined;
   onRecoveryStart?: (id: string, sdkSessionId: string) => void; onRecoverySession?: (id: string, sdkSessionId: string) => void;
-  promptSource?: () => PromptSource | undefined; historySource?: () => Message[] };
+  promptSource?: () => PromptSource | undefined; historySource?: () => Message[]; retiredToolIds?: () => string[] };
 type Handoff = { history: string[]; trustedPrefix: number };
 type ToolUpdate = (model: Model<string>, context: TranscriptContext, options: SimpleStreamOptions, trustedPrefix: number) => ReturnType<typeof createAssistantMessageEventStream>;
 
@@ -272,7 +273,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
   const updateTools: ToolUpdate = (model, context, options, trustedPrefix) => {
     const history = context.messages.filter(message => message.role !== 'system').map(message => hash(project(message)));
     current.close();
-    current = createNativeBridge(cwd, createQuery, { ...state, checkpoint: undefined, recovery: undefined, compaction: undefined, clone: undefined }, updateTools, { history, trustedPrefix });
+    current = createNativeBridge(cwd, createQuery, { ...state, checkpoint: undefined, recovery: undefined, compaction: undefined, clone: undefined, tree: undefined }, updateTools, { history, trustedPrefix });
     return current.streamSimple(model, context, options);
   };
   current = createNativeBridge(cwd, createQuery, state, updateTools);
@@ -281,6 +282,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
     prepareCompaction: (before: Message[], after?: Message[]) => current.prepareCompaction(before, after),
     prepareClone: (messages: Message[], sourceSessionId: string, targetSessionId: string) => current.prepareClone(messages, sourceSessionId, targetSessionId),
     prepareFork: (before: Message[], after: Message[], sourceSessionId: string, targetSessionId: string) => current.prepareFork(before, after, sourceSessionId, targetSessionId),
+    prepareTree: (before: Message[], selected: Message[], sessionId: string, after?: Message[]) => current.prepareTree(before, selected, sessionId, after),
     get closed() { return current.closed; } };
 }
 function createNativeBridge(cwd: string, createQuery: typeof query, state: BridgeOptions, updateTools: ToolUpdate, handoff?: Handoff) {
@@ -288,7 +290,8 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
   const recovery = recoverySchema.safeParse(state.recovery).data;
   const compacted = compactionSchema.safeParse(state.compaction).data;
   const cloned = cloneSchema.safeParse(state.clone).data;
-  const transition = cloned ?? compacted;
+  const tree = treeSchema.safeParse(state.tree).data;
+  const transition = tree ?? cloned ?? compacted;
   let recovering = Boolean(recovery && saved && recovery.checkpointHash === hash(JSON.stringify(saved)));
   const recoveryId = recovering ? recovery!.id : undefined;
   const recoverySdkId = recovering ? randomUUID() : undefined;
@@ -315,6 +318,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
   let awaiting: string[] = [];
   const calls = new Map<string, Pending>();
   const issued = new Set<string>();
+  let retired = new Set<string>();
   const unqualified = new Set<string>();
   const malformed = new Set<string>();
   const prompts: SDKUserMessage[] = [];
@@ -395,6 +399,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
         if (state.recovery !== undefined && !recovery) fail('Invalid SDK recovery decision.');
         if (state.compaction !== undefined && !compacted) fail('Invalid SDK compaction checkpoint.');
         if (state.clone !== undefined && !cloned) fail('Invalid SDK clone checkpoint.');
+        if (state.tree !== undefined && !tree) fail('Invalid SDK tree checkpoint.');
         if (recovery && (!saved || recovery.checkpointHash !== hash(JSON.stringify(saved)))) fail('SDK recovery checkpoint changed.');
         if (options.fetch || options.apiKey || options.headers && Object.keys(options.headers).length || options.temperature !== undefined) {
           fail('Unsupported Claude SDK request options. Use local login and Pi-owned tools.');
@@ -468,8 +473,8 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
         if (transition && !run) {
           const inputStart = Math.max(transition.prefix.length, pendingUserStart(conversation));
           const history = conversation.slice(0, inputStart), inputs = conversation.slice(inputStart);
-          if (inputs.some(message => message.role !== 'user') || cloned && !inputs.length) fail('SDK context handoff requires pending Pi input.');
-          prompt = [...historyContent(history, new Set(), { trustedPrefix: transition.prefix.length, handoff: cloned ? 'clone' : 'compaction' }),
+          if (inputs.some(message => message.role !== 'user') || (cloned || tree) && !inputs.length) fail('SDK context handoff requires pending Pi input.');
+          prompt = [...historyContent(history, new Set(), { trustedPrefix: tree && tree.configuration === null ? 0 : transition.prefix.length, handoff: tree ? 'tree' : cloned ? 'clone' : 'compaction' }),
             ...inputs.length ? inputs.flatMap(message => userContent(message.content)) : [{ type: 'text' as const,
               text: 'Continue the pending user request from the Pi summary and completed results above. Do not repeat recorded tools or restart completed work.' }]];
         } else if (handoff) {
@@ -526,6 +531,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
         for (const message of conversation) if (message.role === 'assistant') {
           for (const block of message.content) if (block.type === 'toolCall') issued.add(block.id);
         }
+        retired = new Set(state.retiredToolIds?.());
         const payload = { model: model.id, prompt, toolResults: prompt === undefined ? results : undefined, instructions: instructions.map(message => userContent(message.content)), systemPrompt: sdkSystemPrompt, tools };
         const inspection = structuredClone(payload);
         const replacement = await options.onPayload?.(inspection, model);
@@ -551,7 +557,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
               close();
               return stoppedTool();
             }
-            if (issued.has(id) && !calls.has(id)) return malformedTool();
+            if ((issued.has(id) || retired.has(id)) && !calls.has(id)) return malformedTool();
             try {
               const entry = remember(id, request.params.name, request.params.arguments ?? {});
               if (entry.handlerStarted) { close(); return stoppedTool(); }
@@ -669,7 +675,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
                 const name = block.name.replace(/^mcp__pi__/, '');
                 if (!block.name.startsWith('mcp__pi__') || !byName.has(name)) {
                   if (!byName.has(block.name)) fail('SDK requested a tool outside Pi.');
-                  if (!block.id || issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
+                  if (!block.id || issued.has(block.id) || retired.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
                   if (++unqualifiedAttempts > 3) fail('SDK repeatedly requested unqualified Pi tool names. Start a new Pi session.');
                   issued.add(block.id);
                   unqualified.add(block.id);
@@ -679,7 +685,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
                 }
                 if (!block.input || typeof block.input !== 'object' || Array.isArray(block.input)) fail('Malformed SDK tool arguments.');
                 if (typeof block.id !== 'string' || !block.id) fail('Invalid SDK tool-call identity.');
-                if (issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
+                if (issued.has(block.id) || retired.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
                 // Complete JSON must validate before any Pi tool-call event can be published.
                 blocks.set(raw.index, { index, json: '', ended: false,
                   toolCall: { type: 'toolCall', id: block.id, name, arguments: block.input as JsonObject } });
@@ -730,7 +736,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
                     continue;
                   }
                   if (!block.arguments || typeof block.arguments !== 'object' || Array.isArray(block.arguments)) fail('Malformed SDK tool arguments.');
-                  if (issued.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
+                  if (issued.has(block.id) || retired.has(block.id)) fail('SDK repeated a previously issued tool-call ID.');
                   issued.add(block.id);
                   remember(block.id, block.name, block.arguments);
                 }
@@ -812,7 +818,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
   // The query only exists after the first turn; before that there is nothing to ask.
   const usage = () => run?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
   const transitionSource = () => {
-    const source = cloned ? state.cloneSource?.() : state.compactionSource?.();
+    const source = tree ? state.treeSource?.() : cloned ? state.cloneSource?.() : state.compactionSource?.();
     if (!source || !isDeepStrictEqual(source.filter(m => m.role !== 'system').map(m => hash(project(m))), transition!.source)) {
       fail('SDK context source history changed. Start a new Pi session.');
     }
@@ -821,6 +827,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
   const prepareCompaction = (before: Message[], after: Message[] = before): CompactionState => {
     if (state.compaction !== undefined && !compacted) fail('Invalid SDK compaction checkpoint.');
     if (state.clone !== undefined && !cloned) fail('Invalid SDK clone checkpoint.');
+    if (state.tree !== undefined && !tree) fail('Invalid SDK tree checkpoint.');
     if (transition && !run) transitionSource();
     if (state.recovery !== undefined && !recovery) fail('Invalid SDK recovery decision.');
     if (busy || recovering) fail('SDK must finish its request or approved recovery before compaction.');
@@ -830,7 +837,8 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
     if (end) historyContent(source.slice(0, end), new Set(), { trustedPrefix: prefix.length, completedPrefix, handoff: 'compaction' });
     return { version: 1, source: history, prefix: after.filter(message => message.role !== 'system').map(message => hash(project(message))),
       accepted: transition && !run ? transition.accepted : prefix.length, configuration: configuration ?? transition?.configuration ?? null,
-      ...(transition && !run && transition.sourceSessionId ? { sourceSessionId: transition.sourceSessionId, targetSessionId: transition.targetSessionId } : {}),
+      ...(transition && !run && transition.sourceSessionId && transition.sourceSessionId !== transition.targetSessionId
+        ? { sourceSessionId: transition.sourceSessionId, targetSessionId: transition.targetSessionId } : {}),
       ...(transition && !run && transition.configurationContext ? { configurationContext: transition.configurationContext } : {}) };
   };
   const prepareClone = (messages: Message[], sourceSessionId: string, targetSessionId: string) => {
@@ -838,10 +846,13 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
     if (!snapshot.configuration) fail('SDK cloning requires a completed checkpoint.');
     if (transition && !run && transition.targetSessionId && transition.targetSessionId !== sourceSessionId) fail('SDK clone source session changed.');
     const history = messages.filter(message => message.role !== 'system');
-    // A compacted summary ends as user data; its original source must still prove a completed turn.
-    const summaryOnly = history.at(-1)?.role === 'user' && transition && !run;
+    if (transition && !run && history.at(-1)?.role === 'user' && history.length !== prefix.length) fail(SDK_INCOMPLETE_HISTORY);
+    // Unactivated tree receipts attest selected tool boundaries, not completion of the omitted work.
+    const treeOnly = tree && !run && history.length === prefix.length;
+    const summaryOnly = !treeOnly && history.at(-1)?.role === 'user' && transition && !run;
     historyContent(summaryOnly ? transitionSource().filter(message => message.role !== 'system') : history,
-      new Set(), { trustedPrefix: summaryOnly ? transition.accepted : prefix.length, completedPrefix: summaryOnly ? transition.accepted : completedPrefix });
+      new Set(), { trustedPrefix: summaryOnly ? transition.accepted : prefix.length, completedPrefix: summaryOnly ? transition.accepted : completedPrefix,
+        ...(treeOnly ? { handoff: 'tree' } : {}) });
     return cloneSchema.parse({ ...snapshot, sourceSessionId: snapshot.sourceSessionId ?? (!run ? saved?.piSessionId : undefined) ?? sourceSessionId, targetSessionId });
   };
   const prepareFork = (before: Message[], after: Message[], sourceSessionId: string, targetSessionId: string) => {
@@ -864,7 +875,20 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
     // Carry only the attested system checkpoint, never later user/assistant content.
     return cloneSchema.parse({ ...snapshot, source: selected, prefix: selected, configurationContext: system });
   };
-  return { streamSimple, close, usage, prepareCompaction, prepareClone, prepareFork, get closed() { return closed; }, checkpoint: () => {
+  const prepareTree = (before: Message[], selected: Message[], sessionId: string, after = selected) => {
+    if (state.checkpoint === undefined && !transition && !configuration && !before.some(message => message.role === 'assistant' &&
+      (message.provider === 'claude-sdk' || message.api === 'claude-sdk'))) {
+      const snapshot = prepareCompaction(before, after), target = selected.filter(message => message.role !== 'system');
+      const source = target.map(message => hash(project(message)));
+      if (!source.every((value, index) => snapshot.source[index] === value)) fail('SDK tree point is not a validated history prefix.');
+      historyContent(target, new Set(), { handoff: 'tree' });
+      return treeSchema.parse({ ...snapshot, source, sourceSessionId: sessionId, targetSessionId: sessionId });
+    }
+    const snapshot = prepareFork(before, selected, sessionId, `${sessionId}:tree`);
+    return treeSchema.parse({ ...snapshot, targetSessionId: sessionId,
+      prefix: after.filter(message => message.role !== 'system').map(message => hash(project(message))) });
+  };
+  return { streamSimple, close, usage, prepareCompaction, prepareClone, prepareFork, prepareTree, get closed() { return closed; }, checkpoint: () => {
     if (!state.persistSession || closed || !completed || !sdkSessionId || !sdkMessageId || !configuration) return undefined;
     return { version: 1 as const, sdkSessionId, sdkMessageId, piSessionId, configuration, prefix: [...prefix], reported: structuredClone(reported) };
   } };

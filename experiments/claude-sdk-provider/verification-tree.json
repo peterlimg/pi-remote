@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-18",
+  "sourceBase": "c270e80",
+  "feature": "Validated SDK tree navigation with independent native contexts, optional Pi summaries and preserved audit/effects",
+  "pass": true,
+  "fullProviderParityEstablished": false,
+  "versions": { "sdk": "0.3.296", "replayPi": ["1.2.0", "1.3.0"], "livePi": "1.3.0" },
+  "red": { "artifact": "pi-sdk-tree-e2e-lIU2N4/result.json", "finding": "The SDK blanket guard cancelled normal tree navigation." },
+  "retainedDevelopmentFailures": [
+    {
+      "artifact": "pi-sdk-tree-e2e-OKbiG2/result.json",
+      "finding": "The summary-error check expected RPC rejection, but Pi reports extension-command failures through its extension UI. The owned command now records the public API result/error directly; the failed summary had left the original path intact."
+    },
+    {
+      "artifact": "pi-sdk-tree-e2e-HJPEof/result.json",
+      "finding": "The missing-system test selected a point whose existing checkpoint could reconstruct the configuration. That safe fallback succeeded. The negative test now selects an uncheckpointed point that actually requires its carried system checkpoint."
+    },
+    {
+      "artifact": "pi-provider-parity-zRM5uc/result.json",
+      "finding": "All three models correctly appended two lines, but the harness expected literal early/late text that its ambiguous wording had not specified. It timed out before navigation. The prompt now requests those exact newline-terminated strings; no provider code changed."
+    },
+    {
+      "artifact": "pi-provider-parity-XkRfzv/result.json",
+      "finding": "SDK Haiku and Opus passed. The Codex fixture restarted before a no-summary tree position had been persisted by any append, so Pi reopened its original leaf. All providers now use the same ordinary Pi label to persist the destination before worker replacement. This was not evidence of Codex leaking excluded context."
+    }
+  ],
+  "replayE2E": {
+    "fixture": "Real Pi navigation/RPC/projection/persistence/provider/MCP and counted filesystem effects; external SDK replayed. Foreign-provider rows use the deterministic recovery-control provider, not real Codex.",
+    "casesPerVersion": 59,
+    "allPassed": true,
+    "finalArtifacts": { "1.2.0": "pi-sdk-tree-e2e-3UGs9u/result.json", "1.3.0": "pi-sdk-tree-e2e-ft33OA/result.json" },
+    "earlierFullPasses": ["pi-sdk-tree-e2e-2YEztu/result.json", "pi-sdk-tree-e2e-oiIgnG/result.json"],
+    "cases": [
+      "selected-history", "assistant-point", "metadata-point", "first-user", "first-user-twice", "queued-point", "tool-boundary", "tool-boundary-clone", "custom-message", "label",
+      "summary", "summary-error", "summary-stop", "compact-source", "compact-target", "compact-before-activation", "tree-before-activation", "clone-before-activation", "pending-unactivated",
+      "foreign-source", "legacy-foreign-source", "foreign-branch", "new-tools-before", "new-tools-branch", "new-calls", "reuse-omitted-id", "permission", "validation", "notices", "stop-first",
+      "inherited-tree", "checkpoint-gap", "summary-checkpoint-gap", "missing-result", "unknown-source", "no-checkpoint", "pending-source", "busy", "invalid-point", "split-batch",
+      "target-tamper", "target-missing-result", "receipt-gap", "receipt-gap-label", "receipt-gap-first", "receipt-gap-return", "source-tamper", "prefix-tamper", "invalid-receipt", "null-config",
+      "intent-tamper", "wrong-source", "wrong-owner", "wrong-target", "system-tamper", "system-missing", "system-malformed", "instructions", "environment"
+    ],
+    "assertions": [
+      "Outgoing and destination histories validate separately, including abandoned paths",
+      "Selected memory survives navigation, repeated returns and owned-worker restart",
+      "First/queued/assistant/tool-boundary points can use completed-descendant proofs without importing later user/assistant bodies",
+      "Optional Pi summaries deliberately carry abandoned information; failed or stopped summaries leave the original path and native context usable",
+      "Every old audit entry remains unchanged and existing filesystem effects neither rewind nor replay",
+      "Native SDK contexts are independent across moves and stable on their own completed-checkpoint restart",
+      "SDK-free foreign roots start normally without dropping a configuration that accepted SDK work",
+      "New tools retain ordinary Pi permission and argument validation; omitted-branch tool IDs cannot execute again",
+      "Malformed/corrupt source, prefix, owner, system, configuration, intent and receipt data reject before another SDK query",
+      "Removing configuration plus resetting the accepted counter cannot approve retained SDK history",
+      "Summary/label publication gaps reject before another SDK query; SIGKILL after a valid receipt is recoverable",
+      "Session usage includes all billed branches and summary entries and reconciles with Pi totals"
+    ]
+  },
+  "liveSharedContracts": {
+    "fixture": "Real normal personal resources/logins, identical 14-tool parents, Pi/host/models and mobile Chromium. Parent Medium; no alternate credentials, restricted profiles or model mocks.",
+    "navigationEntryPoint": "Owned observer command calls public Pi navigateTree through RPC. Standard Pi labels persist positions before worker replacement; phone UI drives reopening and ordinary messages. No product tree picker is added or claimed verified.",
+    "selectedCases": ["tree-contract", "recorded-identities-and-usage"],
+    "otherMatrixRows": "skipped, not passed",
+    "plain": {
+      "artifact": "pi-provider-parity-ZBt4TM/result.json", "pass": true, "queuedSource": true, "summary": false,
+      "models": [
+        { "model": "openai-codex/gpt-6.1-sol", "pass": true, "effectLines": 2, "branchSummaries": 0 },
+        { "model": "claude-sdk/claude-haiku-5-5", "pass": true, "effectLines": 2, "branchSummaries": 0, "nativeParentContexts": 4, "firstSelectedMessages": 7, "configurationAcceptedMessages": 11 },
+        { "model": "claude-sdk/claude-opus-5-5", "pass": true, "effectLines": 2, "branchSummaries": 0, "nativeParentContexts": 4, "firstSelectedMessages": 6, "configurationAcceptedMessages": 10 }
+      ]
+    },
+    "withSummary": {
+      "artifact": "pi-provider-parity-mpJK6G/result.json", "pass": true, "queuedSource": true, "summary": true,
+      "models": [
+        { "model": "openai-codex/gpt-6.1-sol", "pass": true, "effectLines": 2, "branchSummaries": 1 },
+        { "model": "claude-sdk/claude-haiku-5-5", "pass": true, "effectLines": 2, "branchSummaries": 1, "nativeParentContexts": 4, "firstSelectedMessages": 6, "configurationAcceptedMessages": 10 },
+        { "model": "claude-sdk/claude-opus-5-5", "pass": true, "effectLines": 2, "branchSummaries": 1, "nativeParentContexts": 4, "firstSelectedMessages": 6, "configurationAcceptedMessages": 10 }
+      ]
+    },
+    "assertions": [
+      "Normal tools actually read an unknown marker and perform exactly one early and one later filesystem effect",
+      "The selected request enters through mobile UI while a bounded read-only tool gate runs; Pi confirms queued input before release",
+      "SDK selected points genuinely precede a completed checkpoint",
+      "Without summary, the destination retains the tool-read fact but cannot recall the later private value",
+      "With summary, the real persisted Pi branch summary contains that private value and the destination recalls it intentionally",
+      "An alternative private value does not leak into the original branch",
+      "Returning to both paths and replacing their workers preserves the appropriate memory without another tool call",
+      "SDK native IDs differ across moves and remain stable on a branch's own restart",
+      "Every old audit entry and the two effect lines remain unchanged",
+      "Call/result identities and nonnegative token totals reconcile; personal settings unchanged and owned workers closed"
+    ]
+  },
+  "regressions": {
+    "fork": { "casesPerVersion": 44, "1.2.0": "pi-sdk-fork-e2e-jib8lp/result.json", "1.3.0": "pi-sdk-fork-e2e-18VOfK/result.json", "allPassed": true },
+    "clone": { "casesPerVersion": 31, "1.2.0": "pi-sdk-clone-e2e-32qtqn/result.json", "1.3.0": "pi-sdk-clone-e2e-rU1LXD/result.json", "allPassed": true },
+    "compaction": { "casesPerVersion": 24, "1.2.0": "pi-sdk-compaction-context-8lBAhD/result.json", "1.3.0": "pi-sdk-compaction-context-gIbvOt/result.json", "allPassed": true },
+    "safetyPi13": {
+      "recovery": "pi-sdk-recovery-e2e-RNRskd/result.json", "tools": "pi-sdk-tools-e2e-wqhMHx/result.json", "cancel": "pi-sdk-cancel-e2e-cbrglH/result.json",
+      "malformed": "pi-sdk-malformed-e2e-bFLWfV/result.json", "notices": "pi-sdk-notices-e2e-yTvq0Q/result.json", "allPassed": true
+    },
+    "finalReview": "Candidate checkpoint paths are constructed lazily instead of materializing every stored path. Both complete 59-case tree runs passed again after this enumeration-only cleanup. Live model/provider behavior was unchanged."
+  },
+  "checks": ["root TypeScript/check script", "SDK TypeScript", "harness syntax", "whitespace"],
+  "unchanged": ["SDK version", "authentication and billing settings", "default provider", "normal tool schemas/execution", "personal settings", "original user conversations"],
+  "notVerifiedOrEnabled": ["Full all-green provider matrix", "Native interactive selector or new phone tree picker", "Child-local lifecycle and nested delegation", "Images/slash-dialog combinations", "Live Sonnet", "Physical Safari", "Every partial-write/power-loss boundary and overnight stress"],
+  "fullLocalSuiteRun": false,
+  "unitTestsAddedOrRun": false,
+  "unitTestChange": "Removed two obsolete assertions that required every tree move to be cancelled; behavioral replacement coverage is E2E.",
+  "privacy": "Artifacts are private temporary-directory basenames. Raw prompts, sessions, traces, native transcripts, credentials and tool payloads are not committed."
+}

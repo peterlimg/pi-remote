@@ -1,6 +1,6 @@
 # Completed-branch cloning for Claude SDK
 
-Pi can clone an idle, saved SDK conversation at its current leaf. [Earlier-message forks](sdk-forks.md) use the same branch receipt; tree navigation remains guarded. Cloning uses Pi's normal branch copy, then opens a fresh SDK context when the clone receives its first SDK message. It does not resume or fork the parent's native SDK query.
+Pi can clone an idle, saved SDK conversation at its current leaf. [Earlier-message forks](sdk-forks.md) use the same branch receipt; [tree navigation](sdk-tree.md) uses a separate same-file handoff. Cloning uses Pi's normal branch copy, then opens a fresh SDK context when the clone receives its first SDK message. It does not resume or fork the parent's native SDK query.
 
 ```text
 completed Pi branch and accepted SDK work
@@ -42,4 +42,4 @@ All 31 focused cases passed on Pi 1.2 and 1.3 using real Pi RPC, branch copying,
 
 The shared real-model contract reads an unknown marker through normal tools, performs one counted filesystem effect, clones through Pi RPC, and reopens both saved files through the phone UI. Each branch learns a private value, retains its original marker after worker replacement and must not reveal the other branch's value or repeat any tool. SDK branches must have different active native IDs and retain their respective IDs after restart. This contract passed on Codex GPT-6.1 Sol, SDK Haiku 5.5 and SDK Opus 5.5 with the same 14 normal parent tools. Other full-matrix rows were skipped. See [reviewed evidence](../experiments/claude-sdk-provider/verification-clone.json).
 
-This does not enable tree navigation, ephemeral/in-flight cloning, uncheckpointed unknown SDK work, child-local cloning/resume, or a new phone clone control. Physical Safari and every partial-file/power-loss boundary remain unverified. The [gap tracker](provider-gaps.md) remains the canonical open-items list.
+This does not enable ephemeral/in-flight cloning, uncheckpointed unknown SDK work, child-local cloning/resume, or a new phone clone control. Physical Safari and every partial-file/power-loss boundary remain unverified. The [gap tracker](provider-gaps.md) remains the canonical open-items list.

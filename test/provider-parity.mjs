@@ -19,6 +19,7 @@ const targets = (process.env.PI_PARITY_MODELS || `${baseline},claude-sdk/claude-
 const selected = process.env.PI_PARITY_CASES?.split(',');
 const autoCompaction = process.env.PI_PARITY_COMPACTION_AUTO === '1';
 const queuedFork = process.env.PI_PARITY_FORK_QUEUED === '1';
+const treeSummary = process.env.PI_PARITY_TREE_SUMMARY === '1', queuedTree = process.env.PI_PARITY_TREE_QUEUED === '1';
 const evidence = mkdtempSync(join(tmpdir(), 'pi-provider-parity-')), sessions = join(evidence, 'sessions');
 mkdirSync(sessions); process.env.PI_SUBAGENTS_TEMP_ROOT = join(evidence, 'subagent-runtime');
 const bin = process.env.PI_PARITY_BIN || 'pi', auditFile = join(evidence, 'audit.jsonl'), observer = join(evidence, 'observer.ts');
@@ -27,6 +28,11 @@ import {resolve} from 'node:path';
 const log=row=>appendFileSync(${JSON.stringify(auditFile)},JSON.stringify(row)+'\\n');
 export default function(pi){
  pi.on('project_trust',()=>({trusted:'yes'}));
+ pi.registerCommand('parity-tree',{description:'Owned tree-navigation verification',handler:async(args,ctx)=>{
+  const {target,...options}=JSON.parse(args);
+  try{const result=await ctx.navigateTree(target,options);log({type:'tree-result',target,...result,leafId:ctx.sessionManager.getLeafId()});}
+  catch(error){log({type:'tree-result',target,error:error.message});}
+ }});
  pi.on('before_agent_start',(_e,ctx)=>log({type:'loadout',session:ctx.sessionManager.getSessionId(),tools:pi.getActiveTools()}));
  pi.on('tool_call',(e,ctx)=>{
   const path=e.input?.path||e.input?.file_path;
@@ -83,7 +89,7 @@ function checkMessages(messages) {
   }
 }
 const result = { fixture: 'Real phone UI, Pi, normal personal/project resources, builtin worker profiles and model services; no model/agent mocks or credential copies',
-  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', loadouts: {}, cases: [], pass: false };
+  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', treeMode: { summary: treeSummary, queued: queuedTree }, loadouts: {}, cases: [], pass: false };
 let browser, context, page, worker, file, id, project, events = [], models, currentTarget;
 async function until(check, label, ms = 180000) {
   const end = Date.now() + ms;
@@ -144,6 +150,7 @@ async function step(name, run) {
     row.status = 'failed'; row.error = error.message; row.stack = error.stack;
     if (name === 'parallel-background-workers-and-notices') writeFileSync(join(project, 'background-release'), 'release after fixture failure');
     if (name === 'fork-contract') writeFileSync(join(project, 'fork-release'), 'release after fixture failure');
+    if (name === 'tree-contract') writeFileSync(join(project, 'tree-release'), 'release after fixture failure');
     await page?.screenshot({ path: join(evidence, `${currentTarget.replaceAll('/', '-')}-${name}.png`), fullPage: true }).catch(() => {});
     if (worker && !worker.closed) await worker.command({ type: 'abort' }).catch(() => {});
   }
@@ -385,6 +392,55 @@ try {
       assert(again.includes(marker) && again.includes(own) && !again.includes(late));
       assert.equal(readFileSync(original, 'utf8'), sourceBytes); if (branchNative) assert.equal(native(branch), branchNative);
       assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effect, 'utf8'), 'early\nlate\n');
+    });
+    await step('tree-contract', async () => {
+      await newSession('tree');
+      const marker = 'TREE_' + randomUUID(), later = 'LATER_ONLY_' + randomUUID(), own = 'BRANCH_ONLY_' + randomUUID();
+      const effects = join(project, 'tree-effects.log'), gate = join(project, 'tree-release');
+      writeFileSync(join(project, 'tree-marker.txt'), marker); writeFileSync(effects, '');
+      const first = send(`Append exactly ${JSON.stringify('early\n')} to ${effects} once, then read ${join(project, 'tree-marker.txt')}. Keep its exact value in memory. Do not print the value in this turn. This one-turn restriction does not prohibit a later explicit recall request. ${queuedTree ? `Then execute a bounded, read-only wait of up to 120 seconds for ${gate} to exist. Do not create the release file or modify anything during the wait.` : ''} Reply TREE_READY without printing the value.`);
+      const laterRequest = `Remember ${later}. Append exactly ${JSON.stringify('late\n')} to ${effects}, exactly once. Then reply LATER_READY. Do not read the marker again. You may print remembered values when I explicitly request them later.`;
+      if (queuedTree) {
+        await until(() => events.some(e => e.type === 'tool_execution_start' && e.toolName === 'bash' && JSON.stringify(e.args).includes('tree-release')), 'tree source wait before steering');
+        await page.locator('#prompt').fill(laterRequest); await page.getByRole('button', { name: 'Send message' }).click();
+        await until(async () => (await worker.request('get_state')).pendingMessageCount > 0, 'queued tree source input');
+        writeFileSync(gate, 'release'); await first;
+      } else { await first; await send(laterRequest); }
+      const rows = () => readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+      const selectedPoint = rows().find(row => row.message?.role === 'user' && textOf(row.message) === laterRequest);
+      assert(selectedPoint); await until(() => readFileSync(effects, 'utf8') === 'early\nlate\n', 'both source effects');
+      const oldLeaf = (await worker.request('get_tree')).leafId, before = rows(), calls = parentCalls().length;
+      const checkpoint = () => rows().findLast(row => row.customType === 'claude-sdk-checkpoint')?.data.sdkSessionId;
+      const originalNative = checkpoint();
+      if (queuedTree && currentTarget.startsWith('claude-sdk/')) assert(!before.slice(0, before.indexOf(selectedPoint)).some(row => row.customType === 'claude-sdk-checkpoint'));
+      const loadout = audit().find(row => row.type === 'loadout' && row.session === before[0].id); assert(loadout?.tools.length >= 6);
+      result.loadouts[currentTarget] = loadout.tools.sort();
+      const navigate = async (target, summarize = false) => {
+        const offset = audit().length;
+        await worker.request('prompt', { message: '/parity-tree ' + JSON.stringify({ target, summarize, label: 'parity-tree-point', customInstructions: 'Preserve exact TREE_ and LATER_ONLY_ values from the transcript and recorded file outcomes. No tool replay or filesystem rollback.' }) });
+        const receipt = audit().slice(offset).find(row => row.type === 'tree-result'); assert(receipt && !receipt.error, receipt?.error || 'Missing tree result'); assert.equal(receipt.cancelled, false);
+        await reopen(file);
+      };
+      await navigate(treeSummary ? selectedPoint.parentId : selectedPoint.id, treeSummary);
+      if (treeSummary) assert(rows().some(row => row.type === 'branch_summary' && row.summary.includes(later)), 'The real Pi summary must preserve the later private value when requested.');
+      const recall = await send('Without tools, repeat the exact TREE_ value from the selected history. Also repeat the LATER_ONLY_ value only if this branch contains it, otherwise say ABSENT. This explicitly authorizes printing those remembered values.');
+      assert(recall.includes(marker)); assert.equal(recall.includes(later), treeSummary);
+      await send(`Remember ${own} in this branch. Do not use tools. Reply BRANCH_READY.`);
+      const branchLeaf = (await worker.request('get_tree')).leafId, branchNative = checkpoint();
+      if (originalNative) assert.notEqual(branchNative, originalNative);
+      await reopen(file); const branchRecall = await send('Without tools, repeat the TREE_ and BRANCH_ONLY_ values this branch remembers.');
+      assert(branchRecall.includes(marker) && branchRecall.includes(own)); if (branchNative) assert.equal(checkpoint(), branchNative);
+      await navigate(oldLeaf);
+      const originalRecall = await send('Without tools, repeat the TREE_ and LATER_ONLY_ values from this branch. Include a BRANCH_ONLY_ value only if this selected history actually contains one, otherwise say ABSENT.');
+      assert(originalRecall.includes(marker) && originalRecall.includes(later) && !originalRecall.includes(own));
+      const returnedNative = checkpoint(); if (returnedNative) { assert.notEqual(returnedNative, originalNative); assert.notEqual(returnedNative, branchNative); }
+      await reopen(file); assert((await send('Without tools, repeat the TREE_ and LATER_ONLY_ values from this branch.')).includes(later));
+      if (returnedNative) assert.equal(checkpoint(), returnedNative);
+      await navigate(branchLeaf);
+      const final = await send('Without tools, repeat the TREE_ and BRANCH_ONLY_ values from this branch. Include LATER_ONLY_ only if it is present in this selected history.');
+      assert(final.includes(marker) && final.includes(own)); assert.equal(final.includes(later), treeSummary);
+      assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effects, 'utf8'), 'early\nlate\n');
+      for (const entry of before) assert.deepEqual(rows().find(row => row.id === entry.id), entry, 'Every old audit entry must remain unchanged.');
     });
     await step('recorded-identities-and-usage', async () => {
       for (const name of readdirSync(sessions).filter(name => name.endsWith('.jsonl'))) {
