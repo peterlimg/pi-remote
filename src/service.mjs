@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { discover, isInside, readSession } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { sessionTitle } from './session-title.mjs';
@@ -26,6 +27,8 @@ export class SessionService extends EventEmitter {
     this.historyReader = new HistoryReader();
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
     mkdirSync(join(dir, 'projects'), { recursive: true, mode: 0o700 }); this.blankDir = canonical(join(dir, 'projects'));
+    // Scratch sessions in system temp folders are not projects worth offering for a new session.
+    this.tempDirs = [...new Set([tmpdir(), '/tmp'].map(canonical))];
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -80,7 +83,10 @@ export class SessionService extends EventEmitter {
   // Projects in most-recently-used order. Each names its newest session as the source for `new`.
   projects() {
     const projects = new Map();
-    for (const item of this.matches().matches) if (!projects.has(item.cwd)) projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
+    for (const item of this.matches().matches) {
+      if (projects.has(item.cwd) || this.tempDirs.some(dir => inside(item.cwd, dir))) continue;
+      projects.set(item.cwd, { cwd: item.cwd, sessionId: item.id });
+    }
     return [...projects.values()];
   }
   read(id) {
