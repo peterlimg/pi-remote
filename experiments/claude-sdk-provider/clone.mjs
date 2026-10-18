@@ -24,7 +24,7 @@ const result = { fixture: 'real Pi clone, RPC, persistence, SDK provider, MCP an
   piVersion: execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), cases: [], pass: false };
 const modes = ['independent', 'checkpoint-gap', 'clone-again', 'compact-before', 'compact-before-activation', 'compact-after', 'compact-clone-gap',
   'foreign-before', 'clone-away', 'foreign-after', 'parent-moved', 'new-tools', 'permission', 'validation', 'cancel-first',
-  'missing-result', 'unknown-error', 'no-checkpoint', 'pending-user', 'earlier-fork', 'busy', 'receipt-gap', 'source-tamper', 'prefix-tamper',
+  'missing-result', 'unknown-error', 'no-checkpoint', 'pending-user', 'invalid-branch', 'busy', 'receipt-gap', 'source-tamper', 'prefix-tamper',
   'invalid-receipt', 'null-config', 'wrong-target', 'config-receipt', 'instructions', 'environment', 'reuse-id'];
 let worker, file, settled = 0;
 async function until(check, label) {
@@ -86,9 +86,9 @@ try {
       }
       save(file, entries); await start(file);
     }
-    if (['missing-result', 'unknown-error', 'no-checkpoint', 'pending-user', 'earlier-fork'].includes(mode)) {
+    if (['missing-result', 'unknown-error', 'no-checkpoint', 'pending-user', 'invalid-branch'].includes(mode)) {
       const count = queries(), before = readFileSync(file, 'utf8');
-      const request = mode === 'earlier-fork' ? () => worker.request('fork', { entryId: rows(file).find(row => row.message?.role === 'user').id }) : () => worker.request('clone');
+      const request = mode === 'invalid-branch' ? () => worker.request('fork', { entryId: 'no-such-entry' }) : () => worker.request('clone');
       assert.equal((await request()).cancelled, true); assert.equal(queries(), count); assert.equal(readFileSync(file, 'utf8'), before);
       result.cases.push({ mode, pass: true, blockedBeforeCloneOrNetwork: true }); await worker.close(); worker = undefined; continue;
     }

@@ -18,6 +18,7 @@ const baseline = `${settings.defaultProvider || 'openai-codex'}/${settings.defau
 const targets = (process.env.PI_PARITY_MODELS || `${baseline},claude-sdk/claude-haiku-5-5`).split(',');
 const selected = process.env.PI_PARITY_CASES?.split(',');
 const autoCompaction = process.env.PI_PARITY_COMPACTION_AUTO === '1';
+const queuedFork = process.env.PI_PARITY_FORK_QUEUED === '1';
 const evidence = mkdtempSync(join(tmpdir(), 'pi-provider-parity-')), sessions = join(evidence, 'sessions');
 mkdirSync(sessions); process.env.PI_SUBAGENTS_TEMP_ROOT = join(evidence, 'subagent-runtime');
 const bin = process.env.PI_PARITY_BIN || 'pi', auditFile = join(evidence, 'audit.jsonl'), observer = join(evidence, 'observer.ts');
@@ -40,7 +41,7 @@ const host = await startHost({ dir: join(evidence, 'host'), config: { ...loadCon
   workerOptions: { bin, prefix: ['--approve', '--model', baseline, '--thinking', 'medium', '-e', observer] } });
 const url = `http://127.0.0.1:${host.http.address().port}`;
 const audit = () => existsSync(auditFile) ? readFileSync(auditFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-const textOf = message => message?.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
+const textOf = message => typeof message?.content === 'string' ? message.content : message?.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
 const childArtifacts = () => existsSync(join(sessions, 'subagent-artifacts')) ? readdirSync(join(sessions, 'subagent-artifacts')).filter(name => name.endsWith('_meta.json')) : [];
 const messagesAt = path => readFileSync(path, 'utf8').trim().split('\n').map(JSON.parse).flatMap(row => row.message ? [row.message] : []);
 function checkChildren(before, count, stoppedAt = 0) {
@@ -82,7 +83,7 @@ function checkMessages(messages) {
   }
 }
 const result = { fixture: 'Real phone UI, Pi, normal personal/project resources, builtin worker profiles and model services; no model/agent mocks or credential copies',
-  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', loadouts: {}, cases: [], pass: false };
+  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', loadouts: {}, cases: [], pass: false };
 let browser, context, page, worker, file, id, project, events = [], models, currentTarget;
 async function until(check, label, ms = 180000) {
   const end = Date.now() + ms;
@@ -120,6 +121,12 @@ async function newSession(label) {
   models = (await worker.request('get_available_models')).models;
   await openParent(); await select(currentTarget);
 }
+async function reopen(path) {
+  await worker.close(); await until(() => !host.service.live.get(id)?.worker, 'replaced worker closure', 15000);
+  file = path; id = sessionKey(path); await host.service.scan();
+  assert.equal((await host.service.resume(id, randomUUID())).ok, true); attach(host.service.live.get(id).worker);
+  models = (await worker.request('get_available_models')).models; await openParent(); await select(currentTarget);
+}
 async function send(prompt) {
   const start = events.length;
   await page.locator('#prompt').fill(prompt); await page.getByRole('button', { name: 'Send message' }).click();
@@ -136,6 +143,7 @@ async function step(name, run) {
   catch (error) {
     row.status = 'failed'; row.error = error.message; row.stack = error.stack;
     if (name === 'parallel-background-workers-and-notices') writeFileSync(join(project, 'background-release'), 'release after fixture failure');
+    if (name === 'fork-contract') writeFileSync(join(project, 'fork-release'), 'release after fixture failure');
     await page?.screenshot({ path: join(evidence, `${currentTarget.replaceAll('/', '-')}-${name}.png`), fullPage: true }).catch(() => {});
     if (worker && !worker.closed) await worker.command({ type: 'abort' }).catch(() => {});
   }
@@ -313,12 +321,6 @@ try {
       const copy = (await worker.request('get_state')).sessionFile; assert.notEqual(copy, original);
       assert.equal(readFileSync(original, 'utf8'), bytes, 'Cloning must leave the original byte-identical.');
       // RPC replaces its active session; close it before letting the host own either saved file again.
-      const reopen = async path => {
-        await worker.close(); await until(() => !host.service.live.get(id)?.worker, 'cloned worker closure', 15000);
-        file = path; id = sessionKey(path); await host.service.scan();
-        assert.equal((await host.service.resume(id, randomUUID())).ok, true); attach(host.service.live.get(id).worker);
-        models = (await worker.request('get_available_models')).models; await openParent(); await select(currentTarget);
-      };
       await reopen(copy);
       assert((await send('Repeat the original CLONE_ value verbatim, without tools or repeating completed work.')).includes(marker));
       assert((await send(`Remember ${cloneMemory} in this chat. Without tools, repeat that marker and the original CLONE_ value.`)).includes(marker));
@@ -340,6 +342,49 @@ try {
       assert(again.includes(marker) && again.includes(originalMemory) && !again.includes(cloneMemory));
       assert.equal(parentCalls().length, calls, 'Neither branch may replay tools after cloning or restart.');
       assert.equal(readFileSync(effect, 'utf8'), 'effect\n');
+    });
+    await step('fork-contract', async () => {
+      const marker = 'FORK_' + randomUUID(), late = 'LATER_' + randomUUID(), own = 'BRANCH_ONLY_' + randomUUID();
+      const input = join(project, 'fork-marker.txt'), effect = join(project, 'fork-effects.log'), gate = join(project, 'fork-release');
+      writeFileSync(input, marker + '\n'); writeFileSync(effect, ''); await newSession('fork');
+      const first = `Use bash to append exactly one line "early" to ${effect}, once only. Use read to read ${input} and remember its FORK_ value. ${queuedFork ? `Then use bash to wait until ${gate} exists, using a bounded read-only loop with a 120-second timeout and no writes.` : ''} For this acknowledgement only, reply READY without the value. You may repeat it verbatim later. Do not repeat completed work.`;
+      const later = `Remember ${late}. Use bash to append exactly one line "late" to ${effect}, once only. For this acknowledgement only, reply READY without any marker. You may repeat markers verbatim later. Do not repeat earlier tools.`;
+      if (queuedFork) {
+        const start = events.length;
+        await page.locator('#prompt').fill(first); await page.getByRole('button', { name: 'Send message' }).click();
+        await until(() => events.slice(start).some(event => event.type === 'tool_execution_start' && event.toolName === 'bash' && JSON.stringify(event.args).includes('fork-release')), 'source tool wait before steering');
+        await page.locator('#prompt').fill(later); await page.getByRole('button', { name: 'Send message' }).click();
+        await until(async () => (await worker.request('get_state')).pendingMessageCount > 0, 'queued source message');
+        writeFileSync(gate, 'release');
+        await until(() => events.slice(start).some(event => event.type === 'agent_settled'), 'combined source settlement');
+        assert.equal(last()?.stopReason, 'stop', last()?.errorMessage);
+      } else { await send(first); await send(later); }
+      const original = file, originalBytes = readFileSync(original, 'utf8');
+      const entries = originalBytes.trim().split('\n').map(JSON.parse), point = entries.find(row => row.message?.role === 'user' && textOf(row.message) === later);
+      assert(point); const selectedIndex = entries.indexOf(point), calls = parentCalls().length;
+      if (queuedFork && currentTarget.startsWith('claude-sdk/')) assert(!entries.slice(0, selectedIndex).some(row => row.customType === 'claude-sdk-checkpoint'));
+      const loadout = audit().find(row => row.type === 'loadout' && row.session === entries[0].id); assert(loadout?.tools?.includes('read') && loadout.tools.includes('bash'));
+      result.loadouts[currentTarget] = loadout.tools.sort();
+      const native = path => readFileSync(path, 'utf8').trim().split('\n').map(JSON.parse).findLast(row => row.customType === 'claude-sdk-checkpoint')?.data.sdkSessionId;
+      const originalNative = native(original);
+      const forked = await worker.request('fork', { entryId: point.id }); assert.equal(forked.cancelled, false); assert.equal(forked.text, later);
+      const branch = (await worker.request('get_state')).sessionFile; assert.notEqual(branch, original);
+      assert.equal(readFileSync(original, 'utf8'), originalBytes); assert(!readFileSync(branch, 'utf8').includes(late));
+      assert.equal(readFileSync(effect, 'utf8'), 'early\nlate\n', 'Choosing old history must not rewind current files.');
+      await reopen(branch);
+      const reply = await send(`This branch starts before my later message. Files have not been rewound. Without tools or repeating any work, repeat the original FORK_ value and remember ${own}. Do not invent missing LATER_ values.`);
+      assert(reply.includes(marker) && !reply.includes(late)); assert.equal(readFileSync(original, 'utf8'), originalBytes);
+      const branchNative = native(branch), branchBytes = readFileSync(branch, 'utf8');
+      if (originalNative) assert(branchNative && branchNative !== originalNative);
+      await reopen(original);
+      const sourceReply = await send('Without tools, repeat the FORK_ and LATER_ values in this chat. Do not invent values from other branches.');
+      assert(sourceReply.includes(marker) && sourceReply.includes(late) && !sourceReply.includes(own));
+      assert.equal(readFileSync(branch, 'utf8'), branchBytes); if (originalNative) assert.equal(native(original), originalNative);
+      const sourceBytes = readFileSync(original, 'utf8'); await reopen(branch);
+      const again = await send('Without tools, repeat this branch\'s FORK_ and BRANCH_ONLY_ values. Do not invent missing LATER_ values.');
+      assert(again.includes(marker) && again.includes(own) && !again.includes(late));
+      assert.equal(readFileSync(original, 'utf8'), sourceBytes); if (branchNative) assert.equal(native(branch), branchNative);
+      assert.equal(parentCalls().length, calls); assert.equal(readFileSync(effect, 'utf8'), 'early\nlate\n');
     });
     await step('recorded-identities-and-usage', async () => {
       for (const name of readdirSync(sessions).filter(name => name.endsWith('.jsonl'))) {

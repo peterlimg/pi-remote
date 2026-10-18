@@ -88,6 +88,9 @@ jobs:
       - run: npm run test:clone
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:fork
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -100,3 +103,4 @@ jobs:
             ${{ runner.temp }}/pi-sdk-notices-e2e-*/
             ${{ runner.temp }}/pi-sdk-compaction-context-*/
             ${{ runner.temp }}/pi-sdk-clone-e2e-*/
+            ${{ runner.temp }}/pi-sdk-fork-e2e-*/

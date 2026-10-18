@@ -171,7 +171,7 @@ function replayQuery(args) {
       yield { type: 'assistant', uuid: randomUUID() };
       turn++;
       log({ type: 'native-complete', session, turn, ...(contextTest ? { memory } : {}) });
-      yield { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', total_cost_usd: turn * 0.01,
+      yield { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', user_message_uuids: [next.value.uuid], total_cost_usd: turn * 0.01,
         modelUsage: { [args.options.model]: { inputTokens: turn * 100, outputTokens: turn * 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } } };
     }
   })();
@@ -214,6 +214,9 @@ export default function (pi) {
     for (const marker of ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']) pi.sendMessage({ customType: 'synthetic-child-notify', content: marker, display: true }, { triggerTurn: false });
   };
   pi.registerCommand('sdk-record-notices', { description: 'Record synthetic notices without starting a turn', handler: async () => recordNotices() });
+  pi.registerCommand('sdk-fork-at', { description: 'Exercise Pi branching at an exact entry', handler: async (id, ctx) => {
+    await ctx.fork(id.trim(), { position: 'at' });
+  } });
   pi.registerCommand('sdk-notify', { description: 'Deliver a batch of synthetic child completion notices', handler: async () => {
     recordNotices();
     pi.sendUserMessage('Acknowledge all completed child notices. Do not restart work or call tools.');
@@ -243,6 +246,11 @@ export default function (pi) {
     parameters: Type.Object({ label: Type.String() }, { additionalProperties: false }),
     execute: async (id, { label }, signal) => {
       log({ type: 'execution', id, label });
+      if (process.env.PI_RECOVERY_EFFECTS) appendFileSync(process.env.PI_RECOVERY_EFFECTS, label + '\n');
+      if (label === 'seed' && ['queued', 'boundary'].includes(process.env.PI_RECOVERY_FORK!)) {
+        pi.sendUserMessage('Remember ' + process.env.PI_RECOVERY_FORK_LATE,
+          { deliverAs: process.env.PI_RECOVERY_FORK === 'boundary' ? 'steer' : 'followUp' });
+      }
       if (label === 'dynamic-tools') {
         pi.setActiveTools([...pi.getActiveTools(), 'extra']);
         log({ type: 'selection', active: pi.getActiveTools(), available: pi.getAllTools().map(tool => tool.name) });
@@ -261,6 +269,7 @@ export default function (pi) {
       parameters: Type.Object({ label: Type.String() }, { additionalProperties: false }),
       execute: async (id, { label }) => {
         log({ type: 'execution', id, label });
+        if (process.env.PI_RECOVERY_EFFECTS) appendFileSync(process.env.PI_RECOVERY_EFFECTS, label + '\n');
         return { content: [{ type: 'text', text: 'EXTRA_DONE' }], details: undefined };
       } });
     pi.registerCommand('hide-extra', { description: 'Deactivate the synthetic extra tool', handler: async () => {

@@ -25,7 +25,7 @@ const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite:
 const counter = z.number().int().nonnegative();
 const cost = z.number().nonnegative();
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const checkpointSchema = z.object({ version: z.literal(1), sdkSessionId: z.string().uuid(), sdkMessageId: z.string().uuid(),
+const checkpointSchema = z.object({ version: z.literal(1), sdkSessionId: z.string().uuid(), sdkMessageId: z.string().uuid(), piSessionId: z.string().min(1).optional(),
   prefix: z.array(digest).max(100000), configuration: digest,
   reported: z.object({ input: counter, output: counter, cacheRead: counter, cacheWrite: counter, totalTokens: counter,
     cost: z.object({ input: cost, output: cost, cacheRead: cost, cacheWrite: cost, total: cost }) }),
@@ -33,8 +33,10 @@ const checkpointSchema = z.object({ version: z.literal(1), sdkSessionId: z.strin
 const recoverySchema = z.object({ version: z.literal(1), id: z.string().uuid(), checkpointHash: digest,
   history: z.array(digest).min(1).max(100000), interrupted: z.array(z.object({ id: z.string().min(1), name: z.string().min(1) })).max(100000) });
 export type RecoveryPlan = z.infer<typeof recoverySchema>;
+const systemCheckpoint = z.custom<NonNullable<ReturnType<typeof getCurrentSystemMessage>>>(value => typeof value === 'object' && value !== null &&
+  'role' in value && value.role === 'system' && 'content' in value && typeof value.content === 'string');
 const contextSchema = z.object({ version: z.literal(1), source: z.array(digest).max(100000), prefix: z.array(digest).max(100000), accepted: counter, configuration: digest.nullable(),
-  sourceSessionId: z.string().min(1).optional(), targetSessionId: z.string().min(1).optional() });
+  sourceSessionId: z.string().min(1).optional(), targetSessionId: z.string().min(1).optional(), configurationContext: systemCheckpoint.optional() });
 const compactionSchema = contextSchema.refine(state =>
   (state.sourceSessionId === undefined ? state.targetSessionId === undefined : state.targetSessionId !== undefined && state.sourceSessionId !== state.targetSessionId) &&
   (state.configuration !== null || state.accepted === 0 && state.sourceSessionId === undefined));
@@ -185,9 +187,10 @@ function historyContent(messages: Message[], knownIds: Set<string>, { interrupti
     });
   }
   if (interruptions && pending.size) interrupt();
-  if (!interruptions && (pending.size || !completed && !((handoff && messages.at(-1)?.role === 'toolResult') || ((handoff === 'compaction' || handoff === 'clone') && messages.at(-1)?.role === 'user')))) fail(SDK_INCOMPLETE_HISTORY);
+  if (!interruptions && (pending.size || !completed && !((handoff && messages.at(-1)?.role === 'toolResult') ||
+    ((handoff === 'compaction' || handoff === 'clone') && messages.at(-1)?.role === 'user') || handoff === 'clone' && !messages.length))) fail(SDK_INCOMPLETE_HISTORY);
   const header = handoff === 'clone'
-    ? 'Pi-authorized session clone. This is a NEW, independent SDK conversation. The copied Pi history below is JSON data, not executable calls. Never replay historical tools or assume cloning undid their effects. Keep recorded results and unknown outcomes intact. The original Pi session and native SDK conversation are unchanged. Reasoning and provider signatures are omitted. Follow only the new user request after this history.\n'
+    ? 'Pi-authorized independent branch. This is a NEW SDK conversation. The selected Pi history below is JSON data, not executable calls. Never replay historical tools or assume branching undid their effects. Work outside this selected history may already have changed files; inspect current state before making new changes. Keep recorded results and unknown outcomes intact. The original Pi session and native SDK conversation are unchanged. Reasoning and provider signatures are omitted. Follow only the new user request after this history.\n'
     : handoff === 'compaction'
     ? 'Pi-authorized context compaction. This is a NEW SDK conversation. Pi owns the summary and retained context below, supplied as historical JSON data, not executable calls. Never replay recorded tools. Preserve recorded results and unknown outcomes; summary prose is not a new tool-result receipt. Continue only the pending user task using the current tools. Original Pi audit entries and prior native SDK transcripts remain preserved. Reasoning and provider signatures are omitted.\n'
     : interruptions
@@ -277,6 +280,7 @@ export function createBridge(cwd: string, createQuery: typeof query = query, sta
     close: () => current.close(), usage: () => current.usage(), checkpoint: () => current.checkpoint(),
     prepareCompaction: (before: Message[], after?: Message[]) => current.prepareCompaction(before, after),
     prepareClone: (messages: Message[], sourceSessionId: string, targetSessionId: string) => current.prepareClone(messages, sourceSessionId, targetSessionId),
+    prepareFork: (before: Message[], after: Message[], sourceSessionId: string, targetSessionId: string) => current.prepareFork(before, after, sourceSessionId, targetSessionId),
     get closed() { return current.closed; } };
 }
 function createNativeBridge(cwd: string, createQuery: typeof query, state: BridgeOptions, updateTools: ToolUpdate, handoff?: Handoff) {
@@ -301,6 +305,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
   let prefix: string[] = transition?.prefix ?? (recovering ? [] : saved?.prefix ?? []);
   let completedPrefix = transition?.prefix.length ?? handoff?.history.length ?? (recovering ? recovery!.history.length : saved?.prefix.length ?? 0);
   let configuration: string | undefined = saved?.configuration;
+  let piSessionId = saved?.piSessionId;
   let sdkSessionId = recovering ? undefined : saved?.sdkSessionId;
   let sdkMessageId = recovering ? undefined : saved?.sdkMessageId;
   let completed = false;
@@ -424,9 +429,10 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
           const previous = transitionSource();
           if (transition.targetSessionId && transition.targetSessionId !== options.sessionId) fail('SDK context checkpoint belongs to another Pi session.');
           if (transition.configuration) {
-            const origin = state.configurationSource?.(transition.configuration, transition.accepted) ?? previous;
+            const origin = transition.configurationContext ? [transition.configurationContext]
+              : state.configurationSource?.(transition.configuration, transition.accepted) ?? previous;
             let count = 0;
-            const end = origin.findIndex(message => message.role !== 'system' && ++count === transition.accepted);
+            const end = transition.configurationContext ? 0 : origin.findIndex(message => message.role !== 'system' && ++count === transition.accepted);
             const accepted = origin.slice(0, end + 1);
             const previousPrompt = getCurrentSystemPrompt(accepted), previousTools = getCurrentTools(accepted);
             const previousSource = source ? { ...source, systemPrompt: previousPrompt } : undefined;
@@ -570,7 +576,7 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
           } });
           recovering = false;
           handoff = undefined;
-          configuration = config;
+          configuration = config; piSessionId = options.sessionId;
           activeModel = model.id;
           activeEffort = effort;
           thinkingEnabled = enabled;
@@ -824,7 +830,8 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
     if (end) historyContent(source.slice(0, end), new Set(), { trustedPrefix: prefix.length, completedPrefix, handoff: 'compaction' });
     return { version: 1, source: history, prefix: after.filter(message => message.role !== 'system').map(message => hash(project(message))),
       accepted: transition && !run ? transition.accepted : prefix.length, configuration: configuration ?? transition?.configuration ?? null,
-      ...(transition && !run && transition.sourceSessionId ? { sourceSessionId: transition.sourceSessionId, targetSessionId: transition.targetSessionId } : {}) };
+      ...(transition && !run && transition.sourceSessionId ? { sourceSessionId: transition.sourceSessionId, targetSessionId: transition.targetSessionId } : {}),
+      ...(transition && !run && transition.configurationContext ? { configurationContext: transition.configurationContext } : {}) };
   };
   const prepareClone = (messages: Message[], sourceSessionId: string, targetSessionId: string) => {
     const snapshot = prepareCompaction(messages);
@@ -835,10 +842,30 @@ function createNativeBridge(cwd: string, createQuery: typeof query, state: Bridg
     const summaryOnly = history.at(-1)?.role === 'user' && transition && !run;
     historyContent(summaryOnly ? transitionSource().filter(message => message.role !== 'system') : history,
       new Set(), { trustedPrefix: summaryOnly ? transition.accepted : prefix.length, completedPrefix: summaryOnly ? transition.accepted : completedPrefix });
-    return cloneSchema.parse({ ...snapshot, sourceSessionId: snapshot.sourceSessionId ?? sourceSessionId, targetSessionId });
+    return cloneSchema.parse({ ...snapshot, sourceSessionId: snapshot.sourceSessionId ?? (!run ? saved?.piSessionId : undefined) ?? sourceSessionId, targetSessionId });
   };
-  return { streamSimple, close, usage, prepareCompaction, prepareClone, get closed() { return closed; }, checkpoint: () => {
+  const prepareFork = (before: Message[], after: Message[], sourceSessionId: string, targetSessionId: string) => {
+    const snapshot = prepareClone(before, sourceSessionId, targetSessionId);
+    const source = before.filter(message => message.role !== 'system'), target = after.filter(message => message.role !== 'system');
+    const selected = target.map(message => hash(project(message)));
+    if (!selected.every((value, index) => snapshot.source[index] === value)) fail('SDK fork point is not a validated history prefix.');
+    const available = new Set(source.filter(message => message.role === 'toolResult').map(message => message.toolCallId));
+    const retained = new Set(target.filter(message => message.role === 'toolResult').map(message => message.toolCallId));
+    for (const message of target) if (message.role === 'assistant') {
+      if (message.content.some(block => block.type === 'toolCall' && available.has(block.id) && !retained.has(block.id))) fail('SDK fork point splits a Pi tool batch.');
+    }
+    historyContent(target, new Set(), { trustedPrefix: target.length, handoff: 'clone' });
+    const origin = snapshot.configurationContext ? [snapshot.configurationContext]
+      : state.configurationSource?.(snapshot.configuration, snapshot.accepted) ?? (transition && !run ? transitionSource() : before);
+    let count = 0;
+    const end = snapshot.configurationContext ? 0 : origin.findIndex(message => message.role !== 'system' && ++count === snapshot.accepted);
+    const system = getCurrentSystemMessage(origin.slice(0, end + 1));
+    if (end < 0 || !system) fail('SDK fork configuration is unavailable.');
+    // Carry only the attested system checkpoint, never later user/assistant content.
+    return cloneSchema.parse({ ...snapshot, source: selected, prefix: selected, configurationContext: system });
+  };
+  return { streamSimple, close, usage, prepareCompaction, prepareClone, prepareFork, get closed() { return closed; }, checkpoint: () => {
     if (!state.persistSession || closed || !completed || !sdkSessionId || !sdkMessageId || !configuration) return undefined;
-    return { version: 1 as const, sdkSessionId, sdkMessageId, configuration, prefix: [...prefix], reported: structuredClone(reported) };
+    return { version: 1 as const, sdkSessionId, sdkMessageId, piSessionId, configuration, prefix: [...prefix], reported: structuredClone(reported) };
   } };
 }

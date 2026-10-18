@@ -31,11 +31,12 @@ Keep dependent core scenarios together: file operations and earlier memory suppl
 | First-turn Stop | Stop real `bash`, continue in the same chat without repeating it, and inspect the cancellation receipt. |
 | Compaction | Read an unknown marker through normal tools and perform one counted filesystem effect. Require a real marker-preserving summary, no-tool recall and restart without repeating work. Manual and automatic variants use the same contract. |
 | Clone | Read an unknown marker and perform one counted effect, clone through Pi RPC, then reopen both files through mobile UI. Teach each branch a private value; require independent recall after replacing both workers, unchanged inactive branch bytes, no tool replay and separate SDK native IDs. |
+| Earlier fork | Fork before a later user request, retain an earlier tool-read marker but exclude the later private value, preserve both filesystem effects, and restart both branches with independent memory/native IDs. `PI_PARITY_FORK_QUEUED=1` queues that later request during a running tool. |
 | Recorded identities/usage | Every recorded call has exactly one matching Pi result; no reused call IDs; nonnegative usage with reconciled token totals. |
 
 ## Isolation and permissions
 
-The host, projects, session files, artifacts and subagent runtime records are scratch resources. Browser actions drive login, messages, model selection, Stop and reload. Compaction/clone use Pi RPC. No original chat is prompted, changed or recovered.
+The host, projects, session files, artifacts and subagent runtime records are scratch resources. Browser actions drive login, messages, model selection, Stop and reload. Compaction/clone/fork use Pi RPC. No original chat is prompted, changed or recovered.
 
 Pi loads normal personal extensions, instructions and skills. The harness does not use `--no-extensions`, replacement agent profiles, zero-tool workers or copied credentials. It adds a small observer extension and a denial policy for `denied.txt` only. `--approve` trusts the harness-owned project configuration; it does not bypass Pi tool policy. Compaction alone sets project `keepRecentTokens: 0`. With `PI_PARITY_COMPACTION_AUTO=1`, bounded inert file reads and a project-local 45K threshold exercise automatic compaction at tool boundaries. All other personal settings remain unchanged and their bytes are checked afterward.
 
@@ -43,6 +44,6 @@ Parent models use Medium reasoning for comparison. Children use the builtin `wor
 
 ## Open gaps
 
-Use the [provider gap tracker](provider-gaps.md) for remaining limitations and unverified workflows. The [Pi-owned compaction implementation](sdk-compaction.md) replaces the old all-model Pi guard without enabling Haiku's failing SDK-native auto-compaction path. [Completed-branch cloning](sdk-cloning.md) has a separate receipt and acceptance contract; earlier forks/tree navigation remain guarded. This remains a failing contract when a provider lacks a feature, not a smoke test that skips unsupported cases. The [recorded results](../experiments/claude-sdk-provider/verification-parity.json) are evidence, not an all-green interchangeability claim.
+Use the [provider gap tracker](provider-gaps.md) for remaining limitations and unverified workflows. The [Pi-owned compaction implementation](sdk-compaction.md) replaces the old all-model Pi guard without enabling Haiku's failing SDK-native auto-compaction path. [Completed-branch cloning](sdk-cloning.md) and [earlier-message forks](sdk-forks.md) share owner-bound branch receipts. Tree navigation remains guarded. This remains a failing contract when a provider lacks a feature, not a smoke test that skips unsupported cases. The [recorded results](../experiments/claude-sdk-provider/verification-parity.json) are evidence, not an all-green interchangeability claim.
 
 The printed temporary evidence directory contains the result, private audit records, child transcripts, browser trace and failure screenshots. Do not commit its raw contents: normal settings can introduce private instructions and tool payloads. Commit only a reviewed, redacted evidence summary.

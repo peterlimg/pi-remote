@@ -1,9 +1,8 @@
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { createProvider, type ApiKeyAuth, type Message, type Model } from '@earendil-works/pi-ai';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
-import { buildSessionProjection, convertToLlm, type BeforeAgentStartEvent, type ExtensionAPI, type ExtensionContext, type SessionEntry } from '@earendil-works/pi-coding-agent';
+import { buildSessionProjection, convertToLlm, SessionManager, type BeforeAgentStartEvent, type ExtensionAPI, type ExtensionContext, type SessionEntry } from '@earendil-works/pi-coding-agent';
 import { createBridge, prepareRecovery, sdkEnvironment, type RecoveryPlan } from './bridge.ts';
 
 const exec = promisify(execFile);
@@ -39,31 +38,35 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let ownerId: string | undefined, ownerCwd: string;
   const borrowed = new Map<string, ReturnType<typeof createBridge>>();
   let promptSource: Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> | undefined;
-  const restore = (ctx: ExtensionContext) => {
-    ownerId = ctx.sessionManager.getSessionId(); ownerCwd = ctx.cwd;
-    bridge?.close();
-    bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery, compaction: compaction ? compaction.state ?? null : undefined,
+  const branchBridge = (ctx: ExtensionContext, saved: Pick<ReturnType<typeof readBranch>, 'checkpoint' | 'recovery' | 'compaction' | 'clone'>,
+    entries = () => ctx.sessionManager.getBranch()) => createBridge(ctx.cwd, createQuery, {
+      persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint: saved.checkpoint, recovery: saved.recovery,
+      compaction: saved.compaction ? saved.compaction.state ?? null : undefined,
       compactionSource: () => {
-        const branch = ctx.sessionManager.getBranch(), end = branch.findIndex(entry => entry.type === 'compaction' && entry.id === compaction?.entryId);
+        const branch = entries(), end = branch.findIndex(entry => entry.type === 'compaction' && entry.id === saved.compaction?.entryId);
         if (end < 0) throw new Error('SDK compaction source is unavailable.');
         return projectionMessages(branch.slice(0, end), true);
       },
-      clone: clone ? clone.state ?? null : undefined,
+      clone: saved.clone ? saved.clone.state ?? null : undefined,
       cloneSource: () => {
-        const branch = ctx.sessionManager.getBranch(), end = branch.findIndex(entry => entry.id === clone?.entryId);
+        const branch = entries(), end = branch.findIndex(entry => entry.id === saved.clone?.entryId);
         if (end < 0) throw new Error('SDK clone source is unavailable.');
         return projectionMessages(branch.slice(0, end), true);
       },
       configurationSource: (configuration, accepted) => {
-        const branch = ctx.sessionManager.getBranch();
+        const branch = entries();
         const end = branch.findLastIndex(row => row.type === 'custom' && row.customType === 'claude-sdk-checkpoint' &&
           (row.data as { configuration?: unknown; prefix?: unknown[] })?.configuration === configuration &&
           (row.data as { prefix?: unknown[] })?.prefix?.length === accepted);
         return end < 0 ? undefined : projectionMessages(branch.slice(0, end), true);
       },
-      promptSource: () => promptSource, historySource: () => recoveryMessages(ctx, true),
+      promptSource: () => promptSource, historySource: () => projectionMessages(entries(), true),
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },
       onRecoverySession: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-session', { id, sdkSessionId }); } });
+  const restore = (ctx: ExtensionContext) => {
+    ownerId = ctx.sessionManager.getSessionId(); ownerCwd = ctx.cwd;
+    bridge?.close();
+    bridge = branchBridge(ctx, { checkpoint, recovery, compaction, clone });
   };
   const projectionMessages = (branch: SessionEntry[], includeSystem = false): Message[] =>
     convertToLlm(buildSessionProjection(branch).entries.flatMap(entry => entry.messages)).filter(message => includeSystem || message.role !== 'system');
@@ -151,42 +154,62 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       await ctx.ui.select(['Provider usage', ...lines].join('\n'), ['Close']);
     },
   });
-  pi.on('session_start', (event, ctx) => {
-    activeSession = ctx.sessionManager.getSessionFile();
-    const branch = ctx.sessionManager.getBranch();
+  const readBranch = (branch: SessionEntry[], lineage: SessionEntry[] = branch) => {
     const entry = branch.findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-checkpoint');
     const decision = branch.findLast(entry => entry.type === 'custom' && entry.customType === 'claude-sdk-recovery');
-    checkpoint = entry?.type === 'custom' ? entry.data : undefined;
+    let checkpoint = entry?.type === 'custom' ? entry.data : undefined;
     const compact = branch.findLast(row => row.type === 'compaction');
     const receipt = branch.findLast(row => row.type === 'custom' && row.customType === 'claude-sdk-compaction');
     const data = receipt?.type === 'custom' ? receipt.data as { entryId?: unknown; state?: unknown } : undefined;
     const needsReceipt = compact && (!entry || branch.indexOf(compact) > branch.indexOf(entry)) &&
       (data?.entryId === compact.id || branch.some(row => row.type === 'message' && row.message.role === 'assistant' && row.message.provider === providerId));
-    compaction = needsReceipt ? { entryId: compact.id,
+    let compaction = needsReceipt ? { entryId: compact.id,
       state: data?.entryId === compact.id && receipt && branch.indexOf(receipt) > branch.indexOf(compact) ? data.state : null } : undefined;
     const copy = branch.findLast(row => row.type === 'custom' && row.customType === 'claude-sdk-clone');
     const copied = copy?.type === 'custom' ? copy.data as { sessionId?: unknown; state?: unknown } | null : undefined;
-    clone = copy?.type === 'custom' && (!entry || branch.indexOf(copy) > branch.indexOf(entry)) && (!receipt || branch.indexOf(copy) > branch.indexOf(receipt))
+    const clone = copy?.type === 'custom' && (!entry || branch.indexOf(copy) > branch.indexOf(entry)) && (!receipt || branch.indexOf(copy) > branch.indexOf(receipt))
       ? { entryId: copy.id, state: copied?.state } : undefined;
     if (clone) compaction = undefined;
     if (compaction || clone) checkpoint = undefined;
-    compacting = false;
+    if (checkpoint && typeof checkpoint === 'object' && !('piSessionId' in checkpoint)) {
+      const configuration = (checkpoint as { configuration?: unknown }).configuration;
+      const owners = lineage.flatMap(row => {
+        if (row.type !== 'custom' || !['claude-sdk-clone', 'claude-sdk-compaction'].includes(row.customType)) return [];
+        const state = (row.data as { state?: { configuration?: unknown; sourceSessionId?: unknown } } | null)?.state;
+        return state && state.configuration === configuration && typeof state.sourceSessionId === 'string' ? [state.sourceSessionId] : [];
+      });
+      if (owners.length) checkpoint = { ...checkpoint, piSessionId: owners.at(-1) };
+    }
     const plan = decision?.type === 'custom' ? decision.data as RecoveryPlan : undefined;
     const started = plan && branch.some(row => row.type === 'custom' && row.customType === 'claude-sdk-recovery-started' && (row.data as { id?: unknown })?.id === plan.id);
-    recovery = plan && !started && (!entry || branch.indexOf(decision!) > branch.indexOf(entry)) ? plan : undefined;
+    const recovery = plan && !started && (!entry || branch.indexOf(decision!) > branch.indexOf(entry)) ? plan : undefined;
+    return { checkpoint, compaction, clone, recovery, copySessionId: copied?.sessionId };
+  };
+  pi.on('session_start', (event, ctx) => {
+    activeSession = ctx.sessionManager.getSessionFile();
+    const branch = ctx.sessionManager.getBranch(), saved = readBranch(branch);
+    ({ checkpoint, compaction, clone, recovery } = saved); compacting = false;
     restore(ctx);
-    if (event.reason === 'fork' && copied?.sessionId !== ctx.sessionManager.getSessionId() &&
-      branch.some(row => row.type === 'message' && row.message.role === 'assistant' && row.message.provider === providerId)) {
+    if (event.reason === 'fork' && saved.copySessionId !== ctx.sessionManager.getSessionId()) {
       let state: unknown = null;
       try {
         const previous = event.previousSessionFile;
-        if (!previous || ctx.sessionManager.getHeader()?.parentSession !== previous) throw new Error('Missing clone lineage.');
-        const header = JSON.parse(readFileSync(previous, 'utf8').split('\n', 1)[0]);
-        if (header.type !== 'session' || typeof header.id !== 'string' || header.cwd !== ctx.cwd) throw new Error('Invalid clone parent.');
-        state = bridge!.prepareClone(recoveryMessages(ctx, true), header.id, ctx.sessionManager.getSessionId());
+        if (!previous || ctx.sessionManager.getHeader()?.parentSession !== previous) throw new Error('Missing branch lineage.');
+        const parent = SessionManager.open(previous), source = parent.getBranch(), header = parent.getHeader();
+        if (!header || header.cwd !== ctx.cwd) throw new Error('Invalid branch parent.');
+        if (!source.some(row => row.type === 'message' && row.message.role === 'assistant' && row.message.provider === providerId)) return;
+        const target = branchBridge(ctx, readBranch(branch, source), () => branch);
+        try {
+          try { state = target.prepareClone(recoveryMessages(ctx, true), header.id, ctx.sessionManager.getSessionId()); }
+          catch {
+            const origin = branchBridge(ctx, readBranch(source), () => source);
+            try { state = origin.prepareFork(projectionMessages(source, true), recoveryMessages(ctx, true), header.id, ctx.sessionManager.getSessionId()); }
+            finally { origin.close(); }
+          }
+        } finally { target.close(); }
       } catch (error) {
-        console.error('[claude-sdk:clone] Checkpoint rejected:', error);
-        ctx.ui.notify('SDK clone checkpoint could not be recorded. Start a fresh session before continuing.', 'error');
+        console.error('[claude-sdk:branch] Checkpoint rejected:', error);
+        ctx.ui.notify('SDK branch checkpoint could not be recorded. Start a fresh session before continuing.', 'error');
       }
       pi.appendEntry('claude-sdk-clone', { sessionId: ctx.sessionManager.getSessionId(), state });
       clone = { entryId: ctx.sessionManager.getLeafId()!, state };
@@ -273,13 +296,23 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
     const history = recoveryMessages(ctx, true);
     if (ctx.model?.provider !== providerId && !history.some(message => message.role === 'assistant' && message.provider === providerId)) return;
     try {
-      if (!ctx.isIdle() || !ctx.sessionManager.getSessionFile() || event.position !== 'at' || event.entryId !== ctx.sessionManager.getLeafId()) {
-        throw new Error('Only idle, saved, complete branch clones are supported.');
+      if (!ctx.isIdle() || !ctx.sessionManager.getSessionFile()) throw new Error('SDK branching requires an idle saved session.');
+      const selected = ctx.sessionManager.getBranch(event.entryId);
+      if (selected.at(-1)?.id !== event.entryId || !ctx.sessionManager.getBranch().some(entry => entry.id === event.entryId) ||
+        event.position !== 'at' && event.position !== 'before') throw new Error('Invalid SDK branch point.');
+      if (event.position === 'before') {
+        const entry = selected.pop()!;
+        if (entry.type !== 'message' || entry.message.role !== 'user') throw new Error('SDK forks require a user message.');
       }
-      bridge!.prepareClone(history, ownerId!, `${ownerId}:clone`);
+      bridge!.prepareClone(history, ownerId!, `${ownerId}:branch`);
+      const target = branchBridge(ctx, readBranch(selected, ctx.sessionManager.getBranch()), () => selected);
+      try {
+        try { target.prepareClone(projectionMessages(selected, true), ownerId!, `${ownerId}:branch`); }
+        catch { bridge!.prepareFork(history, projectionMessages(selected, true), ownerId!, `${ownerId}:branch`); }
+      } finally { target.close(); }
     } catch (error) {
-      console.error('[claude-sdk:clone] Preparation rejected:', error);
-      ctx.ui.notify('Cannot clone SDK history safely. Finish or recover the turn first. Earlier forks remain unsupported.', 'warning');
+      console.error('[claude-sdk:branch] Preparation rejected:', error);
+      ctx.ui.notify('Cannot branch SDK history safely. Finish or recover the interrupted turn, or choose a completed history point.', 'warning');
       return { cancel: true };
     }
   });
