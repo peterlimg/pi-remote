@@ -532,19 +532,12 @@ function renderList() {
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
-  renderPinChoice();
 }
 const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
-function renderPinChoice() {
-  const pinned = !!sessions.find(item => item.id === selected)?.pinned;
-  $('session-pin').setAttribute('aria-pressed', String(pinned));
-  $('session-pin-label').textContent = pinned ? 'Unpin session' : 'Pin to top';
-}
 async function togglePin(id) {
   try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
   catch (e) { notice(e.message, id); }
 }
-$('session-pin').addEventListener('click', () => { document.querySelector('.session-info').open = false; togglePin(selected); });
 // Swipe a row right to pin or unpin it, like Messages. Vertical drags still scroll the list.
 const pinSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
