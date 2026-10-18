@@ -59,7 +59,8 @@ function replayQuery(args) {
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,
-        providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"') });
+        providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"'),
+        cancelled: text.includes('User-cancelled SDK continuation.') });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
       if (piDocs || request === 'billing-rejection') {
         yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
@@ -101,7 +102,8 @@ function replayQuery(args) {
         if (mode !== 'mixed') yield* valid('after-malformed', mode === 'duplicate' ? badId : undefined);
       } else {
         let label = text.startsWith('seed') ? 'seed' : text === 'interrupt' ? 'orphan' : text === 'allow-new' ? 'allowed'
-          : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart' : undefined;
+          : text === 'deny-new' ? 'policy-denied' : text === 'invalid-new' ? 'invalid' : text === 'after-restart' ? 'after-restart'
+          : request === 'cancel-after-tools' ? 'cancel-completed' : request === 'cancel-in-tool' ? 'cancel-running' : undefined;
         if (label || text === 'reuse-id') {
           const old = readFileSync(process.env.PI_RECOVERY_SESSION!, 'utf8').trim().split('\n').map(JSON.parse)
             .flatMap(entry => entry.message?.role === 'assistant' ? entry.message.content : []).find(block => block.type === 'toolCall' && block.arguments.label === 'orphan');
@@ -115,6 +117,13 @@ function replayQuery(args) {
           const result = await pending;
           log({ type: 'result', label, error: result.isError === true });
         }
+      }
+      if (request.startsWith('cancel-')) {
+        log({ type: 'cancel-ready', request });
+        yield wrap({ type: 'message_start', message: { id: randomUUID(), model: args.options.model, usage: { input_tokens: 10, output_tokens: 5 } } });
+        yield wrap({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+        yield wrap({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Partial answer before Stop.' } });
+        await delay(30000, undefined, { signal: args.options.abortController.signal });
       }
       yield* assistant(args.options.model, [{ type: 'text', text: text.includes('Operator-approved SDK context recovery')
         ? 'RECOVERED ' + process.env.PI_RECOVERY_MARKER + ' with unknown prior effects.' : 'DONE' }]);
@@ -176,6 +185,7 @@ export default function (pi) {
     execute: async (id, { label }, signal) => {
       log({ type: 'execution', id, label });
       if (label === 'orphan') while (!existsSync(process.env.PI_RECOVERY_GATE!)) await delay(20, undefined, { signal });
-      return { content: [{ type: 'text', text: label === 'seed' ? process.env.PI_RECOVERY_MARKER! : 'APPROVED_NEW_EFFECT' }], details: undefined };
+      if (label === 'cancel-running') await delay(30000, undefined, { signal });
+      return { content: [{ type: 'text', text: label === 'seed' || label === 'cancel-completed' ? process.env.PI_RECOVERY_MARKER! : 'APPROVED_NEW_EFFECT' }], details: undefined };
     } });
 }

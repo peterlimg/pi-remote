@@ -41,7 +41,17 @@ The expanded provider passed strict TypeScript checking and 30 offline tests. Li
 
 Saved conversations now also create SDK transcripts under Claude Code's session storage, normally `~/.claude/projects/`. Pi checkpoint entries contain hashes and IDs, not extra conversation bodies or credentials. Ephemeral Pi sessions and helper requests disable SDK persistence. Deleting a Pi session does not delete its SDK copy; Claude Code's own retention applies.
 
-Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, and changed prompt/tool sets remain unsupported. Interrupted conversations require the explicit recovery operation below rather than a normal native resume.
+Start a fresh session to adopt this upgrade. Old prototype sessions have no recoverable SDK checkpoint. Compaction, forks, and changed prompt/tool sets remain unsupported. Recorded Stop turns with matching Pi results can continue as described below. Missing results and unknown SDK failures require explicit recovery rather than a normal native resume.
+
+## Stop and continue
+
+Stop closes the current native SDK query. The next message now starts a new SDK context in the same Pi chat when the cancelled turn has a recorded Pi result for every tool call. This also works before the first completed checkpoint, after a worker restart, and for an already-recorded zero-work rejection from the old cancellation guard. The saved Pi conversation and previous native transcript stay unchanged. Historical calls are imported only as labeled data, never replayed actions. No extra recovery confirmation is needed for this recorded cancellation path.
+
+A cancelled tool's error result does not prove no effects occurred. The new context is told to preserve the recorded results, follow the new message and check effects before repeating interrupted actions. Missing results, unknown SDK errors, changed configuration/history and duplicate IDs still fail closed. Previously approved unknown outcomes inside a validated completed prefix remain explicitly unknown; cancellation does not invent their results or require approving them again.
+
+`npm run test:cancel` uses real Pi RPC Stop/clear-queue, the provider and MCP with an external SDK replay peer. It covers Stop after completed tools on the first turn, a prior checkpoint, worker restart, cancellation during a tool, text-only Stop, an old guard rejection, and blocked missing-result/unknown-error histories. The recovery E2E separately checks Stop after a previously recovered unknown outcome. Native SDK context rebuilding discards unrecorded reasoning and starts a new SDK usage/cache context; it is not native pause/resume. The cancellation E2E passed on Pi 1.2.0 and 1.3.0, including the old guard error. Real Haiku High on installed Pi 1.3 also passed Stop during the first tool, the corrected next message, reload/follow-up and current-context usage reconciliation without repeating the old tool. A no-network preflight of the reported saved chat passed history validation without modifying it. See [recorded evidence](verification-cancel.json).
+
+Run the opt-in live mobile check with `PI_SDK_TEST_STOP=1 PI_SDK_TEST_MODEL=claude-haiku-5-5 PI_SDK_TEST_THINKING=high node steering.mjs`. It consumes Claude allowance and uses only its synthetic probe.
 
 ## Explicit recovery after interruption
 
@@ -231,7 +241,7 @@ Pi 1.1.0's lazy authentication wrapper turns an already-aborted request into a g
 
 ## Remaining history limits
 
-Native resume is limited to this provider's completed SDK checkpoints with a matching Pi prefix and configuration. Completed non-SDK turns, including recorded errors without outstanding tool calls, can be imported as context when initializing or resuming an SDK conversation. Recognized zero-work SDK rejections do not require a checkpoint. Arbitrary SDK histories without their checkpoint, compaction, forks, tree navigation, nested tool-enabled model requests, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; interrupted SDK tools and unknown SDK errors are not automatically recovered. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
+Native resume is limited to this provider's completed SDK checkpoints with a matching Pi prefix and configuration. Completed non-SDK turns, including recorded errors without outstanding tool calls, can be imported as context when initializing or resuming an SDK conversation. Recognized zero-work SDK rejections and validated cancelled turns do not require a checkpoint. Arbitrary SDK histories without their checkpoint, compaction, forks, tree navigation, nested tool-enabled model requests, and dynamic prompt/tool updates remain unsupported. Cancellation closes the SDK query; recorded Stop turns with matching Pi tool results rebuild on the next message. Missing tool results and unknown SDK errors are not automatically recovered. History-changing operations remain blocked while this provider is selected, and unrecognized transcripts fail explicitly.
 
 The tool-ID metadata is a verified behavior of the pinned SDK, not an established public API guarantee. A later invalid handler closes the session, but a preceding Pi-approved batch may already have executed. Cancellation does not undo completed tools or forcibly stop a tool that ignores Pi's abort signal. Settlement timings above measure Pi completion, not OS child-process exit time.
 

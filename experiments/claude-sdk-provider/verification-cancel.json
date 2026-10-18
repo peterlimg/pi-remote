@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-18",
+  "sdkVersion": "0.3.296",
+  "scope": "Stop followed by a new message in the same Pi chat, without replaying recorded tools or requiring a first completed checkpoint",
+  "observedFailure": {
+    "firstTurnCancelledAfterRecordedToolResults": true,
+    "completedCheckpointPresent": false,
+    "nextMessageFailedBeforeSdkStartup": true,
+    "error": "Cannot recover uncheckpointed SDK responses or interrupted SDK tools.",
+    "cause": "Stop closes the native SDK query; continuation rejected its recorded SDK history as arbitrary uncheckpointed work"
+  },
+  "red": {
+    "command": "node cancel.mjs first",
+    "piVersion": "1.2.0",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-cancel-e2e-LOnYKO/result.json"
+  },
+  "green": [
+    { "piVersion": "1.2.0", "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-cancel-e2e-ZD936X/result.json" },
+    { "piVersion": "1.3.0", "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-cancel-e2e-8LyI7q/result.json" }
+  ],
+  "cases": [
+    "Stop after completed tool results on the first turn, with no checkpoint",
+    "Stop after a previous completed checkpoint",
+    "Worker restart between Stop and the next message",
+    "Stop during a running tool with a recorded Pi cancellation result",
+    "Text-only Stop",
+    "Continuation with an old exact zero-work history-guard rejection still in the audit",
+    "Missing tool result remains blocked before SDK startup",
+    "Unknown non-cancellation SDK failure remains blocked before SDK startup"
+  ],
+  "recoveryRegression": {
+    "piVersion": "1.3.0", "pass": true,
+    "cancelRetainsPreviouslyApprovedUnknownOutcomes": true,
+    "normalPermissionAndArgumentValidationPreserved": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-SZEwNp/result.json"
+  },
+  "liveMobile": {
+    "command": "PI_SDK_TEST_STOP=1 PI_SDK_TEST_MODEL=claude-haiku-5-5 PI_SDK_TEST_THINKING=high PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node steering.mjs",
+    "fixture": "Real installed Pi 1.3 RPC, SDK Haiku High, isolated host and mobile Chromium; synthetic tool effects",
+    "pass": true,
+    "firstTurnStoppedWithoutCheckpoint": true,
+    "newMessageFollowedWithoutRecoveryDialog": true,
+    "oldToolExecutions": 1, "newToolExecutions": 1,
+    "newNativeContextAfterStop": true,
+    "followUpReusedReplacementContext": true,
+    "reloadPreservedConversation": true,
+    "callResultIdsMatched": true,
+    "replacementSdkUsageAndPiTotalsMatched": true,
+    "ownedWorkerClosed": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-steering-417RKC/result.json"
+  },
+  "actualChatReadOnlyPreflight": {
+    "historyAccepted": true,
+    "originalChatUnchanged": true,
+    "realSdkRequests": 0,
+    "toolExecutions": 0,
+    "kind": "Saved cancelled conversation through the production bridge with its SDK boundary replaced before network execution; no private input copied into this repository"
+  },
+  "safety": {
+    "samePiChatAndOriginalAuditRetained": true,
+    "oldNativeTranscriptResumedOrRewound": false,
+    "historicalToolsReplayed": false,
+    "newMissingResultsAutomaticallyApproved": false,
+    "previouslyApprovedUnknownOutcomesRemainUnknown": true,
+    "newSdkUsageBaselineReset": true,
+    "pastPiUsageRewritten": false,
+    "authenticationOrBillingChanged": false,
+    "personalSettingsChanged": false
+  },
+  "limits": [
+    "This starts a new native SDK context from recorded Pi history; it is not native pause/resume and omits unrecorded reasoning",
+    "Cancellation does not undo tool effects; recorded error results do not prove nothing happened",
+    "Missing results, unknown errors and changed configuration or history still require explicit recovery when available",
+    "No full local suite, unit tests, physical Safari or diagnostic model request in the original chat"
+  ]
+}

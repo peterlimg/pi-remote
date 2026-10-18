@@ -73,6 +73,9 @@ jobs:
       - run: npm run test:malformed
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:cancel
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -80,3 +83,4 @@ jobs:
           path: |
             ${{ runner.temp }}/pi-sdk-recovery-e2e-*/
             ${{ runner.temp }}/pi-sdk-malformed-e2e-*/
+            ${{ runner.temp }}/pi-sdk-cancel-e2e-*/
