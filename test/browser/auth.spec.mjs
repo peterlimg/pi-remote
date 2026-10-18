@@ -46,13 +46,11 @@ test('a new QR replaces stale credentials and rejected credentials are cleared',
     sessionStorage.setItem(key, 'old-tab-token');
   }, key);
   await page.goto('/#token=' + token);
-  await page.reload(); // A fragment-only navigation does not reload the app.
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   expect(new URL(page.url()).hash).toBe('');
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(token);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
   await page.goto('/#token=invalid-token');
-  await page.reload();
   await expect(page.locator('#login-error')).toHaveText('Authentication failed');
   await expect(page.locator('#login')).toBeVisible();
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();

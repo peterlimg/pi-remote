@@ -26,11 +26,11 @@ Preconditions: fresh owned fixture, Doctor passed, new browser context. Start at
 - **Reopen.** `await page.close(); const reopened = await context.newPage(); await reopened.goto('http://127.0.0.1:8799/')`. Require `await expect(reopened.locator('#connection')).toHaveText('Computer connected')` without a token in the URL.
 - **Sign out.** Open another page in the same context at `/`, wait for connection, then `await reopened.getByRole('button', { name: 'Sign out' }).click()`. Require both tabs' `#login` to be visible, `localStorage.getItem('pi-remote-token')` to be null, and login to remain visible after reload.
 - **Invalid.** In a fresh context, open `http://127.0.0.1:8799/#token=invalid-token`. Require `await expect(page.locator('#login-error')).toHaveText('Authentication failed')` and a visible login form.
-- **Regression.** Run `npm run test:browser -- test/browser/auth.spec.mjs --trace on`. The legacy existing-tab case sets session storage to model an older client. Treat that case as compatibility testing, not a user login proof.
+- **Regression.** Run `npm run test:browser -- test/browser/auth.spec.mjs test/browser/e2e.spec.mjs --trace on`. The Home Screen cases forward a simulated non-loopback HTTPS origin to the real fixture and cover saved token-only links, pasted complete links, reopening, fragment-only recovery, and key/token isolation. This is mobile Chromium coverage, not a physical iPhone installation test. The legacy existing-tab case sets session storage to model an older client. Treat that case as compatibility testing, not a user login proof.
 
 ## Gotchas
 
-- A fragment-only navigation may not reload the app. Use a fresh page, or reload after changing the fragment.
+- New private-link fragments are handled in an already-open page without reloading. A token-only link may reuse a saved encryption key only when its token matches; a fresh Home Screen profile needs the complete private link.
 - Browser contexts must be isolated; local storage carries login between tabs in one context.
 - `/health` success says nothing about token validity.
 - The helper proves the manual entry only. Do not claim QR entry or production relay authentication from that result.

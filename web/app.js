@@ -122,15 +122,23 @@ let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listE
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
-const hashParams = new URLSearchParams(location.hash.slice(1)), hashToken = hashParams.get('token');
-if (hashToken) {
-  token = hashToken; key = hashParams.get('key') || '';
+function rememberLogin(nextToken, nextKey) {
+  // Older shortcuts may contain only a token; reuse a key only for that same token.
+  key = nextKey ?? (nextToken === token ? key : ''); token = nextToken;
+  if (token) localStorage.setItem('pi-remote-token', token);
+  if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
+  sessionStorage.removeItem('pi-remote-token');
+}
+function readLoginHash() {
+  const params = new URLSearchParams(location.hash.slice(1)), nextToken = params.get('token');
+  if (!nextToken) return false;
+  rememberLogin(nextToken, params.get('key'));
   history.replaceState(null, '', location.pathname);
+  return true;
 }
 // Preserve existing tab logins when upgrading to persistent browser storage.
-if (token) localStorage.setItem('pi-remote-token', token);
-if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
-sessionStorage.removeItem('pi-remote-token');
+if (!readLoginHash()) rememberLogin(token, key);
+window.addEventListener('hashchange', () => { if (readLoginHash()) connect(); });
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
 const COPIED_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
 // iOS Safari has no navigator.vibrate; toggling a hidden switch input (iOS 18+) plays a system haptic.
@@ -1640,9 +1648,7 @@ $('login-form').addEventListener('submit', event => {
   const value = $('token').value.trim();
   let params;
   try { params = new URLSearchParams(new URL(value).hash.slice(1)); } catch { /* Bare token. */ }
-  token = params?.get('token') || value; key = params?.get('key') || '';
-  localStorage.setItem('pi-remote-token', token);
-  if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
+  rememberLogin(params?.get('token') || value, params?.get('key'));
   $('token').value = ''; connect();
 });
 $('logout').addEventListener('click', logout);
