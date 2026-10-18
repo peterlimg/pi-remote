@@ -58,10 +58,16 @@ test('scan the terminal QR inside the app, stop the camera and remember the encr
   await expect(page.locator('#qr-status')).toHaveText(/Point your camera/);
   await expect(page.locator('#qr-video')).toBeVisible();
   expect(await page.evaluate(() => window.cameraFixture.requests[0])).toMatchObject({ audio: false, video: { facingMode: { ideal: 'environment' } } });
-  await page.screenshot({ path: testInfo.outputPath('qr-mobile.png'), fullPage: true });
   const viewport = page.viewportSize();
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({ path: testInfo.outputPath('qr-desktop.png'), fullPage: true });
+  for (const [name, size] of [
+    ['mobile', viewport], ['landscape', { width: 844, height: 390 }], ['desktop', { width: 1280, height: 900 }]
+  ]) {
+    await page.setViewportSize(size);
+    await expect.poll(() => page.locator('#qr-scanner .project-sheet').boundingBox()).toEqual({ x: 0, y: 0, ...size });
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('#qr-video')).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: testInfo.outputPath(`qr-${name}.png`), fullPage: true });
+  }
   await page.setViewportSize(viewport);
   await showCode(page, link);
   await expect(page.getByRole('button', { name: /Project Alpha/ })).toBeVisible();

@@ -72,9 +72,11 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .login form { display: grid; gap: 12px; margin: 28px 0 20px; }
 .login input { font-size: 16px; }
 #scan-login { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 24px; border: 1px solid var(--line); }
-.qr-scanner .project-sheet { height: auto; max-height: 90%; overflow-y: auto; }
-.qr-scanner video { display: block; flex: none; width: calc(100% - 40px); max-height: 50dvh; aspect-ratio: 1; object-fit: contain; margin: 0 20px; border-radius: 8px; background: #000; }
-.qr-scanner p { margin: 12px 20px; font-size: 16px; }
+.qr-scanner { --bg: #000; --text: #fff; --accent: #fff; --error: #ffa4a4; }
+.qr-scanner .project-sheet { height: 100%; max-width: none; padding-top: env(safe-area-inset-top); border-radius: 0; animation: none; }
+.qr-scanner header { flex-shrink: 0; }
+.qr-scanner video { display: block; flex: 1; min-height: 0; width: 100%; object-fit: cover; background: #000; }
+.qr-scanner p { flex-shrink: 0; margin: 12px 20px; font-size: 16px; }
 .login-error { padding: 16px; color: var(--error); text-align: center; }
 .shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
 .shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
