@@ -34,6 +34,7 @@
   <section id="login" class="login" hidden>
     <h1>Pi Remote</h1>
     <p>Connect to Pi on your computer.</p>
+    <button id="scan-login" type="button" class="secondary"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path d="M7 7h3v3H7zm7 0h3v3h-3zM7 14h3v3H7zm7 0h3v3h-3z"/></svg>Scan QR code</button>
     <form id="login-form">
       <label for="token">Private login link</label>
       <input id="token" type="password" autocomplete="off" required placeholder="Paste the private link from your computer">
@@ -41,6 +42,14 @@
     </form>
     <p class="hint">Run <code>/pi-remote</code> inside Pi on your computer, then scan the QR code or paste the private login link here.</p>
   </section>
+  <dialog id="qr-scanner" class="project-picker qr-scanner" aria-labelledby="qr-title" aria-describedby="qr-status">
+    <div class="project-sheet">
+      <header><h2 id="qr-title">Scan login QR</h2><button id="qr-close" type="button" class="quiet">Cancel</button></header>
+      <video id="qr-video" autoplay muted playsinline aria-label="Camera preview" hidden></video>
+      <p id="qr-status" role="status">Allow camera access to scan the code.</p>
+      <p id="qr-error" class="dialog-error" role="alert" hidden></p>
+    </div>
+  </dialog>
   <dialog id="image-viewer" class="image-viewer" aria-label="Image" tabindex="-1">
     <button type="button" class="search-round" aria-label="Close image"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
     <img alt="Attached image">

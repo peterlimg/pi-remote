@@ -8,6 +8,8 @@ const files = new Map([
   ['/images.js', ['images.js', 'text/javascript; charset=utf-8']],
   ['/videos.js', ['videos.js', 'text/javascript; charset=utf-8']],
   ['/e2e.js', ['e2e.js', 'text/javascript; charset=utf-8']],
+  ['/qr.js', ['qr.js', 'text/javascript; charset=utf-8']],
+  ['/jsqr.js', ['../node_modules/jsqr/dist/jsQR.js', 'text/javascript; charset=utf-8']],
   ['/markdown-it.mjs', ['../node_modules/markdown-it/dist/browser/markdown-it.esm.min.mjs', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],

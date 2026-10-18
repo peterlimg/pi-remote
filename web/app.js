@@ -267,6 +267,7 @@ function reconnect() {
   reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
 }
 function connect() {
+  $('qr-scanner').close();
   disconnect(); manualClose = false;
   if (key ? !validKey(key) : !loopback) { loginFailed('This login link has no encryption key. Scan the QR code on your computer again.'); return; }
   $('login').hidden = true; if ($('app').hidden) $('boot').hidden = false;
@@ -382,7 +383,7 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   resetSwipe();
-  manualClose = true; disconnect(); $('project-picker').close();
+  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close();
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
@@ -1642,6 +1643,21 @@ function renderDialog(state) {
   footer.append(feedback); form.append(header, body, footer); $('dialog').replaceChildren(form);
   close.focus({ preventScroll: true });
 }
+$('scan-login').addEventListener('click', async event => {
+  const button = event.currentTarget;
+  button.disabled = true; $('login-error').hidden = true;
+  try {
+    const { scanLogin } = await import('./qr.js');
+    const credentials = await scanLogin();
+    if (credentials) { $('token').value = ''; rememberLogin(credentials.token, credentials.key); connect(); }
+  } catch {
+    $('login-error').textContent = 'Could not load the QR scanner. Try again or paste the private link.';
+    $('login-error').hidden = false;
+  } finally {
+    button.disabled = false;
+    if (!$('login').hidden) button.focus({ preventScroll: true });
+  }
+});
 $('login-form').addEventListener('submit', event => {
   event.preventDefault();
   // Accept the full private link (token and key) or, on this computer, a bare token.
