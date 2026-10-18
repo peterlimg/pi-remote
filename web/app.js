@@ -430,8 +430,8 @@ function age(date) {
   if (minutes < 10080) return Math.floor(minutes / 1440) + 'd';
   return shortDate.format(date);
 }
-// Must match the host's order so merged rows land where the host expects.
-const listOrder = (a, b) => !!b.pinned - !!a.pinned || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+// Match the host: user prompts move rows, background activity only refreshes their contents.
+const listOrder = (a, b) => !!b.pinned - !!a.pinned || (b.lastPromptAt ?? b.updatedAt) - (a.lastPromptAt ?? a.updatedAt) || a.id.localeCompare(b.id);
 function receiveList(packet) {
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {

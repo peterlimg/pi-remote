@@ -144,6 +144,7 @@ const parser = new JsonLines(command => {
     }
     if (command.message === 'ask') out({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Proceed?' });
     else {
+      out({ type: 'message_end', message: { role: 'user', timestamp: Date.now(), content: command.message } });
       out({ type: 'message_end', message: { role: 'assistant', timestamp: Date.now(), content: 'reply: ' + command.message } });
       out({ type: 'agent_end' });
     }

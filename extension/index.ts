@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
-import { branchMessages, EXTENSION_INPUT } from '../src/catalog.mjs';
+import { branchMessages, lastPromptTime, EXTENSION_INPUT } from '../src/catalog.mjs';
 import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
@@ -25,6 +25,7 @@ export default function remoteExtension(pi: any) {
     const firstRequest = messages.find((x: any) => x.role === 'user');
     state.title = sessionTitle(pi.getSessionName?.(), firstRequest ? [firstRequest] : []);
     state.messages = messages.slice(-100);
+    state.lastPromptAt = lastPromptTime(messages, state.lastPromptAt);
     state.historyTruncated = messages.length > 100;
     state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined; state.modelName = ctx.model?.name;
     state.thinkingLevel = pi.getThinkingLevel?.() ?? ctx.thinkingLevel;

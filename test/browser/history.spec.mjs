@@ -259,6 +259,11 @@ test('sessions larger than 32 MiB are browsable without blocking live traffic', 
   const config = loadConfig(dir), file = join(dir, 'large.jsonl');
   let host, client;
   try {
+    writeFileSync(join(dir, 'recent.jsonl'), [
+      { type: 'session', version: 3, id: randomUUID(), cwd: dir },
+      { type: 'session_info', id: 'name', parentId: null, name: 'Recent small session' },
+      { type: 'message', id: 'prompt', parentId: 'name', message: { role: 'user', content: 'Recent prompt', timestamp: 1000 } }
+    ].map(entry => JSON.stringify(entry)).join('\n') + '\n');
     writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), cwd: dir }) + '\n');
     appendFileSync(file, JSON.stringify({ id: 'name', parentId: null, type: 'session_info', name: 'Large history' }) + '\n');
     let parentId = 'name';
@@ -273,7 +278,9 @@ test('sessions larger than 32 MiB are browsable without blocking live traffic', 
     host = await startHost({ dir, config, port: 0, roots: [dir], publicUrl: 'http://127.0.0.1:8787', relayUrl: '' });
     const port = host.http.address().port, origin = `http://127.0.0.1:${port}`;
     client = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin);
+    await expect.poll(() => host.service.catalog.get(sessionKey(file)).lastPromptAt).toBe(129);
     await page.goto(origin + '/#token=' + config.clientToken);
+    await expect(page.locator('#sessions .session strong')).toHaveText(['Recent small session', 'Large history']);
     await page.getByRole('button', { name: /Large history/ }).click();
     const started = Date.now();
     const ping = await client.request('ping');

@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
+import { initialState, applyEvent, noteExtensionInput } from '../../src/state.mjs';
 
-test('sessions stay newest first across updates, search, reconnect and reload', async ({ page }, testInfo) => {
+test('sessions sort by your last prompt without jumping during background activity', async ({ page }, testInfo) => {
   let client, scroll, connections = 0, time = Date.now();
-  const states = ['Alpha', 'Beta'].map((name, i) => ({ id: name, title: `Task ${name}`, cwd: '/projects/app',
-    status: 'working', updatedAt: time - i * 60000, messages: [] }));
+  const states = ['Alpha', 'Beta'].map((name, i) => Object.assign(initialState({ id: name, title: `Task ${name}`, cwd: '/projects/app' },
+    [{ id: 'prompt-' + name, role: 'user', text: 'Begin ' + name, timestamp: time - i * 60000 }]),
+    { status: 'working', updatedAt: time - i * 60000 }));
   const service = Object.assign(Object.create(SessionService.prototype),
     { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
   const publish = () => {
@@ -27,16 +29,16 @@ test('sessions stay newest first across updates, search, reconnect and reload', 
   await page.goto('/#token=browser-test-token-only-123456789012345');
   const titles = page.locator('#sessions .session strong');
   await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
-  const update = async (state, text) => {
-    state.updatedAt = time += 60000;
-    state.messages.push({ role: 'assistant', text });
+  const update = async (state, text, role = 'assistant', type = 'message_end') => {
+    applyEvent(state, { type, message: { role, content: text, timestamp: time += 60000 } });
+    state.updatedAt = time;
     publish();
     const row = page.locator('#sessions .session').filter({ hasText: state.title });
-    await expect(row.locator('.session-preview')).toHaveText('Pi: ' + text);
+    await expect(row.locator('.session-preview')).toHaveText((role === 'user' ? 'You: ' : 'Pi: ') + text);
     await expect(row.locator('time')).toHaveAttribute('datetime', new Date(time).toISOString());
   };
-  await update(states[1], 'Beta full-page update');
-  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
+  await update(states[1], 'Beta streaming update', 'assistant', 'message_update');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
   await expect(page.getByRole('button', { name: /Task Beta/ }).locator('.session-icon')).toHaveAttribute('data-unread', '');
   await update(states[0], 'Alpha full-page update');
   await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
@@ -52,25 +54,44 @@ test('sessions stay newest first across updates, search, reconnect and reload', 
   await expect(titles).toHaveText(['Task Beta']);
   await update(states[1], 'Beta filtered update');
   await page.getByRole('searchbox', { name: 'Search sessions' }).fill('');
-  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
+  await expect(titles).toHaveText(['Task Alpha', 'Task Beta']);
   await page.getByRole('searchbox', { name: 'Search sessions' }).blur();
+  await update(states[1], 'A new prompt for Beta', 'user');
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
+  for (const type of ['agent_start', 'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'compaction_start', 'compaction_end']) {
+    applyEvent(states[0], { type, toolCallId: 'read', toolName: 'read' });
+    publish();
+    await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
+  }
+  noteExtensionInput(states[0], 'Scheduled extension input');
+  await update(states[0], 'Scheduled extension input', 'user');
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
   await update(states[1], 'Beta diff update');
   await expect(titles).toHaveText(['Task Beta', 'Task Alpha']);
 
-  const fresh = { id: 'Gamma', title: 'Task Gamma', cwd: '/projects/app', status: 'working', updatedAt: time += 60000, messages: [] };
+  const fresh = initialState({ id: 'Gamma', title: 'Task Gamma', cwd: '/projects/app' },
+    [{ id: 'prompt-Gamma', role: 'user', text: 'Begin Gamma', timestamp: time += 60000 }]);
   service.catalog.set(fresh.id, fresh); publish();
+  await expect(titles).toHaveText(['Task Gamma', 'Task Beta', 'Task Alpha']);
+  service.pins.add('Alpha'); service.pins.add('Beta'); publish();
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
+  await update(states[0], 'Pinned Alpha background update');
+  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
+  service.pins.clear(); publish();
   await expect(titles).toHaveText(['Task Gamma', 'Task Beta', 'Task Alpha']);
   client.close({ code: 1012, reason: 'Reconnect test' });
   await expect.poll(() => connections).toBe(2);
   await update(states[0], 'Alpha reconnect update');
-  await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
-  await page.screenshot({ path: testInfo.outputPath('recent-session-order-mobile.png') });
+  await expect(titles).toHaveText(['Task Gamma', 'Task Beta', 'Task Alpha']);
+  await page.screenshot({ path: testInfo.outputPath('prompt-session-order-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await update(states[1], 'Beta desktop update');
-  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
-  await page.screenshot({ path: testInfo.outputPath('recent-session-order-desktop.png') });
+  await expect(titles).toHaveText(['Task Gamma', 'Task Beta', 'Task Alpha']);
+  await page.screenshot({ path: testInfo.outputPath('prompt-session-order-desktop.png') });
+  await update(states[0], 'A new prompt for Alpha', 'user');
+  await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
   await page.reload();
-  await expect(titles).toHaveText(['Task Beta', 'Task Alpha', 'Task Gamma']);
+  await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
 });
 
 test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }, testInfo) => {

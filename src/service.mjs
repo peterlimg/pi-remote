@@ -3,7 +3,7 @@ import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'no
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { discover, isInside, readSession } from './catalog.mjs';
+import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
@@ -43,8 +43,21 @@ export class SessionService extends EventEmitter {
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
   }
   scan() {
-    const { sessions, warnings } = discover(this.roots);
+    const previous = this.catalog, { sessions, warnings } = discover(this.roots);
     this.catalog = sessions; this.warnings = [...this.restoreWarnings, ...warnings].slice(0, 20);
+    for (const [id, saved] of sessions) {
+      if (!saved.historyPending || saved.lastPromptAt !== undefined) continue;
+      // Large histories are indexed off-thread; keep their previous position during appends.
+      saved.lastPromptAt = previous.get(id)?.lastPromptAt ?? 0;
+      this.historyReader.request('recency', { file: saved.file }).then(value => {
+        saved.lastPromptAt = value;
+        if (this.catalog.get(id) === saved) this.emit('list');
+      }, error => {
+        if (this.stopping) return;
+        this.warnings = [...this.warnings, 'Could not read session prompt time: ' + error.message].slice(0, 20);
+        this.emit('list');
+      });
+    }
     for (const [id, item] of this.live) {
       const saved = sessions.get(id);
       if (!item.socket && saved && saved.title !== item.state.title) {
@@ -87,7 +100,7 @@ export class SessionService extends EventEmitter {
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker, pinned: this.pins.has(id) });
     const visible = [...all.values()].filter(item => includeHelpers || query || !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
-      .sort((a, b) => b.pinned - a.pinned || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+      .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));
     return { matches, total: visible.length };
   }
   pin(id, pinned) {
@@ -139,7 +152,7 @@ export class SessionService extends EventEmitter {
     const page = await this.history(id, {});
     const { historyPending, ...meta } = state;
     return { ...meta, messages: page.messages, title: page.title, model: page.model,
-      thinkingLevel: page.thinkingLevel, historyTruncated: page.older };
+      lastPromptAt: page.lastPromptAt, thinkingLevel: page.thinkingLevel, historyTruncated: page.older };
   }
   historySource(id) {
     const state = this.live.get(id)?.state || this.catalog.get(id);
@@ -165,7 +178,9 @@ export class SessionService extends EventEmitter {
     if (disk.nonce !== owner?.nonce || disk.instanceId !== state.instanceId || disk.pid !== owner.pid) throw new Error('Session ownership mismatch');
     const current = this.live.get(state.id);
     if (current?.worker || (current?.socket && current.socket !== socket)) throw new Error('Session already connected');
-    this.live.set(state.id, { state: { ...state }, socket, owner });
+    const lastPromptAt = state.lastPromptAt ?? lastPromptTime(state.messages,
+      current?.state.lastPromptAt ?? this.catalog.get(state.id)?.lastPromptAt ?? state.updatedAt);
+    this.live.set(state.id, { state: { ...state, lastPromptAt }, socket, owner });
     socket.sessionId = state.id;
     this.changed(state.id);
   }
@@ -173,7 +188,8 @@ export class SessionService extends EventEmitter {
     if (socket.sessionId !== state?.id) throw new Error('Wrong session snapshot');
     const item = this.live.get(state.id);
     if (item?.socket !== socket) throw new Error('Session owner changed');
-    item.state = { ...state }; this.changed(state.id);
+    const lastPromptAt = state.lastPromptAt ?? lastPromptTime(state.messages, item.state.lastPromptAt);
+    item.state = { ...state, lastPromptAt }; this.changed(state.id);
   }
   disconnected(socket) {
     const item = this.live.get(socket.sessionId);

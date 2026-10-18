@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
-import { cleanMessage, shown, textContent, takeText, noteTaskTiming, EXTENSION_INPUT } from './catalog.mjs';
+import { cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { taskText } from '../web/protocol.js';
 
@@ -16,7 +16,9 @@ export function noteExtensionInput(state, text) {
 // Reconnecting is not activity: keep the session file's time so the phone's unread marks survive host restarts.
 const lastWrite = file => { try { return statSync(file).mtimeMs; } catch { return Date.now(); } };
 export function initialState(meta, messages = []) {
-  const state = { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0, updatedAt: meta.file ? lastWrite(meta.file) : Date.now() };
+  const updatedAt = meta.file ? lastWrite(meta.file) : Date.now();
+  const state = { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0,
+    updatedAt, lastPromptAt: lastPromptTime(messages, meta.lastPromptAt ?? updatedAt) };
   const task = {}; tasks.set(state, task);
   for (const message of state.messages) noteTaskTiming(message, task);
   return state;
@@ -59,6 +61,8 @@ export function applyEvent(state, event) {
     noteTaskTiming(item, tasks.get(state));
     let index = state.messages.findIndex(x => x.id === key);
     if (index >= 0 ? state.messages[index].source : m.role === 'user' && takeText(extensionInputs.get(state) || [], item.text)) item.source = 'extension';
+    // Background replies, tools and extension prompts must not move sessions in the list.
+    if (item.role === 'user' && item.source !== 'extension') state.lastPromptAt = Number.isFinite(item.timestamp) ? item.timestamp : state.updatedAt;
     if (index < 0) {
       state.messages.push(item);
       if (state.messages.length > 100) { state.messages.shift(); state.historyTruncated = true; }
@@ -86,6 +90,6 @@ export function summary(state) {
     return line.length > 160 ? line.slice(0, 159) + '…' : line;
   };
   const latest = messages.findLast(message => ['user', 'assistant'].includes(message.role) && message.text?.trim());
-  return { ...meta, title: sessionTitle(meta.title, messages),
+  return { ...meta, lastPromptAt: meta.lastPromptAt ?? lastPromptTime(messages, meta.updatedAt), title: sessionTitle(meta.title, messages),
     preview: excerpt(taskText(latest)), previewRole: latest?.role };
 }

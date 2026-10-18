@@ -2,7 +2,7 @@ import { parentPort } from 'node:worker_threads';
 import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTiming, EXTENSION_INPUT } from './catalog.mjs';
+import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
 import { messageKey, sessionTitle } from '../web/protocol.js';
 import { splitVideoMessage } from '../web/videos.js';
 import { validateImages } from '../web/images.js';
@@ -60,7 +60,7 @@ async function getIndex(file) {
     // Pi can be in the middle of appending a record. Retry that tail on the next read.
     if (segments.length) parse(Buffer.concat(segments), false);
     if (!index.header) throw new Error('Not a Pi session');
-    Object.assign(index, { size: info.size, mtimeMs: info.mtimeMs, ino: info.ino });
+    Object.assign(index, { size: info.size, mtimeMs: info.mtimeMs, birthtimeMs: info.birthtimeMs, ino: info.ino });
     return index;
   } catch (error) { indexes.delete(file); throw error; }
 }
@@ -105,6 +105,8 @@ async function readMessage(handle, row) {
 }
 async function run({ op, file, before, after, tips, expectedTip, imageId, messageId, path }) {
   const index = await getIndex(file), branch = getBranch(index, tips);
+  const lastPromptAt = lastPromptTime(branch.rows, Date.parse(index.header.timestamp) || index.birthtimeMs);
+  if (op === 'recency') return lastPromptAt;
   if (expectedTip && !branch.ids.has(expectedTip)) throw new Error('Conversation changed. Return to latest messages.');
   const handle = await open(file, 'r');
   try {
@@ -149,7 +151,7 @@ async function run({ op, file, before, after, tips, expectedTip, imageId, messag
       branch.title = sessionTitle(index.name, firstUser ? [await readMessage(handle, firstUser)] : []);
     }
     return { messages, older: start > 0, newer: end < rows.length, tip: branch.tip, title: branch.title,
-      model: branch.model, thinkingLevel: branch.thinkingLevel };
+      model: branch.model, thinkingLevel: branch.thinkingLevel, lastPromptAt };
   } finally { await handle.close(); }
 }
 // One append-aware index mutation at a time, even when multiple phones ask for history.

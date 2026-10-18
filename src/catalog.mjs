@@ -38,6 +38,8 @@ function imageReference(part) {
 export const shown = message => message.role !== 'custom' || !!message.display;
 // Pi stores prompts extensions send as plain user messages; Pi Remote's extension records their text.
 export const EXTENSION_INPUT = 'pi-remote-extension-input';
+export const lastPromptTime = (messages = [], fallback = 0) => messages.findLast(message =>
+  message.role === 'user' && message.source !== 'extension' && Number.isFinite(message.timestamp))?.timestamp ?? fallback;
 export function takeText(pending, text) {
   const index = pending.indexOf(text);
   if (index >= 0) pending.splice(index, 1);
@@ -163,7 +165,8 @@ export function readSession(file) {
   const name = entries.filter(x => x.type === 'session_info' && x.name).at(-1)?.name;
   return { id: sessionKey(file), piSessionId: header.id, file: realpathSync(file), cwd: header.cwd,
     title: sessionTitle(name, allMessages), model, thinkingLevel,
-    updatedAt: info.mtimeMs, status: 'saved', messages: allMessages.slice(-100),
+    updatedAt: info.mtimeMs, lastPromptAt: lastPromptTime(allMessages, Date.parse(header.timestamp) || info.birthtimeMs),
+    status: 'saved', messages: allMessages.slice(-100),
     historyTruncated: allMessages.length > 100 };
 }
 // Parsed sessions keyed by file. Unchanged files (same size and mtime) are not reparsed:
