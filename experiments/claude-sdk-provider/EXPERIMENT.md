@@ -57,6 +57,12 @@ An already-recorded exact, zero-usage configuration rejection can also continue 
 
 The real mobile check starts with a non-SDK tool selection, switches to Haiku Max before prompting, enables once and launches one fresh SDK child. The child is constrained to zero tools and its actual SDK transcript, model and exit status are checked. Its result was reopened by stable parent-session ID after a navigation-only selector failure, without another prompt or child launch. A no-network preflight of the reported saved chat also passed without modifying it. See [recorded evidence](verification-tools.json). Physical Safari, forked child contexts and asynchronous child completion are not covered by this live check.
 
+## Shared provider acceptance
+
+The [shared provider E2E](../../docs/provider-parity.md) runs the same real phone/Pi journeys with normal personal resources and builtin `worker` agents on Codex and Claude SDK. It checks actual file changes, child transcripts, permissions, switching, Stop, automatic completion notices, reload and owned-worker restart. Compaction and cloning remain failing contracts rather than omitted scenarios. Results and coverage gaps are in [the parity evidence](verification-parity.json).
+
+That matrix exposed a standard foreground child borrowing its parent's stateful SDK provider. The child's prompt failed the parent's provenance check and closed the parent query. Borrowed Pi session IDs now receive separate ephemeral bridges with their entire child prompt and Pi schemas intact. Tool validation/execution and the normal worker profile remain Pi-owned. A completed or failed child closes only its own bridge. Durable borrowed-child resumes still need child-local provider hooks; arbitrary inherited prompts are not rewritten to bypass upstream rejection.
+
 ## Extension completion notices
 
 Several background child notifications can arrive before Pi starts the next SDK request. Pi presents them as consecutive user inputs. The old bridge treated every input except the last as completed history, then rejected that history because no assistant response followed the earlier notifications. The reported parent turn had completed; this was a local, zero-usage rejection of new input, not a missing child result.

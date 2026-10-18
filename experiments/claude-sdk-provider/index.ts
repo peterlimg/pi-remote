@@ -33,8 +33,11 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   let checkpoint: unknown;
   let recovery: RecoveryPlan | undefined;
   let activeSession: string | undefined;
+  let ownerId: string | undefined, ownerCwd: string;
+  const borrowed = new Map<string, ReturnType<typeof createBridge>>();
   let promptSource: Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> | undefined;
   const restore = (ctx: ExtensionContext) => {
+    ownerId = ctx.sessionManager.getSessionId(); ownerCwd = ctx.cwd;
     bridge?.close();
     bridge = createBridge(ctx.cwd, createQuery, { persistSession: Boolean(ctx.sessionManager.getSessionFile()), checkpoint, recovery, promptSource: () => promptSource, historySource: () => recoveryMessages(ctx, true),
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },
@@ -49,6 +52,17 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
   });
   const streamSimple: ReturnType<typeof createBridge>['streamSimple'] = (...args) => {
     if (!bridge) throw new Error('Claude SDK requires an active Pi session.');
+    const sessionId = args[2]?.sessionId;
+    if (sessionId && sessionId !== ownerId) {
+      // Foreground Pi children borrow the provider, not its session hooks; retain their entire prompt verbatim.
+      // shortcut: fresh borrowed children only; durable child resumes need their own provider session hooks.
+      let child = borrowed.get(sessionId);
+      if (!child) { child = createBridge(ownerCwd, createQuery); borrowed.set(sessionId, child); }
+      const stream = child.streamSimple(...args), current = child;
+      const release = () => { current.close(); if (borrowed.get(sessionId) === current) borrowed.delete(sessionId); };
+      void stream.result().then(message => { if (message.stopReason !== 'toolUse') release(); }, release);
+      return stream;
+    }
     return bridge.streamSimple(...args);
   };
   const catalog = getBuiltinModels('anthropic');
@@ -145,7 +159,10 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
       ctx.ui.setStatus('claude-sdk-checkpoint', undefined);
     }
   });
-  pi.on('session_shutdown', () => { bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; activeSession = undefined; promptSource = undefined; });
+  pi.on('session_shutdown', () => {
+    for (const child of borrowed.values()) child.close(); borrowed.clear();
+    bridge?.close(); bridge = undefined; checkpoint = undefined; recovery = undefined; activeSession = undefined; ownerId = undefined; promptSource = undefined;
+  });
   pi.on('message_end', (event, ctx) => {
     const message = event.message;
     // Pi's lazy auth wrapper reports cancellation before our stream as a setup error.

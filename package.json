@@ -16,7 +16,8 @@
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "check": "tsc --noEmit && node scripts/check.mjs",
     "test:browser": "playwright test",
-    "test:lifecycle": "node test/lifecycle-e2e.mjs"
+    "test:lifecycle": "node test/lifecycle-e2e.mjs",
+    "test:provider-parity": "node test/provider-parity.mjs"
   },
   "dependencies": {
     "jsqr": "1.4.0",

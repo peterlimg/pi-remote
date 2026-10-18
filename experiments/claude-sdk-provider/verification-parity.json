@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-18",
+  "status": "partial-provider-parity",
+  "pass": false,
+  "baselineCommit": "61b591f",
+  "fixture": "Shared real Pi RPC/mobile browser journeys, normal personal resources, builtin worker profiles, actual Codex and SDK model services. No SDK replay or zero-tool probe agents in the live matrix.",
+  "versions": {
+    "pi": "1.3.0",
+    "claudeAgentSdk": "0.3.296",
+    "piSubagents": "0.78.0"
+  },
+  "models": ["openai-codex/gpt-6.1-sol", "claude-sdk/claude-haiku-5-5"],
+  "configuration": {
+    "parentThinking": "medium",
+    "finalChildThinking": "builtin worker default high, asserted in actual child messages",
+    "childProfilesModified": false,
+    "normalParentToolsEqual": true,
+    "normalParentToolCount": 14,
+    "personalSettingsUnchanged": true,
+    "credentialsCopiedOrSubstituted": false,
+    "originalChatsPromptedOrModified": false,
+    "sdkUpgraded": false,
+    "billingSettingsChanged": false
+  },
+  "sdkForegroundFix": {
+    "failure": "A foreground worker borrowed the parent's provider without its session hooks. Its different prompt failed the parent's provenance check and closed the parent bridge.",
+    "oldParentError": "Claude SDK session is no longer available. Start a new Pi session.",
+    "change": "Separate native bridges by borrowed Pi session ID. Preserve the child's entire prompt and current Pi tool declarations. Keep a child bridge across its tool loop and close only that bridge at its terminal response. Leave parent checkpoint/projection and Pi execution unchanged.",
+    "scope": "Fresh foreground children. Durable retained-child resume still requires child-local provider hooks.",
+    "red": "pi-provider-parity-GZOSOO/result.json",
+    "firstInstalledGreen": "pi-provider-parity-oqLMaa/result.json"
+  },
+  "evidence": {
+    "completeMatrix": "pi-provider-parity-iWliqP/result.json",
+    "finalHighWorkerJourneys": "pi-provider-parity-1zdFmS/result.json",
+    "completeMatrixPass": false,
+    "finalHighWorkerJourneysPass": true,
+    "interpretation": "Core/control results come from the complete matrix. The final focused run verifies foreground coding, background/Stop/restart and recorded identities/usage on both providers with default High worker reasoning. Its other rows are skipped, not passed. There is no all-green full parity run."
+  },
+  "resultsAcrossRecordedRuns": [
+    { "case": "instructions-and-messages", "codex": "passed", "sdk": "passed" },
+    { "case": "real-file-tools", "codex": "passed", "sdk": "passed" },
+    { "case": "permission-denial", "codex": "passed", "sdk": "passed" },
+    { "case": "reload-and-history", "codex": "passed", "sdk": "passed" },
+    { "case": "webkit-reopen", "codex": "passed", "sdk": "passed" },
+    { "case": "real-provider-roundtrip", "codex": "passed", "sdk": "passed" },
+    { "case": "owned-worker-restart", "codex": "passed", "sdk": "passed" },
+    { "case": "foreground-standard-worker", "codex": "passed in final High run", "sdk": "passed in final High run" },
+    { "case": "parallel-background-workers-and-notices", "codex": "passed in final High run", "sdk": "passed in final High run" },
+    { "case": "stop-first-turn-and-new-message", "codex": "failed cancellation receipt; continuation/no replay passed", "sdk": "passed" },
+    { "case": "compaction-contract", "codex": "passed", "sdk": "failed: Compaction cancelled" },
+    { "case": "clone-contract", "codex": "passed", "sdk": "failed: cancelled by provider" },
+    { "case": "recorded-identities-and-usage", "codex": "passed in final High run", "sdk": "passed in final High run" }
+  ],
+  "finalDelegationProof": {
+    "standardAgent": "worker",
+    "noProfileOrPermissionReduction": true,
+    "defaultHighReasoningVerified": true,
+    "foreground": [
+      "Exactly one fresh standard worker on the selected provider",
+      "Actual input read, one scratch module edited and read back, real node --check",
+      "Physical final code matches the unknown-to-parent input marker",
+      "Actual child provider, normal read/bash/edit/write declarations, read/edit/bash execution, exit 0, matching IDs and usage",
+      "Parent recalls the child result without more tools"
+    ],
+    "backgroundCombination": [
+      "Exactly two fresh standard workers with real bash wait gates and read calls",
+      "Parent runs a real bash command and is stopped while child gates remain blocked",
+      "Parent accepts a new message before the harness releases the gates",
+      "Both successful child gate results are timestamped after parent Stop",
+      "Automatic completion acknowledgement contains both actual file values; no relaunch or bg_wait",
+      "Browser reload and owned parent worker replacement retain both outputs without new tools"
+    ]
+  },
+  "knownFailures": [
+    "SDK still explicitly blocks compaction, cloning and tree navigation. Do not remove these guards without safe summary/lineage handling.",
+    "Codex first-turn Stop can emit stopReason=error, errorMessage=This operation was aborted. The corrected next message worked without another tool call, but the receipt contract remains failed.",
+    "Borrowed foreground contexts are ephemeral. Durable/retained/forked child continuation is not established."
+  ],
+  "focusedSafetyRegressions": {
+    "externalSdkReplayedOnly": true,
+    "piVersion": "1.3.0",
+    "allPassed": true,
+    "notices": "pi-sdk-notices-e2e-TsGqW8/result.json",
+    "recoveryIncludingApprovalLateInputGuard": "pi-sdk-recovery-e2e-Y5Dclp/result.json",
+    "runtimeToolsPermissionsValidation": "pi-sdk-tools-e2e-JPMrrU/result.json",
+    "cancellation": "pi-sdk-cancel-e2e-tKI1Hp/result.json",
+    "malformedArguments": "pi-sdk-malformed-e2e-rKaayL/result.json"
+  },
+  "retainedHarnessFailures": [
+    "pi-provider-parity-jrRbbj: initial compaction fixture was too small; Codex cancellation receipt failure retained.",
+    "pi-provider-parity-FuasXV, pi-provider-parity-Ta7KUd, pi-provider-parity-ETco4x, pi-provider-parity-yGDCF4: workspace extension hooks loaded but the installed SDK API implementation remained active. These runs did not exercise the proposed routing fix. Installed-source verification was required.",
+    "pi-provider-parity-iWliqP: Codex worker edit succeeded with output:false, but the initial harness wrongly required optional artifacts.",
+    "pi-provider-parity-IgQSKF, pi-provider-parity-BIKnH3: async canonical session archives were not yet available where the harness looked. Final checks use foreground structured results/canonical sessions and published async transcript metadata, with actual gate-result timing.",
+    "pi-provider-parity-q0vkWd: corrected background evidence checks passed on both providers at explicit Low child reasoning; superseded by the final default-High run."
+  ],
+  "notVerifiedByThisMatrix": [
+    "Physical Safari",
+    "Images and slash-command dialogs",
+    "Every standard role and custom agent/permission ceiling",
+    "Nested delegation",
+    "Durable, retained or forked child continuation",
+    "Arbitrary prompt changes or inherited prompt projection",
+    "Tree navigation and clone continuation",
+    "Overnight/background crash recovery"
+  ],
+  "checks": ["SDK TypeScript", "new harness syntax", "git diff whitespace"],
+  "fullLocalOrUnitSuiteRun": false,
+  "artifactPrivacy": "References are local temporary-directory basenames. Raw browser traces, system instructions, child transcripts and tool payloads remain private and are not committed."
+}
