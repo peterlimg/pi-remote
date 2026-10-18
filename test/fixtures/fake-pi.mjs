@@ -27,6 +27,15 @@ const parser = new JsonLines(command => {
     out({ type: 'agent_end' }); return;
   }
   let data;
+  if (command.type === 'get_state' && process.argv.includes('--startup-events')) {
+    out({ type: 'model_select', model });
+    out({ type: 'thinking_level_changed', level: thinkingLevel });
+    out({ type: 'agent_settled' });
+    if (process.argv.includes('--fail-startup')) {
+      out({ id: command.id, type: 'response', success: false, error: 'Replay startup failure' });
+      return;
+    }
+  }
   if (command.type === 'get_state') data = { isStreaming: false, model, thinkingLevel, ...(fresh ? { sessionId, sessionFile } : {}) };
   if (command.type === 'get_available_models') data = { models };
   if (command.type === 'get_session_stats') data = { contextUsage, tokens: { total: 9000000 } };

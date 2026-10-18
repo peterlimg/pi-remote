@@ -7,7 +7,7 @@ import { startHost } from '../../src/host.mjs';
 import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
-test('recent saved sessions stay above older restored workers through paging and host restart', async ({ page }, testInfo) => {
+for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' : 'successful'} restores do not promote old sessions`, async ({ page }, testInfo) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-recency-')), root = join(dir, 'sessions');
   mkdirSync(root);
   const now = Date.now(), files = [], recent = Array.from({ length: 21 }, (_, i) => `Recent task ${i + 1}`);
@@ -25,7 +25,8 @@ test('recent saved sessions stay above older restored workers through paging and
   writeFileSync(join(dir, 'resume-sessions.json'), JSON.stringify(files.slice(-2).map(sessionKey)));
   const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345' };
   const options = { dir, config, roots: [root], relayUrl: '',
-    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url))] } };
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url)),
+      '--startup-events', ...(fails ? ['--fail-startup'] : [])] } };
   let host;
   try {
     host = await startHost({ ...options, port: 0 });
@@ -44,7 +45,7 @@ test('recent saved sessions stay above older restored workers through paging and
     await expect(page.locator('#sessions .session').first()).toHaveAccessibleName(/^Saved Recent task 1 /);
     await page.locator('#sessions .session').last().scrollIntoViewIfNeeded();
     await expect(rows).toHaveText(titles);
-    await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(/^Ready Older restored task 2 /);
+    await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(new RegExp(`^${fails ? 'Saved' : 'Ready'} Older restored task 2 `));
 
     await host.close();
     await expect(page.locator('#connection')).not.toHaveText('Computer connected');
@@ -60,6 +61,15 @@ test('recent saved sessions stay above older restored workers through paging and
     await page.screenshot({ path: testInfo.outputPath('recent-sessions-desktop.png') });
     await testInfo.attach('recent-sessions', { body: await page.locator('#sessions').ariaSnapshot(), contentType: 'text/plain' });
     expect(files.map(file => readFileSync(file, 'utf8'))).toEqual(saved);
+    if (!fails) {
+      await page.locator('#sessions .session').last().scrollIntoViewIfNeeded();
+      await expect(rows).toHaveText(titles);
+      await page.getByRole('button', { name: /Older restored task 1/ }).click();
+      await page.locator('#prompt').fill('Actual conversation activity');
+      await page.getByRole('button', { name: 'Send message' }).click();
+      await expect(page.locator('#transcript')).toContainText('reply: Actual conversation activity');
+      await expect(rows.first()).toHaveText('Older restored task 1');
+    }
   } finally {
     await host?.close();
     rmSync(dir, { recursive: true, force: true });

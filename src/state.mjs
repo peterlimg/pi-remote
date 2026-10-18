@@ -32,7 +32,11 @@ export function applyEvent(state, event) {
     if (event.method === 'setStatus' && event.statusKey === EXTENSION_INPUT && event.statusText) noteExtensionInput(state, event.statusText);
     return state;
   }
-  state.updatedAt = Date.now(); state.revision++;
+  state.revision++;
+  // Startup and control notifications are not conversation activity.
+  if (['agent_start', 'compaction_start', 'session_before_compact', 'compaction_end', 'session_compact', 'session_compact_failed'].includes(event.type) ||
+    event.type.startsWith('tool_execution_') ||
+    ['message_start', 'message_update', 'message_end'].includes(event.type) && event.message && shown(event.message)) state.updatedAt = Date.now();
   if (event.type === 'model_select') {
     state.model = `${event.model.provider}/${event.model.id}`; state.modelName = event.model.name;
     state.fastMode = false;
