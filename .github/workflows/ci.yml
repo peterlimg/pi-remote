@@ -79,6 +79,9 @@ jobs:
       - run: npm run test:tools
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:notices
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -88,3 +91,4 @@ jobs:
             ${{ runner.temp }}/pi-sdk-malformed-e2e-*/
             ${{ runner.temp }}/pi-sdk-cancel-e2e-*/
             ${{ runner.temp }}/pi-sdk-tools-e2e-*/
+            ${{ runner.temp }}/pi-sdk-notices-e2e-*/

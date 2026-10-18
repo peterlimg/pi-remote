@@ -57,6 +57,16 @@ An already-recorded exact, zero-usage configuration rejection can also continue 
 
 The real mobile check starts with a non-SDK tool selection, switches to Haiku Max before prompting, enables once and launches one fresh SDK child. The child is constrained to zero tools and its actual SDK transcript, model and exit status are checked. Its result was reopened by stable parent-session ID after a navigation-only selector failure, without another prompt or child launch. A no-network preflight of the reported saved chat also passed without modifying it. See [recorded evidence](verification-tools.json). Physical Safari, forked child contexts and asynchronous child completion are not covered by this live check.
 
+## Extension completion notices
+
+Several background child notifications can arrive before Pi starts the next SDK request. Pi presents them as consecutive user inputs. The old bridge treated every input except the last as completed history, then rejected that history because no assistant response followed the earlier notifications. The reported parent turn had completed; this was a local, zero-usage rejection of new input, not a missing child result.
+
+The bridge now separates the entire trailing group of user inputs from historical turns and forwards every text/image block in order. The same grouping applies to tool-set handoffs. Recovery approval still rejects unapproved late input; notices already included in the approved snapshot are covered. A recorded exact zero-work incomplete-history rejection can be retained as local failure data on retry. Unknown SDK errors and unmatched tool calls/results remain blocked; no historical action is replayed and no result is invented.
+
+`npm run test:notices` uses real Pi extension messages and RPC with only the external SDK peer replayed. It covers a live query, first request, worker restart, foreign-provider history, approved recovery, the previous guard failure and a blocked unknown error. The tool-update E2E also covers notices queued at the handoff boundary.
+
+For a live two-child asynchronous check, run `PI_SDK_TEST_ASYNC=1 PI_SDK_TEST_PI=<installed Pi CLI> npm run test:subagents`. The Haiku Medium parent launches two fresh SDK children, receives their automatic completion notices and acknowledges both outputs without another launch. Actual child transcripts must show SDK responses and zero tool calls. The test isolates subagent runtime records under its scratch directory and reopens the parent by stable ID. This live check passed, and a no-network preflight of the reported saved conversation passed without changing it or restarting its subagents. See [recorded evidence](verification-notices.json). Forked children and physical Safari remain unverified.
+
 ## Stop and continue
 
 Stop closes the current native SDK query. The next message now starts a new SDK context in the same Pi chat when the cancelled turn has a recorded Pi result for every tool call. This also works before the first completed checkpoint, after a worker restart, and for an already-recorded zero-work rejection from the old cancellation guard. The saved Pi conversation and previous native transcript stay unchanged. Historical calls are imported only as labeled data, never replayed actions. No extra recovery confirmation is needed for this recorded cancellation path.

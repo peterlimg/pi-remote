@@ -38,7 +38,7 @@ async function send(message) {
 }
 console.log('Evidence: ' + evidence);
 try {
-  for (const mode of process.argv.slice(2).length ? process.argv.slice(2) : ['first', 'checkpoint', 'restart', 'remove', 'stop', 'old-guard', 'permission', 'validation', 'environment', 'instructions', 'missing-result', 'history']) {
+  for (const mode of process.argv.slice(2).length ? process.argv.slice(2) : ['first', 'checkpoint', 'restart', 'remove', 'stop', 'old-guard', 'queued-input', 'permission', 'validation', 'environment', 'instructions', 'missing-result', 'history']) {
     result.stage = mode;
     process.env.PI_RECOVERY_TOOL_CASE = mode;
     process.env.PI_RECOVERY_SESSION = join(evidence, mode + '.jsonl');
@@ -70,7 +70,8 @@ try {
       assert.equal(queries[1].resumed, false); assert.equal(queries[1].resumedAt, false);
       assert.notEqual(queries[0].session, queries[1].session);
       assert(current().some(row => row.type === 'prompt' && row.toolUpdate));
-      if (mode !== 'old-guard') assert(current().some(row => row.type === 'prompt' && row.continuation), 'A live handoff must continue, not repeat the original user command.');
+      if (!['old-guard', 'queued-input'].includes(mode)) assert(current().some(row => row.type === 'prompt' && row.continuation), 'A live handoff must continue, not repeat the original user command.');
+      if (mode === 'queued-input') assert.deepEqual(current().find(row => row.type === 'prompt' && row.toolUpdate).notices, ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']);
       assert(entries().some(row => row.customType === 'claude-sdk-checkpoint'));
       const toolResults = entries().flatMap(row => row.message?.role === 'toolResult' && row.message.toolName === 'extra' ? [row.message] : []);
       assert.equal(toolResults.length, 1); assert.equal(toolResults[0].isError, denied);

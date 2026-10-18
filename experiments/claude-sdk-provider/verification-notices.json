@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-18",
+  "sdkVersion": "0.3.296",
+  "cause": "The parent completed, then three child notices and an extension-triggered user input arrived. The bridge misclassified all but the last new input as historical turns and rejected them before SDK startup.",
+  "red": {
+    "command": "PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node notices.mjs",
+    "error": "Cannot recover SDK history with an incomplete Pi turn.",
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-notices-e2e-nD5RME/result.json"
+  },
+  "green": [
+    { "piVersion": "1.2.0", "cases": 7, "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-notices-e2e-EOgpUA/result.json" },
+    { "piVersion": "1.3.0", "cases": 7, "pass": true, "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-notices-e2e-poGz8N/result.json" }
+  ],
+  "cases": [
+    "Three notices and trigger input on an existing query, with order preserved and no tool replay",
+    "Notice batch before the first SDK response",
+    "Completed checkpoint restored in a fresh worker",
+    "Completed foreign-provider history followed by pending notices",
+    "Notices included in an explicitly approved recovery snapshot",
+    "Retry with the prior exact zero-work local rejection preserved",
+    "Unknown SDK failure still blocks before another SDK query"
+  ],
+  "handoffRegression": {
+    "piVersions": ["1.2.0", "1.3.0"],
+    "queuedInputsAtToolHandoff": true,
+    "pass": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-tools-e2e-2kAKgf/result.json"
+  },
+  "liveAsync": {
+    "command": "PI_SDK_TEST_ASYNC=1 PI_SDK_TEST_PI=<installed Pi 1.3 CLI> node subagents.mjs",
+    "fixture": "Real SDK Haiku Medium parent, two fresh SDK children, real Pi subagents and mobile Chromium; isolated zero-tool child profiles, not normal-agent provider parity",
+    "enableCount": 1,
+    "childLaunchCount": 2,
+    "childProvider": "claude-sdk",
+    "childToolCount": 0,
+    "actualChildSdkTranscriptsVerified": true,
+    "automaticCompletionAcknowledged": true,
+    "callResultIdsMatched": true,
+    "reloadPreservedResult": true,
+    "ownedWorkerClosed": true,
+    "personalSettingsUnchanged": true,
+    "pass": true,
+    "evidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-subagents-tGa1RP/result.json"
+  },
+  "reportedChatPreflight": {
+    "pass": true,
+    "privateCopyProjectedByRealSessionManager": true,
+    "originalChatUnchanged": true,
+    "realSdkRequests": 0,
+    "subagentsRestarted": 0
+  },
+  "safetyRegression": {
+    "piVersion": "1.3.0",
+    "recoveryApprovalAndLateInputGuardsPass": true,
+    "recoveryEvidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-recovery-e2e-7m0eP6/result.json",
+    "malformedToolJsonPass": true,
+    "malformedEvidence": "/var/folders/tq/7wm5dbm117qdyz056rryqv0r0000gn/T/pi-sdk-malformed-e2e-HkH5bK/result.json"
+  },
+  "limits": [
+    "The isolated async check does not establish parity with normal settings and builtin worker profiles; a shared live provider-parity journey is separate",
+    "No full local suite, unit tests, physical Safari or forked-child verification",
+    "No SDK upgrade, authentication or billing configuration changes; no original subagent task replay"
+  ]
+}

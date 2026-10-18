@@ -56,13 +56,15 @@ function replayQuery(args) {
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
       let request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
       const continuation = text.includes('Pi tool-set update.') && request.startsWith('Continue the user request');
-      if (continuation) request = 'dynamic-tools';
+      if (continuation || tools.includes('mcp__pi__extra') && text.includes('Pi tool-set update.') && text.includes('"text":"dynamic-tools"')) request = 'dynamic-tools';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,
         providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"'),
-        cancelled: text.includes('User-cancelled SDK continuation.'), toolUpdate: text.includes('Pi tool-set update.'), continuation });
+        cancelled: text.includes('User-cancelled SDK continuation.'), toolUpdate: text.includes('Pi tool-set update.'), continuation,
+        notices: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].filter(marker => text.includes(marker)),
+        noticeOrder: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].map(marker => text.indexOf(marker)) });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };
       if (piDocs || request === 'billing-rejection') {
         yield { type: 'assistant', uuid: randomUUID(), error: 'unknown', parent_tool_use_id: null,
@@ -181,6 +183,14 @@ export default function (pi) {
   localLogin.resolve = async () => ({ auth: {}, source: 'isolated SDK replay',
     ...(['environment', 'old-guard'].includes(process.env.PI_RECOVERY_TOOL_CASE!) ? { env: { PI_SYNTHETIC_SDK_SCOPE: process.env.PI_RECOVERY_REQUEST_SCOPE ?? 'base' } } : {}) });
   install(pi, replayQuery);
+  const recordNotices = () => {
+    for (const marker of ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']) pi.sendMessage({ customType: 'synthetic-child-notify', content: marker, display: true }, { triggerTurn: false });
+  };
+  pi.registerCommand('sdk-record-notices', { description: 'Record synthetic notices without starting a turn', handler: async () => recordNotices() });
+  pi.registerCommand('sdk-notify', { description: 'Deliver a batch of synthetic child completion notices', handler: async () => {
+    recordNotices();
+    pi.sendUserMessage('Acknowledge all completed child notices. Do not restart work or call tools.');
+  } });
   pi.on('before_agent_start', event => {
     event.systemPromptOptions.promptGuidelines.push('PORTABLE_GUIDELINE');
     event.systemPromptOptions.toolGuidelines.probe = ['PORTABLE_TOOL_GUIDE'];
@@ -210,6 +220,9 @@ export default function (pi) {
         pi.setActiveTools([...pi.getActiveTools(), 'extra']);
         log({ type: 'selection', active: pi.getActiveTools(), available: pi.getAllTools().map(tool => tool.name) });
         if (['environment', 'old-guard'].includes(process.env.PI_RECOVERY_TOOL_CASE!)) process.env.PI_RECOVERY_REQUEST_SCOPE = 'changed';
+        if (process.env.PI_RECOVERY_TOOL_CASE === 'queued-input') {
+          for (const marker of ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']) pi.sendMessage({ customType: 'synthetic-child-notify', content: marker, display: true }, { triggerTurn: false });
+        }
       }
       if (label === 'orphan') while (!existsSync(process.env.PI_RECOVERY_GATE!)) await delay(20, undefined, { signal });
       if (label === 'cancel-running') await delay(30000, undefined, { signal });
