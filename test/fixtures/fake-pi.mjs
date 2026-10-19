@@ -1,7 +1,7 @@
 import { JsonLines } from '../../src/rpc.mjs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 const out = value => process.stdout.write(JSON.stringify(value) + '\n');
 const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
@@ -10,7 +10,7 @@ const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.j
 if (fresh) mkdirSync(dir, { recursive: true });
 if (process.argv.includes('--startup-pid')) writeFileSync(process.argv[process.argv.indexOf('--startup-pid') + 1], String(process.pid));
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
-let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp;
+let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp, retryTimer;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
   title: `Provider usage\n${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
@@ -62,6 +62,11 @@ const parser = new JsonLines(command => {
       clearInterval(timer); out({ id: command.id, type: 'response', success: true, data });
     }, 20);
   } else out({ id: command.id, type: 'response', success: true, data });
+  if (command.type === 'abort' && retryTimer) {
+    clearInterval(retryTimer); retryTimer = undefined;
+    out({ type: 'auto_retry_end', success: false, attempt: 1, finalError: 'Retry cancelled' });
+    out({ type: 'agent_settled', aborted: true });
+  }
   if (command.type === 'abort' && waitingTimestamp) {
     out({ type: 'message_end', message: { role: 'assistant', timestamp: waitingTimestamp, content: [], stopReason: 'aborted' } });
     out({ type: 'agent_end' }); waitingTimestamp = undefined;
@@ -131,6 +136,32 @@ const parser = new JsonLines(command => {
       }, 4000);
       return;
     }
+    if (command.message === 'retry reply') {
+      const file = process.argv[process.argv.indexOf('--session') + 1], timestamp = Date.now();
+      const rows = readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+      const record = entry => {
+        const row = { id: randomUUID(), parentId: rows.at(-1)?.id, ...entry };
+        rows.push(row); appendFileSync(file, JSON.stringify(row) + '\n'); return row;
+      };
+      const message = value => { const row = record({ type: 'message', message: value }); out({ type: 'message_end', message: value }); return row; };
+      message({ role: 'user', timestamp, content: command.message });
+      const failure = message({ role: 'assistant', timestamp: timestamp + 1, content: [], stopReason: 'error', errorMessage: 'Private retry diagnostics' });
+      out({ type: 'agent_end', willRetry: true });
+      out({ type: 'auto_retry_start', attempt: 1, maxAttempts: 1, delayMs: 1000, errorMessage: 'Private retry diagnostics' });
+      record({ type: 'context_edit', targetId: failure.id, replacement: null });
+      retryTimer = setInterval(() => {
+        const gate = join(process.cwd(), 'retry-result.json');
+        if (!existsSync(gate)) return;
+        clearInterval(retryTimer); retryTimer = undefined;
+        const { success } = JSON.parse(readFileSync(gate, 'utf8'));
+        out({ type: 'agent_start' });
+        message({ role: 'assistant', timestamp: timestamp + 2, content: success ? 'Recovered reply.' : [],
+          stopReason: success ? 'stop' : 'error', ...(!success && { errorMessage: 'Private final retry diagnostics' }) });
+        out({ type: 'auto_retry_end', success, attempt: 1 });
+        out({ type: 'agent_end' }); out({ type: 'agent_settled', aborted: false });
+      }, 20);
+      return;
+    }
     if (command.message === 'wait for model') {
       waitingTimestamp = Date.now();
       out({ type: 'message_end', message: { role: 'user', timestamp: waitingTimestamp - 1, content: command.message } });
@@ -145,7 +176,7 @@ const parser = new JsonLines(command => {
       out({ type: 'message_end', message: { role: 'assistant', timestamp: timestamp + 1,
         content: command.message.startsWith('partial') ? [{ type: 'text', text: 'Partial reply.' }] : [],
         stopReason: 'error', errorMessage: 'WebSocket error', durationMs: 93343 } });
-      out({ type: 'agent_end' });
+      out({ type: 'agent_end' }); out({ type: 'agent_settled', aborted: false });
       return;
     }
     if (command.message === 'ask') out({ type: 'extension_ui_request', id: 'dialog-1', method: 'confirm', title: 'Proceed?' });

@@ -14,7 +14,7 @@ export function refreshStatus(state, session) {
   if (session && !session.lifecycle) status = session.socket ? state.status : 'disconnected';
   else if (session && !session.worker) status = 'saved';
   else if (state.dialog || prompting.has(state)) status = 'waiting';
-  else if (running.get(state) || state.compacting) status = 'working';
+  else if (running.get(state) || state.compacting || state.pendingReply || state.retrying) status = 'working';
   else status = session?.lifecycle.snapshot.phase === 'starting' ? 'starting' : 'idle';
   state.status = status;
   return state;
@@ -62,7 +62,13 @@ export function applyEvent(state, event) {
   }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
   if (event.type === 'agent_start') running.set(state, true);
-  if (event.type === 'agent_settled') state.compacting = false;
+  if (event.type === 'auto_retry_start') {
+    const failed = state.messages.findLast(message => message.role === 'assistant');
+    if (failed?.stopReason === 'error') failed.retryAttempt = true;
+    state.retrying = true; state.pendingReply = undefined;
+  }
+  if (event.type === 'auto_retry_end') state.retrying = false;
+  if (event.type === 'agent_settled') { state.compacting = false; state.retrying = false; state.pendingReply = undefined; }
   if (event.type === 'agent_end' || event.type === 'agent_settled') running.set(state, false);
   if (['compaction_start', 'session_before_compact'].includes(event.type)) state.compacting = true;
   if (['compaction_end', 'session_compact', 'session_compact_failed'].includes(event.type)) state.compacting = false;
@@ -71,6 +77,11 @@ export function applyEvent(state, event) {
   if (['message_start', 'message_update', 'message_end'].includes(event.type) && event.message && shown(event.message)) {
     const m = event.message;
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');
+    if (m.role === 'user') { state.pendingReply = undefined; state.retrying = false; }
+    if (m.role === 'assistant' && event.type === 'message_end') {
+      state.pendingReply = m.stopReason === 'error' ? key : undefined;
+      if (m.stopReason !== 'error') state.retrying = false;
+    }
     const item = cleanMessage(m, key);
     if (!tasks.has(state)) tasks.set(state, {});
     noteTaskTiming(item, tasks.get(state));

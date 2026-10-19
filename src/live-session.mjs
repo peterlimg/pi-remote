@@ -77,6 +77,7 @@ export class WorkerSession extends LiveSession {
     worker.once('exit', () => {
       this.advance({ type: 'worker_exit' });
       this.lock?.release(); this.worker = undefined; this.state.dialog = undefined; this.state.compacting = false;
+      this.state.retrying = false; this.state.pendingReply = undefined;
       if (this.state.id) this.onExit(this);
       this.notify();
     });

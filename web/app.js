@@ -1,4 +1,4 @@
-import { patchState, loadedSkill, sessionTitle, taskText } from './protocol.js';
+import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
@@ -1036,6 +1036,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   loading?.setAttribute('role', 'status');
   if (loading) fragment.append(loading);
   if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
+  const { recovered } = replyAttempts(state, messages);
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
@@ -1054,7 +1055,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       continue;
     }
     const skill = loadedSkill({ ...message, text: userMessageText(message) });
-    const failed = message.role === 'assistant' && message.stopReason === 'error';
+    const failed = message.role === 'assistant' && message.stopReason === 'error' && !recovered.has(message.id)
+      && !(state.pendingReply && [message.id, message.liveId].includes(state.pendingReply));
     if (message.text || message.images?.length || message.role === 'user' || failed) {
       activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
@@ -1091,10 +1093,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         article.append(copy);
       }
       if (failed) {
-        const error = el('p', 'Reply failed. You can send another message.', 'message-error');
+        const error = el('p', 'Reply failed. Try again.', 'message-error');
         error.setAttribute('role', 'alert'); article.append(error);
       }
-      if (message.role === 'assistant' && !failed && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
+      if (message.role === 'assistant' && message.stopReason !== 'error' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
         const phrases = ['Tinkered for', 'Chipped away for', 'Puzzled over it for', 'Plugged away for', 'Kept at it for'];
         let hash = 0;
         // Timestamps keep the wording stable even when saved history uses different message IDs.
@@ -1185,7 +1187,8 @@ function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
   const active = connected && !historyWindow && state?.status === 'working', compacting = state?.compacting === true;
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || now >= activityLabelAt)) {
+  const retrying = state ? replyAttempts(state).retrying : false;
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
       'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
@@ -1193,17 +1196,17 @@ function updateActivity() {
       'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
       'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
       .filter(text => text !== label.textContent);
-    label.textContent = compacting ? 'Compacting conversation…' : labels[Math.floor(Math.random() * labels.length)];
-    const announcement = compacting ? 'Compacting conversation…' : 'Working…', status = activity.querySelector('.sr-only');
+    label.textContent = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : labels[Math.floor(Math.random() * labels.length)];
+    const announcement = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : 'Working…', status = activity.querySelector('.sr-only');
     if (status.textContent !== announcement) status.textContent = announcement;
     activityLabelAt = now + 8000;
-    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting);
+    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting); activity.dataset.retrying = String(retrying);
   }
   activity.hidden = !active;
   if (!active) return;
   const message = state.messages?.findLast(message => message.role === 'assistant');
   const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, now - message.timestamp) : 0;
-  const showTime = !compacting && elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
+  const showTime = !compacting && !retrying && elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
     && !state.tools?.some(tool => tool.status === 'working');
   time.hidden = !showTime;
   time.textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';

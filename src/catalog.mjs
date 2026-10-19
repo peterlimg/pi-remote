@@ -63,14 +63,18 @@ export function noteTaskTiming(message, task) {
     message.taskDurationMs = Math.max(0, message.timestamp + message.durationMs - task.startedAt);
   }
 }
+export function omittedMessages(entries) {
+  return new Map(entries.filter(entry => entry.type === 'context_edit').map(entry => [entry.targetId, entry.replacement === null]));
+}
 export function branchMessages(branch, key) {
-  const pending = [], task = {};
+  const pending = [], task = {}, omitted = omittedMessages(branch);
   return branch.flatMap(entry => {
     if (entry.type === 'custom' && entry.customType === EXTENSION_INPUT) pending.push(entry.data?.text);
     const message = entry.type === 'custom_message' ? { role: 'custom', content: entry.content, display: entry.display,
       timestamp: Date.parse(entry.timestamp) } : entry.type === 'message' ? entry.message : undefined;
     if (!message || !shown(message)) return [];
     const item = cleanMessage(message, key({ ...entry, message }));
+    if (item.role === 'assistant' && item.stopReason === 'error' && omitted.get(entry.id)) item.retryAttempt = true;
     if (item.role === 'user' && takeText(pending, item.text)) item.source = 'extension';
     noteTaskTiming(item, task);
     return [item];

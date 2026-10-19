@@ -30,6 +30,25 @@ export function sessionTitle(title, messages = []) {
   return line ? (line.length > 80 ? line.slice(0, 79) + '…' : line) : title || 'Untitled session';
 }
 
+// Older terminal bridges lack retry metadata; a completed reply in the same turn resolves its failed attempts.
+export function replyAttempts(state, messages = state.messages || []) {
+  const recovered = new Set(); let current = [];
+  for (const message of messages) {
+    if (message.retryAttempt) recovered.add(message.id);
+    if (message.role === 'user') current = [];
+    else if (message.role === 'assistant') {
+      if (message.stopReason === 'error') current.push(message.id);
+      else if (['stop', 'length', 'toolUse'].includes(message.stopReason)) {
+        for (const id of current) recovered.add(id);
+        current = [];
+      }
+    }
+  }
+  const retrying = state.retrying === true || !state.pendingReply && state.status === 'working' && current.length > 0;
+  if (retrying) for (const id of current) recovered.add(id);
+  return { recovered, retrying };
+}
+
 // Live events predate their JSONL entry IDs; history uses this alias only at the live boundary.
 export const messageKey = message => `${message.role}:${message.timestamp ?? message.id}:${message.toolCallId || ''}`;
 

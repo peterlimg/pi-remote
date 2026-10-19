@@ -299,6 +299,18 @@ test('actual extension registers, reattaches after host restart and releases own
   sessionName = 'My manual task title';
   await emit('agent_start', { type: 'agent_start' });
   await until(() => host.service.list().sessions[0].title === 'My manual task title');
+  const retryTimestamp = Date.now(), failedReply = { role: 'assistant', timestamp: retryTimestamp, content: [], stopReason: 'error', errorMessage: 'Private network error' };
+  branch.push({ type: 'message', id: 'bridge-failed-reply', message: failedReply });
+  await emit('message_end', { type: 'message_end', message: failedReply });
+  await emit('agent_end', { type: 'agent_end' });
+  branch.push({ type: 'context_edit', targetId: 'bridge-failed-reply', replacement: null });
+  await until(() => host.service.read(id).retrying === true);
+  assert.equal(host.service.read(id).status, 'working');
+  assert.equal(host.service.read(id).messages.at(-1).retryAttempt, true);
+  await emit('agent_start', { type: 'agent_start' });
+  await emit('message_end', { type: 'message_end', message: { role: 'assistant', timestamp: retryTimestamp + 1, content: 'Recovered terminal reply', stopReason: 'stop' } });
+  await emit('agent_end', { type: 'agent_end' }); await emit('agent_settled', { type: 'agent_settled' });
+  await until(() => host.service.read(id).status === 'idle' && host.service.read(id).retrying === false);
   await host.close();
   host = await startHost({ dir, config, roots: [] });
   await until(() => host.service.live.has(id));

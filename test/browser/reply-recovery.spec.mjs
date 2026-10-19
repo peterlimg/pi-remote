@@ -27,7 +27,7 @@ test('failed replies, recovered workers and long model waits have honest feedbac
   try {
     await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
     await page.getByRole('button', { name: /Reply recovery/ }).click();
-    const failure = 'Reply failed. You can send another message.';
+    const failure = 'Reply failed. Try again.';
     await expect(page.locator('.message-error')).toHaveText(failure);
     await expect(page.locator('#transcript')).not.toContainText('Private provider diagnostics');
     await page.locator('#resume').click();

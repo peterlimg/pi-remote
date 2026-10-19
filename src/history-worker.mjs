@@ -2,7 +2,7 @@ import { parentPort } from 'node:worker_threads';
 import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
+import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, omittedMessages, EXTENSION_INPUT } from './catalog.mjs';
 import { messageKey, sessionTitle, unnamed } from '../web/protocol.js';
 import { splitVideoMessage } from '../web/videos.js';
 import { validateImages } from '../web/images.js';
@@ -18,6 +18,7 @@ function addEntry(index, entry, offset, length) {
   const message = entry.type === 'custom_message' ? { role: 'custom', display: entry.display, content: entry.content, timestamp: Date.parse(entry.timestamp) }
     : entry.type === 'message' ? entry.message : undefined;
   const node = { id: entry.id, parentId: entry.parentId, type: entry.type, offset, length,
+    ...(entry.type === 'context_edit' ? { targetId: entry.targetId, replacement: entry.replacement === null ? null : false } : {}),
     ...(message && shown(message) ? { role: message.role, timestamp: message.timestamp, toolCallId: message.toolCallId,
       stopReason: message.stopReason, durationMs: message.durationMs,
       hasImages: Array.isArray(message.content) && message.content.some(part => part.type === 'image'),
@@ -74,11 +75,12 @@ function getBranch(index, tips) {
     visited.add(node.id); entries.push(node);
   }
   entries.reverse();
-  const rows = [], positions = new Map(), pending = [], task = {};
+  const rows = [], positions = new Map(), pending = [], task = {}, omitted = omittedMessages(entries);
   for (const entry of entries) {
     if (entry.inputHash) pending.push(entry.inputHash);
     if (!entry.role) continue;
     const row = { ...entry };
+    if (row.role === 'assistant' && row.stopReason === 'error' && omitted.get(row.id)) row.retryAttempt = true;
     if (row.role === 'user' && takeText(pending, row.userHash)) row.source = 'extension';
     noteTaskTiming(row, task);
     positions.set(row.id, rows.length); rows.push(row);
@@ -101,7 +103,7 @@ async function readMessage(handle, row) {
   const entry = await readEntry(handle, row);
   const [message] = branchMessages([entry], item => item.id);
   return { ...message, liveId: messageKey(row), source: row.source,
-    taskStartedAt: row.taskStartedAt, taskDurationMs: row.taskDurationMs };
+    taskStartedAt: row.taskStartedAt, taskDurationMs: row.taskDurationMs, ...(row.retryAttempt ? { retryAttempt: true } : {}) };
 }
 async function run({ op, file, before, after, tips, expectedTip, imageId, messageId, path }) {
   const index = await getIndex(file), branch = getBranch(index, tips);

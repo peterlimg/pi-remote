@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
-import { branchMessages, lastPromptTime, EXTENSION_INPUT } from '../src/catalog.mjs';
+import { branchMessages, lastPromptTime, omittedMessages, EXTENSION_INPUT } from '../src/catalog.mjs';
 import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
@@ -39,6 +39,13 @@ export default function remoteExtension(pi: any) {
     flush = setTimeout(() => {
       flush = undefined;
       if (state && enabled && !stopped) {
+        // Terminal extensions lack retry events; Pi's durable omission identifies the retry attempt.
+        const failed = state.messages.find((message: any) => message.id === state.pendingReply);
+        if (failed) {
+          const branch = ctx.sessionManager.getBranch();
+          const entry = branch.findLast((row: any) => row.type === 'message' && row.message.role === 'assistant' && row.message.timestamp === failed.timestamp);
+          if (entry && omittedMessages(branch).get(entry.id)) applyEvent(state, { type: 'auto_retry_start' });
+        }
         state.contextUsage = ctx.getContextUsage?.();
         send(socket || {}, { type: 'snapshot', state });
       }
