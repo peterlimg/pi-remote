@@ -27,7 +27,7 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
     const lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
     const agent = await socket(base + '/bridge', config.bridgeToken); sockets.push(agent.ws);
     agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state: { id, file, instanceId, cwd: dir, title, status: 'working', messages: [], tools: [], revision: 0, updatedAt: Date.now() } }));
-    agents.push({ ...agent, id });
+    agents.push({ ...agent, id, owner: lock.owner });
   }
   await until(() => host.service.live.size === 2);
   assert.equal((await client.request('watch', { sessionId: agents[0].id })).ok, true);
@@ -51,6 +51,13 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   const ready = await until(() => reconnected.messages.find(x => x.type === 'ready'));
   assert.equal(ready.supportsCommandResults, true);
   const receipt = reconnected.request('commandResult', { sessionId: agents[1].id, requestId });
+  // Re-registration must keep this socket's in-flight acknowledgement; another terminal cannot claim it.
+  agents[1].ws.send(JSON.stringify({ type: 'register', owner: agents[1].owner, state: { ...host.service.read(agents[1].id), revision: 1 } }));
+  await until(() => host.service.read(agents[1].id).revision === 1);
+  agents[0].ws.send(JSON.stringify({ type: 'result', id: command.id, ok: true, value: { accepted: false } }));
+  agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: { ...host.service.read(agents[0].id), revision: 2 } }));
+  await until(() => host.service.read(agents[0].id).revision === 2);
+  assert.equal(client.messages.some(x => x.type === 'response' && x.id === requestId), false);
   agents[1].ws.send(JSON.stringify({ type: 'result', id: command.id, ok: true, value: { accepted: true } }));
   assert.deepEqual((await receipt).value, { ok: true, value: { accepted: true } });
   const missing = await reconnected.request('commandResult', { sessionId: agents[1].id, requestId: 'never-sent' });
@@ -59,7 +66,10 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   client.ws.send(JSON.stringify(packet));
   await until(() => client.messages.filter(x => x.id === requestId && x.type === 'response').length === 2);
   assert.equal(agents[1].messages.filter(x => x.type === 'command').length, 1);
+  const lost = client.request('command', { sessionId: agents[0].id, command: { type: 'prompt', text: 'disconnect before acknowledgement' } });
+  await until(() => agents[0].messages.find(x => x.type === 'command'));
   agents[0].ws.close();
+  assert.match((await lost).value.error, /disconnected; delivery outcome may be unknown/);
   await until(() => host.service.read(agents[0].id).status === 'disconnected');
   const response = await client.request('command', { sessionId: agents[0].id, command: { type: 'abort' } });
   assert.equal(response.value.ok, false);
@@ -74,6 +84,12 @@ test('two live sessions stay independent; history, ownership, dedup and disconne
   assert.match(await staticPage.text(), /<title>Pi Remote<\/title>/);
   const cached = await fetch('http://127.0.0.1:' + port + '/', { headers: { 'If-None-Match': staticPage.headers.get('etag') } });
   assert.equal(cached.status, 304);
+  const timeoutId = randomUUID(), timedOut = host.service.command(agents[1].id, timeoutId, { type: 'prompt', text: 'no acknowledgement' });
+  await until(() => agents[1].messages.find(x => x.type === 'command' && x.requestId === timeoutId));
+  const outcome = await timedOut;
+  assert.equal(outcome.ok, false);
+  assert.match(outcome.error, /acknowledgement timed out; delivery may have occurred/);
+  assert.deepEqual((await reconnected.request('commandResult', { sessionId: agents[1].id, requestId: timeoutId })).value, outcome);
 });
 
 test('session pages and search stay bounded on initial load, updates and reconnect', async t => {
@@ -96,7 +112,7 @@ test('session pages and search stay bounded on initial load, updates and reconne
   assert.equal(initial.total, 675);
   assert.equal(initial.matched, 675);
   assert.equal(initial.offset, 0);
-  assert.deepEqual(initial.sessions.slice(0, 3).map(x => x.id), ['2', '1', '0']);
+  assert.deepEqual(initial.sessions.slice(0, 3).map(x => x.id), ['674', '673', '672']);
   const second = (await client.request('list', { offset: 20 })).value;
   assert.equal(second.sessions.length, 20);
   assert.equal(second.offset, 20);
@@ -109,7 +125,7 @@ test('session pages and search stay bounded on initial load, updates and reconne
   assert.equal(window.reset, true); assert.equal(window.changes.length, 40); assert.equal(window.matched, 675);
   const more = (await client.request('list', { limit: 60 })).value;
   assert.equal(more.reset, false); assert.deepEqual(more.removed, []);
-  assert.deepEqual(more.changes.map(x => x.id), Array.from({ length: 20 }, (_, i) => String(637 - i)));
+  assert.deepEqual(more.changes.map(x => x.id), Array.from({ length: 20 }, (_, i) => String(634 - i)));
   const pushes = () => client.messages.filter(x => x.type === 'sessions' && x.changes);
   host.service.catalog.get('650').title = 'Renamed';
   host.service.emit('list');
@@ -121,7 +137,7 @@ test('session pages and search stay bounded on initial load, updates and reconne
   host.service.catalog.get('651').updatedAt = -1; // Sinks out of the window; the next row moves in.
   host.service.emit('list');
   await until(() => pushes().length === 2);
-  assert.deepEqual(pushes()[1].removed, ['651']); assert.deepEqual(pushes()[1].changes.map(x => x.id), ['617']);
+  assert.deepEqual(pushes()[1].removed, ['651']); assert.deepEqual(pushes()[1].changes.map(x => x.id), ['614']);
   const search = (await client.request('list', { query: ' NEEDLE ' })).value;
   assert.equal(search.total, 675); assert.equal(search.matched, 1);
   assert.deepEqual(search.sessions.map(x => x.id), ['674']);

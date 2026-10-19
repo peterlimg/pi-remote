@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { SessionService } from '../../src/service.mjs';
+import { BridgeSession } from '../../src/live-session.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
 test('a relay-first upgrade still pages and searches an older host catalog', async ({ page }) => {
@@ -27,7 +28,7 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
     status: 'saved', updatedAt: 45 - i, messages: [] }));
   const service = Object.assign(Object.create(SessionService.prototype),
     { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
-  states[0].status = 'idle'; service.live.set('0', { state: states[0], socket: {} });
+  states[0].status = 'idle'; service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
   let client, scroll, hold = false;
   const requests = [], replies = [];
   await page.routeWebSocket('**/ws', ws => {
@@ -56,7 +57,7 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
   // The selected session can disconnect while the list is grown.
-  states[0].status = 'disconnected'; service.live.get('0').socket = undefined;
+  service.live.get('0').disconnected();
   client.send(JSON.stringify({ type: 'snapshot', sessionId: '0', version: 1, state: states[0] }));
   await expect(page.locator('#resume')).toBeEnabled();
   client.close({ code: 1012, reason: 'Reconnect test' });

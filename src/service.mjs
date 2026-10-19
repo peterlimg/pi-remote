@@ -4,15 +4,12 @@ import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
-import { initialState, applyEvent, summary } from './state.mjs';
-import { sessionTitle } from './session-title.mjs';
+import { summary } from './state.mjs';
 import { unnamed } from '../web/protocol.js';
-import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
+import { sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
-import { RpcWorker } from './rpc.mjs';
-import { send } from './config.mjs';
 import { HistoryReader } from './history.mjs';
-import { createSessionLifecycle } from './session-lifecycle.mjs';
+import { WorkerSession, BridgeSession } from './live-session.mjs';
 
 function inside(file, dir) {
   const rel = relative(canonical(dir), canonical(file));
@@ -28,7 +25,7 @@ function isHelperSession(state) {
 export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
-    this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.pending = new Map(); this.starting = new Set();
+    this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.bridges = new WeakMap(); this.starting = new Set();
     this.restoreIds = new Set(); this.restoreWarnings = []; this.restoring = new Set();
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.historyReader = new HistoryReader();
@@ -57,11 +54,7 @@ export class SessionService extends EventEmitter {
         if (!unnamed(value.title)) saved.title = value.title;
         if (this.catalog.get(id) !== saved) return;
         const item = this.live.get(id);
-        if (item && !item.socket && item.state.title !== saved.title && !unnamed(saved.title) &&
-          (item.state.title === liveTitle || unnamed(item.state.title))) {
-          item.state.title = saved.title; item.state.revision++;
-          this.emit('state', id);
-        }
+        if (item && !unnamed(saved.title) && (item.state.title === liveTitle || unnamed(item.state.title))) item.syncTitle(saved.title);
         this.emit('list');
       }, error => {
         if (this.stopping) return;
@@ -71,10 +64,7 @@ export class SessionService extends EventEmitter {
     }
     for (const [id, item] of this.live) {
       const saved = sessions.get(id);
-      if (!item.socket && saved && !saved.historyPending && saved.title !== item.state.title) {
-        item.state.title = saved.title; item.state.revision++;
-        this.emit('state', id);
-      }
+      if (saved && !saved.historyPending) item.syncTitle(saved.title);
     }
     this.emit('list');
   }
@@ -108,7 +98,7 @@ export class SessionService extends EventEmitter {
     if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
-    for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && !item.socket && !item.worker, pinned: this.pins.has(id) });
+    for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && item.resumable, pinned: this.pins.has(id) });
     const visible = [...all.values()].filter(item => includeHelpers || query || !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));
@@ -133,25 +123,16 @@ export class SessionService extends EventEmitter {
     return [...projects.values()];
   }
   read(id) {
-    if (this.live.has(id)) {
-      const live = this.live.get(id).state;
-      const state = { ...live, title: sessionTitle(live.title, live.messages) };
-      // Already-running terminals may still send the old text-only message format.
-      if (!state.messages?.some(message => !message.images && message.text?.includes('[image]'))) return state;
-      try {
-        if (!isInside(state.file, this.roots)) return state;
-        let saved = this.catalog.get(id);
-        if (saved?.updatedAt !== statSync(state.file).mtimeMs) {
-          saved = readSession(state.file); this.catalog.set(id, saved);
-        }
-        return { ...state, messages: state.messages.map(message => {
-          if (message.images || !message.text?.includes('[image]')) return message;
-          const original = saved.messages.find(item => item.id === message.id || (message.timestamp !== undefined &&
-            item.timestamp === message.timestamp && item.role === message.role && item.toolCallId === message.toolCallId));
-          return original?.images ? { ...message, text: original.text, images: original.images } : message;
-        }) };
-      } catch { return state; } // History may not have been flushed yet.
-    }
+    const item = this.live.get(id);
+    if (item) return item.read(() => {
+      const { file } = item.state;
+      if (!isInside(file, this.roots)) return undefined;
+      let saved = this.catalog.get(id);
+      if (saved?.updatedAt !== statSync(file).mtimeMs) {
+        saved = readSession(file); this.catalog.set(id, saved);
+      }
+      return saved;
+    });
     const saved = this.catalog.get(id);
     if (!saved) throw new Error('Session not found');
     if (!isInside(saved.file, this.roots)) throw new Error('Session is outside configured roots');
@@ -188,49 +169,29 @@ export class SessionService extends EventEmitter {
     const disk = JSON.parse(readFileSync(join(this.dir, 'locks', state.id + '.json'), 'utf8'));
     if (disk.nonce !== owner?.nonce || disk.instanceId !== state.instanceId || disk.pid !== owner.pid) throw new Error('Session ownership mismatch');
     const current = this.live.get(state.id);
-    if (current?.worker || (current?.socket && current.socket !== socket)) throw new Error('Session already connected');
+    const bridge = this.bridges.get(socket);
+    if (current && !current.resumable && current !== bridge) throw new Error('Session already connected');
     const lastPromptAt = state.lastPromptAt ?? lastPromptTime(state.messages,
       current?.state.lastPromptAt ?? this.catalog.get(state.id)?.lastPromptAt ?? state.updatedAt);
-    this.live.set(state.id, { state: { ...state, lastPromptAt }, socket, owner });
+    const item = bridge || new BridgeSession({ ...state, lastPromptAt }, socket, owner, id => this.changed(id));
+    this.live.set(state.id, item); this.bridges.set(socket, item);
     socket.sessionId = state.id;
-    this.changed(state.id);
+    item.snapshot({ ...state, lastPromptAt }, owner);
   }
   snapshot(socket, state) {
     if (socket.sessionId !== state?.id) throw new Error('Wrong session snapshot');
-    const item = this.live.get(state.id);
-    if (item?.socket !== socket) throw new Error('Session owner changed');
-    const lastPromptAt = state.lastPromptAt ?? lastPromptTime(state.messages, item.state.lastPromptAt);
-    item.state = { ...state, lastPromptAt }; this.changed(state.id);
+    const item = this.bridges.get(socket);
+    if (!item || this.live.get(state.id) !== item) throw new Error('Session owner changed');
+    item.snapshot(state);
   }
   disconnected(socket) {
-    const item = this.live.get(socket.sessionId);
-    if (item?.socket !== socket) return;
-    item.socket = undefined; item.state.status = 'disconnected'; this.changed(socket.sessionId);
-    for (const [id, request] of this.pending) {
-      if (request.socket === socket) { clearTimeout(request.timer); request.reject(new Error('Pi disconnected; delivery outcome may be unknown')); this.pending.delete(id); }
-    }
+    this.bridges.get(socket)?.disconnected(); this.bridges.delete(socket);
   }
-  result(socket, response) {
-    const request = this.pending.get(response.id);
-    if (!request || request.socket !== socket) return;
-    clearTimeout(request.timer); this.pending.delete(response.id);
-    if (response.ok) request.resolve(response.value); else request.reject(new Error(response.error || 'Pi rejected command'));
-  }
+  result(socket, response) { this.bridges.get(socket)?.result(response); }
   changed(id) { this.emit('state', id); this.emit('list'); }
   async command(id, requestId, input) {
     const command = validateCommand(input);
-    return this.journal.execute(id, requestId, command, async () => {
-      const result = await this.dispatch(id, requestId, command);
-      if (command.type === 'setModel' || command.type === 'setThinkingLevel') {
-        const item = this.live.get(id);
-        if (item) {
-          if (command.type === 'setModel') { item.state.model = result.model; item.state.modelName = result.modelName; item.state.contextUsage = undefined; }
-          item.state.thinkingLevel = result.thinkingLevel;
-          item.state.revision++; this.changed(id);
-        }
-      }
-      return result;
-    });
+    return this.journal.execute(id, requestId, command, () => this.dispatch(id, requestId, command));
   }
   async getModels(id) {
     const result = await this.dispatch(id, randomUUID(), { type: 'getModels' });
@@ -245,76 +206,28 @@ export class SessionService extends EventEmitter {
     if (includeProvider && item?.state.dialog) throw new Error('Close the active dialog before checking usage.');
     const result = await this.dispatch(id, randomUUID(), { type: 'getUsage', includeProvider });
     if (this.live.get(id) === item && item.state.model === model) {
-      item.state.contextUsage = result.contextUsage;
-      item.state.revision++; this.changed(id);
+      item.update({ contextUsage: result.contextUsage });
     }
     return { ...result, model };
   }
   async dispatch(id, requestId, command) {
     if (this.stopping) throw new Error('Pi Remote is stopping');
     const item = this.live.get(id);
-    if (item?.worker) {
-      if (['prompt', 'steer', 'followUp'].includes(command.type) && !command.text.trimStart().startsWith('/')) {
-        this.advance(id, item, { type: 'request_started' });
-      }
-      try { return await item.worker.command(command); }
-      catch (error) {
-        try {
-          const state = await item.worker.request('get_state');
-          if (!state.isStreaming) this.advance(id, item, { type: 'request_rejected' });
-        } catch { /* A worker exit owns the final lifecycle transition. */ }
-        throw error;
-      }
-    }
-    if (!item?.socket || item.socket.readyState !== 1) throw new Error('Session is not connected. Resume a saved session first.');
-    if (command.images?.length && !item.state.supportsImages) throw new Error('Restart this Pi terminal to enable image uploads.');
-    const responseId = randomUUID();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(responseId); reject(new Error('Pi acknowledgement timed out; delivery may have occurred'));
-      }, 30000);
-      this.pending.set(responseId, { socket: item.socket, resolve, reject, timer });
-      send(item.socket, { type: 'command', id: responseId, sessionId: id, requestId, command });
-    });
+    if (!item) throw new Error('Session is not connected. Resume a saved session first.');
+    return item.command(command, requestId);
   }
   get managedSessions() {
-    return [...this.live].filter(([, item]) => item.worker).map(([id, item]) => ({ id, ...item.lifecycle.snapshot,
-      requests: item.worker.pending.size, restartSafe: item.lifecycle.snapshot.restartSafe && !item.worker.pending.size }));
+    return [...this.live.values()].map(item => item.managed).filter(Boolean);
   }
   get busyWorkers() {
     const busy = new Set(this.restoring);
-    for (const [id, item] of this.live) if (item.worker && (!item.lifecycle.snapshot.restartSafe || item.worker.pending.size)) busy.add(id);
+    for (const item of this.managedSessions) if (!item.restartSafe) busy.add(item.id);
     return this.starting.size + busy.size;
   }
-  advance(id, item, event) {
-    const before = item.lifecycle.snapshot, after = item.lifecycle.send(event);
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      this.emit('lifecycle', { id, event: event.type, from: before.phase, to: after.phase,
-        pendingTools: after.pendingTools, waitFor: after.waitFor, blocked: after.blocked, restartSafe: after.restartSafe });
-    }
-    return after;
-  }
-  trackWorker(id, item, discardEmpty = false) {
-    const { worker, lock } = item;
-    worker.on('event', event => {
-      this.advance(id, item, event);
-      if (event.type === 'extension_ui_request') {
-        if (['select', 'confirm', 'input', 'editor'].includes(event.method)) {
-          item.state.dialog = event; item.state.status = 'waiting';
-        }
-      }
-      applyEvent(item.state, event);
-      if (item.state.dialog) item.state.status = 'waiting';
-      this.changed(id);
-    });
-    worker.on('fault', error => { item.state.error = error.message; this.changed(id); });
-    worker.once('exit', () => {
-      this.advance(id, item, { type: 'worker_exit' });
-      lock.release(); item.worker = undefined; item.state.dialog = undefined; item.state.compacting = false;
-      this.scan();
-      if (discardEmpty && !this.catalog.has(id)) this.live.delete(id);
-      else item.state.status = 'saved';
-      this.changed(id);
+  workerSession(meta, options, discardEmpty = false) {
+    return new WorkerSession(meta, {
+      dir: this.dir, workerOptions: options, changed: id => this.changed(id), lifecycle: event => this.emit('lifecycle', event),
+      exited: id => { this.scan(); if (discardEmpty && !this.catalog.has(id)) this.live.delete(id); },
     });
   }
   async newSession(id, requestId) {
@@ -324,7 +237,7 @@ export class SessionService extends EventEmitter {
       const source = this.read(id);
       if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
       // A saved source starts a host-owned worker, the same as resuming it would.
-      if (!this.live.get(id)?.socket && !this.live.get(id)?.worker) {
+      if (this.live.get(id)?.resumable ?? true) {
         if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
         if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory no longer exists');
       }
@@ -351,28 +264,20 @@ export class SessionService extends EventEmitter {
   }
   async startFresh(cwd, sessionDir) {
     if (this.stopping) throw new Error('Pi Remote is stopping');
-    const worker = new RpcWorker(undefined, cwd, { ...this.workerOptions, sessionDir });
-    const startup = { worker, lifecycle: createSessionLifecycle() };
-    this.starting.add(startup);
-    let lock;
+    const item = this.workerSession({ cwd }, { ...this.workerOptions, sessionDir }, true);
+    this.starting.add(item);
     try {
-      const info = await worker.request('get_state');
+      const info = await item.inspect();
       if (this.stopping) throw new Error('Pi Remote is stopping');
       if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
-      const path = canonical(info.sessionFile);
-      if (!inside(path, sessionDir)) throw new Error('New session is outside configured roots');
-      const nextId = sessionKey(path);
-      lock = acquireSessionLock(join(this.dir, 'locks'), nextId, { file: path, kind: 'rpc' });
-      if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-      const item = { worker, lock, lifecycle: startup.lifecycle, state: initialState({ id: nextId, file: path, cwd, piSessionId: info.sessionId,
-        model: info.model ? `${info.model.provider}/${info.model.id}` : undefined, modelName: info.model?.name, thinkingLevel: info.thinkingLevel,
-        compacting: !!info.isCompacting }) };
-      this.advance(nextId, item, { type: 'restore', provider: info.model?.provider, streaming: !!info.isStreaming || !!info.isCompacting });
-      item.state.status = info.isStreaming || info.isCompacting ? 'working' : 'idle'; this.live.set(nextId, item); this.changed(nextId);
-      this.trackWorker(nextId, item, true);
-      return { sessionId: nextId };
-    } catch (e) { await worker.close(); lock?.release(); throw e; }
-    finally { this.starting.delete(startup); }
+      const file = canonical(info.sessionFile);
+      if (!inside(file, sessionDir)) throw new Error('New session is outside configured roots');
+      const id = sessionKey(file);
+      item.attach({ id, file, cwd, piSessionId: info.sessionId }, info);
+      this.live.set(id, item); item.notify();
+      return { sessionId: id };
+    } catch (e) { await item.close(); throw e; }
+    finally { this.starting.delete(item); }
   }
   async resume(id, requestId) {
     requestKey(requestId);
@@ -384,60 +289,32 @@ export class SessionService extends EventEmitter {
   async startWorker(id) {
     if (this.stopping) throw new Error('Pi Remote is stopping');
     const current = this.live.get(id);
-    if (current?.socket || current?.worker) return { attached: true };
+    if (current && !current.resumable) return { attached: true };
     const saved = this.catalog.get(id);
     if (!saved || !isInside(saved.file, this.roots)) throw new Error('Saved session not found in configured roots');
     const actual = await this.view(id);
     if (this.stopping) throw new Error('Pi Remote is stopping');
     if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
-    const lock = acquireSessionLock(join(this.dir, 'locks'), id, { file: actual.file, kind: 'rpc' });
-    let worker;
-    try { worker = new RpcWorker(actual.file, actual.cwd, this.workerOptions); }
-    catch (e) { lock.release(); throw e; }
-    if (worker.process.pid) lock.setWorkerPid(worker.process.pid);
-    const item = { worker, lock, lifecycle: createSessionLifecycle(), state: initialState(actual, actual.messages) };
-    item.state.status = 'starting'; this.live.set(id, item); this.changed(id);
-    this.trackWorker(id, item);
+    const item = this.workerSession(actual, this.workerOptions);
+    this.live.set(id, item); item.notify();
     try {
-      const rpcState = await worker.request('get_state');
+      const rpcState = await item.inspect();
       // The saved branch already has image references; get_messages duplicates all base64 over RPC.
       let history = readSession(actual.file);
       if (history.historyPending) {
         const page = await this.history(id, {});
         history = { ...history, messages: page.messages, historyTruncated: page.older };
       }
-      item.state.messages = history.messages;
-      item.state.historyTruncated = history.historyTruncated;
-      item.state.model = rpcState?.model ? `${rpcState.model.provider}/${rpcState.model.id}` : undefined;
-      item.state.modelName = rpcState?.model?.name;
-      item.state.thinkingLevel = rpcState?.thinkingLevel;
-      item.state.compacting = !!rpcState?.isCompacting;
-      this.advance(id, item, { type: 'restore', provider: rpcState?.model?.provider, streaming: !!rpcState?.isStreaming || !!rpcState?.isCompacting });
-      item.state.status = item.state.dialog ? 'waiting' : rpcState?.isStreaming || rpcState?.isCompacting ? 'working' : 'idle';
-      delete item.state.error;
       this.restoreIds.delete(id);
-      this.changed(id); return { resumed: true };
-    } catch (e) { await worker.close(); throw e; }
+      item.restore(rpcState, history);
+      return { resumed: true };
+    } catch (e) { await item.close(); throw e; }
   }
   async answer(id, requestId, answer) {
     return this.journal.execute(id, requestId, { type: 'answer', answer }, async () => {
-      const item = this.live.get(id), dialog = item?.state.dialog;
-      if (!item?.worker || !dialog || answer?.dialogId !== dialog.id) throw new Error('Dialog is no longer active');
-      const response = { type: 'extension_ui_response', id: dialog.id };
-      if (answer.cancelled) response.cancelled = true;
-      else if (dialog.method === 'confirm') {
-        if (typeof answer.confirmed !== 'boolean') throw new Error('Expected confirmation');
-        response.confirmed = answer.confirmed;
-      } else {
-        if (typeof answer.value !== 'string' || answer.value.length > 50000) throw new Error('Invalid answer');
-        if (dialog.method === 'select' && !dialog.options.includes(answer.value)) throw new Error('Invalid option');
-        response.value = answer.value;
-      }
-      this.advance(id, item, { type: 'input_closed' });
-      item.worker.process.stdin.write(JSON.stringify(response) + '\n');
-      item.state.dialog = undefined;
-      item.state.status = item.lifecycle.snapshot.restartSafe ? 'idle' : 'working'; this.changed(id);
-      return { accepted: true };
+      const item = this.live.get(id);
+      if (!item) throw new Error('Dialog is no longer active');
+      return item.answer(answer);
     });
   }
   async close() {
@@ -445,7 +322,7 @@ export class SessionService extends EventEmitter {
     clearInterval(this.timer);
     // Remember only host-owned workers. Terminal bridges reconnect themselves;
     // other saved sessions resume on demand from the phone.
-    const ids = [...new Set([...this.restoreIds, ...[...this.live].filter(([, item]) => item.worker).map(([id]) => id)])];
+    const ids = [...new Set([...this.restoreIds, ...this.managedSessions.map(item => item.id)])];
     if (this.restoreLoaded || this.live.size) {
       const file = join(this.dir, 'resume-sessions.json');
       writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
@@ -453,10 +330,7 @@ export class SessionService extends EventEmitter {
     }
     this.stopping = true;
     await this.historyReader.close();
-    const workers = new Set([...this.live.values(), ...this.starting].filter(item => item.worker).map(item => item.worker));
-    await Promise.all([...workers].map(worker => worker.close()));
-    for (const item of this.live.values()) if (item.socket) item.socket.close();
-    for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('Service stopped')); }
-    this.pending.clear();
+    const sessions = new Set([...this.live.values(), ...this.starting]);
+    await Promise.all([...sessions].map(item => item.close()));
   }
 }

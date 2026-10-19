@@ -92,7 +92,7 @@ test('resume reads large saved branches without an RPC history copy and keeps la
   const state = service.read(id);
   assert.equal(state.status, 'idle');
   assert.deepEqual(state.messages.map(message => message.text), ['preview 0', 'preview 1', 'preview 2', 'preview 3', 'preview 4', 'visible extension message']);
-  for (const message of state.messages) assert.deepEqual(service.getImage(id, message.images[0].id), message.role === 'custom' ? customImage : image);
+  for (const message of state.messages) assert.deepEqual(await service.getImage(id, message.images[0].id), message.role === 'custom' ? customImage : image);
   assert.ok(JSON.stringify(state).length < 10000);
   assert.equal(readFileSync(file, 'utf8'), saved, 'resuming must not alter or strip saved images');
   assert.equal((await service.command(id, randomUUID(), { type: 'prompt', text: 'continue after large history' })).ok, true);

@@ -2,7 +2,15 @@
 
 The phone's `idle` label is presentation, not permission to restart a worker. Pi can emit `agent_end` before queued work settles or the SDK checkpoint is written.
 
-`src/session-lifecycle.mjs` owns restart readiness for host-managed RPC workers. Its interface is `send(event)` and a read-only `snapshot`. It has no filesystem, process, browser, credential, or SDK dependencies. `SessionService` feeds actual RPC events through it and exposes transitions for diagnostics and E2E assertions.
+`src/session-lifecycle.mjs` owns restart readiness for host-managed RPC workers. Its interface is `send(event)` and a read-only `snapshot`. It has no filesystem, process, browser, credential, or SDK dependencies. The worker adapter feeds actual RPC events through it. `SessionService` forwards transitions for diagnostics and E2E assertions.
+
+## Live session seam
+
+`SessionService.live` holds adapters from `src/live-session.mjs`, not transport records. Both provide `state`, `command(command, requestId)`, `answer(answer)`, `close()`, `resumable`, `read(savedHistory)`, and `syncTitle(title)`. Shared `update(changes)` increments the revision and `notify()` sends state/list notifications. The service owns catalog and history reads, admission checks, pins, projects, new/resume/restore orchestration, and the command journal.
+
+`WorkerSession` owns the RPC worker, session lock, dialogs, display-state event updates through the existing `applyEvent` reducer, and lifecycle. Its `managed` snapshot includes outstanding RPC requests in restart readiness. Startup inspection, fresh-session attachment, and history restoration are worker-specific operations used by the service's orchestration.
+
+`BridgeSession` owns the terminal socket, pending acknowledgements, their 30-second deadlines, and disconnect cleanup. It keeps terminal snapshots authoritative while connected and repairs legacy text-only image previews through the service's saved-history reader. Its `managed` snapshot is absent, so terminal sessions never enter the host's worker restore list. The phone and extension protocols are unchanged.
 
 ```mermaid
 stateDiagram-v2

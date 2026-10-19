@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionService } from '../src/service.mjs';
+import { BridgeSession } from '../src/live-session.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
 import { socket, until, testKey } from './helpers.mjs';
 
@@ -74,7 +75,7 @@ test('saved and existing live previews load over the authenticated relay with se
     assert.equal((await client.request('image', options)).ok, false);
   }
   const legacy = { ...saved, status: 'working', messages: [{ id: 'user:1:', role: 'user', timestamp: 1, text: '[image]' }] };
-  service.live.set(saved.id, { state: legacy });
+  service.live.set(saved.id, new BridgeSession(legacy, undefined, undefined, id => service.changed(id)));
   assert.deepEqual(service.read(saved.id).messages[0].images, [reference]);
   assert.equal(service.read(saved.id).messages[0].text, '');
   assert.equal(legacy.messages[0].text, '[image]', 'hydration must not mutate the bridge snapshot');
