@@ -2,6 +2,8 @@
 
 Opt-in Pi provider `claude-sdk` for Haiku 5.5, Sonnet 5.5, and Opus 5.5, tested October 14, 2026. It uses Claude's local login through the official Agent SDK and leaves tool validation, permissions, and execution in Pi. Pi Remote's normal extension manifest does not load this package; enable it separately with the installation command below.
 
+The standalone package is [pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). Its `v0.1.0` runtime matches this directory at `607f786`. This directory remains for current installations and Pi Remote integration tests; the export does not switch an installed provider. Do not load both packages in one Pi session.
+
 ```text
 Pi or Pi Remote
   → Pi session and provider extension
