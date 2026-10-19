@@ -21,6 +21,14 @@ for (const view of [
       await page.evaluate(() => document.fonts.ready);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText('Claude thinks.Pi does the work.');
       await expect(page.locator('figure')).toHaveCount(4);
+      await expect(page.locator('.byline time')).toHaveAttribute('datetime', '2026-10-19');
+      await expect(page.locator('#worker-gap')).toContainText('before either child reached the SDK');
+      await expect(page.locator('#delegate-fix')).toContainText('complete canonical Pi base');
+      await expect(page.locator('#delegate-fix')).toContainText('unchanged suffix of child instructions');
+      await expect(page.locator('#worker-gap')).toContainText('Codex, SDK Haiku and SDK Opus');
+      await expect(page.locator('.worker-figure')).toContainText('Retained resume stops here.');
+      await expect(page.locator('#what-remains')).toContainText('Explicitly forced foreground delegates');
+      await expect(page.locator('a[href$="/verification-inherited.json"]')).toHaveAttribute('href', 'https://github.com/peterlimg/pi-remote/blob/558dfed/experiments/claude-sdk-provider/verification-inherited.json');
       await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
       expect(await page.evaluate(() => document.fonts.check('600 20px Bricolage'))).toBe(true);
       expect(await page.getByRole('heading', { level: 1 }).evaluate(element => getComputedStyle(element).fontFamily)).toContain('Bricolage');
@@ -46,7 +54,7 @@ for (const view of [
         mkdirSync(process.env.PI_GUIDE_EVIDENCE, { recursive: true });
         await page.screenshot({ path: join(process.env.PI_GUIDE_EVIDENCE, view.name + '-top.png') });
         await page.screenshot({ path: join(process.env.PI_GUIDE_EVIDENCE, view.name + '-full.png'), fullPage: true });
-        for (const [name, selector] of [['tools', '.tool-figure'], ['memories', '.memory-figure'], ['branches', '.branch-figure'], ['workers', '.worker-figure']]) {
+        for (const [name, selector] of [['tools', '.tool-figure'], ['memories', '.memory-figure'], ['branches', '.branch-figure'], ['delegates', '#worker-gap'], ['workers', '.worker-figure']]) {
           await page.locator(selector).screenshot({ path: join(process.env.PI_GUIDE_EVIDENCE, view.name + '-' + name + '.png') });
         }
       }
@@ -69,6 +77,8 @@ for (const view of [
       const details = page.getByText('What the verification establishes', { exact: true });
       await details.focus(); await page.keyboard.press('Enter');
       await expect(page.locator('details').filter({ has: details })).toHaveAttribute('open', '');
+      await expect(page.getByRole('row', { name: /Inherited prompt projection/ })).toContainText('10');
+      await expect(page.getByText('Nine selected rows passed', { exact: false })).toBeVisible();
       await expect(page.getByText('No all-green full parity run is recorded.', { exact: false })).toBeVisible();
       expect(sockets).toEqual([]);
       expect(requests.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
