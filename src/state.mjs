@@ -6,7 +6,24 @@ import { taskText } from '../web/protocol.js';
 
 // Whether a run is active, kept off the wire. Terminal dialogs also open while idle.
 const running = new WeakMap();
+const prompting = new WeakSet();
 const tasks = new WeakMap();
+// Presentation only; the lifecycle owns permission to restart a worker.
+export function refreshStatus(state, session) {
+  let status;
+  if (session && !session.lifecycle) status = session.socket ? state.status : 'disconnected';
+  else if (session && !session.worker) status = 'saved';
+  else if (state.dialog || prompting.has(state)) status = 'waiting';
+  else if (running.get(state) || state.compacting) status = 'working';
+  else status = session?.lifecycle.snapshot.phase === 'starting' ? 'starting' : 'idle';
+  state.status = status;
+  return state;
+}
+export function restoreActivity(state, info) {
+  // Live events can precede the startup snapshot.
+  if (!running.has(state)) running.set(state, !!info?.isStreaming);
+  state.compacting = !!info?.isCompacting;
+}
 // Prompts extensions sent whose user message has not arrived yet, also off the wire.
 const extensionInputs = new WeakMap();
 export function noteExtensionInput(state, text) {
@@ -17,11 +34,11 @@ export function noteExtensionInput(state, text) {
 const lastWrite = file => { try { return statSync(file).mtimeMs; } catch { return Date.now(); } };
 export function initialState(meta, messages = []) {
   const updatedAt = meta.file ? lastWrite(meta.file) : Date.now();
-  const state = { ...meta, title: sessionTitle(meta.title, messages), status: 'idle', messages: messages.slice(-100), tools: [], revision: 0,
+  const state = { ...meta, title: sessionTitle(meta.title, messages), messages: messages.slice(-100), tools: [], revision: 0,
     updatedAt, lastPromptAt: lastPromptTime(messages, meta.lastPromptAt ?? updatedAt) };
   const task = {}; tasks.set(state, task);
   for (const message of state.messages) noteTaskTiming(message, task);
-  return state;
+  return refreshStatus(state);
 }
 export function applyEvent(state, event) {
   if (event.type === 'extension_ui_request') {
@@ -32,7 +49,7 @@ export function applyEvent(state, event) {
       state.revision++;
     }
     if (event.method === 'setStatus' && event.statusKey === EXTENSION_INPUT && event.statusText) noteExtensionInput(state, event.statusText);
-    return state;
+    return refreshStatus(state);
   }
   state.revision++;
   // Startup and control notifications are not conversation activity.
@@ -44,15 +61,13 @@ export function applyEvent(state, event) {
     state.fastMode = false;
   }
   if (event.type === 'thinking_level_select' || event.type === 'thinking_level_changed') state.thinkingLevel = event.level;
-  if (event.type === 'agent_start') { running.set(state, true); state.status = 'working'; }
+  if (event.type === 'agent_start') running.set(state, true);
   if (event.type === 'agent_settled') state.compacting = false;
-  if (event.type === 'agent_end' || event.type === 'agent_settled') { running.delete(state); state.status = state.compacting ? 'working' : 'idle'; }
-  if (['compaction_start', 'session_before_compact'].includes(event.type)) { state.compacting = true; state.status = 'working'; }
-  if (['compaction_end', 'session_compact', 'session_compact_failed'].includes(event.type)) {
-    state.compacting = false; state.status = running.get(state) ? 'working' : 'idle';
-  }
-  if (event.type === 'ui_prompt_start') state.status = 'waiting';
-  if (event.type === 'ui_prompt_end') state.status = running.get(state) || state.compacting ? 'working' : 'idle';
+  if (event.type === 'agent_end' || event.type === 'agent_settled') running.set(state, false);
+  if (['compaction_start', 'session_before_compact'].includes(event.type)) state.compacting = true;
+  if (['compaction_end', 'session_compact', 'session_compact_failed'].includes(event.type)) state.compacting = false;
+  if (event.type === 'ui_prompt_start') prompting.add(state);
+  if (event.type === 'ui_prompt_end') prompting.delete(state);
   if (['message_start', 'message_update', 'message_end'].includes(event.type) && event.message && shown(event.message)) {
     const m = event.message;
     const key = m.role + ':' + (m.timestamp ?? 'current') + ':' + (m.toolCallId || '');
@@ -76,7 +91,7 @@ export function applyEvent(state, event) {
     if (index < 0) state.tools.push(tool); else state.tools[index] = tool;
     state.tools = state.tools.slice(-20);
   }
-  return state;
+  return refreshStatus(state);
 }
 export function summary(state) {
   const { messages = [], tools, file, ...meta } = state;

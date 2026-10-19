@@ -8,6 +8,7 @@ const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
 // Like Pi, create a new session's folder at startup and its file on the first prompt.
 if (fresh) mkdirSync(dir, { recursive: true });
+if (process.argv.includes('--startup-pid')) writeFileSync(process.argv[process.argv.indexOf('--startup-pid') + 1], String(process.pid));
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };

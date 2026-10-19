@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { initialState, applyEvent } from './state.mjs';
+import { initialState, applyEvent, refreshStatus, restoreActivity } from './state.mjs';
 import { lastPromptTime } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { acquireSessionLock } from './locks.mjs';
@@ -10,7 +10,7 @@ import { createSessionLifecycle } from './session-lifecycle.mjs';
 
 class LiveSession {
   constructor(state, changed) { this.state = state; this.onChange = changed; }
-  notify() { this.onChange(this.state.id); }
+  notify() { refreshStatus(this.state, this); if (this.state.id) this.onChange(this.state.id); }
   update(patch) { Object.assign(this.state, patch); this.state.revision++; this.notify(); }
   read() { return { ...this.state, title: sessionTitle(this.state.title, this.state.messages) }; }
   syncTitle(title) { if (this.state.title !== title) this.update({ title }); }
@@ -27,17 +27,29 @@ class LiveSession {
 }
 
 export class WorkerSession extends LiveSession {
-  constructor(meta, { dir, workerOptions, changed, lifecycle, exited }) {
+  constructor(meta, { dir, workerOptions, changed, started, lifecycle, exited }) {
     super(initialState(meta, meta.messages), changed);
-    this.lifecycle = createSessionLifecycle(); this.onLifecycle = lifecycle; this.onExit = exited;
-    this.lockDir = join(dir, 'locks');
-    if (meta.file) this.lock = acquireSessionLock(this.lockDir, meta.id, { file: meta.file, kind: 'rpc' });
-    try { this.worker = new RpcWorker(meta.file, meta.cwd, workerOptions); }
-    catch (error) { this.lock?.release(); throw error; }
-    if (this.lock) {
+    this.lifecycle = createSessionLifecycle(); this.onLifecycle = lifecycle; this.onExit = exited; this.onStart = started;
+    this.lockDir = join(dir, 'locks'); this.workerOptions = workerOptions;
+  }
+  async start(identify) {
+    const open = () => {
+      this.worker = new RpcWorker(this.state.file, this.state.cwd, this.workerOptions);
+      this.track();
+    };
+    try {
+      let info;
+      // Fresh workers choose their file at handshake; resumed files must be locked before spawning.
+      if (!this.state.file) {
+        open(); info = await this.inspect();
+        Object.assign(this.state, identify(info));
+      }
+      this.lock = acquireSessionLock(this.lockDir, this.state.id, { file: this.state.file, kind: 'rpc' });
+      if (!this.worker) open();
       if (this.worker.process.pid) this.lock.setWorkerPid(this.worker.process.pid);
-      this.state.status = 'starting'; this.track();
-    }
+      this.onStart(this); this.notify();
+      return info ?? await this.inspect();
+    } catch (error) { await this.close(); throw error; }
   }
   get resumable() { return !this.worker; }
   get managed() {
@@ -47,44 +59,36 @@ export class WorkerSession extends LiveSession {
   }
   advance(event) {
     const before = this.lifecycle.snapshot, after = this.lifecycle.send(event);
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
+    if (this.state.id && JSON.stringify(before) !== JSON.stringify(after)) {
       this.onLifecycle({ id: this.state.id, event: event.type, from: before.phase, to: after.phase,
         pendingTools: after.pendingTools, waitFor: after.waitFor, blocked: after.blocked, restartSafe: after.restartSafe });
     }
     return after;
   }
   track() {
-    const { worker, lock } = this;
+    const { worker } = this;
     worker.on('event', event => {
       this.advance(event);
       if (event.type === 'extension_ui_request' && ['select', 'confirm', 'input', 'editor'].includes(event.method)) this.state.dialog = event;
       applyEvent(this.state, event);
-      if (this.state.dialog) this.state.status = 'waiting';
       this.notify();
     });
     worker.on('fault', error => { this.state.error = error.message; this.notify(); });
     worker.once('exit', () => {
       this.advance({ type: 'worker_exit' });
-      lock.release(); this.worker = undefined; this.state.dialog = undefined; this.state.compacting = false;
-      this.onExit(this.state.id);
-      this.state.status = 'saved'; this.notify();
+      this.lock?.release(); this.worker = undefined; this.state.dialog = undefined; this.state.compacting = false;
+      if (this.state.id) this.onExit(this);
+      this.notify();
     });
   }
   inspect() { return this.worker.request('get_state'); }
-  attach(meta, info) {
-    this.lock = acquireSessionLock(this.lockDir, meta.id, { file: meta.file, kind: 'rpc' });
-    if (this.worker.process.pid) this.lock.setWorkerPid(this.worker.process.pid);
-    this.state = initialState(meta);
-    this.restoreState(info); this.track();
-  }
   restoreState(info, history) {
     if (history) { this.state.messages = history.messages; this.state.historyTruncated = history.historyTruncated; }
     this.state.model = info?.model ? `${info.model.provider}/${info.model.id}` : undefined;
     this.state.modelName = info?.model?.name;
     this.state.thinkingLevel = info?.thinkingLevel;
-    this.state.compacting = !!info?.isCompacting;
+    restoreActivity(this.state, info);
     this.advance({ type: 'restore', provider: info?.model?.provider, streaming: !!info?.isStreaming || !!info?.isCompacting });
-    this.state.status = this.state.dialog ? 'waiting' : info?.isStreaming || info?.isCompacting ? 'working' : 'idle';
     delete this.state.error;
   }
   restore(info, history) { this.restoreState(info, history); this.notify(); }
@@ -118,11 +122,10 @@ export class WorkerSession extends LiveSession {
     }
     this.advance({ type: 'input_closed' });
     this.worker.process.stdin.write(JSON.stringify(response) + '\n');
-    this.state.dialog = undefined;
-    this.state.status = this.lifecycle.snapshot.restartSafe ? 'idle' : 'working'; this.notify();
+    this.state.dialog = undefined; this.notify();
     return { accepted: true };
   }
-  async close() { await this.worker?.close(); this.lock?.release(); }
+  async close() { try { await this.worker?.close(); } finally { this.lock?.release(); } }
 }
 
 export class BridgeSession extends LiveSession {
@@ -174,7 +177,7 @@ export class BridgeSession extends LiveSession {
   }
   disconnected() {
     if (!this.socket) return;
-    this.socket = undefined; this.state.status = 'disconnected'; this.notify();
+    this.socket = undefined; this.notify();
     this.rejectPending(new Error('Pi disconnected; delivery outcome may be unknown'));
   }
   close() {

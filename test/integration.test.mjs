@@ -200,6 +200,15 @@ test('actual extension registers, reattaches after host restart and releases own
   await emit('session_start');
   await until(() => host.service.live.size === 1);
   const id = sessionKey(file);
+  for (const [type, status] of [
+    ['ui_prompt_start', 'waiting'], ['ui_prompt_end', 'idle'],
+    ['session_before_compact', 'working'], ['ui_prompt_start', 'waiting'], ['ui_prompt_end', 'working'], ['session_compact_failed', 'idle'],
+    ['agent_start', 'working'], ['ui_prompt_start', 'waiting'], ['ui_prompt_end', 'working'], ['agent_end', 'idle']
+  ]) {
+    await emit(type, { type });
+    await until(() => host.service.read(id).status === status);
+    assert.equal(host.service.list().sessions.find(session => session.id === id).status, status);
+  }
   await emit('model_select', { type: 'model_select', model: { provider: 'openai', id: 'o3' } });
   await emit('thinking_level_select', { type: 'thinking_level_select', level: 'high' });
   await until(() => host.service.read(id).model === 'openai/o3' && host.service.read(id).thinkingLevel === 'high');

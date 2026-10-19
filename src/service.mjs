@@ -228,8 +228,13 @@ export class SessionService extends EventEmitter {
   }
   workerSession(meta, options, discardEmpty = false) {
     return new WorkerSession(meta, {
-      dir: this.dir, workerOptions: options, changed: id => this.changed(id), lifecycle: event => this.emit('lifecycle', event),
-      exited: id => { this.scan(); if (discardEmpty && !this.catalog.has(id)) this.live.delete(id); },
+      dir: this.dir, workerOptions: options, changed: id => this.changed(id), started: item => this.live.set(item.state.id, item),
+      lifecycle: event => this.emit('lifecycle', event),
+      exited: item => {
+        const { id } = item.state;
+        this.scan();
+        if (discardEmpty && this.live.get(id) === item && !this.catalog.has(id)) this.live.delete(id);
+      },
     });
   }
   async newSession(id, requestId) {
@@ -269,15 +274,15 @@ export class SessionService extends EventEmitter {
     const item = this.workerSession({ cwd }, { ...this.workerOptions, sessionDir }, true);
     this.starting.add(item);
     try {
-      const info = await item.inspect();
-      if (this.stopping) throw new Error('Pi Remote is stopping');
-      if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
-      const file = canonical(info.sessionFile);
-      if (!inside(file, sessionDir)) throw new Error('New session is outside configured roots');
-      const id = sessionKey(file);
-      item.attach({ id, file, cwd, piSessionId: info.sessionId }, info);
-      this.live.set(id, item); item.notify();
-      return { sessionId: id };
+      const info = await item.start(info => {
+        if (this.stopping) throw new Error('Pi Remote is stopping');
+        if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
+        const file = canonical(info.sessionFile);
+        if (!inside(file, sessionDir)) throw new Error('New session is outside configured roots');
+        return { id: sessionKey(file), file, cwd, piSessionId: info.sessionId };
+      });
+      item.restore(info);
+      return { sessionId: item.state.id };
     } catch (e) { await item.close(); throw e; }
     finally { this.starting.delete(item); }
   }
@@ -298,9 +303,8 @@ export class SessionService extends EventEmitter {
     if (this.stopping) throw new Error('Pi Remote is stopping');
     if (actual.id !== id || !statSync(actual.cwd).isDirectory()) throw new Error('Invalid saved session');
     const item = this.workerSession(actual, this.workerOptions);
-    this.live.set(id, item); item.notify();
     try {
-      const rpcState = await item.inspect();
+      const rpcState = await item.start();
       // The saved branch already has image references; get_messages duplicates all base64 over RPC.
       let history = readSession(actual.file);
       if (history.historyPending) {

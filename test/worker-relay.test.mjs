@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, statSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { SessionService } from '../src/service.mjs';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { startRelay, connectRelay } from '../src/relay.mjs';
-import { acquireLock, sessionKey } from '../src/locks.mjs';
+import { acquireLock, sessionKey, processExists } from '../src/locks.mjs';
 import { socket, until, testKey } from './helpers.mjs';
 import { diffState, patchState } from '../web/protocol.js';
 
@@ -70,6 +70,36 @@ test('saved session resume is allowed by default, rejects existing owners, runs 
   assert.equal(answer.ok, true);
   await until(() => service.read(id).messages.some(x => x.text === 'dialog answered'));
 });
+for (const fresh of [false, true]) test(`${fresh ? 'fresh' : 'resumed'} startup tracks early events, records ownership and cleans up failures`, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-startup-')), file = join(dir, 'saved.jsonl'), pidFile = join(dir, 'worker.pid');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  const prefix = [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url)), '--startup-events', '--startup-pid', pidFile];
+  const service = new SessionService({ dir, roots: [dir], workerOptions: { bin: process.execPath, prefix } });
+  t.after(async () => { await service.close(); rmSync(dir, { recursive: true, force: true }); });
+  const start = () => fresh ? service.startFresh(dir, dir) : service.startWorker(sessionKey(file));
+  await start();
+  const item = [...service.live.values()][0], pid = Number(readFileSync(pidFile, 'utf8'));
+  const owner = JSON.parse(readFileSync(join(dir, 'locks', item.state.id + '.json'), 'utf8'));
+  assert.equal(owner.workerPid, pid);
+  assert.equal(owner.file, item.state.file);
+  assert.equal(item.state.revision, 3, 'Startup events must survive session identification');
+  assert.equal(item.lifecycle.snapshot.phase, 'ready');
+  assert.equal(service.read(item.state.id).status, 'idle');
+  await item.close();
+  assert.equal(processExists(pid), false);
+  assert.deepEqual(readdirSync(join(dir, 'locks')), []);
+  prefix.push('--fail-startup');
+  await assert.rejects(start(), /Replay startup failure/);
+  assert.equal(processExists(Number(readFileSync(pidFile, 'utf8'))), false);
+  assert.deepEqual(readdirSync(join(dir, 'locks')), []);
+  assert.equal(service.managedSessions.length, 0);
+  assert.equal(service.busyWorkers, 0);
+  service.workerOptions = { bin: join(dir, 'missing-pi') };
+  await assert.rejects(start(), /ENOENT/);
+  assert.deepEqual(readdirSync(join(dir, 'locks')), []);
+  assert.equal(service.busyWorkers, 0);
+});
+
 test('resume reads large saved branches without an RPC history copy and keeps lazy images and custom messages', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-large-history-')), file = join(dir, 'saved.jsonl');
   const image = { type: 'image', mimeType: 'image/png', data: 'a'.repeat(2 * 1024 * 1024) };
