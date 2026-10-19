@@ -7,7 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Type } from 'typebox';
 import { createProvider, createAssistantMessageEventStream, getCurrentTools } from '@earendil-works/pi-ai';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
-import install, { localLogin } from '../index.ts';
+import install, { localLogin } from 'pi-claude-sdk/index.ts';
 
 const log = value => appendFileSync(process.env.PI_RECOVERY_EVENTS!, JSON.stringify(value) + '\n');
 const wrap = event => ({ type: 'stream_event', parent_tool_use_id: null, event });

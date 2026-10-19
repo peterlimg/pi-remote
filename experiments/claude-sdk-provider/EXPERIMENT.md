@@ -2,7 +2,7 @@
 
 Opt-in Pi provider `claude-sdk` for Haiku 5.5, Sonnet 5.5, and Opus 5.5, tested October 14, 2026. It uses Claude's local login through the official Agent SDK and leaves tool validation, permissions, and execution in Pi. Pi Remote's normal extension manifest does not load this package; enable it separately with the installation command below.
 
-The standalone package is [pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). Its `v0.1.0` runtime matches this directory at `607f786`. This directory remains for current installations and Pi Remote integration tests; the export does not switch an installed provider. Do not load both packages in one Pi session.
+The maintained adapter is [pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk), pinned here to `v0.1.0` commit `bd9e41b2ba5ca2061099aaab56c496c2b454ea8e`. See [package installation and migration verification](../../docs/sdk-package-installation.md). This package's extension manifest, type check and replay E2Es consume that dependency. The original `index.ts`, `bridge.ts`, unit tests and early direct-SDK research scripts remain historical snapshots, not the active provider implementation. Do not maintain a second adapter here or load both package declarations in one Pi session.
 
 ```text
 Pi or Pi Remote
@@ -281,16 +281,17 @@ Authentication discovery runs `claude auth status --json`, checks `loggedIn`, `c
 
 ## Enable it for the phone
 
-After installing the dependencies, run this from `experiments/claude-sdk-provider` in the checkout your local Pi Remote host uses:
+Pi Remote loads providers from Pi's package settings; its own extension does not bundle the SDK adapter. Install the pinned standalone package:
 
 ```sh
-npm ci --ignore-scripts --omit=dev
-pi install "$PWD"
+pi install git:github.com/peterlimg/pi-claude-sdk@bd9e41b2ba5ca2061099aaab56c496c2b454ea8e
 ```
+
+If the old local experiment is already declared in `pi list`, replace that declaration rather than loading a second `claude-sdk` provider. Keep unrelated settings, package filters and the default model unchanged. A package source change alone does not authorize altered history, a recovery operation or a restart of unrelated workers.
 
 This adds the provider to your personal Pi package configuration without changing your default model. In Pi Remote, start a **fresh session**, tap the model button or use `/model`, and choose `Claude SDK Opus 5.5 (experimental)`. Its full ID is `claude-sdk/claude-opus-5-5`. Existing workers do not load newly installed extensions until reloaded or replaced; starting a fresh session creates a new worker. No Pi Remote host restart is needed.
 
-Tap `Reasoning effort` to select a level, for example High. Image attachments and Pi image-reading results are supported. Switching between SDK Haiku, Sonnet, and Opus preserves the conversation. Newly saved, completed SDK sessions can resume after their worker restarts. To disable this package later, run `pi remove "$PWD"` from the same directory and use fresh sessions.
+Tap `Reasoning effort` to select a level, for example High. Image attachments and Pi image-reading results are supported. Switching between SDK Haiku, Sonnet, and Opus preserves the conversation. Newly saved, completed SDK sessions can resume after their worker restarts. To disable this package later, run `pi remove git:github.com/peterlimg/pi-claude-sdk@bd9e41b2ba5ca2061099aaab56c496c2b454ea8e` and use fresh sessions.
 
 ## Implementation boundaries
 

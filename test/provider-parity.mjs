@@ -21,6 +21,8 @@ const autoCompaction = process.env.PI_PARITY_COMPACTION_AUTO === '1';
 const queuedFork = process.env.PI_PARITY_FORK_QUEUED === '1';
 const treeSummary = process.env.PI_PARITY_TREE_SUMMARY === '1', queuedTree = process.env.PI_PARITY_TREE_QUEUED === '1';
 const childHooks = process.env.PI_PARITY_CHILD_HOOKS === '1';
+const sdkPin = JSON.parse(readFileSync(new URL('../experiments/claude-sdk-provider/package.json', import.meta.url), 'utf8')).dependencies['pi-claude-sdk'].split('#')[1];
+const sdkSource = `git:github.com/peterlimg/pi-claude-sdk@${sdkPin}`;
 const evidence = mkdtempSync(join(tmpdir(), 'pi-provider-parity-')), sessions = join(evidence, 'sessions');
 mkdirSync(sessions); process.env.PI_SUBAGENTS_TEMP_ROOT = join(evidence, 'subagent-runtime');
 const bin = process.env.PI_PARITY_BIN || 'pi', auditFile = join(evidence, 'audit.jsonl'), observer = join(evidence, 'observer.ts');
@@ -104,7 +106,7 @@ function checkMessages(messages) {
   }
 }
 const result = { fixture: 'Real phone UI, Pi, normal personal/project resources, builtin worker profiles and model services; no model/agent mocks or credential copies',
-  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', treeMode: { summary: treeSummary, queued: queuedTree }, childHooks, loadouts: {}, cases: [], pass: false };
+  piVersion: execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), targets, compactionMode: autoCompaction ? 'automatic' : 'manual', forkMode: queuedFork ? 'queued-source' : 'completed-source', treeMode: { summary: treeSummary, queued: queuedTree }, childHooks, sdkPackages: {}, loadouts: {}, cases: [], pass: false };
 let browser, context, page, worker, file, id, project, events = [], models, currentTarget;
 async function until(check, label, ms = 180000) {
   const end = Date.now() + ms;
@@ -128,6 +130,13 @@ async function select(spec) {
   await worker.request('set_thinking_level', { level: 'medium' });
 }
 async function openParent() {
+  if (currentTarget.startsWith('claude-sdk/')) {
+    const { commands } = await worker.request('get_commands');
+    const resource = commands.find(command => command.name === 'claude-usage' && command.source === 'extension')?.sourceInfo;
+    assert.equal(resource?.source, sdkSource, 'SDK journeys must load the pinned standalone package, not the archived experiment.');
+    assert.equal(resource.origin, 'package');
+    result.sdkPackages[currentTarget] = resource;
+  }
   await page.reload(); await expect(page.locator('#connection')).toHaveText('Computer connected');
   await page.locator(`#sessions button.session[data-id="${id}"]`).click();
 }

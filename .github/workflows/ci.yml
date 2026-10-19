@@ -64,37 +64,9 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - run: npm test
       - run: npm install --ignore-scripts
         working-directory: .
-      - run: npm run test:recovery
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:prompt
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:malformed
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:cancel
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:tools
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:notices
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:compaction
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:clone
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:fork
-        env:
-          TMPDIR: ${{ runner.temp }}
-      - run: npm run test:tree
+      - run: npm test
         env:
           TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4

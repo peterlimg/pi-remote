@@ -8,5 +8,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["bridge.ts", "index.ts"]
+  "files": ["node_modules/pi-claude-sdk/bridge.ts", "node_modules/pi-claude-sdk/index.ts"]
 }
