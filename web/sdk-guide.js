@@ -84,7 +84,7 @@ operationSwitch.addEventListener('click', event => {
     path.setAttribute('d', operation[path.dataset.branchPath]);
     if (!reducedMotion.matches && !paused && !document.hidden) {
       const length = path.getTotalLength();
-      branchAnimations.push(path.animate([{ strokeDasharray: String(length), strokeDashoffset: length }, { strokeDasharray: String(length), strokeDashoffset: 0 }], { duration: 700, easing: 'cubic-bezier(.16,1,.3,1)' }));
+      branchAnimations.push(path.animate([{ strokeDasharray: String(length), strokeDashoffset: length }, { strokeDasharray: String(length), strokeDashoffset: 0 }], { duration: 300, easing: 'cubic-bezier(.16,1,.3,1)' }));
     }
   });
   refreshMotion();

@@ -37,10 +37,10 @@
         <text class="module-name sdk-ink" x="820" y="162">Claude</text><text class="module-role" x="820" y="188">Model inference</text>
         <text class="wire-label request-ink" x="500" y="82">Tool proposal</text><text class="wire-label pi-ink" x="500" y="263">Pi's actual result</text>
         <text class="diagram-note" x="180" y="295">Validate · authorize · execute</text><text class="diagram-note" x="820" y="295">Official SDK + Claude Code</text>
-        <circle class="packet request-packet" r="5"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M750 145H580"/></circle>
-        <circle class="packet request-packet" r="5"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M420 145H250"/></circle>
-        <circle class="packet result-packet" r="5"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M250 185H420"/></circle>
-        <circle class="packet result-packet" r="5"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M580 185H750"/></circle>
+        <circle class="packet request-packet" r="5"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M750 145H580"/></circle>
+        <circle class="packet request-packet" r="5"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M420 145H250"/></circle>
+        <circle class="packet result-packet" r="5"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M250 185H420"/></circle>
+        <circle class="packet result-packet" r="5"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M580 185H750"/></circle>
       </svg>
       <svg class="diagram-svg mobile-diagram" viewBox="0 0 360 440" aria-hidden="true">
         <path class="wire request-wire" d="M195 285V238M195 172V125"/><path class="wire result-wire" d="M165 125V172M165 238V285"/>
@@ -48,7 +48,7 @@
         <circle class="pi-fill module-outline" cx="180" cy="65" r="60"/><rect class="bridge-fill module-outline" x="110" y="172" width="140" height="66" rx="8"/><circle class="sdk-fill module-outline" cx="180" cy="345" r="60"/>
         <text class="module-name pi-ink" x="180" y="61">Pi</text><text class="module-role" x="180" y="85">Execution</text><text class="bridge-name" x="180" y="201">SDK adapter</text><text class="module-role" x="180" y="222">Translation</text><text class="module-name sdk-ink" x="180" y="341">Claude</text><text class="module-role" x="180" y="365">Model</text>
         <text class="mobile-side pi-ink" x="24" y="145">Actual<tspan x="24" dy="21">result</tspan></text><text class="mobile-side request-ink" x="255" y="265">Tool<tspan x="255" dy="21">proposal</tspan></text><text class="diagram-note" x="180" y="432">Pi keeps permissions and execution.</text>
-        <circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M195 285V238"/></circle><circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M195 172V125"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M165 125V172"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="4s" repeatCount="indefinite" path="M165 238V285"/></circle>
+        <circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M195 285V238"/></circle><circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M195 172V125"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M165 125V172"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M165 238V285"/></circle>
       </svg>
       <figcaption>Claude can request a tool. It cannot bypass Pi to execute it. The adapter connects the official SDK's MCP handlers to the same Pi validation, permission and execution path.</figcaption>
     </figure>

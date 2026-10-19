@@ -103,8 +103,8 @@ figcaption { max-width: 88ch; font-size: .81rem; line-height: 1.7; color: var(--
 .native-id { color: var(--sdk); font: .8rem ui-monospace, monospace; }
 .page-back { opacity: 0; }
 .memory-figure figcaption { grid-column: 1 / -1; margin-top: 28px; }
-.motion-ready .page-front { animation: context-front 14s infinite; animation-play-state: paused; }
-.motion-ready .page-back { animation: context-back 14s infinite; animation-play-state: paused; }
+.motion-ready .page-front { animation: context-front 5s infinite; animation-play-state: paused; }
+.motion-ready .page-back { animation: context-back 5s infinite; animation-play-state: paused; }
 [data-playing='true'] .page-front, [data-playing='true'] .page-back { animation-play-state: running; }
 @keyframes context-front { 0%, 35%, 100% { opacity: 1; transform: translateY(0); } 45%, 85% { opacity: 0; transform: translateY(-8px); } }
 @keyframes context-back { 0%, 35%, 100% { opacity: 0; clip-path: inset(0 0 100% 0); } 45%, 85% { opacity: 1; clip-path: inset(0); } }
@@ -144,7 +144,7 @@ figcaption { max-width: 88ch; font-size: .81rem; line-height: 1.7; color: var(--
 .worker-lane > strong { font-size: .92rem; }
 .worker-lane > p { font-size: .88rem; line-height: 1.75; margin: 10px 0 0; }
 .worker-figure figcaption { grid-column: 1 / -1; margin: 0; }
-.motion-ready .traveler { animation: guard-stop 7s infinite; animation-play-state: paused; }
+.motion-ready .traveler { animation: guard-stop 2.4s infinite; animation-play-state: paused; }
 [data-playing='true'] .traveler { animation-play-state: running; }
 @keyframes guard-stop { 0%, 8% { clip-path: inset(0 100% 0 0); } 55%, 90% { clip-path: inset(0); } 100% { clip-path: inset(0 100% 0 0); } }
 .closing-link { margin-top: 30px; }

@@ -82,6 +82,11 @@ test('motion pauses on demand and offscreen, with no animation under reduced mot
   await page.goto('/sdk-guide.html');
   const figure = page.locator('.tool-figure'), svg = figure.locator('svg:visible');
   await expect(figure).toHaveAttribute('data-playing', 'true');
+  const packetDurations = await figure.locator('animateMotion').evaluateAll(elements => elements.map(element => element.getSimpleDuration()));
+  expect(packetDurations).toHaveLength(8);
+  for (const duration of packetDurations) expect(duration).toBeCloseTo(1.2, 3);
+  expect(await page.locator('.page-front').evaluate(element => getComputedStyle(element).animationDuration)).toBe('5s');
+  expect(await page.locator('.traveler').first().evaluate(element => getComputedStyle(element).animationDuration)).toBe('2.4s');
   await expect.poll(() => svg.evaluate(element => element.getCurrentTime())).toBeGreaterThan(.1);
   const packet = svg.locator('.request-packet').first(), start = await packet.boundingBox();
   await expect.poll(async () => { const point = await packet.boundingBox(); return Math.hypot(point.x - start.x, point.y - start.y); }).toBeGreaterThan(1);
@@ -95,7 +100,8 @@ test('motion pauses on demand and offscreen, with no animation under reduced mot
   await expect(figure).toHaveAttribute('data-playing', 'false');
   await expect(page.locator('.worker-figure')).toHaveAttribute('data-playing', 'true');
   await page.locator('.branch-figure').getByRole('button', { name: 'Compact', exact: true }).click();
-  expect(await page.locator('[data-branch-path]').evaluateAll(paths => paths.flatMap(path => path.getAnimations()).length)).toBeGreaterThan(0);
+  const durations = await page.locator('[data-branch-path]').evaluateAll(paths => paths.flatMap(path => path.getAnimations()).map(animation => animation.effect.getTiming().duration));
+  expect(durations.length).toBeGreaterThan(0); expect(durations.every(duration => duration === 300)).toBe(true);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.getByRole('button', { name: 'Reduced motion' })).toBeDisabled();
   await expect(page.locator('[data-playing="true"]')).toHaveCount(0);
