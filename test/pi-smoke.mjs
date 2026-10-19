@@ -26,7 +26,23 @@ for (const name of ['agent', 'worker-agent']) {
 }
 const trust = join(dir, 'trust-test.ts');
 const receivedImage = join(dir, 'received-image.json'), progressRequest = join(dir, 'progress-request.json');
-writeFileSync(trust, `import { writeFileSync } from 'node:fs';
+const usageFailure = join(dir, 'usage-failure');
+writeFileSync(trust, `import { writeFileSync, existsSync } from 'node:fs';
+export function adapterForProvider(provider) { return { id: provider }; }
+export async function resolveUsageAuth(ctx, adapter) {
+  if (adapter.id !== ctx.model.provider) throw new Error('Usage must follow the selected provider');
+  return { fingerprint: ctx.model.id };
+}
+export async function queryProviderUsage(adapter, auth, signal, timeout, guard) {
+  if (!signal || timeout !== 10000 || !auth.fingerprint) throw new Error('Usage query must be authenticated and bounded');
+  await guard();
+  if (existsSync(${JSON.stringify(usageFailure)})) throw new Error('Internal provider failure with secret fixture-token');
+  return '5-hour limit: [██░░] 75% left';
+}
+export function formatUsageReport(report, displayState) {
+  if (displayState !== 'current') throw new Error('Usage must identify the current account');
+  return report;
+}
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
   pi.on('session_before_compact', event => ({ compaction: {
@@ -72,6 +88,17 @@ try {
   const remoteUsage = await host.service.getUsage([...host.service.live.keys()][0]);
   assert.ok(remoteUsage.contextUsage.contextWindow > 0);
   assert.deepEqual(remoteUsage.contextUsage, stats.data.contextUsage);
+  const bridgeUsage = await host.service.getUsage([...host.service.live.keys()][0], true);
+  assert.equal(bridgeUsage.providerUsage?.title, 'Provider usage\n5-hour limit: [██░░] 75% left');
+  assert.equal(messages.some(x => x.type === 'extension_ui_request' && x.method === 'select'), false);
+  writeFileSync(usageFailure, '');
+  const failedUsage = await host.service.getUsage([...host.service.live.keys()][0], true);
+  assert.equal(failedUsage.providerUsage, undefined);
+  assert.equal(failedUsage.providerMessage, 'Provider usage is temporarily unavailable. Try again.');
+  assert.deepEqual(failedUsage.contextUsage, remoteUsage.contextUsage);
+  rmSync(usageFailure);
+  assert.equal((await host.service.getUsage([...host.service.live.keys()][0], true)).providerUsage.title, bridgeUsage.providerUsage.title);
+  assert.equal(readFileSync(file, 'utf8').includes('/usage'), false, 'Read-only queries must not enter the conversation');
   child.stdin.write(JSON.stringify({ id: 'commands', type: 'get_commands' }) + '\n');
   const commands = await until(() => messages.find(x => x.id === 'commands' && x.type === 'response'));
   assert.ok(commands.data.commands.some(x => x.name === 'pi-remote'));

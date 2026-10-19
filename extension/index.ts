@@ -101,10 +101,39 @@ export default function remoteExtension(pi: any) {
           return;
         }
         if (message.command?.type === 'getUsage') {
-          send(ws, { type: 'result', id: message.id, ok: true, value: {
-            contextUsage: ctx.getContextUsage?.(),
-            providerMessage: 'Check /usage in the Pi terminal for account limits.'
-          } });
+          const contextUsage = ctx.getContextUsage?.();
+          let provider: any = {};
+          if (message.command.includeProvider) {
+            const command = pi.getCommands?.().find((item: any) => item.name === 'usage' && item.source === 'extension');
+            if (!command?.sourceInfo?.path) provider.providerMessage = 'No provider usage extension is installed in this session.';
+            else try {
+              // shortcut: reuse pi-usage's exported queries until Pi has read-only command invocation.
+              const usage = await import(command.sourceInfo.path);
+              if (!usage.adapterForProvider || !usage.resolveUsageAuth || !usage.queryProviderUsage || !usage.formatUsageReport) {
+                provider.providerMessage = 'Update the provider usage extension and reload this Pi terminal to check account limits.';
+              } else {
+                const context = ctx, adapter = usage.adapterForProvider(context.model?.provider);
+                if (!adapter) provider.providerMessage = 'The usage extension does not report account limits for this provider.';
+                else {
+                  const signal = AbortSignal.timeout(10000), auth = await usage.resolveUsageAuth(context, adapter);
+                  if (!auth) provider.providerMessage = 'Provider authentication is unavailable. Check /login in Pi.';
+                  else {
+                    const validate = async () => {
+                      const current = await usage.resolveUsageAuth(context, adapter);
+                      if (context !== ctx || stopped || generation !== epoch || current?.fingerprint !== auth.fingerprint) throw new Error('Session or provider authentication changed');
+                    };
+                    await validate();
+                    const report = await usage.queryProviderUsage(adapter, auth, signal, 10000, validate);
+                    await validate();
+                    provider.providerUsage = { title: 'Provider usage\n' + usage.formatUsageReport(report, 'current') };
+                  }
+                }
+              }
+            } catch {
+              provider.providerMessage = 'Provider usage is temporarily unavailable. Try again.';
+            }
+          }
+          send(ws, { type: 'result', id: message.id, ok: true, value: { contextUsage, ...provider } });
           return;
         }
         if (message.command?.type === 'getModels') {
