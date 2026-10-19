@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { openSync, closeSync, fchmodSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { dataDir, loadConfig } from './config.mjs';
@@ -44,7 +44,7 @@ export async function hostStatus(config = loadConfig(), method = 'GET', dir = da
   return status;
 }
 
-export async function ensureHost(config = loadConfig(), dir = dataDir(), { idleOnly = false } = {}) {
+export async function ensureHost(config = loadConfig(), dir = dataDir(), { idleOnly = false, execPath = process.execPath } = {}) {
   dir = resolve(dir);
   const running = await hostStatus(config, 'GET', dir, { idleOnly });
   if (running) {
@@ -56,9 +56,10 @@ export async function ensureHost(config = loadConfig(), dir = dataDir(), { idleO
   fchmodSync(log, 0o600);
   let child;
   try {
-    child = spawn(process.execPath, [fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), 'serve'], {
+    child = spawn(execPath, [fileURLToPath(new URL('../bin/pi-remote.mjs', import.meta.url)), 'serve'], {
       detached: true, cwd: dir, stdio: ['ignore', log, log, 'ipc'],
-      env: { ...process.env, PI_REMOTE_HOME: dir, PI_REMOTE_PORT: String(config.port),
+      env: { ...process.env, PATH: [dirname(execPath), process.env.PATH].filter(Boolean).join(delimiter),
+        PI_REMOTE_HOME: dir, PI_REMOTE_PORT: String(config.port),
         PI_REMOTE_PUBLIC_URL: config.publicUrl, PI_REMOTE_RELAY_URL: config.relayUrl }
     });
   } finally { closeSync(log); }
@@ -122,14 +123,14 @@ export async function stopHost(config = loadConfig(), { idleOnly = false } = {})
   throw new Error('Pi Remote is still stopping after 30 seconds. Check /pi-remote status.');
 }
 
-export async function restartHost(config = loadConfig(), dir = dataDir(), { idleOnly = false } = {}) {
+export async function restartHost(config = loadConfig(), dir = dataDir(), { idleOnly = false, execPath = process.execPath } = {}) {
   let stopError;
   try { await stopHost(config, { idleOnly }); }
   catch (error) { if (['ERESTARTBUSY', 'EHOSTAUTH'].includes(error.code) || idleOnly && error.code === 'EHOSTTIMEOUT') throw error; stopError = error; }
   // Even an unsuccessful stop wait may have delivered DELETE. Never skip startup.
   const deadline = Date.now() + 30000;
   for (;;) {
-    try { return await ensureHost(config, dir, { idleOnly }); }
+    try { return await ensureHost(config, dir, { idleOnly, execPath }); }
     catch (error) {
       if (error.code === 'EHOSTAUTH') throw error;
       if (Date.now() >= deadline) throw new AggregateError(stopError ? [stopError, error] : [error],

@@ -31,7 +31,7 @@ export async function restartAndResume(config = loadConfig(), dir = dataDir(), {
       renameSync(temp, file);
     }
   }
-  return restartHost(config, dir, { idleOnly });
+  return restartHost(config, dir, { idleOnly, execPath: before?.execPath });
 }
 
 // One-time upgrade fallback for a running host that predates lifecycle status.

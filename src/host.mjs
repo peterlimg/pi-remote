@@ -24,7 +24,7 @@ export async function startHost(options = {}) {
     try { appendFileSync(join(dir, 'host.log'), line, { mode: 0o600 }); }
     catch (error) { console.error(line.trimEnd(), 'Could not write host.log:', error.message); }
   };
-  const status = () => ({ protocol: 1, pid: process.pid, publicUrl, relayUrl,
+  const status = () => ({ protocol: 1, pid: process.pid, execPath: process.execPath, publicUrl, relayUrl,
     relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
     busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
