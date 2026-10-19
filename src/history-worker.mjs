@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
-import { messageKey, sessionTitle } from '../web/protocol.js';
+import { messageKey, sessionTitle, unnamed } from '../web/protocol.js';
 import { splitVideoMessage } from '../web/videos.js';
 import { validateImages } from '../web/images.js';
 
@@ -106,10 +106,16 @@ async function readMessage(handle, row) {
 async function run({ op, file, before, after, tips, expectedTip, imageId, messageId, path }) {
   const index = await getIndex(file), branch = getBranch(index, tips);
   const lastPromptAt = lastPromptTime(branch.rows, Date.parse(index.header.timestamp) || index.birthtimeMs);
-  if (op === 'recency') return lastPromptAt;
   if (expectedTip && !branch.ids.has(expectedTip)) throw new Error('Conversation changed. Return to latest messages.');
   const handle = await open(file, 'r');
   try {
+    if (op === 'metadata' || op === 'page') {
+      if (!branch.title) {
+        const firstUser = unnamed(index.name) ? branch.rows.find(row => row.role === 'user') : undefined;
+        branch.title = sessionTitle(index.name, firstUser ? [await readMessage(handle, firstUser)] : []);
+      }
+      if (op === 'metadata') return { title: branch.title, lastPromptAt };
+    }
     if (op === 'image') {
       if (typeof imageId !== 'string' || !/^[a-f0-9]{64}$/.test(imageId)) throw new Error('Invalid image ID');
       for (const row of branch.rows) {
@@ -145,10 +151,6 @@ async function run({ op, file, before, after, tips, expectedTip, imageId, messag
       }
       bytes += size;
       if (backwards) messages.unshift(message); else messages.push(message);
-    }
-    if (!branch.title) {
-      const firstUser = rows.find(row => row.role === 'user');
-      branch.title = sessionTitle(index.name, firstUser ? [await readMessage(handle, firstUser)] : []);
     }
     return { messages, older: start > 0, newer: end < rows.length, tip: branch.tip, title: branch.title,
       model: branch.model, thinkingLevel: branch.thinkingLevel, lastPromptAt };

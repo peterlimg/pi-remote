@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
 import { initialState, applyEvent, summary } from './state.mjs';
 import { sessionTitle } from './session-title.mjs';
+import { unnamed } from '../web/protocol.js';
 import { acquireSessionLock, sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { RpcWorker } from './rpc.mjs';
@@ -47,20 +48,30 @@ export class SessionService extends EventEmitter {
     this.catalog = sessions; this.warnings = [...this.restoreWarnings, ...warnings].slice(0, 20);
     for (const [id, saved] of sessions) {
       if (!saved.historyPending || saved.lastPromptAt !== undefined) continue;
-      // Large histories are indexed off-thread; keep their previous position during appends.
+      // Large previews are incomplete; keep known metadata until full indexing completes.
       saved.lastPromptAt = previous.get(id)?.lastPromptAt ?? 0;
-      this.historyReader.request('recency', { file: saved.file }).then(value => {
-        saved.lastPromptAt = value;
-        if (this.catalog.get(id) === saved) this.emit('list');
+      saved.title = previous.get(id)?.title ?? saved.title;
+      const liveTitle = this.live.get(id)?.state.title;
+      this.historyReader.request('metadata', { file: saved.file }).then(value => {
+        saved.lastPromptAt = value.lastPromptAt;
+        if (!unnamed(value.title)) saved.title = value.title;
+        if (this.catalog.get(id) !== saved) return;
+        const item = this.live.get(id);
+        if (item && !item.socket && item.state.title !== saved.title && !unnamed(saved.title) &&
+          (item.state.title === liveTitle || unnamed(item.state.title))) {
+          item.state.title = saved.title; item.state.revision++;
+          this.emit('state', id);
+        }
+        this.emit('list');
       }, error => {
         if (this.stopping) return;
-        this.warnings = [...this.warnings, 'Could not read session prompt time: ' + error.message].slice(0, 20);
+        this.warnings = [...this.warnings, 'Could not read session metadata: ' + error.message].slice(0, 20);
         this.emit('list');
       });
     }
     for (const [id, item] of this.live) {
       const saved = sessions.get(id);
-      if (!item.socket && saved && saved.title !== item.state.title) {
+      if (!item.socket && saved && !saved.historyPending && saved.title !== item.state.title) {
         item.state.title = saved.title; item.state.revision++;
         this.emit('state', id);
       }

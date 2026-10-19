@@ -8,6 +8,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 - `sessions-search`: filter by task or project and recover from an empty result.
 - `sessions-pages`: move through saved and online session pages.
 - `sessions-resume`: resume a saved session when available.
+- `sessions-title`: preserve the saved creation title through scans, large-history indexing and host restarts.
 
 ## How to get to it (user POV)
 
@@ -26,6 +27,10 @@ Preconditions: authenticated baseline with two projects. Pagination and saved-se
 - **Search.** From the list, `await page.getByRole('searchbox', { name: 'Search sessions' }).fill('Alpha')`; require `#sessions .session` count 1 and Project Alpha visible. Fill `no such project`; require `#list-empty` to read `No matching sessions. Try another task or project.` Clear the input; require both projects again.
 - **Pages.** Run `npm run test:browser -- test/browser/session-pages.spec.mjs test/browser/sessions.spec.mjs --trace on`. These provide larger lists. Verify `1–20 of 675`, choose `Next session page`, verify `21–40 of 675`, then search and clear. Inspect each spec's fixture before claiming host-backed pagination; `sessions.spec.mjs` routes the browser WebSocket.
 - **Resume boundary.** The baseline has no saved resumable session. Report `sessions-resume` blocked here. A real proof needs a disposable saved Pi session, a working Pi installation, and a separate isolated host; click `page.getByRole('button', { name: 'Resume session' })`, then require an online session and an acknowledged prompt. Do not create a worker in the user's live host to fill this gap.
+
+## Title stability
+
+Run `npm run test:browser -- test/browser/session-title.spec.mjs`. It uses a real host, session file over 32 MiB, background history index, fresh host process and mobile browser, with Pi RPC replayed instead of model calls. The name is deliberately beyond the catalog's preview window. It checks that scans and restart/reconnect retain the header and list title without changing the session file. An explicit Pi rename must still take effect.
 
 ## Gotchas
 
