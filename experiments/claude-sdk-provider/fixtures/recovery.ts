@@ -47,7 +47,7 @@ function replayQuery(args) {
     skill: sdkPrompt.includes('PORTABLE_SKILL'), append: sdkPrompt.includes('PORTABLE_APPEND'),
     toolGuidance: sdkPrompt.includes('PORTABLE_TOOL_GUIDE'), guideline: sdkPrompt.includes('PORTABLE_GUIDELINE'),
     latePolicy: sdkPrompt.includes('PORTABLE_LATE_POLICY'), customDocs: sdkPrompt.includes('PORTABLE_DOC_OVERRIDE'),
-    customPrompt: sdkPrompt.includes('PORTABLE_CUSTOM_PROMPT') });
+    customPrompt: sdkPrompt.includes('PORTABLE_CUSTOM_PROMPT'), forceBoundary: sdkPrompt.includes('PORTABLE_FORCE_BOUNDARY') });
   const stream = (async function* () {
     const server = args.options.mcpServers?.pi;
     if (server) {
@@ -241,6 +241,19 @@ export default function (pi) {
     event.systemPromptOptions.toolGuidelines.probe = ['PORTABLE_TOOL_GUIDE'];
     event.systemPromptOptions.sections.late_policy = 'PORTABLE_LATE_POLICY';
     if (process.env.PI_RECOVERY_DOC_OVERRIDE === '1') event.systemPromptOptions.sections.docs = 'PORTABLE_DOC_OVERRIDE';
+  });
+  if (process.env.PI_RECOVERY_PROMPT_CASE) pi.on('before_agent_start', event => {
+    const mode = process.env.PI_RECOVERY_PROMPT_CASE;
+    if (mode === 'append-override') event.systemPromptOptions.sections.docs = 'PORTABLE_DOC_OVERRIDE';
+    if (mode === 'override-explicit-docs') event.systemPromptOptions.sections.docs = 'PORTABLE_DOC_OVERRIDE: providers (docs/custom-provider.md), pi packages (docs/packages.md)';
+    const base = event.systemPrompt;
+    return { systemPrompt: mode === 'same' ? base : mode === 'opaque' ? 'PORTABLE_CUSTOM_PROMPT PORTABLE_FORCE_BOUNDARY'
+      : mode === 'rewrite' ? base.replace('PORTABLE_PROJECT_POLICY', 'CHANGED_PROJECT_POLICY') + '\n\nPORTABLE_FORCE_BOUNDARY'
+      : mode === 'prepend' ? 'PORTABLE_FORCE_BOUNDARY\n\n' + base
+      : base + '\n\nPORTABLE_FORCE_BOUNDARY' + (mode === 'append-explicit-docs' ? '\nExplicit documentation: providers (docs/custom-provider.md), pi packages (docs/packages.md)' : '') };
+  });
+  if (process.env.PI_RECOVERY_PROMPT_CASE === 'late-change') pi.on('before_agent_start', event => {
+    event.systemPromptOptions.sections.late_policy = 'CHANGED_LATE_POLICY';
   });
   pi.on('context_with_system', event => {
     if (event.messages.some(message => message.role === 'toolResult' && message.toolName === 'probe')) {

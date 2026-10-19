@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createProvider, type ApiKeyAuth, type Message, type Model } from '@earendil-works/pi-ai';
+import { createProvider, getCurrentSystemMessage, type ApiKeyAuth, type Message, type Model } from '@earendil-works/pi-ai';
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all';
 import { buildSessionProjection, convertToLlm, SessionManager, type BeforeAgentStartEvent, type ExtensionAPI, type ExtensionContext, type SessionEntry } from '@earendil-works/pi-coding-agent';
 import { createBridge, prepareRecovery, sdkEnvironment, type RecoveryPlan } from './bridge.ts';
@@ -74,7 +74,9 @@ export default function (pi: ExtensionAPI, createQuery?: Parameters<typeof creat
           (row.data as { prefix?: unknown[] })?.prefix?.length === accepted);
         return end < 0 ? undefined : projectionMessages(branch.slice(0, end), true);
       },
-      promptSource: () => promptSource, historySource: () => projectionMessages(entries(), true),
+      promptSource: () => promptSource?.systemPromptOptions.forceSystemPrompt === undefined ? promptSource
+        : { ...promptSource, canonical: getCurrentSystemMessage(projectionMessages(entries(), true)) },
+      historySource: () => projectionMessages(entries(), true),
       retiredToolIds: () => ctx.sessionManager.getEntries().flatMap(row => row.type === 'message' && row.message.role === 'assistant'
         ? row.message.content.filter(block => block.type === 'toolCall').map(block => block.id) : []),
       onRecoveryStart: (id, sdkSessionId) => { pi.appendEntry('claude-sdk-recovery-started', { id, sdkSessionId }); recovery = undefined; },

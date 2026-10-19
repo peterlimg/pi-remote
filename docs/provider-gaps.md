@@ -11,6 +11,7 @@ Canonical open-items list, updated for Pi-owned parent compaction, cloning, earl
 | SDK-3 | Durable foreground-child continuation is incomplete. | A real standard-worker resume now reproduces the missing checkpoint. A test-only use of the existing pi-subagents API loads child-owned hooks and saves that checkpoint, without changing the extension; an upstream patch is not proven necessary. Resume then rejects real prompt changes between foreground and background, including an added Ponytail section. Safe prompt handoff and production-safe hook admission remain open. Parent-wide registration must not conflict with other policies or non-SDK ceilings. See [workflow and evidence](sdk-worker-continuation.md). |
 | SDK-4 | General instruction/configuration changes cannot transparently reuse a native query. | Validated tool declarations and generated `tools` guidance can change through a handoff, including order-only regeneration on reload. Other prompt, environment and output-limit changes remain guarded. Any broader handoff must preserve operator instructions and verify accepted history rather than weaken the fingerprint checks. |
 | SDK-5 | The upstream prompt-sensitive request rejection is unresolved. | Structured prompt projection mitigates the recorded generated-documentation trigger. It is not an upstream fix, and opaque/custom/inherited prompts can still be rejected. See the [billing/request-content investigation](research/claude-agent-sdk-billing.md). No billing change or credential workaround is justified by this response alone. |
+| SDK-6 | Hookless foreground append-mode children still lack prompt-projection provenance. | The normal default-placement parallel `delegate` workflow now passes on Codex, SDK Haiku and SDK Opus. Its append-only safety override is projected only after matching the complete canonical Pi base; every appended instruction remains intact. Explicitly forcing the borrowed foreground route is not fixed by this change. See [inherited delegate scope/evidence](sdk-inherited-delegates.md). |
 | CODEX-1 | Stop can be recorded as an error rather than cancellation. | The real Codex first-turn Stop returned `stopReason=error` with `This operation was aborted`. The next message succeeded without replay. This is a cancellation-status defect, not an SDK failure or proof that Stop cannot continue. |
 
 ## Compaction status and earlier ACK_0 findings
@@ -43,7 +44,7 @@ The new parent implementation is verified separately in [compaction-context evid
 
 These workflows still need shared realistic verification. Earlier narrow checks do not establish these combinations:
 
-- Other standard roles and custom agents or permission ceilings beyond the verified builtin `worker` journeys.
+- Other standard roles and custom agents or permission ceilings beyond the verified builtin `worker` and default-placement parallel `delegate` journeys.
 - Nested delegation and durable/retained/forked child continuation.
 - Images and slash-command dialogs combined with tools, delegation, switching, Stop and restart.
 - Arbitrary inherited/custom prompt changes and their provenance across child contexts.

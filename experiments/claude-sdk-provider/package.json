@@ -16,6 +16,7 @@
     "test:handoff": "node handoff.mjs",
     "test:progress": "node progress.mjs",
     "test:recovery": "node recovery.mjs",
+    "test:prompt": "node prompt.mjs",
     "test:malformed": "node malformed.mjs",
     "test:cancel": "node cancel.mjs",
     "test:tools": "node tools.mjs",

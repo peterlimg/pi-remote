@@ -16,7 +16,7 @@ const LEGACY_PROMPT_ERROR = 'This conversation uses the previous prompt format. 
 const SDK_HISTORY_RESTRICTION = 'Cannot recover uncheckpointed SDK responses or interrupted SDK tools.';
 const SDK_CONFIGURATION_RESTRICTION = 'SDK prompt, tools, environment, or output limit changed. Start a new Pi session.';
 const SDK_INCOMPLETE_HISTORY = 'Cannot recover SDK history with an incomplete Pi turn.';
-type PromptSource = Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'>;
+type PromptSource = Pick<BeforeAgentStartEvent, 'systemPrompt' | 'systemPromptOptions'> & { canonical?: ReturnType<typeof getCurrentSystemMessage> };
 
 class BridgeError extends Error {}
 function fail(message: string): never { throw new BridgeError(message); }
@@ -235,8 +235,15 @@ function projectSdkPrompt(messages: Message[], tools: ReturnType<typeof getCurre
   let portablePrompt = systemPrompt;
   if (source) {
     if (!source.systemPromptOptions || source.systemPrompt !== systemPrompt) fail(PORTABLE_PROMPT_ERROR);
-    if (source.systemPromptOptions.forceSystemPrompt === undefined) {
-      const current = getCurrentSystemMessage(messages);
+    let current = getCurrentSystemMessage(messages), suffix = '';
+    if (source.systemPromptOptions.forceSystemPrompt !== undefined) {
+      const canonical = source.canonical;
+      const base = canonical?.sections && !canonical.content ? getSystemMessageText(canonical) : undefined;
+      // A whole-prompt override is projectable only when it retains the complete structured Pi base.
+      current = base && (systemPrompt === base || systemPrompt.startsWith(base + '\n\n')) ? canonical : undefined;
+      if (current) suffix = systemPrompt.slice(base!.length);
+    }
+    if (source.systemPromptOptions.forceSystemPrompt === undefined || current) {
       if (!current?.sections) fail(PORTABLE_PROMPT_ERROR);
       const sections = { ...current.sections };
       if (!source.systemPromptOptions.customPrompt) {
@@ -244,7 +251,7 @@ function projectSdkPrompt(messages: Message[], tools: ReturnType<typeof getCurre
         delete sections.preamble;
         if (!Object.hasOwn(source.systemPromptOptions.sections, 'docs')) delete sections.docs;
       }
-      portablePrompt = getSystemMessageText({ ...current, sections });
+      portablePrompt = getSystemMessageText({ ...current, sections }) + suffix;
     }
     if (portablePrompt.includes('providers (docs/custom-provider.md)') && portablePrompt.includes('pi packages (docs/packages.md)')) fail(INHERITED_PROMPT_ERROR);
   }

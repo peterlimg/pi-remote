@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-19",
+  "sourceBase": "5958f02",
+  "sdkVersion": "0.3.296",
+  "piSubagentsVersion": "0.79.1",
+  "scope": "Fresh default-placement parallel builtin delegate children with append-mode prompts; not retained-worker continuation or full provider parity",
+  "cause": "The child safety boundary uses a whole-prompt before_agent_start return. Pi makes the effective provider prompt opaque through forceSystemPrompt, so the adapter could not account for the generated documentation section despite the complete canonical base remaining unchanged.",
+  "fix": "Supply the structured canonical Pi system message and project only an exact full-base prefix, retaining its entire suffix. Unknown rewrites and explicit documentation remain protected.",
+  "red": {
+    "realWorkflow": "pi-provider-parity-9Yzqwe/result.json",
+    "promptReplay": "pi-sdk-prompt-e2e-zzq2wg/result.json",
+    "error": "Cannot project an inherited Pi base prompt safely. Required instructions were not removed. Use a portable prompt for this SDK call."
+  },
+  "retainedDiagnostics": [
+    {
+      "artifact": "pi-provider-parity-QiZMcz/result.json",
+      "classification": "Different launch mode, not the original bug",
+      "finding": "Explicit foreground delegates use borrowed hookless bridges and reached the upstream request restriction. No billing, authentication or model fallback was applied."
+    },
+    {
+      "artifact": "pi-sdk-prompt-e2e-e4re9e/result.json",
+      "classification": "Test assertion corrected",
+      "finding": "A custom system prompt intentionally omits generated Pi rule/tool-guide sections; requiring those absent sections was incorrect. Custom/operator content remains required."
+    },
+    {
+      "artifact": "pi-provider-parity-nMhH1w/result.json",
+      "classification": "Prompt fix passed on Codex and SDK Opus; Haiku Git fixture failed",
+      "finding": "Both Haiku delegates passed the prompt guard and ran tools. The Git child added a path filter, which hides empty commits. The final fixture uses real file-changing commits instead; the earlier failure remains recorded."
+    }
+  ],
+  "promptE2E": {
+    "externalSdkReplayed": true,
+    "realPiHooksProviderMcpAndToolExecution": true,
+    "cases": ["append", "same", "rewrite", "prepend", "append-override", "append-explicit-docs", "override-explicit-docs", "late-change", "custom", "opaque"],
+    "runs": [
+      { "piVersion": "1.2.0", "artifact": "pi-sdk-prompt-e2e-7bFl5t/result.json", "passed": 10 },
+      { "piVersion": "1.3.0", "artifact": "pi-sdk-prompt-e2e-qP9PPR/result.json", "passed": 10 }
+    ],
+    "unsafeCasesStartZeroSdkQueries": true,
+    "customPromptsExplicitDocsOperatorProjectAndLateInstructionsPreserved": true
+  },
+  "live": {
+    "artifact": "pi-provider-parity-DS4KG2/result.json",
+    "piVersion": "1.3.0",
+    "targets": ["openai-codex/gpt-6.1-sol", "claude-sdk/claude-haiku-5-5", "claude-sdk/claude-opus-5-5"],
+    "selectedCases": ["parallel-inherited-delegates", "foreground-standard-worker", "recorded-identities-and-usage"],
+    "selectedRowsPassed": 9,
+    "otherRowsSkippedPerModel": 14,
+    "noModelOrAgentMocks": true,
+    "normalPersonalResources": true,
+    "identicalNormalParentTools": true,
+    "parentToolCountBeforeActivation": 12,
+    "parentThinking": "medium",
+    "delegateThinkingObserved": "max",
+    "workerThinkingObserved": "high",
+    "delegateProfilesOrThinkingOverridden": false,
+    "delegateChildrenPerModel": 2,
+    "childBashExecutionProjectPolicyAndIndependentConversationsVerified": true,
+    "parentDidNotReadDelegateTaskData": true,
+    "standardWorkerEditReadbackAndSyntaxCheckPassed": true,
+    "callResultIdentityAndUsageVerified": true,
+    "childHooksExperimentEnabled": false,
+    "sourceVerification": "The checked and replay-tested index.ts and bridge.ts were copied into the clean installed checkout for the normal-resource run, compared before launch, then restored with a compare-before-restore EXIT trap. No hook-only provider override was used.",
+    "personalSettingsUnchanged": true,
+    "ownedParentWorkersClosed": true,
+    "pass": true
+  },
+  "regression": {
+    "piVersion": "1.3.0",
+    "recoveryAndPermissions": "pi-sdk-recovery-e2e-HCk991/result.json",
+    "toolAndConfigurationCases": "pi-sdk-tools-e2e-Jtk7JF/result.json",
+    "toolCasesPassed": 17,
+    "allPassed": true,
+    "rootAndProviderChecksPassed": true
+  },
+  "constraints": {
+    "originalSessionInspectedReadOnly": true,
+    "originalSessionUnchanged": true,
+    "originalChildrenRetriedOrRecovered": false,
+    "piSubagentsModified": false,
+    "sdkUpgraded": false,
+    "sdkAuthenticationOrBillingChanged": false,
+    "requiredChildExtensionPolicyChanged": false,
+    "unitTestsAddedOrRun": false,
+    "rawPromptsSessionsNativeTranscriptsOrToolPayloadsCommitted": false
+  },
+  "limits": [
+    "Hookless foreground append-mode prompt projection is not implemented by this change",
+    "Durable foreground-to-background retained-worker continuation remains SDK-3",
+    "General instruction, environment, output-limit and unknown-history changes remain guarded",
+    "No full parity matrix, full local suite, physical Safari, overnight stress or child-local history-lifecycle verification"
+  ]
+}

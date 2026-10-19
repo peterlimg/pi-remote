@@ -70,6 +70,9 @@ jobs:
       - run: npm run test:recovery
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:prompt
+        env:
+          TMPDIR: ${{ runner.temp }}
       - run: npm run test:malformed
         env:
           TMPDIR: ${{ runner.temp }}
@@ -100,6 +103,7 @@ jobs:
           name: sdk-recovery-results
           path: |
             ${{ runner.temp }}/pi-sdk-recovery-e2e-*/
+            ${{ runner.temp }}/pi-sdk-prompt-e2e-*/
             ${{ runner.temp }}/pi-sdk-malformed-e2e-*/
             ${{ runner.temp }}/pi-sdk-cancel-e2e-*/
             ${{ runner.temp }}/pi-sdk-tools-e2e-*/

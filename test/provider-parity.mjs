@@ -237,6 +237,48 @@ try {
       await openParent(); await select(currentTarget); const before = parentCalls().length;
       assert((await send('Without tools, repeat the MEMORY marker from this chat.')).includes(memory)); assert.equal(parentCalls().length, before);
     });
+    await step('parallel-inherited-delegates', async () => {
+      await newSession('inherited-delegates');
+      const fixture = join(project, 'delegate-inputs'); mkdirSync(fixture);
+      for (const name of ['alpha', 'beta']) mkdirSync(join(fixture, name));
+      execFileSync('git', ['init', '--quiet', '--initial-branch=fixture', fixture]);
+      const subjects = Array.from({ length: 5 }, (_, index) => `DELEGATE_COMMIT_${index}_${randomUUID()}`);
+      for (const subject of subjects) {
+        writeFileSync(join(fixture, 'history.txt'), subject + '\n');
+        execFileSync('git', ['-C', fixture, 'add', '--', 'history.txt']);
+        execFileSync('git', ['-C', fixture, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
+          '-c', 'user.name=SDK fixture', '-c', 'user.email=sdk-fixture@example.invalid', 'commit', '--quiet', '-m', subject]);
+      }
+      const before = new Set(readdirSync(evidence, { recursive: true }).filter(name => name.endsWith('.jsonl')));
+      const reply = await send(`Test exactly two builtin delegate agents through one subagent call with workflow "parallel", args.tasks containing two entries with agent "delegate" and their task strings, and top-level async false. Leave child placement, context, model, thinking and acceptance at their normal profile defaults, inheriting this parent's ${currentTarget} model. Do not set child async values, use worker, custom profiles, external runners, altered instructions or extension overrides. Child one must use bash to count the non-hidden immediate subdirectories of ${fixture} and return DIR_COUNT=<number>. Child two must use bash to run git -C ${JSON.stringify(fixture)} log -5 --format=%s and return the five actual subjects. Both must also report the POLICY_ marker from their already-loaded project instructions. All child tasks are read-only: no edits, commits, staging, external requests or further delegation. The parent must not read or run commands against ${fixture}; use only the actual child outputs. If anything fails, report the exact failure and stop without retries, model switches or fallback runners.`);
+      const launches = parentCalls().filter(call => call.name === 'subagent' && !call.arguments.action);
+      assert.equal(launches.length, 1); assert.equal(launches[0].arguments.workflow, 'parallel'); assert.equal(launches[0].arguments.async, false);
+      const tasks = launches[0].arguments.args.tasks; assert.equal(tasks.length, 2);
+      for (const task of tasks) {
+        assert.equal(task.agent, 'delegate');
+        assert(Object.keys(task).every(key => ['agent', 'task', 'key', 'label'].includes(key)), 'Delegate defaults must not be overridden.');
+      }
+      const completions = messagesAt(file).filter(m => m.role === 'toolResult' && m.toolName === 'subagent');
+      assert(completions.length);
+      for (const completion of completions) assert(!completion.isError, textOf(completion));
+      assert(reply.includes('DIR_COUNT=2') && subjects.every(subject => reply.includes(subject)) && reply.includes(policy), reply);
+      const children = new Map();
+      for (const name of readdirSync(evidence, { recursive: true }).filter(name => name.endsWith('.jsonl') && !before.has(name))) {
+        const rows = readFileSync(join(evidence, name), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+        const header = rows[0]; if (header?.type !== 'session' || header.cwd !== project) continue;
+        const messages = rows.flatMap(row => row.message ? [row.message] : []), replies = messages.filter(m => m.role === 'assistant');
+        if (!replies.length || !messages.some(m => m.role === 'user' && textOf(m).includes(fixture))) continue;
+        assert(replies.every(m => `${m.provider}/${m.model}` === currentTarget));
+        assert.equal(replies.at(-1).stopReason, 'stop', replies.at(-1).errorMessage);
+        assert(replies.flatMap(m => m.content).some(block => block.type === 'toolCall' && block.name === 'bash'));
+        assert(textOf(replies.at(-1)).includes(policy), 'Each inherited delegate must retain the project instructions.');
+        checkMessages(messages); children.set(header.id, messages);
+      }
+      assert.equal(children.size, 2, 'Require two distinct, successful real delegate conversations.');
+      assert(!parentCalls().some(call => ['read', 'bash', 'fffind', 'ffgrep', 'find', 'grep', 'ls', 'edit', 'write'].includes(call.name) && JSON.stringify(call.arguments).includes(fixture)), 'Only children may inspect the task data.');
+      const parentId = JSON.parse(readFileSync(file, 'utf8').split('\n')[0]).id;
+      result.loadouts[currentTarget] = audit().find(row => row.type === 'loadout' && row.session === parentId).tools.sort();
+    });
     await step('foreground-standard-worker', async () => {
       const code = join(project, 'worker-edit.mjs'); writeFileSync(code, 'export const marker = "before";\n');
       await newSession('foreground'); const before = new Set(childArtifacts());
