@@ -1,8 +1,8 @@
 # Publish the SDK article to Vercel
 
-- Project: `pi-sdk-blog`
+- Project: `claude-sdk-in-pi`
 - Scope: `peterlimgs-projects`
-- Production address: https://pi-sdk-blog.vercel.app
+- Production address: https://claude-sdk-in-pi.vercel.app
 - Hosting config: `deploy/sdk-blog/vercel.json`
 
 This is a standalone static article. It does not host Pi Remote's server, expose a bridge, run models or require the local host to stay online. The repository's `web/` files remain the article's source. Publishing is manual; a Git push alone does not update this Vercel project.
@@ -12,25 +12,25 @@ This is a standalone static article. It does not host Pi Remote's server, expose
 Run from the repository root using the normal Vercel login. Export an explicit allowlist into a fresh directory. Never deploy the repository root or the entire `web/` directory.
 
 ```sh
-publish=$(mktemp -d "${TMPDIR:-/tmp}/pi-sdk-blog-publish-XXXXXX")
-mkdir "$publish/pi-sdk-blog"
+publish=$(mktemp -d "${TMPDIR:-/tmp}/claude-sdk-in-pi-publish-XXXXXX")
+mkdir "$publish/claude-sdk-in-pi"
 cp web/sdk-guide.html web/sdk-guide.css web/sdk-guide.js \
   web/sdk-guide-font.woff2 web/sdk-guide-font-LICENSE.txt web/icon.svg \
-  "$publish/pi-sdk-blog/"
-cp deploy/sdk-blog/vercel.json "$publish/pi-sdk-blog/"
+  "$publish/claude-sdk-in-pi/"
+cp deploy/sdk-blog/vercel.json "$publish/claude-sdk-in-pi/"
 
-npx vercel link --cwd "$publish/pi-sdk-blog" --yes \
-  --scope peterlimgs-projects --project pi-sdk-blog
+npx vercel link --cwd "$publish/claude-sdk-in-pi" --yes \
+  --scope peterlimgs-projects --project claude-sdk-in-pi
 # The CLI may download a project OIDC token. It is not an article asset.
-rm -f "$publish/pi-sdk-blog/.env.local"
-npx vercel deploy --cwd "$publish/pi-sdk-blog" \
+rm -f "$publish/claude-sdk-in-pi/.env.local"
+npx vercel deploy --cwd "$publish/claude-sdk-in-pi" \
   --scope peterlimgs-projects --dry --json --yes
 ```
 
 Inspect the dry run. Exactly seven files should be included: the six named public assets and `vercel.json`. `.env.local`, `.vercel` and `.gitignore` must be excluded. No sessions, credentials, project instructions or other repository files belong in the upload.
 
 ```sh
-npx vercel deploy --cwd "$publish/pi-sdk-blog" \
+npx vercel deploy --cwd "$publish/claude-sdk-in-pi" \
   --scope peterlimgs-projects --prod --yes
 ```
 
