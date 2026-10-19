@@ -73,7 +73,7 @@ Some operations have independently checkable goals. A restart job can verify the
 
 ### Native SDK continuation
 
-The current [bridge](../../experiments/claude-sdk-provider/bridge.ts) persists completed native checkpoints, but its pending MCP callbacks, tool batches, and accepted-input tracking live in memory. `historyContent()` intentionally rejects SDK work after the saved checkpoint. That guard cannot simply be removed when a Pi result is restored.
+The current [bridge](https://github.com/peterlimg/pi-claude-sdk/blob/main/bridge.ts) persists completed native checkpoints, but its pending MCP callbacks, tool batches, and accepted-input tracking live in memory. `historyContent()` intentionally rejects SDK work after the saved checkpoint. That guard cannot simply be removed when a Pi result is restored.
 
 A recovery adapter must reconcile:
 

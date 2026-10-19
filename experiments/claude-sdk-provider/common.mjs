@@ -8,8 +8,11 @@ import { chromium } from '@playwright/test';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { Type } from 'typebox';
-import extension from './index.ts';
-import { createBridge } from './bridge.ts';
+import { createJiti } from 'jiti';
+
+const jiti = createJiti(import.meta.url);
+const { default: extension } = await jiti.import('pi-claude-sdk/index.ts');
+const { createBridge } = await jiti.import('pi-claude-sdk/bridge.ts');
 
 const cwd = mkdtempSync(join(tmpdir(), 'pi-sdk-common-'));
 const evidence = { fixture: 'real SDK, synthetic images and in-memory Pi tools', controls: [], models: [], executions: 0 };

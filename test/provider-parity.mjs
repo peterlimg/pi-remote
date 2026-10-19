@@ -132,7 +132,9 @@ async function select(spec) {
 async function openParent() {
   if (currentTarget.startsWith('claude-sdk/')) {
     const { commands } = await worker.request('get_commands');
-    const resource = commands.find(command => command.name === 'claude-usage' && command.source === 'extension')?.sourceInfo;
+    const command = commands.find(command => command.name === 'claude-usage' && command.source === 'extension');
+    assert(command, 'SDK journeys require the claude-usage extension command; it is missing or renamed.');
+    const resource = command.sourceInfo;
     assert.equal(resource?.source, sdkSource, 'SDK journeys must load the pinned standalone package, not the archived experiment.');
     assert.equal(resource.origin, 'package');
     result.sdkPackages[currentTarget] = resource;

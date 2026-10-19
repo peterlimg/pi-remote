@@ -203,7 +203,7 @@ No new live Claude/Amp experiment calls, unit tests, production configuration ch
 ## Sources and verification limits
 
 - [Pinned SDK dependency](../../experiments/claude-sdk-provider/package-lock.json), installed `@anthropic-ai/claude-agent-sdk/sdk.d.ts`: `Query`, `Settings`, `SDKCompactBoundaryMessage`, `SDKStatusMessage`, `PostCompactHookInput`, `GetSessionMessagesOptions`, `SDKControlGetContextUsageResponse`, and SDK result usage documentation.
-- [Current bridge](../../experiments/claude-sdk-provider/bridge.ts) and [registration/lifecycle hooks](../../experiments/claude-sdk-provider/index.ts).
+- [Current standalone bridge](https://github.com/peterlimg/pi-claude-sdk/blob/main/bridge.ts) and [registration/lifecycle hooks](https://github.com/peterlimg/pi-claude-sdk/blob/main/index.ts).
 - Pi 1.2.0 installed sources: `dist/core/agent-session.js` manual `compact()`; `dist/core/extensions/types.d.ts` compaction events; `dist/core/compaction/compaction.d.ts` custom result shape; `docs/compaction.md`; `examples/extensions/custom-compaction.ts`.
 - [Pi compaction reference source](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/compaction/compaction.ts) and [extension interface source](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts). Local 1.2.0 files, rather than a moving GitHub main branch, were used for the findings above.
 

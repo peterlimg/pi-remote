@@ -1,6 +1,6 @@
 # Standalone SDK package
 
-Pi Remote loads the Claude SDK provider from Pi's package settings, not from its own extension. The maintained adapter is [peterlimg/pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). The current integration pin is `v0.1.0`, commit `bd9e41b2ba5ca2061099aaab56c496c2b454ea8e`; the underlying Agent SDK stays at 0.3.296.
+Pi Remote loads the Claude SDK provider from Pi's package settings, not from its own extension. The maintained adapter is [peterlimg/pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for the integration pin; the underlying Agent SDK stays at 0.3.296.
 
 ```sh
 pi install git:github.com/peterlimg/pi-claude-sdk@bd9e41b2ba5ca2061099aaab56c496c2b454ea8e
@@ -18,9 +18,9 @@ An existing chat still needs its valid completed checkpoint and matching configu
 
 ## Integration ownership
 
-`experiments/claude-sdk-provider/package.json` pins the external dependency. Its extension manifest and TypeScript check target that dependency, and its replay fixture imports the package directly. CI runs those Pi Remote RPC integration E2Es rather than the archived bridge unit suite. The old implementation and early direct-SDK scripts remain research snapshots; new adapter fixes belong in the standalone repository.
+The experiment's extension manifest, TypeScript check, replay fixture and research scripts all load the external dependency. CI runs the Pi Remote RPC integration E2Es. The deleted local adapter and its bridge unit tests remain in Git history; new adapter fixes belong in the standalone repository.
 
-When advancing the pin, update the dependency/lock and the installed Pi package source together. The paid [provider acceptance runner](provider-parity.md) verifies the SDK command's package source on each parent reopen, so an old local implementation cannot silently pass as the pinned package.
+When advancing the pin, update the dependency/lock, the install command above and the installed Pi package source together. The paid [provider acceptance runner](provider-parity.md) verifies the SDK command's package source on each parent reopen, so an old local implementation cannot silently pass as the pinned package.
 
 ## Migration verification
 

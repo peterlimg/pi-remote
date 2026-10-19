@@ -7,8 +7,11 @@ import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { Type } from 'typebox';
-import extension from './index.ts';
-import { createBridge } from './bridge.ts';
+import { createJiti } from 'jiti';
+
+const jiti = createJiti(import.meta.url);
+const { default: extension } = await jiti.import('pi-claude-sdk/index.ts');
+const { createBridge } = await jiti.import('pi-claude-sdk/bridge.ts');
 
 const cwd = mkdtempSync(join(tmpdir(), 'pi-sdk-auto-compact-'));
 const budget = Number(process.env.PI_SDK_TEST_BUDGET_USD ?? 0.35);

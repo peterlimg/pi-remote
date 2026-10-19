@@ -9,7 +9,9 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { Type } from 'typebox';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
-import { createBridge } from './bridge.ts';
+import { createJiti } from 'jiti';
+
+const { createBridge } = await createJiti(import.meta.url).import('pi-claude-sdk/bridge.ts');
 
 const cwd = mkdtempSync(join(tmpdir(), 'pi-sdk-provider-live-'));
 const rows = [];

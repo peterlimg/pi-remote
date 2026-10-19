@@ -64,7 +64,7 @@ writeFileSync(file, [
 const config = { ...loadConfig(scratch), clientToken: 'browser-test-token-only-123456789012345' };
 const host = await startHost({ dir: scratch, config, roots: [sessions], port: 0, relayUrl: '', allowResume: true,
   workerOptions: { bin: 'pi', prefix: ['-ne', '-ns', '-np', '-nc', '--no-mcp', '--tools', 'probe',
-    '-e', fileURLToPath(new URL('./index.ts', import.meta.url)), '-e', fixture,
+    '-e', fileURLToPath(import.meta.resolve('pi-claude-sdk/index.ts')), '-e', fixture,
     '-e', fileURLToPath(new URL('../../extension/index.ts', import.meta.url)), '--thinking', 'off'] } });
 const rows = () => { try { return readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
 const entries = () => readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);

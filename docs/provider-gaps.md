@@ -22,7 +22,7 @@ The provider now accepts Pi's manual and threshold compaction after checking acc
 
 The earlier parity result `Compaction cancelled` came from the all-model hook introduced in `7aac7e81` on October 14. It was a pre-existing integration restriction, not a new `ACK_0` reproduction. That blanket Pi-compaction block has been replaced by the validated handoff. Tree navigation now has its own validated handoff.
 
-[The pinned standalone bridge](https://github.com/peterlimg/pi-claude-sdk/blob/bd9e41b2ba5ca2061099aaab56c496c2b454ea8e/bridge.ts) still disables SDK-native automatic/idle compaction and rejects unexpected native compaction events. This is deliberate: Pi is the single compaction owner for the new path. It does not enable or claim to fix the native Haiku failure below.
+The [standalone bridge](sdk-package-installation.md) still disables SDK-native automatic/idle compaction and rejects unexpected native compaction events. The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for its pin. This is deliberate: Pi is the single compaction owner for the new path. It does not enable or claim to fix the native Haiku failure below.
 
 ### The earlier native automatic-compaction memory failure
 

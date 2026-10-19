@@ -59,7 +59,7 @@ const config = { ...loadConfig(scratch), clientToken: 'browser-test-token-only-1
 const entry = process.env.PI_SDK_TEST_PI || fileURLToPath(new URL('./bundle/cli.js', import.meta.resolve('@earendil-works/pi-coding-agent')));
 const host = await startHost({ dir: scratch, config, roots: [sessions], port: 0, relayUrl: '', allowResume: true,
   workerOptions: { bin: process.execPath, prefix: [entry, '-ne', '-ns', '-np', '-nc', '--no-mcp', '--tools', 'probe',
-    '-e', fileURLToPath(new URL('./index.ts', import.meta.url)), '-e', fixture, '--model', 'claude-sdk/'+modelId, '--thinking', thinking] } });
+    '-e', fileURLToPath(import.meta.resolve('pi-claude-sdk/index.ts')), '-e', fixture, '--model', 'claude-sdk/'+modelId, '--thinking', thinking] } });
 const rows = () => { try { return readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse); } catch { return []; } };
 const events = [], sent = [], received = [];
 const result = { fixture: 'real Pi RPC, SDK, local host and mobile Chromium', model: modelId, thinking, stopAndContinue, pass: false };

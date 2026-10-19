@@ -8,7 +8,7 @@ Investigated October 17, 2026, with SDK 0.3.296. These are observations for the 
 Pi provider → createBridge() → official SDK query() → SDK-managed Claude Code → Claude
 ```
 
-`experiments/claude-sdk-provider/bridge.ts` defaults to the official `@anthropic-ai/claude-agent-sdk` `query` function. The provider does not send its own Anthropic Messages requests. Authentication uses the official local Claude login. API keys and alternate cloud routing remain rejected.
+The [standalone bridge](https://github.com/peterlimg/pi-claude-sdk/blob/main/bridge.ts) defaults to the official `@anthropic-ai/claude-agent-sdk` `query` function. The provider does not send its own Anthropic Messages requests. Authentication uses the official local Claude login. API keys and alternate cloud routing remain rejected.
 
 The failed recovered conversation reached a new native SDK session with the expected identity. Claude then returned:
 

@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { query, tool, createSdkMcpServer, getSessionMessages } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { sdkEnvironment } from './bridge.ts';
-import { localLogin } from './index.ts';
+import { createJiti } from 'jiti';
+
+const jiti = createJiti(import.meta.url);
+const { sdkEnvironment } = await jiti.import('pi-claude-sdk/bridge.ts');
+const { localLogin } = await jiti.import('pi-claude-sdk/index.ts');
 
 const model = process.env.PI_SDK_TEST_MODEL ?? 'claude-haiku-5-5';
 assert(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'].includes(model));

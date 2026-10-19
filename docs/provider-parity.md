@@ -6,7 +6,7 @@ npm run test:provider-parity
 
 **Opt-in, paid model requests.** Requires Pi 1.3, normal local provider logins, the standalone SDK provider, pi-subagents, and Playwright Chromium/WebKit. This is not a CI job. Install browser engines with the project's usual Playwright command if needed.
 
-Install the SDK package using the pinned source in [the installation instructions](../experiments/claude-sdk-provider/EXPERIMENT.md#enable-it-for-the-phone). SDK journeys verify the command's package source on every parent reopen and record its metadata. The expected revision comes from the integration fixture's `pi-claude-sdk` dependency; an archived local adapter cannot silently satisfy this check.
+Install the SDK package using [the standalone installation instructions](sdk-package-installation.md). SDK journeys require the `claude-usage` extension command, verify its package source on every parent reopen and record its metadata. The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for the expected revision; an archived local adapter cannot silently satisfy this check.
 
 The same scenarios run against the user's configured default model and `claude-sdk/claude-haiku-5-5`. Nothing switches models after a failed request. To select models or rerun independent scenarios:
 

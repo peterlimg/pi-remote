@@ -34,7 +34,7 @@ export default function(pi) {
 const remote = fileURLToPath(new URL('../../extension/index.ts', import.meta.url));
 const entry = fileURLToPath(new URL('./bundle/cli.js', import.meta.resolve('@earendil-works/pi-coding-agent')));
 const prefix = progress => [entry, '-ne', '-ns', '-np', '-nc', '--no-mcp', '--tools', 'inspect_styles',
-  '-e', fileURLToPath(new URL('./index.ts', import.meta.url)), '-e', fixture, ...(progress ? ['-e', remote] : []),
+  '-e', fileURLToPath(import.meta.resolve('pi-claude-sdk/index.ts')), '-e', fixture, ...(progress ? ['-e', remote] : []),
   '--model', 'claude-sdk/claude-opus-5-5', '--thinking', 'medium'];
 const files = ['New progress session', 'Existing SDK session'].map((name, i) => {
   const file = join(scratch, 'sessions', `${i}.jsonl`);

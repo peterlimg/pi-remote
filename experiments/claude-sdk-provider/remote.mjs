@@ -58,7 +58,7 @@ const config = { ...loadConfig(scratch), clientToken: 'browser-test-token-only-1
 const entry = fileURLToPath(new URL('./bundle/cli.js', import.meta.resolve('@earendil-works/pi-coding-agent')));
 const host = await startHost({ dir: scratch, config, roots: [sessions], port: 0, relayUrl: '', allowResume: true,
   workerOptions: { bin: process.execPath, prefix: [entry, '-ne', '-ns', '-np', '-nc', '--no-mcp', '--tools', 'probe',
-    '-e', fileURLToPath(new URL('./index.ts', import.meta.url)), '-e', fixture,
+    '-e', fileURLToPath(import.meta.resolve('pi-claude-sdk/index.ts')), '-e', fixture,
     '--model', 'anthropic/claude-haiku-5-5', '--thinking', 'off'] } });
 const id = sessionKey(file);
 const url = `http://127.0.0.1:${host.http.address().port}`;

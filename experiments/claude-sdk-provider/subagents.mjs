@@ -18,7 +18,7 @@ const settings = join(homedir(), '.pi/agent/settings.json');
 const settingsHash = () => existsSync(settings) ? createHash('sha256').update(readFileSync(settings)).digest('hex') : undefined;
 const beforeSettings = settingsHash();
 Object.assign(process.env, { PI_CODING_AGENT_DIR: agentDir, PI_SUBAGENTS_TEMP_ROOT: join(scratch, 'subagent-runtime'), PI_OFFLINE: '1', PI_TELEMETRY: '0' });
-const sdk = fileURLToPath(new URL('./index.ts', import.meta.url));
+const sdk = fileURLToPath(import.meta.resolve('pi-claude-sdk/index.ts'));
 const subagents = process.env.PI_SDK_TEST_SUBAGENTS || join(homedir(), '.pi/agent/git/github.com/nicobailon/pi-subagents/index.ts');
 assert(existsSync(subagents), 'Install pi-subagents or set PI_SDK_TEST_SUBAGENTS.');
 // Agent frontmatter uses scalar lists; a blank tools value means no child tools.

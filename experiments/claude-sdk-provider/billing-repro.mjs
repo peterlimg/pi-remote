@@ -4,7 +4,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { sdkEnvironment } from './bridge.ts';
+import { createJiti } from 'jiti';
+
+const { sdkEnvironment } = await createJiti(import.meta.url).import('pi-claude-sdk/bridge.ts');
 
 const evidence = mkdtempSync(join(tmpdir(), 'pi-sdk-billing-repro-'));
 const sdk = JSON.parse(readFileSync(new URL('./package.json', import.meta.resolve('@anthropic-ai/claude-agent-sdk')), 'utf8'));
