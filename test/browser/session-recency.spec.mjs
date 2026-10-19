@@ -113,8 +113,8 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
   try {
     host = await startHost({ ...options, port: 0 });
     const port = host.http.address().port, url = `http://127.0.0.1:${port}`;
-    const restored = async () => {
-      await expect.poll(() => host.service.live.size).toBe(2);
+    const restored = async (expectedLive = 2) => {
+      await expect.poll(() => host.service.live.size).toBe(expectedLive);
       await expect.poll(() => host.service.busyWorkers).toBe(0);
       for (const [i, file] of files.entries()) {
         expect(host.service.read(sessionKey(file)).updatedAt).toBeCloseTo(now - i * 3600000, 0);
@@ -130,9 +130,10 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(new RegExp(`^${fails ? 'Saved' : 'Ready'} Older restored task 2 `));
 
     await host.close();
+    expect(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8'))).toEqual(fails ? [] : files.slice(-2).map(sessionKey));
     await expect(page.locator('#connection')).not.toHaveText('Computer connected');
     host = await startHost({ ...options, port });
-    await restored();
+    await restored(fails ? 0 : 2);
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await expect(rows).toHaveText(titles);
     await page.reload();

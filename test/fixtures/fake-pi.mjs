@@ -55,7 +55,12 @@ const parser = new JsonLines(command => {
   }
   // Pi acknowledges extension commands only after their handler returns.
   if (command.message?.startsWith('/usage')) usageCommand = command;
-  else out({ id: command.id, type: 'response', success: true, data });
+  else if (command.type === 'get_state' && process.argv.includes('--startup-gate')) {
+    const timer = setInterval(() => {
+      if (!existsSync(join(process.cwd(), 'startup-ready'))) return;
+      clearInterval(timer); out({ id: command.id, type: 'response', success: true, data });
+    }, 20);
+  } else out({ id: command.id, type: 'response', success: true, data });
   if (command.type === 'abort' && waitingTimestamp) {
     out({ type: 'message_end', message: { role: 'assistant', timestamp: waitingTimestamp, content: [], stopReason: 'aborted' } });
     out({ type: 'agent_end' }); waitingTimestamp = undefined;

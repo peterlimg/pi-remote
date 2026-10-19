@@ -50,6 +50,8 @@ The SDK extension sends a one-shot `claude-sdk-checkpoint` status only **after**
 
 New input during a running tool does not reset its pending tool IDs. A late startup snapshot cannot roll a running session back to idle. Outstanding RPC requests and startup/restoration work also block a restart.
 
+Automatic restoration starts one worker at a time to bound cold-start load. Shutdown remembers live workers and restorations still queued or in progress. Failed attempts produce warnings and remain manually resumable, but are not carried into every future restart. Session files are never removed.
+
 Restart-safe and SDK-resumable are different capabilities. Stopping an already failed, quiescent worker cannot undo its tools, but it does not resolve an unknown tool result. Native checkpoint, history, configuration, and tool-result validation remain in the SDK provider. There is no automatic tool replay or permissive history fallback.
 
 ## Safe restart path

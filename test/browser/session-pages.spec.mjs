@@ -6,6 +6,10 @@ import { sessionWindow } from '../../src/client-channel.mjs';
 test('a relay-first upgrade still pages and searches an older host catalog', async ({ page }) => {
   await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
     const packet = JSON.parse(raw);
+    if (packet.op === 'projects') {
+      ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+      return;
+    }
     if (packet.type !== 'auth') throw new Error('Old hosts must not receive page requests');
     ws.send(JSON.stringify({ type: 'ready' }));
     ws.send(JSON.stringify({ type: 'sessions', sessions: Array.from({ length: 615 }, (_, i) => ({

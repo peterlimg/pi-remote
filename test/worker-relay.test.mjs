@@ -120,6 +120,11 @@ test('host restart restores every managed session with phone prompts, images and
   const pids = ids.map(id => host.service.live.get(id).worker.process.pid);
   await host.close();
   assert.equal(statSync(join(dir, 'resume-sessions.json')).mode & 0o777, 0o600);
+  host = await startHost({ ...options, workerOptions: { ...options.workerOptions, prefix: [...options.workerOptions.prefix, '--startup-gate'] } });
+  await until(() => host.service.managedSessions.length);
+  assert.equal(host.service.managedSessions.length, 1, 'Cold restorations must not start every worker at once');
+  await host.close();
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')).sort(), [...ids].sort(), 'Shutdown must retain queued restorations');
   host = await startHost(options); // The normal background start has no --allow-resume flag.
   await until(() => ids.every(id => host.service.read(id).status === 'idle'));
   const port = host.http.address().port;
@@ -169,6 +174,8 @@ test('restoration respects owners and roots, reports failures and continues rest
   host.service.scan();
   assert.match(host.service.list().warnings.join('\n'), /owned or has a stale lock/);
   assert.match(host.service.list().warnings.join('\n'), /not found in configured roots/);
+  await host.close();
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')), [valid], 'Failed restore attempts must not become a permanent restart backlog');
 });
 
 test('remote /new creates an independent session in the same working directory', async t => {

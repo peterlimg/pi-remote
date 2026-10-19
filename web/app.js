@@ -1573,7 +1573,7 @@ function dragToClose(sheet, dialog = sheet, list) {
   sheet.addEventListener('touchcancel', release);
 }
 dragToClose($('image-viewer'));
-dragToClose(document.querySelector('.project-sheet'), $('project-picker'), $('project-options'));
+dragToClose($('project-picker').querySelector('.project-sheet'), $('project-picker'), $('project-options'));
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {

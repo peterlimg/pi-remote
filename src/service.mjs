@@ -26,7 +26,7 @@ export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.bridges = new WeakMap(); this.starting = new Set();
-    this.restoreIds = new Set(); this.restoreWarnings = []; this.restoring = new Set();
+    this.restoreWarnings = []; this.restoring = new Set();
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.historyReader = new HistoryReader();
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
@@ -72,12 +72,14 @@ export class SessionService extends EventEmitter {
     try {
       const ids = JSON.parse(readFileSync(join(this.dir, 'resume-sessions.json'), 'utf8'));
       if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid session restore list');
-      this.restoreIds = new Set(ids); this.restoreLoaded = true; this.restoring = new Set(ids);
-      await Promise.all([...this.restoreIds].map(async id => {
+      this.restoreLoaded = true; this.restoring = new Set(ids);
+      // Cold Pi startups are expensive; do not launch the whole restore list at once.
+      for (const id of this.restoring) {
+        if (this.stopping) break;
         try { await this.startWorker(id); }
         catch (error) { this.restoreWarnings.push(`Could not restore ${id}: ${error.message}`); }
         finally { this.restoring.delete(id); }
-      }));
+      }
     } catch (error) {
       if (error.code === 'ENOENT') this.restoreLoaded = true;
       else this.restoreWarnings.push('Could not read session restore list: ' + error.message);
@@ -305,7 +307,6 @@ export class SessionService extends EventEmitter {
         const page = await this.history(id, {});
         history = { ...history, messages: page.messages, historyTruncated: page.older };
       }
-      this.restoreIds.delete(id);
       item.restore(rpcState, history);
       return { resumed: true };
     } catch (e) { await item.close(); throw e; }
@@ -320,9 +321,9 @@ export class SessionService extends EventEmitter {
   async close() {
     if (this.stopping) return;
     clearInterval(this.timer);
-    // Remember only host-owned workers. Terminal bridges reconnect themselves;
-    // other saved sessions resume on demand from the phone.
-    const ids = [...new Set([...this.restoreIds, ...this.managedSessions.map(item => item.id)])];
+    // Preserve live workers and unfinished restores, not historical failed attempts.
+    // Terminal bridges reconnect themselves; saved sessions resume on demand.
+    const ids = [...new Set([...this.restoring, ...this.managedSessions.map(item => item.id)])];
     if (this.restoreLoaded || this.live.size) {
       const file = join(this.dir, 'resume-sessions.json');
       writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
