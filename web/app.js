@@ -1813,6 +1813,8 @@ document.addEventListener('keydown', event => {
   }
 });
 document.addEventListener('pointerdown', event => {
+  const info = document.querySelector('.session-info');
+  if (info.open && !info.contains(event.target)) info.open = false;
   const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
   if (settingsPicker && !$('settings-picker').contains(event.target) && !trigger.contains(event.target)) closePicker();
 });

@@ -19,6 +19,17 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   await page.keyboard.press('Enter');
   await expect(page.locator('#project')).toBeVisible();
   await expect(page.locator('#project')).toHaveText('/projects/Project Alpha');
+  await page.locator('#project').tap();
+  await expect(page.locator('#project')).toBeVisible();
+  await page.locator('#transcript').tap({ position: { x: 10, y: 10 } });
+  await expect(page.locator('#project')).toBeHidden();
+  await details.tap();
+  await expect(page.locator('#project')).toBeVisible();
+  await page.locator('#prompt').tap();
+  await expect(page.locator('#project')).toBeHidden();
+  await expect(page.locator('#prompt')).toBeFocused();
+  await details.tap();
+  await expect(page.locator('#project')).toBeVisible();
   await expect(page.locator('#composer select')).toHaveCount(0);
   await expect(page.locator('#transcript')).toContainText('Working on Project Alpha');
   await page.locator('#prompt').fill('draft for alpha');
@@ -93,6 +104,10 @@ test('conversation header centers and truncates long titles without crowding its
     await expect(page.locator('#project')).toHaveText(state.cwd);
     await expect(page.locator('#project')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator('#title').click();
+    await expect(page.locator('#project')).toBeHidden();
+    await details.click();
+    await expect(page.locator('#project')).toBeVisible();
     await details.click();
   }
 });
