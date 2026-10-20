@@ -134,10 +134,46 @@ test('the blog and native disclosure remain readable without JavaScript', async 
   } finally { await context.close(); }
 });
 
+test('the article exposes a static large-image preview to X without JavaScript', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, userAgent: 'Twitterbot/1.0' });
+  try {
+    const page = await context.newPage();
+    expect((await page.goto(browserOrigin + '/sdk-guide.html')).status()).toBe(200);
+    const canonical = 'https://claude-sdk-in-pi.vercel.app/';
+    const title = 'Claude thinks. Pi does the work.';
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
+    for (const [selector, content] of [
+      ['meta[property="og:type"]', 'article'],
+      ['meta[property="og:url"]', canonical],
+      ['meta[property="og:title"]', title],
+      ['meta[property="og:image:type"]', 'image/png'],
+      ['meta[property="og:image:width"]', '1200'],
+      ['meta[property="og:image:height"]', '600'],
+      ['meta[name="twitter:card"]', 'summary_large_image'],
+      ['meta[name="twitter:title"]', title]
+    ]) await expect(page.locator(selector)).toHaveAttribute('content', content);
+    const image = await page.locator('meta[property="og:image"]').getAttribute('content');
+    expect(image).toBe(canonical + 'sdk-guide-social.png');
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute('content', image);
+    const alt = await page.locator('meta[property="og:image:alt"]').getAttribute('content');
+    expect(alt).toContain('tools, permissions and history stay in Pi'); expect(alt.length).toBeLessThanOrEqual(420);
+    await expect(page.locator('meta[name="twitter:image:alt"]')).toHaveAttribute('content', alt);
+    const response = await context.request.get(browserOrigin + new URL(image).pathname);
+    expect(response.status()).toBe(200); expect(response.headers()['content-type']).toContain('image/png');
+    const bytes = await response.body();
+    expect(bytes.length).toBeLessThan(5_000_000); expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(bytes.readUInt32BE(16)).toBe(1200); expect(bytes.readUInt32BE(20)).toBe(600);
+    expect(bytes.includes(Buffer.from('impeccable:prompt\0Rendered from the authored web/sdk-guide-social.svg'))).toBe(true);
+    await page.goto(browserOrigin + new URL(image).pathname);
+    await expect(page.locator('img')).toHaveJSProperty('naturalWidth', 1200);
+    await expect(page.locator('img')).toHaveJSProperty('naturalHeight', 600);
+  } finally { await context.close(); }
+});
+
 test('the article assets are explicit and font permission stays scoped to the article', async ({ request }) => {
   for (const [path, type] of [['/sdk-guide.css', 'text/css'], ['/sdk-guide.js', 'text/javascript'], ['/sdk-guide-font.woff2', 'font/woff2']]) {
     const response = await request.get(path); expect(response.status()).toBe(200); expect(response.headers()['content-type']).toContain(type);
   }
   expect((await request.get('/')).headers()['content-security-policy']).not.toContain('font-src');
-  for (const path of ['/docs/provider-gaps.md', '/sdk-guide.html/extra', '/web/sdk-guide.js']) expect((await request.get(path)).status()).toBe(404);
+  for (const path of ['/docs/provider-gaps.md', '/sdk-guide.html/extra', '/web/sdk-guide.js', '/sdk-guide-social.svg']) expect((await request.get(path)).status()).toBe(404);
 });

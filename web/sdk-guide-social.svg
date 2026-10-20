@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title description">
+  <title id="title">Claude thinks. Pi does the work.</title>
+  <desc id="description">Pi owns tools, permissions and history. An SDK adapter connects tool proposals from Claude to Pi and sends recorded results back.</desc>
+  <rect width="1200" height="600" fill="#f8faf7"/>
+  <g font-family="Bricolage, sans-serif" fill="#182820">
+    <g font-size="102" font-weight="600" letter-spacing="-3" style="font-variation-settings:'opsz' 64">
+      <text x="64" y="134" fill="#35674d">Claude thinks.</text>
+      <text x="64" y="238">Pi does the work.</text>
+    </g>
+    <text x="600" y="344" text-anchor="middle" font-size="24" fill="#355f85">Tool proposal</text>
+    <g fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M958 398H714M486 398H242m12-7-12 7 12 7M726 391l-12 7 12 7" stroke="#355f85"/>
+      <path d="M242 432H486m-12-7 12 7-12 7M714 432H958m-12-7 12 7-12 7" stroke="#35674d"/>
+    </g>
+    <circle cx="184" cy="414" r="58" fill="#e8f0e9" stroke="#35674d" stroke-width="1.5"/>
+    <rect x="486" y="374" width="228" height="80" rx="9" fill="#fff" stroke="#ccd7cf" stroke-width="1.5"/>
+    <circle cx="1016" cy="414" r="58" fill="#eaf0f7" stroke="#355f85" stroke-width="1.5"/>
+    <text x="184" y="427" text-anchor="middle" font-size="38" font-weight="600" fill="#35674d">Pi</text>
+    <text x="600" y="423" text-anchor="middle" font-size="30" font-weight="600">SDK adapter</text>
+    <text x="1016" y="425" text-anchor="middle" font-size="30" font-weight="600" fill="#355f85">Claude</text>
+    <text x="600" y="504" text-anchor="middle" font-size="24" fill="#35674d">Recorded result</text>
+    <text x="64" y="566" font-size="25">Tools, permissions and history stay in Pi.</text>
+    <text x="1136" y="566" text-anchor="end" font-size="20" fill="#5b6c62">claude-sdk-in-pi.vercel.app</text>
+  </g>
+</svg>
