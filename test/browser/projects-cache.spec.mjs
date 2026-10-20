@@ -18,6 +18,11 @@ test('cached projects stay usable while the picker refreshes', async ({ page }, 
         requests.push({ ws, packet });
         if (requests.length === 1) reply(requests[0], projects);
       } else if (packet.op === 'new') starts.push({ ws, packet });
+      else if (packet.op === 'watch') {
+        ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0,
+          state: { ...state, id: packet.sessionId, title: 'Untitled session', messages: [] } }));
+        reply({ ws, packet });
+      } else if (packet.op === 'commands') reply({ ws, packet }, []);
     });
   });
   await page.goto(url);
@@ -62,17 +67,24 @@ test('cached projects stay usable while the picker refreshes', async ({ page }, 
   await open();
   await expect.poll(() => requests.length).toBe(5);
   await picker.locator('.project-option').first().click();
-  await expect(status).toHaveText('Starting session…');
-  // A refresh arriving during creation must not replace or re-enable the buttons.
+  await expect(picker).toBeHidden();
+  await expect(page.locator('#composer-hint')).toContainText('Starting session');
+  await page.locator('#prompt').fill('Keep this draft if startup fails');
+  // A late project refresh must not interrupt the new conversation.
   reply(requests.at(-1), projects);
-  await expect(picker.locator('.project-option').first()).toBeDisabled();
-  await expect(picker.getByRole('button', { name: 'Start without a project' })).toBeDisabled();
-  await expect(status).toHaveText('Starting session…');
+  await expect(picker).toBeHidden();
+  await expect(page.locator('#send')).toBeDisabled();
   await expect.poll(() => starts.length).toBe(1);
   expect(starts[0].packet.sessionId).toBe('beta');
   reply(starts[0], undefined, 'Session start failed');
-  await expect(status).toHaveText('Session start failed');
-  await expect(picker.locator('.project-option').first()).toBeEnabled();
+  await expect(page.locator('#notice')).toHaveText('Session start failed');
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft if startup fails');
+  await page.getByRole('button', { name: 'Try starting again' }).click();
+  await expect.poll(() => starts.length).toBe(2);
+  expect(starts[1].packet.sessionId).toBe('beta');
+  reply(starts[1], { sessionId: 'fresh' });
+  await expect(page.locator('#send')).toBeEnabled();
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft if startup fails');
 });
 
 test('project prefetch survives dismissal and reconnect, but clears on sign out', async ({ page }) => {

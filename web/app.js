@@ -400,7 +400,7 @@ function connect() {
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       loadProjects();
       if (supportsSessionSections || listLimit > 20 || searchQuery || listError) loadList();
-      if (selected) {
+      if (selected && !cache.get(selected)?.creation) {
         const id = selected;
         request('watch', { sessionId: id }).then(() => loadUsage(id)).catch(e => notice(e.message));
         loadCommands(id);
@@ -804,7 +804,8 @@ async function selectSession(id) {
   if (selected !== id) { clearThreadImages(); clearThreadVideos(); }
   selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
   renderImages();
-  commandDismissed = false; commandIndex = 0; loadCommands(id);
+  commandDismissed = false; commandIndex = 0;
+  if (!cache.get(id)?.creation) loadCommands(id);
   lastDialog = undefined; $('dialog').hidden = true;
   $('transcript').replaceChildren();
   updateScrollButton();
@@ -839,6 +840,7 @@ async function selectSession(id) {
     $('composer').hidden = false; updateControls();
   }
   resizePrompt();
+  if (state?.creation) return;
   try { await request('watch', { sessionId: id }); loadUsage(id); }
   catch (e) {
     if (selected !== id) return;
@@ -1372,7 +1374,7 @@ function updateControls() {
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
-  $('image-files').disabled = !selected || sending.has(selected);
+  $('image-files').disabled = !selected || !!state?.creation || sending.has(selected);
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
   $('abort').hidden = !working;
@@ -1398,10 +1400,12 @@ function updateControls() {
   renderUsageMeter();
   if (settingsPicker?.kind === 'usage') renderUsagePanel();
   $('fast-mode').toggleAttribute('hidden', !live || state?.fastMode !== true);
-  $('resume').hidden = !state || !['saved', 'disconnected'].includes(state.status);
+  $('resume').hidden = state?.creation ? state.creation.pending : !state || !['saved', 'disconnected'].includes(state.status);
+  $('resume').textContent = state?.creation ? 'Try starting again' : 'Resume session';
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
-  $('resume').disabled = !connected || !resumable;
+  $('resume').disabled = !connected || (state?.creation ? state.creation.pending : !resumable);
   $('composer-hint').textContent = !connected ? '' :
+    state?.creation ? (state.creation.pending ? 'Starting session… You can write your message now.' : 'Session did not start. Your draft is kept here.') :
     live && state.compacting ? 'Summarizing earlier messages. New messages will wait.' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';
@@ -2049,19 +2053,28 @@ function openProjects() {
   loadProjects();
 }
 // Without a project, the host starts the session in a new folder it creates.
-async function startInProject(project) {
-  const buttons = $('project-picker').querySelectorAll('.project-option, .project-pin, #new-project');
-  for (const button of buttons) button.disabled = true;
-  $('project-status').textContent = 'Starting session…';
+async function startInProject(project, id = 'new-' + crypto.randomUUID()) {
+  if (cache.get(id)?.creation?.pending) return;
+  const creation = { project, pending: true };
+  cache.set(id, { id, title: 'Untitled session', cwd: project?.cwd || '', status: 'starting', messages: [], tools: [], creation });
+  $('project-picker').close();
+  void selectSession(id);
   try {
     const created = project ? await request('new', { sessionId: project.sessionId }) : await request('newProject');
-    if (!$('project-picker').open) return;
-    $('project-picker').close();
-    await selectSession(created.sessionId);
+    if (cache.get(id)?.creation !== creation) return;
+    drafts.set(created.sessionId, selected === id ? $('prompt').value : drafts.get(id) || '');
+    // Finishing startup must not reopen a conversation the user has already left.
+    if (selected === id) {
+      if ($('app').classList.contains('viewing')) await selectSession(created.sessionId);
+      else selected = undefined;
+    }
+    drafts.delete(id); cache.delete(id);
   } catch (e) {
-    $('project-status').textContent = e.message;
-  } finally {
-    for (const button of buttons) button.disabled = false;
+    if (cache.get(id)?.creation !== creation) return;
+    creation.pending = false;
+    const state = cache.get(id);
+    state.status = 'error'; state.error = e.message;
+    if (selected === id) renderConversation(state);
   }
 }
 $('new-session').addEventListener('click', () => { haptic(); openProjects(); });
@@ -2413,6 +2426,8 @@ $('abort').addEventListener('click', async () => {
   catch (e) { notice(e.message); }
 });
 $('resume').addEventListener('click', async () => {
+  const creation = cache.get(selected)?.creation;
+  if (creation) { await startInProject(creation.project, selected); return; }
   $('resume').disabled = true;
   try { await request('resume', { sessionId: selected }); }
   catch (e) { notice(e.message); }
