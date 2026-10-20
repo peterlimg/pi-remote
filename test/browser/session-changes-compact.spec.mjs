@@ -27,6 +27,10 @@ for (const view of [
       await expect(task).toHaveValue('1');
       await expect(code()).toContainText('code.trim()');
       await expect(main.locator('.review-location-details code')).toBeHidden();
+      const badge = await main.locator('.review-heading .worktree-badge').boundingBox();
+      const target = await main.getByLabel('Work location details').boundingBox();
+      expect(badge.height).toBeLessThanOrEqual(24);
+      expect(target.height).toBeGreaterThanOrEqual(44);
       await main.getByLabel('Work location details').click();
       await expect(main.locator('.review-location-details code')).toHaveText('~/workspace/pi-remote/.worktrees/login-flow');
       await main.getByLabel('Work location details').click();
@@ -67,12 +71,12 @@ for (const view of [
       await expect(page.locator('#variant-label')).toHaveText('F · File browser');
       await expect(main.locator('.browser-file')).toHaveCount(6);
       await capture('F');
-      await main.getByRole('button', { name: 'login-flow', exact: true }).click();
+      await main.getByRole('combobox', { name: 'Filter worktrees' }).selectOption('1');
       await expect(main.locator('.browser-file')).toHaveCount(3);
       await expect(main.locator('.browser-location h3')).toHaveText('login-flow');
-      await main.getByRole('button', { name: 'All worktrees', exact: true }).click();
+      await main.getByRole('combobox', { name: 'Filter worktrees' }).selectOption('-1');
       await main.getByRole('region', { name: 'Files in login-flow' }).getByRole('button', { name: /web\/app\.js/ }).click();
-      await expect(main.locator('.inspector-context > span')).toHaveText('login-flow');
+      await expect(main.locator('.inspector-context .worktree-badge')).toHaveText('login-flow');
       await expect(code()).toContainText('code.trim()');
       await expect(code()).not.toContainText('showSessions();');
       await capture('F-diff');

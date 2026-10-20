@@ -9,7 +9,6 @@ const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   send: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
   warning: '<path d="m12 3 10 18H2ZM12 9v5m0 3v.1"/>',
-  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>'
 };
 const icon = name => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
@@ -92,7 +91,7 @@ function stats(items) {
   return `<span class="diff-stats" aria-label="${added} added lines, ${removed} removed lines"><span class="added">+${added}</span><span class="removed">−${removed}</span></span>`;
 }
 function scopeHeader(location) {
-  return `<div class="location-heading"><div class="location-name">${icon('branch')}<strong>${location.name}</strong><span class="location-kind">${location.kind}</span></div><span class="branch-name">${location.branch}</span><code class="location-path">${location.path}</code><p class="folder-scope">${location.scope}</p></div>`;
+  return `<div class="location-heading">${locationDetails([location])}</div>`;
 }
 function diffCode(file) {
   return `<div class="code-scroll" tabindex="0" role="region" aria-label="Diff for ${file.name}"><pre><span class="hunk">${file.hunk}</span>${file.lines.map(([type, line]) => `<span class="code-line ${type === '+' ? 'line-added' : type === '-' ? 'line-removed' : ''}"><span class="line-sign">${type}</span>${escape(line)}</span>`).join('')}</pre></div>`;
@@ -113,7 +112,7 @@ function emptyState() {
 function taskContent() {
   return `<div class="changes-overview"><div><h2>Changes in this session</h2><p>${data().tasks.length} tasks · ${data().locations.length} worktrees</p></div>${stats(allFiles())}</div><p class="scope-note">Choose a task. Each diff stays in its own worktree.</p><div class="task-list">${data().tasks.map(task => {
     const items = task.locations.flatMap(location => location.files);
-    return `<details class="task-change"><summary><span class="task-title"><strong>${task.title}</strong>${icon('chevron')}</span><span class="task-meta"><span class="task-status ${task.status === 'Working' ? 'task-working' : ''}">${task.status}</span><span>${items.length} files</span>${stats(items)}</span><span class="task-worktrees">${icon('branch')}${task.locations.map(location => location.name).join(' · ')}</span></summary><div class="task-files"><p class="task-boundary">Only this task's captured edits. Other tasks stay separate.</p>${task.locations.map(location => `<section class="task-location" aria-label="${task.title} in ${location.name}">${scopeHeader(location)}${fileList(location.files)}</section>`).join('')}</div></details>`;
+    return `<details class="task-change"><summary><span class="task-title"><strong>${task.title}</strong>${icon('chevron')}</span><span class="task-meta"><span class="task-status ${task.status === 'Working' ? 'task-working' : ''}">${task.status}</span><span class="worktree-badge">${icon('branch')}${task.locations.length === 1 ? task.locations[0].name : task.locations.length + ' worktrees'}</span><span>${items.length} files</span>${stats(items)}</span></summary><div class="task-files">${task.locations.map(location => `<section class="task-location" aria-label="${task.title} in ${location.name}">${task.locations.length > 1 ? scopeHeader(location) : ''}${fileList(location.files)}</section>`).join('')}</div></details>`;
   }).join('')}</div>${exclusions()}`;
 }
 function changesContent() {
@@ -143,7 +142,7 @@ function reviewTabs() {
   return `<nav class="session-tabs review-tabs" aria-label="Session view"><button type="button" data-action="conversation" aria-pressed="${conversation}">Conversation</button><button type="button" data-action="changes" aria-pressed="${!conversation}">Changes <span>${allFiles().length}</span></button></nav>`;
 }
 function locationDetails(locations) {
-  return `<details class="review-location-details"><summary aria-label="Work location details">${icon('info')}</summary><div>${locations.map(location => `<p><strong>${location.name}</strong><span>${location.branch}</span><code>${location.path}</code></p>`).join('')}</div></details>`;
+  return `<details class="review-location-details"><summary aria-label="Work location details"><span class="worktree-badge">${icon('branch')}<span class="location-name"><strong>${locations.length === 1 ? locations[0].name : locations.length + ' worktrees'}</strong></span>${icon('chevron')}</span></summary><div>${locations.map(location => `<p><strong>${location.name}</strong><span class="location-kind">${location.kind}</span><span class="branch-name">${location.branch}</span><code class="location-path">${location.path}</code><span class="folder-scope">${location.scope}</span></p>`).join('')}</div></details>`;
 }
 function selectedDiff(entry) {
   return `<section class="compact-diff" aria-label="Selected file diff"><div class="review-diff-state"><span>${entry.file.state}</span>${stats([entry.file])}</div>${diffCode(entry.file)}</section>`;
@@ -152,11 +151,11 @@ function renderD() {
   const task = reviewTasks()[reviewTask], entries = taskEntries();
   if (conversation) return reviewTabs() + transcript();
   if (!task) return reviewTabs() + emptyState();
-  return `${reviewTabs()}<div class="focused-review"><label class="review-task-label" for="review-task">Task</label><select id="review-task" data-review-task aria-label="Review task">${reviewTasks().map((item, index) => `<option value="${index}" ${index === reviewTask ? 'selected' : ''}>${item.title}</option>`).join('')}</select><div class="review-context"><span>${icon('branch')}${task.locations.map(location => location.name).join(' + ')}</span><span>${task.status}</span>${locationDetails(task.locations)}</div><div class="review-file-list" aria-label="Task files">${entries.map((entry, index) => `<button type="button" data-review-file="${index}" aria-pressed="${index === reviewFile}"><span>${entry.file.name}${task.locations.length > 1 ? `<small>${entry.location.name}</small>` : ''}</span>${index === reviewFile ? icon('check') : stats([entry.file])}</button>`).join('')}</div>${selectedDiff(entries[reviewFile])}<p class="review-footnote">Session edits only · 1 shared file excluded</p></div>`;
+  return `${reviewTabs()}<div class="focused-review"><div class="review-heading"><select id="review-task" data-review-task aria-label="Review task">${reviewTasks().map((item, index) => `<option value="${index}" ${index === reviewTask ? 'selected' : ''}>${item.title}</option>`).join('')}</select>${locationDetails(task.locations)}</div><div class="review-file-list" aria-label="Task files">${entries.map((entry, index) => `<button type="button" data-review-file="${index}" aria-pressed="${index === reviewFile}"><span>${entry.file.name}${task.locations.length > 1 ? `<small>${entry.location.name}</small>` : ''}</span>${index === reviewFile ? icon('check') : stats([entry.file])}</button>`).join('')}</div>${selectedDiff(entries[reviewFile])}<p class="review-footnote">Session edits only · 1 shared file excluded</p></div>`;
 }
 function renderE() {
   const entries = taskEntries(), selected = entries[reviewFile];
-  return `<div class="linked-workspace"><section class="linked-chat" aria-label="Sample conversation"><div class="sample-user">Keep each task separate so I can review its changes.</div><p>${selected ? `Captured edits for <strong>${selected.task.title}</strong>. Other tasks stay separate.` : 'No session edits have been captured yet.'}</p></section>${linkedReviewOpen ? `<section class="inline-review" aria-label="Changes beside the conversation"><header><h2>Session changes</h2><button class="icon-button" type="button" data-action="toggle-linked" aria-label="Hide changes">${icon('close')}</button></header>${selected ? `<div class="review-task-strip" aria-label="Review task">${reviewTasks().map((task, index) => `<button type="button" data-review-task="${index}" aria-pressed="${index === reviewTask}">${task.shortTitle}</button>`).join('')}</div><div class="inline-file-picker"><select data-review-file aria-label="File to review">${entries.map((entry, index) => `<option value="${index}" ${index === reviewFile ? 'selected' : ''}>${reviewTasks()[reviewTask].locations.length > 1 ? entry.location.name + ' / ' : ''}${entry.file.name}</option>`).join('')}</select><span>${icon('branch')}${selected.location.name}</span></div><div class="inline-code">${selectedDiff(selected)}</div>` : emptyState()}</section>` : `<button type="button" class="reopen-review" data-action="toggle-linked">${icon('diff')}Review ${allFiles().length} session files${icon('chevron')}</button>`}<div class="linked-composer"><label class="sr-only" for="sample-message">Sample message, not connected</label><input id="sample-message" readonly placeholder="Message this session…"><span aria-hidden="true">${icon('send')}</span></div></div>`;
+  return `<div class="linked-workspace"><section class="linked-chat" aria-label="Sample conversation"><div class="sample-user">Keep each task separate so I can review its changes.</div><p>${selected ? `Captured edits for <strong>${selected.task.title}</strong>. Other tasks stay separate.` : 'No session edits have been captured yet.'}</p></section>${linkedReviewOpen ? `<section class="inline-review" aria-label="Changes beside the conversation"><header><h2>Session changes</h2><button class="icon-button" type="button" data-action="toggle-linked" aria-label="Hide changes">${icon('close')}</button></header>${selected ? `<div class="review-task-strip" aria-label="Review task">${reviewTasks().map((task, index) => `<button type="button" data-review-task="${index}" aria-pressed="${index === reviewTask}">${task.shortTitle}</button>`).join('')}</div><div class="inline-file-picker"><select data-review-file aria-label="File to review">${entries.map((entry, index) => `<option value="${index}" ${index === reviewFile ? 'selected' : ''}>${reviewTasks()[reviewTask].locations.length > 1 ? entry.location.name + ' / ' : ''}${entry.file.name}</option>`).join('')}</select>${locationDetails([selected.location])}</div><div class="inline-code">${selectedDiff(selected)}</div>` : emptyState()}</section>` : `<button type="button" class="reopen-review" data-action="toggle-linked">${icon('diff')}Review ${allFiles().length} session files${icon('chevron')}</button>`}<div class="linked-composer"><label class="sr-only" for="sample-message">Sample message, not connected</label><input id="sample-message" readonly placeholder="Message this session…"><span aria-hidden="true">${icon('send')}</span></div></div>`;
 }
 function renderF() {
   const entries = reviewEntries();
@@ -164,9 +163,9 @@ function renderF() {
   if (!entries.length) return reviewTabs() + emptyState();
   if (inspectorIndex !== null) {
     const entry = entries[inspectorIndex];
-    return `${reviewTabs()}<div class="file-inspector"><button type="button" class="text-button" data-action="file-list">${icon('back')}Back to files</button><h2>${entry.file.name}</h2><div class="inspector-context"><span>${icon('branch')}${entry.location.name}</span>${locationDetails([entry.location])}</div><p class="inspector-task">${entry.task.title}</p>${selectedDiff(entry)}</div>`;
+    return `${reviewTabs()}<div class="file-inspector"><button type="button" class="text-button" data-action="file-list">${icon('back')}Back to files</button><h2>${entry.file.name}</h2><div class="inspector-context"><span class="inspector-task">${entry.task.title}</span>${locationDetails([entry.location])}</div>${selectedDiff(entry)}</div>`;
   }
-  return `${reviewTabs()}<div class="file-browser"><div class="browser-heading"><h2>Session files</h2><span>${entries.length} files</span></div><div class="worktree-filters" aria-label="Filter worktrees"><button type="button" data-worktree-filter="-1" aria-pressed="${worktreeFilter === -1}">All worktrees</button>${data().locations.map((location, index) => `<button type="button" data-worktree-filter="${index}" aria-pressed="${worktreeFilter === index}">${location.name}</button>`).join('')}</div>${data().locations.filter((location, index) => worktreeFilter === -1 || worktreeFilter === index).map(location => `<section class="browser-location" aria-label="Files in ${location.name}"><h3>${icon('branch')}${location.name}</h3>${entries.map((entry, index) => entry.location.path === location.path ? `<button type="button" class="browser-file" data-inspect-file="${index}"><span><strong>${entry.file.name}</strong><small>${entry.task.shortTitle} · ${entry.file.state}</small></span>${stats([entry.file])}${icon('chevron')}</button>` : '').join('')}</section>`).join('')}</div>`;
+  return `${reviewTabs()}<div class="file-browser"><div class="browser-heading"><h2>Session files</h2><select data-worktree-filter aria-label="Filter worktrees"><option value="-1">All worktrees</option>${data().locations.map((location, index) => `<option value="${index}" ${worktreeFilter === index ? 'selected' : ''}>${location.name}</option>`).join('')}</select></div>${data().locations.filter((location, index) => worktreeFilter === -1 || worktreeFilter === index).map(location => `<section class="browser-location" aria-label="Files in ${location.name}"><h3><span class="worktree-badge">${icon('branch')}${location.name}</span></h3>${entries.map((entry, index) => entry.location.path === location.path ? `<button type="button" class="browser-file" data-inspect-file="${index}"><span><strong>${entry.file.name}</strong><small>${entry.task.shortTitle} · ${entry.file.state}</small></span>${stats([entry.file])}${icon('chevron')}</button>` : '').join('')}</section>`).join('')}</div>`;
 }
 function render() {
   const current = variants.find(item => item.key === variant);
@@ -175,6 +174,7 @@ function render() {
   document.querySelector('#prototype-project').textContent = data().project;
   document.querySelector('.conversation-heading h1').textContent = data().tasks ? 'Polish the mobile experience' : 'Fix mobile navigation';
   document.querySelector('#scenario').value = scenario;
+  document.querySelector('#scope-locations').innerHTML = data().locations.map(location => `<p><strong>${location.name}</strong><span>${location.branch}</span><code>${location.path}</code></p>`).join('');
   view.dataset.variant = variant;
   document.body.dataset.reviewRound = 'DEF'.includes(variant) ? 'compact' : 'initial';
   view.innerHTML = current.render();
@@ -222,14 +222,13 @@ view.addEventListener('click', event => {
   if (button.hasAttribute('data-review-task')) { reviewTask = Number(button.dataset.reviewTask); reviewFile = 0; }
   if (button.hasAttribute('data-review-file')) reviewFile = Number(button.dataset.reviewFile);
   if (button.hasAttribute('data-inspect-file')) inspectorIndex = Number(button.dataset.inspectFile);
-  if (button.hasAttribute('data-worktree-filter')) worktreeFilter = Number(button.dataset.worktreeFilter);
   if (button.dataset.action === 'file-list') inspectorIndex = null;
   if (button.dataset.action === 'toggle-linked') linkedReviewOpen = !linkedReviewOpen;
   render();
   if (button.dataset.action === 'conversation' || button.dataset.action === 'changes') view.querySelector(`[data-action="${button.dataset.action}"]`).focus({ preventScroll: true });
   if (button.hasAttribute('data-location')) view.querySelector('.location-back').focus({ preventScroll: true });
   if (button.dataset.action === 'locations') view.querySelector('[data-location]')?.focus({ preventScroll: true });
-  for (const name of ['review-task', 'review-file', 'worktree-filter']) {
+  for (const name of ['review-task', 'review-file']) {
     if (button.hasAttribute('data-' + name)) view.querySelector(`[data-${name}="${button.getAttribute('data-' + name)}"]`)?.focus({ preventScroll: true });
   }
   if (button.hasAttribute('data-inspect-file')) view.querySelector('[data-action="file-list"]').focus({ preventScroll: true });
@@ -239,8 +238,9 @@ view.addEventListener('click', event => {
 view.addEventListener('change', event => {
   if (event.target.matches('select[data-review-task]')) { reviewTask = Number(event.target.value); reviewFile = 0; }
   else if (event.target.matches('select[data-review-file]')) reviewFile = Number(event.target.value);
+  else if (event.target.matches('select[data-worktree-filter]')) worktreeFilter = Number(event.target.value);
   else return;
-  const selector = event.target.matches('[data-review-task]') ? 'select[data-review-task]' : 'select[data-review-file]';
+  const selector = event.target.matches('[data-review-task]') ? 'select[data-review-task]' : event.target.matches('[data-review-file]') ? 'select[data-review-file]' : 'select[data-worktree-filter]';
   render(); view.querySelector(selector)?.focus({ preventScroll: true });
 });
 document.addEventListener('keydown', event => {

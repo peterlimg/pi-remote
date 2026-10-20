@@ -31,6 +31,7 @@
       <button id="scope-info" class="icon-button" type="button" aria-label="How session changes are scoped" aria-expanded="false" aria-controls="scope-explanation"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><g fill="currentColor" stroke="none"><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></g></svg></button>
     </header>
     <section id="scope-explanation" class="scope-explanation" hidden>
+      <div id="scope-locations" class="scope-location-list" aria-label="Session work locations"></div>
       <h2>What counts as this session's work?</h2>
       <p>These examples assume a snapshot before the session and a record of its edits, including commits. The starting folder is context, not the diff scope.</p>
       <p>Pre-existing and other sessions' edits stay separate. Overlapping edits need review. Git status alone cannot establish ownership.</p>

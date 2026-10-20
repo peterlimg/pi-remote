@@ -91,9 +91,13 @@ for (const view of [
       await expect(main.locator('.changes-overview .diff-stats')).toHaveText('+24−4');
       await expect(main.locator('.task-change[open]')).toHaveCount(0);
       await capture('tasks-overview');
+      await page.getByRole('button', { name: 'How session changes are scoped' }).click();
+      await expect(page.locator('#scope-locations code')).toHaveText(['~/workspace/pi-remote/.worktrees/mobile-nav', '~/workspace/pi-remote/.worktrees/login-flow']);
+      await page.getByRole('button', { name: 'How session changes are scoped' }).click();
       await navigationTask.locator(':scope > summary').click();
       await expect(navigationTask.locator('.file-diff')).toHaveCount(2);
-      await expect(navigationTask.locator('.location-path')).toHaveText('~/workspace/pi-remote/.worktrees/mobile-nav');
+      await expect(navigationTask.locator('.task-meta .worktree-badge')).toHaveText('mobile-nav');
+      await expect(navigationTask.locator('.location-path')).toHaveCount(0);
       await capture('tasks-navigation');
       await navigationTask.locator('.file-diff').first().locator('summary').click();
       await expect(navigationTask.getByRole('region', { name: 'Diff for web/app.js' })).toContainText('showSessions();');
@@ -102,7 +106,8 @@ for (const view of [
       await loginTask.locator('.file-diff').first().locator('summary').click();
       await expect(loginTask.getByRole('region', { name: 'Diff for web/app.js' })).toContainText('code.trim()');
       await expect(loginTask.getByRole('region', { name: 'Diff for web/app.js' })).not.toContainText('showSessions();');
-      await expect(loginTask.locator('.location-path')).toHaveText('~/workspace/pi-remote/.worktrees/login-flow');
+      await expect(loginTask.locator('.task-meta .worktree-badge')).toHaveText('login-flow');
+      await expect(loginTask.locator('.location-path')).toHaveCount(0);
       await loginTask.scrollIntoViewIfNeeded();
       await capture('tasks-login-diff');
       await loginTask.locator(':scope > summary').click();
