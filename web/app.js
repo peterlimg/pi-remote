@@ -1589,7 +1589,16 @@ $('image-close').addEventListener('click', () => imageViewer.close());
 $('image-zoom-in').addEventListener('click', () => zoomImage(imageZoom * 2));
 $('image-zoom-out').addEventListener('click', () => zoomImage(imageZoom / 2));
 $('image-zoom-reset').addEventListener('click', () => positionImage(1, 0, 0));
-fullImage.addEventListener('load', () => positionImage());
+fullImage.addEventListener('load', () => {
+  if (!imageViewer.open) return;
+  const width = imageStage.clientWidth / fullImage.naturalWidth, height = imageStage.clientHeight / fullImage.naturalHeight;
+  const fit = Math.min(width, height);
+  if (!fit) return;
+  // Start closer in on phones; whole-image fit remains available through the percentage button.
+  const zoom = matchMedia('(max-width: 700px)').matches ? Math.min(8, Math.max(width, height) / fit) : 1;
+  const top = Math.max(0, (fullImage.naturalHeight * fit * zoom - imageStage.clientHeight) / 2);
+  positionImage(zoom, 0, top);
+});
 new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
 imageViewer.addEventListener('close', () => imagePointers.clear());
 imageViewer.addEventListener('keydown', event => {
