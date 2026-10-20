@@ -2,7 +2,7 @@
 
 Pi Remote renders generated videos as conversation attachments. Tap the preview to load the video, then use the player's controls or **Download video**. Phones that support file sharing open the native share sheet; choose **Save Video** or **Save to Files** on iOS. Other browsers use a download link that cannot replace the chat tab. Saving also works when the browser cannot decode the video. Canceling the share sheet leaves the conversation open.
 
-For still images and screenshots, use the `read` tool on the image file. Image attachments appear directly in the conversation, outside collapsed tool details, and open full-screen on tap. Pinch to zoom and drag to inspect details, or use the viewer's zoom buttons. Do not convert a still image to a video just to display it.
+For still images and screenshots, use the `read` tool on the image file. Image attachments appear directly in the conversation, outside collapsed tool details, and open full-screen on tap. On phones, images initially fit the screen width without cropping the sides. Pinch to zoom and drag to inspect details, or use the viewer's zoom buttons. For UI evidence, capture the relevant region or a phone-sized viewport rather than a whole desktop page with large empty margins. Do not convert a still image to a video just to display it.
 
 For agents:
 

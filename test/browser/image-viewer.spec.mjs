@@ -112,37 +112,50 @@ test('image viewer fills the screen and supports zooming and panning without dis
   expect(errors).toEqual([]);
 });
 
-test('desktop screenshots open at a readable size on phones with whole-image fit still available', async ({ page }, info) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/');
-  await expect(page.locator('#login')).toBeVisible();
-  const loginWidth = (await page.locator('#login').boundingBox()).width;
-  const screenshot = await page.screenshot();
-  await page.setViewportSize({ width: 390, height: 844 });
+for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${width}x${height} images open at phone width without horizontal cropping`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  await page.locator('#image-files').setInputFiles({ name: 'desktop-login.png', mimeType: 'image/png', buffer: screenshot });
-  await page.getByRole('link', { name: 'Open desktop-login.png' }).tap();
+  const screenshot = await page.screenshot();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#image-files').setInputFiles({ name: 'screenshot.png', mimeType: 'image/png', buffer: screenshot });
+  const open = page.getByRole('link', { name: 'Open screenshot.png' });
+  await open.tap();
   const viewer = page.getByRole('dialog', { name: 'Image', exact: true });
-  const image = viewer.getByRole('img');
-  const displayedLoginWidth = () => image.evaluate((img, fraction) => {
-    const stage = img.parentElement;
-    const fit = Math.min(stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight);
-    return img.naturalWidth * fit * new DOMMatrix(getComputedStyle(img).transform).a * fraction;
-  }, loginWidth / 1280);
-  await expect.poll(displayedLoginWidth).toBeGreaterThanOrEqual(390 * .8);
-  await expect(viewer.getByRole('button', { name: 'Zoom out', exact: true })).toBeEnabled();
-  await page.screenshot({ path: info.outputPath('readable-default-mobile.png') });
-  await viewer.getByRole('button', { name: 'Reset image zoom' }).tap();
-  await expect(viewer.getByRole('button', { name: 'Reset image zoom' })).toHaveText('100%');
-  await expect.poll(displayedLoginWidth).toBeCloseTo(loginWidth * 390 / 1280);
-  await page.screenshot({ path: info.outputPath('whole-screenshot-mobile.png') });
+  const image = viewer.getByRole('img'), zoom = viewer.getByRole('button', { name: 'Reset image zoom' });
+  await expect(image).toHaveCSS('object-fit', 'contain');
+  const frame = await viewer.locator('.image-stage').boundingBox();
+  // Measure the actual image pixels, not the full-size img element's letterboxing.
+  const imageBounds = () => image.evaluate(img => {
+    const box = img.parentElement.getBoundingClientRect(), transform = new DOMMatrix(getComputedStyle(img).transform);
+    const fit = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight);
+    const width = img.naturalWidth * fit * transform.a, height = img.naturalHeight * fit * transform.d;
+    return { x: box.x + (box.width - width) / 2 + transform.e, y: box.y + (box.height - height) / 2 + transform.f, width, height };
+  });
+  await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(frame.width, 1);
+  const initial = await imageBounds();
+  expect(initial.x).toBeCloseTo(frame.x, 1);
+  expect(initial.x + initial.width).toBeCloseTo(frame.x + frame.width, 1);
+  expect(initial.y).toBeCloseTo(frame.y + Math.max(0, (frame.height - initial.height) / 2), 1);
+  await page.screenshot({ path: info.outputPath('fit-width-mobile.png') });
+  await viewer.getByRole('button', { name: 'Zoom in', exact: true }).tap();
+  await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(frame.width * 2, 1);
+  await zoom.tap();
+  await expect(zoom).toHaveText('100%');
+  const fitted = await imageBounds();
+  expect(fitted.width).toBeLessThanOrEqual(frame.width + 1);
+  expect(fitted.height).toBeLessThanOrEqual(frame.height + 1);
   await viewer.getByRole('button', { name: 'Close image' }).tap();
-  await page.getByRole('link', { name: 'Open desktop-login.png' }).tap();
-  await expect.poll(displayedLoginWidth).toBeGreaterThanOrEqual(390 * .8);
+  await open.tap();
+  await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(frame.width, 1);
+  expect((await imageBounds()).x).toBeCloseTo(frame.x, 1);
   await viewer.getByRole('button', { name: 'Close image' }).tap();
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole('link', { name: 'Open desktop-login.png' }).click();
-  await expect(viewer.getByRole('button', { name: 'Reset image zoom' })).toHaveText('100%');
-  await info.attach('readable-image-viewer', { body: await viewer.ariaSnapshot(), contentType: 'text/plain' });
+  await open.click();
+  await expect(zoom).toHaveText('100%');
+  const desktopFrame = await viewer.locator('.image-stage').boundingBox(), desktop = await imageBounds();
+  expect(desktop.width).toBeLessThanOrEqual(desktopFrame.width + 1);
+  expect(desktop.height).toBeLessThanOrEqual(desktopFrame.height + 1);
+  await page.screenshot({ path: info.outputPath('fit-image-desktop.png') });
+  await info.attach('fit-width-image-viewer', { body: await viewer.ariaSnapshot(), contentType: 'text/plain' });
 });
