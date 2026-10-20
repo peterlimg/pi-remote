@@ -1,0 +1,320 @@
+<!doctype html>
+<!-- Throwaway session-list comparison, isolated from the live app and its auth/mutations.
+     Three layouts at ?variant=A|B|C. Run npm run prototype:sessions, then open
+     http://127.0.0.1:8841/prototype-sessions.html. All data and actions are illustrative. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Sessions layout prototypes · Pi Remote</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafaf8; --panel: #f2f3f0; --paper: #fff; --text: #141816;
+      --muted: #626c66; --line: #daddd7; --accent: #35675c; --tint: #e8eeea;
+      --warning: #77591a; --warning-bg: #f0e9d9;
+      --shadow: 0 6px 24px rgb(20 24 22 / .09);
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text); background: var(--bg); font-synthesis: none;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #272b33; --panel: #22262d; --paper: #30353d; --text: #e5e8e6;
+        --muted: #a7afa9; --line: #444a51; --accent: #9cc8bd; --tint: #343f40;
+        --warning: #e4c078; --warning-bg: #40392b;
+      }
+    }
+    * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) var(--panel); }
+    ::selection { background: var(--tint); color: var(--text); }
+    body { margin: 0; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; touch-action: manipulation; color: inherit; }
+    button, input, select { -webkit-tap-highlight-color: transparent; }
+    button { border: 0; background: transparent; min-height: 44px; }
+    button:disabled { cursor: default; opacity: .5; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    input, select { caret-color: var(--accent); }
+    [hidden] { display: none !important; }
+    svg { display: block; width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    h1, h2, p { margin: 0; }
+    .app { width: 100%; max-width: 440px; height: calc(100dvh - 112px - env(safe-area-inset-bottom)); margin: 0 auto; display: flex; flex-direction: column; background: var(--panel); }
+    .app-header { padding: max(20px, env(safe-area-inset-top)) 20px 12px; flex: none; }
+    .heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    h1 { font-size: 27px; font-weight: 650; letter-spacing: -.025em; }
+    .sign-out { color: var(--accent); font-size: 14px; padding: 0 0 0 12px; }
+    .search { display: flex; align-items: center; gap: 10px; margin-top: 14px; border-bottom: 1px solid var(--line); }
+    .search > svg { color: var(--muted); }
+    .search input { width: 100%; min-width: 0; padding: 10px 0; border: 0; outline: 0; color: var(--text); background: transparent; }
+    .search input::placeholder { color: var(--muted); }
+    .search:focus-within { border-color: var(--accent); }
+    .icon-button { display: grid; place-items: center; width: 44px; padding: 0; flex: none; }
+    .viewport { overflow: auto; overscroll-behavior: contain; min-height: 0; flex: 1; padding: 0 20px 12px; }
+    .section { margin-top: 14px; }
+    .section:first-child { margin-top: 0; }
+    .section-heading { min-height: 42px; display: flex; align-items: center; gap: 8px; }
+    h2, .section-title { font-size: 14px; font-weight: 650; }
+    .count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .section-action { margin-left: auto; padding: 0; color: var(--accent); font-size: 13px; font-weight: 500; }
+    .session-row { width: 100%; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 12px; padding: 14px 0; text-align: left; border-radius: 0; }
+    .session-row + .session-row { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+    .session-row .status { margin-top: 6px; }
+    .row-body { min-width: 0; }
+    .row-heading { display: flex; align-items: flex-start; gap: 8px; }
+    .row-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 17px; line-height: 1.35; font-weight: 500; letter-spacing: -.012em; }
+    .row-heading > svg { width: 14px; height: 14px; color: var(--muted); margin: 4px 0 0 auto; }
+    .preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; color: var(--muted); font-size: 14px; }
+    .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .meta > span + span::before { content: '·'; margin-right: 5px; font-weight: 400; color: var(--muted); }
+    .state-working { color: var(--accent); font-weight: 500; }
+    .state-waiting { color: var(--warning); font-weight: 500; }
+    .status { width: 11px; height: 11px; border: 1.5px solid var(--muted); border-radius: 50%; flex: none; }
+    .status.working { color: var(--accent); border-color: currentColor; border-right-color: transparent; }
+    .status.waiting { border: 0; color: var(--warning); width: 12px; height: 16px; margin-top: 2px; }
+    .status.waiting svg { width: 12px; height: 16px; stroke-width: 2; }
+    .status.unread { background: var(--accent); border-color: var(--accent); width: 8px; height: 8px; margin-left: 2px; }
+    .compact { padding: 11px 0; }
+    .compact .row-title { font-size: 16px; -webkit-line-clamp: 1; }
+    .compact .meta { margin-top: 2px; font-size: 12px; }
+    .compact .status { margin-top: 5px; width: 9px; height: 9px; }
+    .now .session-row { padding: 12px 0; }
+    .now .section-heading h2 { color: var(--accent); }
+    .app-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 20px 12px; flex: none; }
+    .search-button { display: grid; place-items: center; width: 48px; min-height: 48px; padding: 0; border-radius: 50%; background: var(--paper); box-shadow: 0 2px 8px rgb(20 24 22 / .06); }
+    .search-button svg { width: 22px; height: 22px; }
+    .new-session { display: flex; align-items: center; gap: 9px; border-radius: 999px; background: var(--text); color: var(--panel); min-height: 48px; padding: 0 21px 0 17px; font-size: 15px; font-weight: 500; }
+    .new-session svg { width: 22px; height: 22px; }
+    .view-tabs { display: flex; background: var(--tint); border-radius: 10px; padding: 3px; margin: 5px 0 13px; gap: 3px; }
+    .view-tabs button { display: flex; justify-content: center; align-items: center; gap: 5px; flex: 1; min-width: 0; min-height: 38px; padding: 0 6px; border-radius: 7px; font-size: 14px; color: var(--muted); }
+    .view-tabs button[aria-selected=true] { background: var(--paper); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgb(20 24 22 / .07); }
+    .view-tabs .count { font-size: 11px; color: inherit; }
+    .activity-link { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 0; color: var(--accent); text-align: left; font-size: 14px; font-weight: 500; }
+    .activity-link > svg { margin-left: auto; width: 16px; height: 16px; }
+    .activity-link .needs-input { color: var(--warning); }
+    .activity-dock { position: sticky; top: 0; z-index: 1; background: var(--panel); padding: 0 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+    .activity-dock .activity-link { padding: 11px 0; }
+    .activity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+    .pin-group { margin-bottom: 14px; }
+    .pin-group summary { display: flex; align-items: center; gap: 8px; min-height: 58px; cursor: pointer; list-style: none; touch-action: manipulation; border-bottom: 1px solid var(--line); }
+    .pin-group summary::-webkit-details-marker { display: none; }
+    .pin-group summary > svg:first-child { width: 16px; height: 16px; color: var(--muted); margin-right: 3px; }
+    .pin-group .expand-label { margin-left: auto; font-size: 13px; color: var(--accent); }
+    .pin-group summary > svg:last-child { width: 14px; height: 14px; color: var(--muted); }
+    .pin-group[open] summary > svg:last-child { transform: rotate(90deg); }
+    .pin-group[open] .expand-label { display: none; }
+    .empty { padding: 34px 12px; text-align: center; color: var(--muted); font-size: 14px; }
+    .prototype-controls { position: fixed; z-index: 3; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 440px); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+    .variant-controls { display: flex; align-items: center; gap: 10px; background: var(--text); color: var(--bg); border-radius: 999px; padding: 2px 6px; }
+    .variant-controls .icon-button { border-radius: 50%; }
+    .variant-label { flex: 1; min-width: 0; text-align: center; font-size: 13px; font-weight: 500; }
+    .scenario-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 43px; }
+    #fixture-state { color: var(--muted); font-size: 11px; }
+    .scenario-row label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+    select { font-size: 16px; background: transparent; color: var(--text); border: 0; min-height: 40px; padding: 0 2px; max-width: 130px; }
+    .rationale { display: none; }
+    .toast { position: fixed; z-index: 6; bottom: calc(190px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(340px, calc(100% - 40px)); background: var(--text); color: var(--bg); padding: 12px 16px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); }
+    dialog { width: min(100%, 440px); max-width: 100%; max-height: 80dvh; margin: auto auto 0; padding: 0 20px max(20px, env(safe-area-inset-bottom)); color: var(--text); background: var(--panel); border: 0; border-radius: 18px 18px 0 0; }
+    dialog::backdrop { background: rgb(0 0 0 / .3); }
+    .sheet-heading { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; padding-top: 12px; background: var(--panel); }
+    .sheet-heading h2 { font-size: 18px; }
+    .sheet-description { padding: 12px 0 20px; color: var(--muted); font-size: 14px; }
+    @media (hover: hover) {
+      .session-row:hover { background: var(--tint); }
+      button:hover:not(:disabled) { filter: brightness(.9); }
+    }
+    @media (min-width: 900px) {
+      body { min-height: 100dvh; display: flex; align-items: center; justify-content: center; gap: 64px; padding: 28px 28px 140px; }
+      .app { height: min(760px, calc(100dvh - 170px)); margin: 0; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+      .prototype-controls { bottom: 16px; padding-bottom: 4px; border: 0; background: var(--bg); }
+      .rationale { display: block; max-width: 300px; }
+      .rationale h2 { font-size: 25px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; margin-bottom: 18px; }
+      .rationale p { color: var(--muted); line-height: 1.65; margin-top: 16px; font-size: 15px; }
+      .rationale .prototype-notice { padding-top: 20px; font-size: 12px; }
+    }
+    @media (max-width: 360px) {
+      .app-header { padding-left: 16px; padding-right: 16px; }
+      .viewport { padding-left: 16px; padding-right: 16px; }
+      .row-title { font-size: 16px; }
+      #fixture-state { max-width: 134px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Sessions prototype">
+    <header class="app-header">
+      <div class="heading"><h1>Sessions</h1><button class="sign-out" data-demo="Your real login is unchanged. This is a prototype.">Sign out</button></div>
+      <div class="search" id="search-field" hidden>
+        <span data-icon="search" aria-hidden="true"></span>
+        <input id="search" type="search" aria-label="Search sessions" placeholder="Search tasks or projects" autocomplete="off">
+        <button class="icon-button" id="close-search" aria-label="Close search"><span data-icon="close" aria-hidden="true"></span></button>
+      </div>
+    </header>
+    <div class="viewport" id="viewport"><div id="content"></div></div>
+    <footer class="app-footer">
+      <button class="search-button" id="open-search" aria-label="Search sessions"><span data-icon="search" aria-hidden="true"></span></button>
+      <button class="new-session" data-demo="Prototype only. No session was created."><span data-icon="plus" aria-hidden="true"></span>New session</button>
+    </footer>
+  </main>
+  <aside class="rationale" aria-label="About this layout">
+    <h2 id="rationale-title"></h2>
+    <p id="rationale-copy"></p>
+    <p id="rationale-tradeoff"></p>
+    <p class="prototype-notice">Throwaway design study. Illustrative sessions only. No connection to your computer, account, or real conversations.</p>
+  </aside>
+  <nav class="prototype-controls" aria-label="Prototype controls">
+    <div class="variant-controls">
+      <button class="icon-button" id="previous" aria-label="Previous prototype"><span data-icon="left" aria-hidden="true"></span></button>
+      <div class="variant-label" id="variant-label" aria-live="polite"></div>
+      <button class="icon-button" id="next" aria-label="Next prototype"><span data-icon="right" aria-hidden="true"></span></button>
+    </div>
+    <div class="scenario-row">
+      <span id="fixture-state"></span>
+      <label>Scenario <select id="scenario" aria-label="Prototype scenario"><option value="normal">Typical day</option><option value="busy">Busy day</option><option value="quiet">Nothing active</option></select></label>
+    </div>
+  </nav>
+  <dialog id="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-heading"><h2 id="sheet-title"></h2><button class="icon-button" id="close-sheet" aria-label="Close preview"><span data-icon="close" aria-hidden="true"></span></button></div>
+    <div id="sheet-content"></div>
+  </dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const paths = {
+      search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
+      plus: '<path d="M12 4v16M4 12h16"/>',
+      close: '<path d="m6 6 12 12M18 6 6 18"/>',
+      left: '<path d="m14 6-6 6 6 6"/>', right: '<path d="m10 6 6 6-6 6"/>',
+      pin: '<path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/>',
+      waiting: '<path d="M12 4v10"/><circle cx="12" cy="20" r=".5" fill="currentColor"/>'
+    };
+    const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
+    document.querySelectorAll('[data-icon]').forEach(node => { node.innerHTML = icon(node.dataset.icon); });
+    const pinned = [
+      ['Import RG-Main session and track handoff', 'primezero', 'Pi: The handoff notes are ready.', '39m'],
+      ['Add model-independent voice input to composer', 'pi-remote', 'Pi: We can use the microphone here.', '2h'],
+      ['Respond to initial greeting', 'pi-remote', 'Pi: Ready when you are.', '3h'],
+      ['Fix Usage panel account limits', 'pi-remote', 'Pi: The account limits are updated.', '17h'],
+      ['Review architecture of web/app.js', 'pi-remote', 'Pi: The review notes are ready.', '18h'],
+      ['Live session seam refactor', 'pi-remote', 'Pi: The reconnect flow is simplified.', '17h'],
+      ['Improve image viewer gestures', 'pi-remote', 'Pi: Pinch and pan feel consistent now.', '1d'],
+      ['Keep drafts when switching sessions', 'pi-remote', 'Pi: Your draft stays with the session.', '1d'],
+      ['Review onboarding notes', 'primezero', 'Pi: The checklist is ready to review.', '2d'],
+      ['Make project picker searchable', 'pi-remote', 'Pi: Search now matches project names.', '2d'],
+      ['Check reconnect behavior', 'pi-remote', 'Pi: The connection recovered cleanly.', '3d'],
+      ['Simplify mobile navigation', 'pi-remote', 'Pi: The navigation sketch is ready.', '3d']
+    ].map(([title, project, preview, age], id) => ({ id: 'pin-' + id, title, project, preview, age, pinned: true, status: 'idle' }));
+    const running = [
+      { id: 'active-0', title: 'Review authentication flow', project: 'pi-remote', preview: 'Pi: Should this device stay signed in?', age: 'now', status: 'waiting' },
+      { id: 'active-1', title: 'Design the sessions page', project: 'pi-remote', preview: 'Pi: Comparing the three layouts…', age: 'now', status: 'working' },
+      { id: 'active-2', title: 'Investigate Claude SDK session', project: 'pi-remote', preview: 'Pi: Checking the session lifecycle…', age: '2m', status: 'working' }
+    ];
+    const extra = ['Check browser recovery', 'Update project navigation', 'Review the image pipeline', 'Improve history loading', 'Trace reconnect events']
+      .map((title, id) => ({ id: 'extra-' + id, title, project: 'pi-remote', preview: 'Pi: Working through the next step…', age: '4m', status: id === 0 ? 'waiting' : 'working' }));
+    const recent = [
+      { id: 'recent-0', title: 'Tune mobile keyboard spacing', project: 'pi-remote', preview: 'Pi: The composer stays above the keyboard.', age: '12m', status: 'idle', unread: true },
+      { id: 'recent-1', title: 'Polish the project picker', project: 'pi-remote', preview: 'Pi: The latest changes are ready.', age: '24m', status: 'idle' },
+      { id: 'recent-2', title: 'Review the deployment notes', project: 'primezero', preview: 'Pi: I have summarized the next steps.', age: '1h', status: 'idle' },
+      { id: 'recent-3', title: 'Check attachment downloads', project: 'pi-remote', preview: 'Pi: The download opens correctly.', age: '2h', status: 'idle' }
+    ];
+    const variants = {
+      A: { name: 'Activity first', title: 'What needs you comes first.', copy: 'Live work gets its own place above your pins. Three compact bookmarks leave room for recent conversations.', tradeoff: 'The tradeoff: pinned previews disappear, and the page has more section headings.' },
+      B: { name: 'Separate views', title: 'One list, one purpose.', copy: 'Recent conversations stay in time order. Active work and your complete pinned collection each have a dedicated view.', tradeoff: 'The tradeoff: switching between activity and bookmarks takes a tap. Counts keep hidden activity discoverable.' },
+      C: { name: 'Foldable pins', title: 'Keep the list. Fold the pins.', copy: 'Your pins become a collapsible group. A persistent activity shortcut stays visible even when all twelve pins are expanded.', tradeoff: 'The tradeoff: you manage the group yourself. This changes the current page the least.' }
+    };
+    const params = new URLSearchParams(location.search);
+    let variant = Object.hasOwn(variants, params.get('variant')) ? params.get('variant') : 'A';
+    let scenario = ['normal', 'busy', 'quiet'].includes(params.get('scenario')) ? params.get('scenario') : 'normal';
+    let view = 'recent', pinsOpen = false, toastTimer;
+    $('scenario').value = scenario;
+    const activity = () => scenario === 'quiet' ? [] : scenario === 'busy' ? [...running, ...extra].sort((a, b) => (b.status === 'waiting') - (a.status === 'waiting')) : running;
+    const allSessions = () => [...activity(), ...recent, ...pinned];
+    function row(item, compact = false, live = false) {
+      const status = item.status === 'waiting' ? 'Needs input' : item.status === 'working' ? 'Working' : '';
+      const dot = item.status === 'waiting' ? `<span class="status waiting" aria-hidden="true">${icon('waiting')}</span>` : `<span class="status ${item.unread ? 'unread' : item.status}" aria-hidden="true"></span>`;
+      return `<button class="session-row${compact ? ' compact' : ''}" data-session="${item.id}">
+        ${dot}<span class="row-body"><span class="row-heading"><span class="row-title">${item.title}</span>${item.pinned ? icon('pin') : ''}</span>
+        ${!compact && !live ? `<span class="preview" style="display:block">${item.preview}</span>` : ''}
+        <span class="meta">${status ? `<span class="state-${item.status}">${status}</span>` : ''}<span>${item.project}</span>${!compact ? `<span>${item.age}</span>` : ''}</span></span></button>`;
+    }
+    function section(title, items, { compact = false, live = false, count = items.length, action = '', actionLabel = '' } = {}) {
+      return `<section class="section${live ? ' now' : ''}" aria-label="${title}"><div class="section-heading"><h2>${title}</h2><span class="count">${count}</span>${action ? `<button class="section-action" data-collection="${action}">${actionLabel}</button>` : ''}</div>${items.map(item => row(item, compact, live)).join('')}</section>`;
+    }
+    function activityLink() {
+      const items = activity(), waiting = items.filter(item => item.status === 'waiting').length;
+      return `<button class="activity-link" data-collection="active" aria-label="View all ${items.length} active sessions"><span class="activity-dot" aria-hidden="true"></span>${items.length ? `<span>${waiting ? `<span class="needs-input">${waiting} needs input</span><span aria-hidden="true"> · </span>` : ''}${items.length - waiting} working</span>` : '<span>No sessions running</span>'}${icon('right')}</button>`;
+    }
+    function render() {
+      const active = activity(), info = variants[variant], query = $('search').value.trim().toLowerCase();
+      $('variant-label').textContent = `${variant} · ${info.name}`;
+      $('fixture-state').textContent = `Sample data · ${active.length} active · 12 pins`;
+      $('rationale-title').textContent = info.title;
+      $('rationale-copy').textContent = info.copy;
+      $('rationale-tradeoff').textContent = info.tradeoff;
+      document.title = `${variant} · ${info.name} · Sessions prototype`;
+      const url = new URL(location.href); url.searchParams.set('variant', variant); url.searchParams.set('scenario', scenario); history.replaceState(null, '', url);
+      let html = '';
+      if (query) {
+        const matches = allSessions().filter(item => `${item.title} ${item.project} ${item.preview}`.toLowerCase().includes(query));
+        html = section('Search results', matches) + (!matches.length ? '<p class="empty">No matching sessions. Try another task or project.</p>' : '');
+      } else if (variant === 'A') {
+        html = (active.length ? section('Now', active.slice(0, 3), { live: true, count: active.length, action: active.length > 3 ? 'active' : '', actionLabel: 'View all' }) : '')
+          + section('Pinned', pinned.slice(0, 3), { compact: true, count: pinned.length, action: 'pinned', actionLabel: 'View all' })
+          + section('Recent', recent);
+      } else if (variant === 'B') {
+        html = `<div class="view-tabs" role="tablist" aria-label="Session view">${[['recent', 'Recent', ''], ['active', 'Active', active.length], ['pinned', 'Pinned', pinned.length]].map(([key, label, count]) => `<button role="tab" id="tab-${key}" aria-controls="view-panel" aria-selected="${view === key}" tabindex="${view === key ? 0 : -1}" data-view="${key}">${label}${count !== '' ? `<span class="count">${count}</span>` : ''}</button>`).join('')}</div>`;
+        const items = view === 'active' ? active : view === 'pinned' ? pinned : allSessions();
+        html += `<div id="view-panel" role="tabpanel" aria-labelledby="tab-${view}">${items.map(item => row(item)).join('')}${!items.length ? '<p class="empty">Nothing running. Start a session or return to a pin.</p>' : ''}</div>`;
+      } else {
+        html = `<div class="activity-dock">${activityLink()}</div><details class="pin-group"${pinsOpen ? ' open' : ''}><summary>${icon('pin')}<span class="section-title">Pinned</span><span class="count">12</span><span class="expand-label">Show</span>${icon('right')}</summary>${pinned.map(item => row(item, true)).join('')}</details>` + section('Recent', [...active, ...recent]);
+      }
+      $('content').innerHTML = html;
+      const details = document.querySelector('.pin-group');
+      if (details) details.addEventListener('toggle', () => { pinsOpen = details.open; });
+    }
+    function changeVariant(direction) {
+      const keys = Object.keys(variants); variant = keys[(keys.indexOf(variant) + direction + keys.length) % keys.length];
+      view = 'recent'; pinsOpen = false; $('viewport').scrollTop = 0; render();
+    }
+    function showToast(message) { clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false; toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3000); }
+    function showCollection(key) {
+      const items = key === 'pinned' ? pinned : activity();
+      $('sheet-title').textContent = key === 'pinned' ? 'Pinned sessions' : 'Active sessions';
+      $('sheet-content').innerHTML = items.map(item => row(item)).join('') || '<p class="empty">No sessions running. Your recent conversations are still here.</p>';
+      $('sheet').showModal();
+    }
+    document.addEventListener('click', event => {
+      const collection = event.target.closest('[data-collection]');
+      if (collection) { showCollection(collection.dataset.collection); return; }
+      const tab = event.target.closest('[data-view]');
+      if (tab) { view = tab.dataset.view; render(); $(`tab-${view}`).focus({ preventScroll: true }); return; }
+      const demo = event.target.closest('[data-demo]');
+      if (demo) { showToast(demo.dataset.demo); return; }
+      const session = event.target.closest('[data-session]');
+      if (session) {
+        const item = allSessions().find(item => item.id === session.dataset.session);
+        if (!item) return;
+        if ($('sheet').open) $('sheet').close();
+        $('sheet-title').textContent = item.title;
+        $('sheet-content').innerHTML = '<p class="sheet-description">Illustrative conversation preview. No real messages are loaded, and opening this does not change any session.</p>';
+        $('sheet').showModal();
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key) || event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
+      const tab = event.target.closest('[role=tab]');
+      if (tab) {
+        event.preventDefault(); const keys = ['recent', 'active', 'pinned']; view = keys[(keys.indexOf(view) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; render(); $(`tab-${view}`).focus();
+      } else { event.preventDefault(); changeVariant(event.key === 'ArrowRight' ? 1 : -1); }
+    });
+    $('previous').addEventListener('click', () => changeVariant(-1));
+    $('next').addEventListener('click', () => changeVariant(1));
+    $('scenario').addEventListener('change', event => { scenario = event.target.value; $('viewport').scrollTop = 0; render(); });
+    $('open-search').addEventListener('click', () => { $('search-field').hidden = false; $('search').focus(); });
+    $('close-search').addEventListener('click', () => { $('search').value = ''; $('search-field').hidden = true; render(); $('open-search').focus(); });
+    $('search').addEventListener('input', render);
+    $('close-sheet').addEventListener('click', () => $('sheet').close());
+    $('sheet').addEventListener('click', event => { if (event.target === $('sheet') && event.clientY < $('sheet').getBoundingClientRect().top) $('sheet').close(); });
+    render();
+  </script>
+</body>
+</html>
