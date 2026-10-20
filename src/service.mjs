@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
 import { summary } from './state.mjs';
-import { unnamed } from '../web/protocol.js';
+import { unnamed, sessionGroup, activityOrder } from '../web/protocol.js';
 import { sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { HistoryReader } from './history.mjs';
@@ -86,13 +86,24 @@ export class SessionService extends EventEmitter {
     }
     this.scan();
   }
-  list({ offset = 0, query = '' } = {}) {
-    if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('Invalid session page');
+  list({ offset = 0, limit = 20, query = '', section } = {}) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 ||
+      section !== undefined && !['overview', 'now', 'pinned'].includes(section)) throw new Error('Invalid session page');
     const requestOffset = offset;
-    const { matches, total } = this.matches(query);
+    let { matches, total } = this.matches(query), groups, highlights = [];
     query = query.trim().toLowerCase();
-    offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / 20) - 1) * 20);
-    return { sessions: matches.slice(offset, offset + 20), total, matched: matches.length, offset, requestOffset, query,
+    if (section && !query) {
+      const now = matches.filter(item => sessionGroup(item) === 'now').sort(activityOrder);
+      const pins = matches.filter(item => item.pinned);
+      if (section === 'overview') {
+        highlights = [...now.slice(0, 3), ...pins.filter(item => sessionGroup(item) !== 'now').slice(0, 3)];
+        matches = matches.filter(item => sessionGroup(item) === 'recent');
+        groups = { now: now.length, pinned: pins.length, recent: matches.length };
+      } else matches = section === 'now' ? now : pins;
+    }
+    offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / limit) - 1) * limit);
+    const rows = matches.slice(offset, offset + limit);
+    return { sessions: [...highlights, ...rows], total, matched: matches.length, loaded: rows.length, offset, requestOffset, query, section, groups,
       warnings: this.warnings, allowResume: this.allowResume };
   }
   // Helpers stay searchable; only the default browsing list hides them.

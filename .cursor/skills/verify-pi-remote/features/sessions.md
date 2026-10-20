@@ -5,6 +5,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 ## Sub-features
 
 - `sessions-select`: select from the mobile list or desktop sidebar.
+- `sessions-sections`: Now, three compact pins, then Recent; View all opens a live, scrollable collection.
 - `sessions-search`: filter by task or project and recover from an empty result.
 - `sessions-pages`: move through saved and online session pages.
 - `sessions-resume`: resume a saved session when available.
@@ -15,7 +16,8 @@ The session list lets users find a task, see whether it is working or waiting, a
 - Connect to Pi Remote to see the session list.
 - On mobile, choose `Show sessions` from a conversation to return to the list.
 - On desktop, use the sidebar without leaving the conversation.
-- Use `Search sessions`, `Previous session page`, or `Next session page`.
+- Use `Search sessions` or scroll to load more recent conversations.
+- Use `View all active sessions` or `View all pinned sessions` for the complete collection; `Close sessions` returns to the overview.
 - Open a saved conversation and choose `Resume session` when offered.
 
 ## Driving it with Playwright
@@ -25,7 +27,8 @@ Preconditions: authenticated baseline with two projects. Pagination and saved-se
 - **Select mobile.** `await page.getByRole('button', { name: /Project Alpha/ }).click()`; require `await expect(page.locator('#title')).toHaveText('Project Alpha')`. Choose `page.getByRole('button', { name: 'Show sessions' })`, then the `/Project Beta/` button; require the title to change to `Project Beta`.
 - **Select desktop.** `await page.setViewportSize({ width: 1280, height: 900 })`; require `#sidebar` visible, choose Alpha directly, and require its title and conversation. Do not click the hidden mobile back button.
 - **Search.** From the list, `await page.getByRole('searchbox', { name: 'Search sessions' }).fill('Alpha')`; require `#sessions .session` count 1 and Project Alpha visible. Fill `no such project`; require `#list-empty` to read `No matching sessions. Try another task or project.` Clear the input; require both projects again.
-- **Pages.** Run `npm run test:browser -- test/browser/session-pages.spec.mjs test/browser/sessions.spec.mjs --trace on`. These provide larger lists. Verify `1–20 of 675`, choose `Next session page`, verify `21–40 of 675`, then search and clear. Inspect each spec's fixture before claiming host-backed pagination; `sessions.spec.mjs` routes the browser WebSocket.
+- **Sections.** Run `npm run test:browser -- test/browser/session-sections.spec.mjs` with the default trace mode. It uses a real isolated host, more than 20 pins, and simulated bridge agents. Require needs-input sessions first, at most three Now and three pinned rows, no duplicate pinned activity, and recent rows without downloading every pin. Open both collections, scroll for more pins, swipe to unpin, open a conversation, and reload. The spec also covers live activity changes, search, and phone/desktop layouts. It does not execute Pi or models.
+- **Pages.** Run `npm run test:browser -- test/browser/session-pages.spec.mjs test/browser/sessions.spec.mjs --trace on`. Scroll the last row into view, require 20 then 40 rows in the paged list, then search and clear. These specs route the browser WebSocket and cover the legacy list contract, not a real host.
 - **Resume boundary.** The baseline has no saved resumable session. Report `sessions-resume` blocked here. A real proof needs a disposable saved Pi session, a working Pi installation, and a separate isolated host; click `page.getByRole('button', { name: 'Resume session' })`, then require an online session and an acknowledged prompt. Do not create a worker in the user's live host to fill this gap.
 
 ## Title stability

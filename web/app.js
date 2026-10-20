@@ -1,4 +1,4 @@
-import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts } from './protocol.js';
+import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts, sessionGroup, activityOrder } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage, VideoCache } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
@@ -121,6 +121,8 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let supportsSessionSections = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
@@ -328,6 +330,8 @@ function connect() {
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
       supportsCommandResults = packet.supportsCommandResults === true;
+      supportsSessionSections = packet.supportsSessionSections === true;
+      if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
@@ -342,7 +346,7 @@ function connect() {
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       loadProjects();
-      if (listLimit > 20 || searchQuery || listError) loadList();
+      if (supportsSessionSections || listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
         const id = selected;
         request('watch', { sessionId: id }).then(() => loadUsage(id)).catch(e => notice(e.message));
@@ -404,7 +408,7 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   resetSwipe();
-  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close();
+  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close();
   videoCache?.clear(); videoCache = undefined;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
@@ -419,6 +423,7 @@ function logout() {
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
+  listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20;
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -438,6 +443,8 @@ function age(date) {
 // Match the host: user prompts move rows, background activity only refreshes their contents.
 const listOrder = (a, b) => !!b.pinned - !!a.pinned || (b.lastPromptAt ?? b.updatedAt) - (a.lastPromptAt ?? a.updatedAt) || a.id.localeCompare(b.id);
 function receiveList(packet) {
+  // Section-aware phones request their overview after ready; ignore the initial legacy page.
+  if (supportsSessionSections && packet.section === undefined) return;
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
     legacyList = packet;
@@ -457,8 +464,10 @@ function receiveList(packet) {
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
-  sessions = rows.sort(listOrder); allowResume = packet.allowResume === true;
-  listMatched = packet.matched ?? sessions.length;
+  sessions = rows.sort(packet.section === 'now' ? activityOrder : listOrder);
+  if (supportsSessionSections && (packet.section !== listSection || packet.query !== searchQuery)) return;
+  allowResume = packet.allowResume === true;
+  listMatched = packet.matched ?? sessions.length; listLoaded = packet.loaded ?? sessions.length; listGroups = packet.groups;
   showApp();
   markSeen();
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
@@ -469,7 +478,7 @@ async function loadList() {
   const generation = ++listRequest;
   listLoading = true; listError = ''; renderPagination();
   try {
-    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery });
+    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery, ...(supportsSessionSections ? { section: listSection } : {}) });
     const current = generation === listRequest;
     if (current) { listLoading = false; listError = ''; }
     if (current && !page.changes) receiveList(page);
@@ -480,8 +489,8 @@ async function loadList() {
   }
 }
 function renderPagination() {
-  $('sessions').setAttribute('aria-busy', String(listLoading));
-  $('sessions').inert = listLoading;
+  listRoot().setAttribute('aria-busy', String(listLoading));
+  listRoot().inert = listLoading;
   $('list-retry').hidden = !listError; $('list-retry').disabled = !connected || listLoading;
   // Scrolling loads more by itself; the line only speaks up while loading or after a failure.
   $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' : '';
@@ -491,70 +500,109 @@ function renderPagination() {
 // Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
 const moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 400px' });
 function loadMore() {
-  if (!connected || listLoading || listError || sessions.length < listLimit || sessions.length >= listMatched) return;
+  if (!connected || listLoading || listError || listLoaded < listLimit || listLoaded >= listMatched) return;
   listLimit += 20; loadList();
+}
+function sessionRow(item) {
+  const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
+  button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
+  const icon = statusIcon(item.status);
+  if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
+  const indicators = el('span', undefined, 'session-indicators');
+  indicators.append(icon);
+  const typeIcon = sessionTypeIcon(item);
+  if (typeIcon) indicators.append(typeIcon);
+  if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
+  button.append(indicators);
+  const body = el('div', undefined, 'session-body');
+  const top = el('div', undefined, 'session-top');
+  const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
+  const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
+  top.append(title);
+  if (item.pinned) {
+    const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.title = 'Pinned';
+    pin.innerHTML = pinSvg; top.append(pin);
+  }
+  body.append(top);
+  if (item.preview && item.preview !== item.title) {
+    body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
+  }
+  const meta = el('div', undefined, 'session-meta');
+  // Ready and Saved are the resting states; only label what needs attention.
+  if (!['idle', 'saved'].includes(item.status)) {
+    const status = el('span', statusLabels[item.status] || item.status, 'session-state');
+    status.dataset.status = item.status;
+    meta.append(status);
+  }
+  if (!isBlank(item.cwd)) {
+    const project = el('span', projectName(item.cwd), 'session-project');
+    project.title = displayPaths(item.cwd);
+    meta.append(project);
+  }
+  const date = new Date(item.updatedAt);
+  if (Number.isFinite(date.getTime())) {
+    const time = el('time', age(date), 'session-time');
+    time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
+    meta.append(time);
+  }
+  body.append(meta);
+  button.append(body);
+  // The finger lifting after a swipe must not also open the session.
+  button.addEventListener('click', () => {
+    if (Date.now() - swipedAt <= 400) return;
+    selectSession(item.id); $('session-collection').close();
+  });
+  return button;
 }
 function renderList() {
   // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
   if (rowSwipe) { rowSwipe.stale = true; return; }
-  const matches = sessions;
-  $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
+  $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' :
+    listSection === 'now' ? 'No sessions running.' : listSection === 'pinned' ? 'No pinned sessions.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
-  for (const item of matches) {
-    const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
-    button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
-    const icon = statusIcon(item.status);
-    if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
-    const indicators = el('span', undefined, 'session-indicators');
-    indicators.append(icon);
-    const typeIcon = sessionTypeIcon(item);
-    if (typeIcon) indicators.append(typeIcon);
-    if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
-    button.append(indicators);
-    const body = el('div', undefined, 'session-body');
-    const top = el('div', undefined, 'session-top');
-    const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
-    const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
-    top.append(title);
-    if (item.pinned) {
-      const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.title = 'Pinned';
-      pin.innerHTML = pinSvg; top.append(pin);
+  if (listGroups && listSection === 'overview' && !searchQuery) {
+    for (const [group, label] of [['now', 'Now'], ['pinned', 'Pinned'], ['recent', 'Recent']]) {
+      if (!listGroups[group]) continue;
+      const section = el('section', undefined, 'session-group session-group-' + group); section.setAttribute('aria-label', label);
+      const header = el('div', undefined, 'session-group-heading');
+      header.append(el('h3', label), el('span', String(listGroups[group]), 'badge'));
+      if (group === 'pinned' || group === 'now' && listGroups[group] > 3) {
+        const more = el('button', 'View all', 'quiet'); more.type = 'button'; more.dataset.collection = group;
+        more.setAttribute('aria-label', 'View all ' + (group === 'now' ? 'active' : 'pinned') + ' sessions');
+        more.addEventListener('click', () => openCollection(group)); header.append(more);
+      }
+      section.append(header);
+      const items = sessions.filter(item => sessionGroup(item) === group);
+      if (group === 'now') items.sort(activityOrder);
+      section.append(...items.map(sessionRow)); fragment.append(section);
     }
-    body.append(top);
-    if (item.preview && item.preview !== item.title) {
-      body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
-    }
-    const meta = el('div', undefined, 'session-meta');
-    // Ready and Saved are the resting states; only label what needs attention.
-    if (!['idle', 'saved'].includes(item.status)) {
-      const status = el('span', statusLabels[item.status] || item.status, 'session-state');
-      status.dataset.status = item.status;
-      meta.append(status);
-    }
-    if (!isBlank(item.cwd)) {
-      const project = el('span', projectName(item.cwd), 'session-project');
-      project.title = displayPaths(item.cwd);
-      meta.append(project);
-    }
-    const date = new Date(item.updatedAt);
-    if (Number.isFinite(date.getTime())) {
-      const time = el('time', age(date), 'session-time');
-      time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
-      meta.append(time);
-    }
-    body.append(meta);
-    button.append(body);
-    // The finger lifting after a swipe must not also open the session.
-    button.addEventListener('click', () => { if (Date.now() - swipedAt > 400) selectSession(item.id); }); fragment.append(button);
-  }
-  $('sessions').replaceChildren(fragment);
+  } else fragment.append(...sessions.map(sessionRow));
+  listRoot().replaceChildren(fragment);
   moreObserver.disconnect();
-  const last = [...$('sessions').querySelectorAll('.session')].at(-1);
+  const last = [...listRoot().querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
 }
+function openCollection(section) {
+  overviewLimit = listLimit; listSection = section; listLimit = 20;
+  moreObserver.disconnect(); $('collection-sessions').replaceChildren();
+  $('collection-feedback').append($('list-empty'), $('list-page').parentElement);
+  $('session-collection-title').textContent = section === 'now' ? 'Active sessions' : 'Pinned sessions';
+  $('session-collection').showModal(); $('session-collection').focus();
+  loadList();
+}
+$('session-collection-close').addEventListener('click', () => $('session-collection').close());
+$('session-collection').addEventListener('click', event => { if (event.target === $('session-collection')) $('session-collection').close(); });
+$('session-collection').addEventListener('close', () => {
+  const section = listSection;
+  $('search-bar').before($('list-empty'), $('list-page').parentElement);
+  listSection = 'overview'; listLimit = overviewLimit; moreObserver.disconnect();
+  if (!manualClose) loadList().then(() => {
+    if (document.activeElement === document.body) $('sessions').querySelector(`[data-collection="${section}"]`)?.focus({ preventScroll: true, focusVisible: false });
+  });
+});
 const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
 async function togglePin(id) {
   try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
@@ -563,11 +611,11 @@ async function togglePin(id) {
 // Swipe a row right to pin or unpin it, like Messages. Vertical drags still scroll the list.
 const pinSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
-$('sessions').addEventListener('touchstart', event => {
+for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchstart', event => {
   const row = event.target.closest('.session'), touch = event.touches[0];
   rowSwipe = row && event.touches.length === 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
 }, { passive: true });
-$('sessions').addEventListener('touchmove', event => {
+for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchmove', event => {
   if (!rowSwipe) return;
   const touch = event.touches[0], dx = touch.clientX - rowSwipe.x, dy = touch.clientY - rowSwipe.y;
   if (!rowSwipe.active) {
@@ -594,8 +642,10 @@ function endRowSwipe() {
   }
   if (swipe.stale) setTimeout(renderList, swipe.active ? 200 : 0);
 }
-$('sessions').addEventListener('touchend', endRowSwipe);
-$('sessions').addEventListener('touchcancel', endRowSwipe);
+for (const list of [$('sessions'), $('collection-sessions')]) {
+  list.addEventListener('touchend', endRowSwipe);
+  list.addEventListener('touchcancel', endRowSwipe);
+}
 function sessionTypeIcon(item) {
   const choice = sessionIcons.get(item.id);
   const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');

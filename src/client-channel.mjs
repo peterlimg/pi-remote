@@ -10,25 +10,26 @@ import { splitVideoMessage } from '../web/videos.js';
 export function sessionWindow(service) {
   let view;
   const changes = () => {
-    const { matches, total } = service.matches(view.query);
-    const rows = matches.slice(0, view.limit), changed = [];
+    const { sessions: rows, ...page } = service.list({ query: view.query, limit: view.limit, section: view.section });
+    const changed = [];
     for (const row of rows) {
       const json = JSON.stringify(row);
       if (view.sent.get(row.id) !== json) { view.sent.set(row.id, json); changed.push(row); }
     }
     const keep = new Set(rows.map(row => row.id)), removed = [...view.sent.keys()].filter(id => !keep.has(id));
     for (const id of removed) view.sent.delete(id);
-    const meta = { total, matched: matches.length, limit: view.limit, query: view.query, warnings: service.warnings, allowResume: service.allowResume };
+    const meta = { ...page, limit: view.limit };
     const unchanged = !changed.length && !removed.length && JSON.stringify(meta) === view.meta;
     view.meta = JSON.stringify(meta);
     return { changes: changed, removed, ...meta, unchanged };
   };
   return {
     get active() { return view !== undefined; },
-    request({ limit, query = '' }) {
-      if (!Number.isSafeInteger(limit) || limit < 1 || typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
-      const reset = view?.query !== query;
-      if (reset) view = { query, sent: new Map() };
+    request({ limit, query = '', section }) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || typeof query !== 'string' || query.length > 500 ||
+        section !== undefined && !['overview', 'now', 'pinned'].includes(section)) throw new Error('Invalid session page');
+      const reset = view?.query !== query || view?.section !== section;
+      if (reset) view = { query, section, sent: new Map() };
       view.limit = limit;
       const { unchanged, ...value } = changes();
       return { reset, ...value };
@@ -75,7 +76,7 @@ export function attachClient(socket, service) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
