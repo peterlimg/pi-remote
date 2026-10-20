@@ -44,6 +44,25 @@ const scenarios = {
   ] },
   empty: { project: 'pi-remote', start: '~/workspace/pi-remote', locations: [] }
 };
+const navigation = scenarios.worktree.locations[0];
+const login = {
+  name: 'login-flow', kind: 'Worktree', branch: 'fix/pairing-login', path: '~/workspace/pi-remote/.worktrees/login-flow', scope: 'web/ · test/browser/', files: [
+    { name: 'web/app.js', kind: 'M', state: 'Uncommitted', hunk: '@@ -88,3 +88,4 @@', lines: [
+      [' ', 'function pair(code) {'], ['-', '  return connect(code);'], ['+', '  const cleanCode = code.trim();'], ['+', '  return connect(cleanCode);'], [' ', '}']
+    ] },
+    { name: 'web/style.css', kind: 'M', state: 'Uncommitted', hunk: '@@ -24,3 +24,4 @@', lines: [
+      [' ', '.pairing-form {'], ['-', '  gap: 8px;'], ['+', '  gap: 12px;'], ['+', '  padding: 16px;'], [' ', '}']
+    ] },
+    { name: 'test/browser/pairing.spec.mjs', kind: 'A', state: 'Committed · b57de10', hunk: '@@ -0,0 +1,5 @@', lines: [
+      ['+', "test('pairing trims spaces', async ({ page }) => {"], ['+', "  await page.goto('/');"], ['+', "  await page.getByLabel('Pairing code').fill(' 123456 ');"], ['+', "  await expect(page.getByRole('button', { name: 'Pair with computer' })).toBeEnabled();"], ['+', '});']
+    ] }
+  ]
+};
+scenarios.tasks = { project: 'pi-remote', start: '~/workspace/pi-remote', locations: [navigation, login], tasks: [
+  { title: 'Fix mobile navigation', status: 'Working', locations: [{ ...navigation, files: navigation.files.slice(0, 2) }] },
+  { title: 'Improve pairing login', status: 'Working', locations: [{ ...login, files: login.files.slice(0, 2) }] },
+  { title: 'Add regression coverage', status: 'Committed', locations: [{ ...navigation, files: [navigation.files[2]] }, { ...login, files: [login.files[2]] }] }
+] };
 const variants = [
   { key: 'A', name: 'Changes tab', description: 'A permanent place beside the conversation', render: renderA },
   { key: 'B', name: 'In the conversation', description: 'A task summary opens a review sheet', render: renderB },
@@ -63,10 +82,10 @@ function scopeHeader(location) {
   return `<div class="location-heading"><div class="location-name">${icon('branch')}<strong>${location.name}</strong><span class="location-kind">${location.kind}</span></div><span class="branch-name">${location.branch}</span><code class="location-path">${location.path}</code><p class="folder-scope">${location.scope}</p></div>`;
 }
 function fileList(items) {
-  return `<div class="file-list">${items.map(file => `<details class="file-diff"><summary><span class="file-kind" aria-label="${file.kind === 'A' ? 'Added' : 'Modified'} file">${file.kind}</span><span class="file-info"><span class="file-path">${file.name}</span><span class="file-state">${file.state}</span></span>${stats([file])}<span class="file-chevron">${icon('chevron')}</span></summary><div class="diff-caption">Session edit <span>${file.state}</span></div><div class="code-scroll" tabindex="0" role="region" aria-label="Diff for ${file.name}"><pre><span class="hunk">${file.hunk}</span>${file.lines.map(([type, line]) => `<span class="code-line ${type === '+' ? 'line-added' : type === '-' ? 'line-removed' : ''}"><span class="line-sign">${type}</span>${escape(line)}</span>`).join('')}</pre></div></details>`).join('')}</div>`;
+  return `<div class="file-list">${items.map(file => `<details class="file-diff"><summary><span class="file-kind" aria-label="${file.kind === 'A' ? 'Added' : 'Modified'} file">${file.kind}</span><span class="file-info"><span class="file-path">${file.name}</span><span class="file-state">${file.state}</span></span>${stats([file])}<span class="file-chevron">${icon('chevron')}</span></summary><div class="diff-caption">Captured edit <span>${file.state}</span></div><div class="code-scroll" tabindex="0" role="region" aria-label="Diff for ${file.name}"><pre><span class="hunk">${file.hunk}</span>${file.lines.map(([type, line]) => `<span class="code-line ${type === '+' ? 'line-added' : type === '-' ? 'line-removed' : ''}"><span class="line-sign">${type}</span>${escape(line)}</span>`).join('')}</pre></div></details>`).join('')}</div>`;
 }
 function exclusions() {
-  return `<div class="exclusions"><details><summary>${icon('check')}<span>Other project changes stay out</span>${icon('chevron')}</summary><div class="excluded-content"><p>These are not counted as this session's work.</p><ul><li><code>README.md</code><span>Changed before this session</span></li><li><code>package.json</code><span>Changed by another session</span></li></ul></div></details>${scenario === 'empty' ? '' : `<details class="shared-edits"><summary>${icon('warning')}<span>1 shared file needs review</span>${icon('chevron')}</summary><div class="excluded-content"><p><code>web/index.html</code> has overlapping edits. We cannot confidently separate who changed which lines.</p><p>No attributed diff available. It is excluded from this session's totals.</p></div></details>`}</div>`;
+  return `<div class="exclusions"><details><summary>${icon('check')}<span>Other project changes stay out</span>${icon('chevron')}</summary><div class="excluded-content"><p>These are not counted as this session's work.</p><ul><li><code>README.md</code><span>Changed before this session</span></li><li><code>package.json</code><span>Changed by another session</span></li></ul></div></details>${scenario === 'empty' ? '' : `<details class="shared-edits"><summary>${icon('warning')}<span>1 shared file needs review</span>${icon('chevron')}</summary><div class="excluded-content"><p><code>${data().tasks ? '.worktrees/mobile-nav/web/index.html' : 'web/index.html'}</code> has overlapping edits. We cannot confidently separate who changed which lines.</p><p>No attributed diff available. It is excluded from this session's totals.</p></div></details>`}</div>`;
 }
 function overview() {
   const items = allFiles();
@@ -75,14 +94,21 @@ function overview() {
 function emptyState() {
   return `<div class="changes-empty">${icon('diff')}<h2>No captured changes yet</h2><p>Edits from this session will appear here, wherever the work happens.</p><p>Existing project changes are not a substitute for session history.</p></div>`;
 }
+function taskContent() {
+  return `<div class="changes-overview"><div><h2>Changes in this session</h2><p>${data().tasks.length} tasks · ${data().locations.length} worktrees</p></div>${stats(allFiles())}</div><p class="scope-note">Choose a task. Each diff stays in its own worktree.</p><div class="task-list">${data().tasks.map(task => {
+    const items = task.locations.flatMap(location => location.files);
+    return `<details class="task-change"><summary><span class="task-title"><strong>${task.title}</strong>${icon('chevron')}</span><span class="task-meta"><span class="task-status ${task.status === 'Working' ? 'task-working' : ''}">${task.status}</span><span>${items.length} files</span>${stats(items)}</span><span class="task-worktrees">${icon('branch')}${task.locations.map(location => location.name).join(' · ')}</span></summary><div class="task-files"><p class="task-boundary">Only this task's captured edits. Other tasks stay separate.</p>${task.locations.map(location => `<section class="task-location" aria-label="${task.title} in ${location.name}">${scopeHeader(location)}${fileList(location.files)}</section>`).join('')}</div></details>`;
+  }).join('')}</div>${exclusions()}`;
+}
 function changesContent() {
+  if (data().tasks) return taskContent();
   return `${allFiles().length ? overview() + data().locations.map(location => `<section class="location-group" aria-label="Changes in ${location.name}">${scopeHeader(location)}${fileList(location.files)}</section>`).join('') : emptyState()}${exclusions()}`;
 }
 function composer() {
   return `<div class="demo-composer" aria-label="Sample composer, not connected"><span>Type / for commands</span><div><span class="composer-circle">${icon('plus')}</span><span class="composer-model">GPT-6.1 Sol <span>Max</span></span><span class="composer-slash">/</span><span class="composer-send">${icon('send')}</span></div></div>`;
 }
 function transcript(withSummary = false) {
-  return `<section class="sample-transcript" aria-label="Sample conversation"><div class="sample-user">Make the back gesture return to the session list without losing my place.</div><div class="sample-assistant"><p>I'll make the change in <strong>${scenario === 'worktree' ? 'the mobile-nav worktree' : scenario === 'nested' ? 'the phone app and its test repository' : 'this checkout'}</strong> and leave the other edits alone.</p><p class="sample-tool">${icon('check')} ${allFiles().length ? 'Edited navigation and checked the back gesture' : 'Read the navigation code. No edits captured.'}</p><p>${allFiles().length ? 'The back gesture now returns to your sessions. Your conversation stays where you left it.' : 'The project has existing changes, but there is no captured work to attribute to this session.'}</p></div>${withSummary ? `<button class="chat-change-card" type="button" data-action="review"><span class="chat-change-heading">${icon('diff')}<strong>${allFiles().length ? `${allFiles().length} files changed in this session` : 'No captured session edits'}</strong>${icon('chevron')}</span><span class="chat-change-location">${data().locations.map(location => `${location.name} · ${location.kind.toLowerCase()}`).join(' / ') || 'No work location yet'}</span><span class="chat-change-footer"><span>Review changes</span>${stats(allFiles())}</span></button><p class="chat-card-note">Unrelated project edits are not included.</p>` : `<button type="button" class="inline-changes" data-action="changes">${icon('diff')}View this session's ${allFiles().length} changed files${icon('chevron')}</button>`}</section>${composer()}`;
+  return `<section class="sample-transcript" aria-label="Sample conversation"><div class="sample-user">${data().tasks ? 'Fix navigation and pairing in separate worktrees, then add regression tests.' : 'Make the back gesture return to the session list without losing my place.'}</div><div class="sample-assistant"><p>I'll make the change in <strong>${data().tasks ? 'separate worktrees for navigation and pairing' : scenario === 'worktree' ? 'the mobile-nav worktree' : scenario === 'nested' ? 'the phone app and its test repository' : 'this checkout'}</strong> and leave the other edits alone.</p><p class="sample-tool">${icon('check')} ${data().tasks ? 'Captured task edits from two worktrees' : allFiles().length ? 'Edited navigation and checked the back gesture' : 'Read the navigation code. No edits captured.'}</p><p>${data().tasks ? 'Navigation and pairing are in progress. Regression tests have been committed separately in both worktrees.' : allFiles().length ? 'The back gesture now returns to your sessions. Your conversation stays where you left it.' : 'The project has existing changes, but there is no captured work to attribute to this session.'}</p></div>${withSummary ? `<button class="chat-change-card" type="button" data-action="review"><span class="chat-change-heading">${icon('diff')}<strong>${allFiles().length ? `${allFiles().length} files changed in this session` : 'No captured session edits'}</strong>${icon('chevron')}</span><span class="chat-change-location">${data().locations.map(location => `${location.name} · ${location.kind.toLowerCase()}`).join(' / ') || 'No work location yet'}</span><span class="chat-change-footer"><span>Review changes</span>${stats(allFiles())}</span></button><p class="chat-card-note">Unrelated project edits are not included.</p>` : `<button type="button" class="inline-changes" data-action="changes">${icon('diff')}View this session's ${allFiles().length} changed files${icon('chevron')}</button>`}</section>${composer()}`;
 }
 function renderA() {
   return `<nav class="session-tabs" aria-label="Session view"><button type="button" data-action="conversation" aria-pressed="${conversation}">Conversation</button><button type="button" data-action="changes" aria-pressed="${!conversation}">Changes <span>${allFiles().length}</span></button></nav>${conversation ? transcript() : `<div class="changes-page">${changesContent()}</div>`}`;
@@ -102,6 +128,7 @@ function render() {
   document.querySelector('#variant-label').textContent = `${current.key} · ${current.name}`;
   document.querySelector('#variant-description').textContent = current.description;
   document.querySelector('#prototype-project').textContent = data().project;
+  document.querySelector('.conversation-heading h1').textContent = data().tasks ? 'Polish the mobile experience' : 'Fix mobile navigation';
   document.querySelector('#scenario').value = scenario;
   view.dataset.variant = variant;
   view.innerHTML = current.render();

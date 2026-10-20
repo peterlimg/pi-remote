@@ -16,6 +16,7 @@
     <p>Prototype <span>Sample data only</span></p>
     <label for="scenario">Work happens in
       <select id="scenario">
+        <option value="tasks">Tasks &amp; worktrees</option>
         <option value="worktree">A worktree</option>
         <option value="project">This checkout</option>
         <option value="nested">Nested projects</option>
@@ -33,6 +34,7 @@
       <h2>What counts as this session's work?</h2>
       <p>These examples assume a snapshot before the session and a record of its edits, including commits. The starting folder is context, not the diff scope.</p>
       <p>Pre-existing and other sessions' edits stay separate. Overlapping edits need review. Git status alone cannot establish ownership.</p>
+      <p>The task example assumes separate edit records for each task. Several tasks can share a worktree, and one task can span several worktrees.</p>
       <p>This is a UI experiment. No files, Git repositories, or real sessions are read or changed.</p>
     </section>
     <main id="prototype-view" aria-label="Session changes prototype"></main>
