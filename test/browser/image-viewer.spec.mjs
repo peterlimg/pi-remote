@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('image viewer fills the screen and supports zooming and panning without dismissing', async ({ page, context, browserName }, info) => {
+test('image viewer supports full-screen zoom, pan and pull-down dismissal', async ({ page, context, browserName }, info) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -52,10 +52,10 @@ test('image viewer fills the screen and supports zooming and panning without dis
   const magnified = await image.boundingBox();
   expect(magnified.width).toBeCloseTo(initial.width * 4);
   await touch('touchStart', [[center.x, center.y]]);
-  await touch('touchMove', [[center.x + 60, center.y + 40]]);
+  await touch('touchMove', [[center.x + 60, center.y + 120]]);
   await touch('touchEnd', []);
   expect((await image.boundingBox()).x).toBeCloseTo(magnified.x + 60);
-  expect((await image.boundingBox()).y).toBeCloseTo(magnified.y + 40);
+  expect((await image.boundingBox()).y).toBeCloseTo(magnified.y + 120);
   await expect(viewer).toBeVisible();
   await page.screenshot({ path: info.outputPath('zoomed-mobile.png') });
   await touch('touchStart', [[center.x, center.y]]);
@@ -65,7 +65,32 @@ test('image viewer fills the screen and supports zooming and panning without dis
   await touch('touchEnd', []);
   await expect(zoom).toHaveText('100%');
   await expect.poll(() => image.boundingBox()).toEqual(initial);
-  await cdp?.detach();
+  await touch('touchStart', [[center.x, center.y]]);
+  await touch('touchMove', [[center.x, center.y + 160]]);
+  await page.screenshot({ path: info.outputPath('pull-down-mobile.png') });
+  await touch('touchEnd', []);
+  await expect(viewer).toBeHidden();
+  await page.getByRole('link', { name: 'Open landscape.png' }).tap();
+  await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  for (const [label, dx, dy, end] of [
+    ['short pull', 0, 40, 'touchEnd'], ['canceled pull', 0, 160, 'touchCancel'], ['sideways drag', 120, 100, 'touchEnd']
+  ]) await test.step(label, async () => {
+    await touch('touchStart', [[center.x, center.y]]);
+    await touch('touchMove', [[center.x + dx, center.y + dy]]);
+    await expect.poll(async () => (await viewer.boundingBox()).y).toBe(dx ? 0 : dy);
+    await touch(end, []);
+    await expect(viewer).toBeVisible();
+    await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  });
+  await touch('touchStart', [[center.x - 40, center.y]]);
+  await touch('touchMove', [[center.x - 40, center.y + 100]]);
+  await touch('touchStart', [[center.x - 40, center.y + 100], [center.x + 40, center.y + 100]]);
+  await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  await touch('touchMove', [[center.x - 80, center.y + 100], [center.x + 80, center.y + 100]]);
+  await touch('touchEnd', []);
+  await expect(viewer).toBeVisible();
+  await expect(zoom).toHaveText('200%');
+  await zoom.tap();
   await stage.tap();
   await expect(viewer).toBeVisible();
   await stage.dblclick();
@@ -92,8 +117,24 @@ test('image viewer fills the screen and supports zooming and panning without dis
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
   await expect.poll(async () => Math.abs((await image.boundingBox()).y - (await stage.boundingBox()).y)).toBeLessThan(1);
   await page.screenshot({ path: info.outputPath('portrait-mobile.png') });
+  await touch('touchStart', [[center.x, center.y]]);
+  await touch('touchMove', [[center.x, center.y - 40]]);
+  await touch('touchEnd', []);
+  expect((await image.boundingBox()).y).toBeCloseTo(bounds.y - 40);
+  await touch('touchStart', [[center.x, center.y]]);
+  await touch('touchMove', [[center.x, center.y + 120]]);
+  await touch('touchEnd', []);
+  await expect(viewer).toBeVisible(); // Returning to the top pans, rather than dismissing mid-gesture.
+  expect((await image.boundingBox()).y).toBeCloseTo(bounds.y);
+  await touch('touchStart', [[center.x, center.y]]);
+  await touch('touchMove', [[center.x, center.y + 160]]);
+  await touch('touchEnd', []);
+  await expect(viewer).toBeHidden();
+  await page.getByRole('link', { name: 'Open portrait.png' }).tap();
+  await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
   await zoom.tap();
   await expect(zoom).toHaveText('100%');
+  await cdp?.detach();
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 1280, height: 900 });
   await viewer.getByRole('button', { name: 'Zoom in', exact: true }).click();

@@ -803,7 +803,10 @@ function clearThreadImages(keep = new Set()) {
 }
 const imageViewer = $('image-viewer'), imageStage = $('image-stage'), fullImage = imageViewer.querySelector('img');
 const imagePointers = new Map();
-let imageZoom = 1, imageX = 0, imageY = 0;
+let imageZoom = 1, imageX = 0, imageY = 0, imagePull;
+function resetImagePull() {
+  imagePull = undefined; imageViewer.style.transform = '';
+}
 function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
   imageZoom = Math.max(1, Math.min(8, zoom));
   const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
@@ -821,7 +824,7 @@ function zoomImage(zoom, x = 0, y = 0) {
 }
 function openImage(event) {
   event.preventDefault();
-  imagePointers.clear(); fullImage.src = event.currentTarget.href;
+  resetImagePull(); imagePointers.clear(); fullImage.src = event.currentTarget.href;
   imageViewer.showModal(); positionImage(1, 0, 0); imageViewer.focus();
 }
 function showThreadImage(image, blob) {
@@ -1650,7 +1653,7 @@ fullImage.addEventListener('load', () => {
   positionImage(zoom, 0, top);
 });
 new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
-imageViewer.addEventListener('close', () => imagePointers.clear());
+imageViewer.addEventListener('close', () => { imagePointers.clear(); resetImagePull(); });
 imageViewer.addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (['+', '='].includes(event.key)) zoomImage(imageZoom * 2);
@@ -1669,6 +1672,14 @@ function imageGesture() {
 imageStage.addEventListener('pointerdown', event => {
   if (event.button !== 0 || imagePointers.size >= 2) return;
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  resetImagePull();
+  if (event.pointerType === 'touch' && imagePointers.size === 1) {
+    const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
+    const width = fullImage.naturalWidth * fit * imageZoom;
+    const top = imageY + (imageStage.clientHeight - fullImage.naturalHeight * fit * imageZoom) / 2;
+    // A tall image must pan back to its top before a new pull can dismiss it.
+    if (width <= imageStage.clientWidth + 1 && top >= -1) imagePull = { x: event.clientX, y: event.clientY, distance: 0 };
+  }
   // Touch and pen already capture implicitly; mouse drags need explicit capture.
   if (event.pointerType === 'mouse') imageStage.setPointerCapture(event.pointerId);
 });
@@ -1676,13 +1687,30 @@ imageStage.addEventListener('pointermove', event => {
   if (!imagePointers.has(event.pointerId)) return;
   const before = imageGesture();
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (imagePull) {
+    const dx = event.clientX - imagePull.x, dy = event.clientY - imagePull.y;
+    if (!imagePull.distance) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      if (dy <= 0 || Math.abs(dx) > dy) resetImagePull();
+    }
+    if (imagePull) {
+      imagePull.distance = Math.max(0, dy);
+      imageViewer.style.transform = `translateY(${imagePull.distance}px)`;
+      return;
+    }
+  }
   const after = imageGesture(), box = imageStage.getBoundingClientRect();
   const zoom = Math.max(1, Math.min(8, before.distance ? imageZoom * after.distance / before.distance : imageZoom));
   const x = before.x - box.x - box.width / 2, y = before.y - box.y - box.height / 2;
   const ratio = zoom / imageZoom;
   positionImage(zoom, x - (x - imageX) * ratio + after.x - before.x, y - (y - imageY) * ratio + after.y - before.y);
 });
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => imagePointers.delete(event.pointerId));
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => {
+  if (!imagePointers.has(event.pointerId)) return;
+  const dismiss = type === 'pointerup' && imagePull?.distance >= 80;
+  imagePointers.delete(event.pointerId); resetImagePull();
+  if (dismiss) imageViewer.close();
+});
 imageStage.addEventListener('dblclick', event => {
   const box = imageStage.getBoundingClientRect();
   zoomImage(imageZoom > 1 ? 1 : 2, event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
