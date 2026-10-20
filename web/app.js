@@ -122,7 +122,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsSessionSections = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+let supportsSessionSections = false, supportsSessionClosing = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -380,6 +380,7 @@ function connect() {
       supportsVideos = packet.supportsVideos === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
+      supportsSessionClosing = packet.supportsSessionClosing === true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -480,7 +481,7 @@ function logout() {
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20;
-  renderList();
+  sessionFeedback(''); renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
   $('login-cancel').hidden = true; $('login-logout').hidden = true;
@@ -585,6 +586,7 @@ function sessionRow(item) {
     body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
   }
   const meta = el('div', undefined, 'session-meta');
+  if (item.closed) meta.append(el('span', 'Closed', 'session-closed'));
   // Ready and Saved are the resting states; only label what needs attention.
   if (!['idle', 'saved'].includes(item.status)) {
     const status = el('span', statusLabels[item.status] || item.status, 'session-state');
@@ -647,7 +649,7 @@ function renderList() {
 function openCollection(section) {
   overviewLimit = listLimit; listSection = section; listLimit = 20;
   moreObserver.disconnect(); $('collection-sessions').replaceChildren();
-  $('collection-feedback').append($('list-empty'), $('list-page').parentElement);
+  $('collection-feedback').append($('session-feedback'), $('list-empty'), $('list-page').parentElement);
   $('session-collection-title').textContent = section === 'now' ? 'Active sessions' : 'Pinned sessions';
   $('session-collection').showModal(); $('session-collection').focus();
   loadList();
@@ -656,7 +658,7 @@ $('session-collection-close').addEventListener('click', () => $('session-collect
 $('session-collection').addEventListener('click', event => { if (event.target === $('session-collection')) $('session-collection').close(); });
 $('session-collection').addEventListener('close', () => {
   const section = listSection;
-  $('search-bar').before($('list-empty'), $('list-page').parentElement);
+  $('search-bar').before($('session-feedback'), $('list-empty'), $('list-page').parentElement);
   listSection = 'overview'; listLimit = overviewLimit; moreObserver.disconnect();
   if (!manualClose) loadList().then(() => {
     if (document.activeElement === document.body) $('sessions').querySelector(`[data-collection="${section}"]`)?.focus({ preventScroll: true, focusVisible: false });
@@ -667,44 +669,80 @@ async function togglePin(id) {
   try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
   catch (e) { notice(e.message, id); }
 }
-// Swipe a row right to pin or unpin it, like Messages. Vertical drags still scroll the list.
-const pinSwipeDistance = 72;
+function sessionFeedback(text, undoId) {
+  const box = $('session-feedback'); box.replaceChildren(); box.hidden = !text;
+  if (!text) return;
+  box.append(el('span', text));
+  if (undoId) {
+    const undo = el('button', 'Undo', 'quiet'); undo.type = 'button';
+    undo.addEventListener('click', () => closeSession(undoId, false)); box.append(undo);
+  }
+}
+async function closeSession(id, closed = true) {
+  try {
+    await request('closeSession', { sessionId: id, closed });
+    if (closed && selected === id) {
+      drafts.set(id, $('prompt').value);
+      resetSwipe(); closePicker(); clearThreadImages(); clearThreadVideos(); resetScrollback();
+      selected = undefined; selectedSummary = undefined;
+      document.querySelector('.session-info').open = false;
+      $('session-icon-picker').close(); $('app').classList.remove('viewing');
+      $('title').textContent = 'Pi Remote'; renderProject(); notice('');
+      $('transcript').replaceChildren(); $('transcript').hidden = true; $('dialog').hidden = true;
+      $('empty').hidden = false; $('composer').hidden = true;
+      if (history.state?.session) history.back();
+      renderList(); updateControls();
+    }
+    sessionFeedback(closed ? 'Session closed. History is kept; active work continues.' : 'Session reopened.', closed ? id : undefined);
+  } catch (e) { sessionFeedback(e.message); if (selected === id) notice(e.message, id); }
+}
+$('session-close').addEventListener('click', () => closeSession(selected));
+// Swipe right to pin or unpin, left to close. Vertical drags still scroll the list.
+const rowSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
 for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchstart', event => {
+  endRowSwipe(false);
   const row = event.target.closest('.session'), touch = event.touches[0];
   rowSwipe = row && event.touches.length === 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
 }, { passive: true });
 for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchmove', event => {
   if (!rowSwipe) return;
+  if (event.touches.length !== 1) { endRowSwipe(false); return; }
   const touch = event.touches[0], dx = touch.clientX - rowSwipe.x, dy = touch.clientY - rowSwipe.y;
   if (!rowSwipe.active) {
-    if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { endRowSwipe(); return; }
-    if (dx < 8) return;
-    rowSwipe.active = true; rowSwipe.row.classList.add('dragging');
+    if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { endRowSwipe(false); return; }
+    if (Math.abs(dx) < 8 || dx < 0 && !supportsSessionClosing) return;
+    rowSwipe.active = true; rowSwipe.row.style.transition = ''; rowSwipe.row.classList.add('dragging');
   }
   event.preventDefault();
-  const ready = dx > pinSwipeDistance;
-  if (ready !== rowSwipe.dx > pinSwipeDistance) haptic();
-  rowSwipe.dx = Math.max(0, dx);
-  rowSwipe.row.classList.toggle('pin-ready', ready);
-  rowSwipe.row.style.transform = `translateX(${Math.min(rowSwipe.dx, pinSwipeDistance * 1.5)}px)`;
+  const distance = supportsSessionClosing ? dx : Math.max(0, dx), ready = Math.abs(distance) > rowSwipeDistance;
+  if (ready !== (Math.abs(rowSwipe.dx) > rowSwipeDistance)) haptic();
+  rowSwipe.dx = distance;
+  rowSwipe.row.classList.toggle('swipe-ready', ready);
+  rowSwipe.row.classList.toggle('closing', rowSwipe.dx < 0);
+  rowSwipe.row.style.transform = `translateX(${Math.max(-rowSwipeDistance * 1.5, Math.min(rowSwipe.dx, rowSwipeDistance * 1.5))}px)`;
 }, { passive: false });
-function endRowSwipe() {
+function endRowSwipe(commit = true) {
   const swipe = rowSwipe;
   if (!swipe) return;
   rowSwipe = undefined;
+  const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200;
   if (swipe.active) {
-    swipe.row.style.transition = 'transform .2s ease-out'; swipe.row.style.transform = ''; swipe.row.classList.remove('pin-ready');
+    swipe.row.style.transition = duration ? 'transform .2s ease-out' : 'none'; swipe.row.style.transform = ''; swipe.row.classList.remove('swipe-ready');
     swipedAt = Date.now();
-    setTimeout(() => swipe.row.classList.remove('dragging'), 200);
-    if (swipe.dx > pinSwipeDistance) togglePin(swipe.row.dataset.id);
+    setTimeout(() => swipe.row.classList.remove('dragging', 'closing'), duration);
+    if (commit && Math.abs(swipe.dx) > rowSwipeDistance) {
+      if (swipe.dx < 0) closeSession(swipe.row.dataset.id);
+      else togglePin(swipe.row.dataset.id);
+    }
   }
-  if (swipe.stale) setTimeout(renderList, swipe.active ? 200 : 0);
+  if (swipe.stale) setTimeout(renderList, swipe.active ? duration : 0);
 }
 for (const list of [$('sessions'), $('collection-sessions')]) {
-  list.addEventListener('touchend', endRowSwipe);
-  list.addEventListener('touchcancel', endRowSwipe);
+  list.addEventListener('touchend', event => endRowSwipe(event.touches.length === 0));
+  list.addEventListener('touchcancel', () => endRowSwipe(false));
 }
+document.addEventListener('visibilitychange', () => { if (document.hidden) endRowSwipe(false); });
 function sessionTypeIcon(item) {
   const choice = sessionIcons.get(item.id);
   const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');
@@ -830,7 +868,7 @@ async function selectSession(id) {
       $('app').classList.remove('opening'); $('sidebar').inert = false;
     };
   }
-  markSeen(); renderList(); notice('');
+  markSeen(); renderList(); notice(''); sessionFeedback('');
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
@@ -843,7 +881,10 @@ async function selectSession(id) {
   }
   resizePrompt();
   if (state?.creation) return;
-  try { await request('watch', { sessionId: id }); loadUsage(id); }
+  try {
+    if (selectedSummary?.closed) await request('closeSession', { sessionId: id, closed: false });
+    await request('watch', { sessionId: id }); loadUsage(id);
+  }
   catch (e) {
     if (selected !== id) return;
     if (!cache.has(id)) {
@@ -1365,6 +1406,8 @@ function updateActivity() {
 }
 setInterval(() => { if (!document.hidden) updateActivity(); }, 1000);
 function updateControls() {
+  $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
+  $('session-close').disabled = !connected;
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const working = state && ['working', 'waiting'].includes(state.status);

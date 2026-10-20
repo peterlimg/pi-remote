@@ -10,7 +10,7 @@ for (const standalone of [false, true]) {
       status: i === 0 ? 'working' : 'idle', updatedAt: Date.now() - i * 1000,
       messages: [{ id: 'reply', role: 'assistant', text: `Reply for task ${i}` }] }));
     const service = Object.assign(Object.create(SessionService.prototype), {
-      catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['1', '2', '3']), warnings: [],
+      catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['1', '2', '3']), closedSessions: new Set(), warnings: [],
     });
     service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
     let client, scroll;

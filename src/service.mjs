@@ -36,6 +36,8 @@ export class SessionService extends EventEmitter {
     // Pinned sessions sort first for every phone; ids of deleted sessions just never match.
     try { this.pins = new Set(JSON.parse(readFileSync(join(dir, 'pinned-sessions.json'), 'utf8')).filter(id => typeof id === 'string')); }
     catch { this.pins = new Set(); }
+    try { this.closedSessions = new Set(JSON.parse(readFileSync(join(dir, 'closed-sessions.json'), 'utf8')).filter(id => typeof id === 'string')); }
+    catch { this.closedSessions = new Set(); }
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -112,7 +114,9 @@ export class SessionService extends EventEmitter {
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && item.resumable, pinned: this.pins.has(id) });
-    const visible = [...all.values()].filter(item => includeHelpers || query || !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
+    const visible = [...all.values()].filter(item => includeHelpers || query || !this.closedSessions.has(item.id) &&
+      !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
+    for (const item of visible) if (this.closedSessions.has(item.id)) item.closed = true;
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));
     return { matches, total: visible.length };
@@ -125,6 +129,23 @@ export class SessionService extends EventEmitter {
     renameSync(file + '.tmp', file);
     this.emit('list');
     return { pinned };
+  }
+  setClosed(id, closed) {
+    if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id) || typeof closed !== 'boolean') throw new Error('Invalid session close');
+    if (this.stopping) throw new Error('Pi Remote is stopping');
+    if (!this.catalog.has(id) && !this.live.has(id)) throw new Error('Session not found');
+    if (this.closedSessions.has(id) === closed) return { closed };
+    const next = new Set(this.closedSessions);
+    if (closed) next.add(id); else next.delete(id);
+    const file = join(this.dir, 'closed-sessions.json');
+    try {
+      writeFileSync(file + '.tmp', JSON.stringify([...next]), { mode: 0o600 });
+      renameSync(file + '.tmp', file);
+    } catch { throw new Error('Could not save closed sessions. Try again.'); }
+    // Closing only changes list visibility; never delete history or interrupt an agent.
+    this.closedSessions = next;
+    this.emit('list');
+    return { closed };
   }
   // Projects in most-recently-used order. Each names its newest session as the source for `new`.
   projects() {

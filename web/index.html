@@ -89,6 +89,7 @@
         <nav id="collection-sessions" aria-label="Session collection"></nav>
         <div id="collection-feedback"></div>
       </div></dialog>
+      <div id="session-feedback" class="session-feedback" role="status" hidden></div>
       <p id="list-empty" class="hint" hidden>No sessions yet. Start Pi with the remote extension loaded.</p>
       <div class="list-pagination">
         <span id="list-page" class="hint" role="status">Loading sessions…</span>
@@ -115,6 +116,7 @@
         <div class="conversation-heading"><h1 id="title">Pi Remote</h1><p id="project-name" hidden></p></div>
         <details class="session-info"><summary aria-label="Session details" title="Session details"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><g fill="currentColor" stroke="none"><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></g></svg></summary><div class="session-details">
           <p id="project">Select a session to see its project directory.</p>
+          <button id="session-close" type="button" hidden>Close session</button>
           <button id="session-icon-open" type="button" aria-haspopup="dialog" aria-controls="session-icon-picker"><span>Session icon</span><span id="session-icon-current"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
         </div></details>
       </header>

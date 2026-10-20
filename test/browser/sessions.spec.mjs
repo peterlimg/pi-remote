@@ -9,7 +9,7 @@ test('sessions sort by your last prompt without jumping during background activi
     [{ id: 'prompt-' + name, role: 'user', text: 'Begin ' + name, timestamp: time - i * 60000 }]),
     { status: 'working', updatedAt: time - i * 60000 }));
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true });
   const publish = () => {
     const update = scroll.active ? scroll.update() : service.list();
     if (update) client.send(JSON.stringify({ type: 'sessions', ...update }));
@@ -108,7 +108,7 @@ test('same-project sessions show their tasks, previews, status and activity with
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true });
   let scroll, failList = false;
   const requests = [];
   // Mirrors the host channel: whole pages until the phone scrolls or searches, then diffs.
