@@ -75,7 +75,8 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
     sheet.dispatchEvent(new TouchEvent('touchmove', { touches: touch(innerHeight), bubbles: true, cancelable: true }));
     sheet.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
   });
-  await expect(viewer).toBeHidden(); // Pulling the sheet down dismisses it.
+  await expect(viewer).toBeVisible(); // Inspecting an image must not dismiss it.
+  await viewer.getByRole('button', { name: 'Close image' }).click();
   await page.locator('.tool-activity > summary').click();
   await page.locator('.tool summary').click();
   await expect(page.locator('.tool-output')).toHaveText('Screenshot tool output');

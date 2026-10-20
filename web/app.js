@@ -751,9 +751,28 @@ function clearThreadImages(keep = new Set()) {
     threadImages.delete(id);
   }
 }
+const imageViewer = $('image-viewer'), imageStage = $('image-stage'), fullImage = imageViewer.querySelector('img');
+const imagePointers = new Map();
+let imageZoom = 1, imageX = 0, imageY = 0;
+function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
+  imageZoom = Math.max(1, Math.min(8, zoom));
+  const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
+  const limitX = Math.max(0, (fullImage.naturalWidth * fit * imageZoom - imageStage.clientWidth) / 2);
+  const limitY = Math.max(0, (fullImage.naturalHeight * fit * imageZoom - imageStage.clientHeight) / 2);
+  imageX = Math.max(-limitX, Math.min(limitX, x)); imageY = Math.max(-limitY, Math.min(limitY, y));
+  fullImage.style.transform = `translate(${imageX}px, ${imageY}px) scale(${imageZoom})`;
+  imageStage.classList.toggle('zoomed', imageZoom > 1);
+  $('image-zoom-reset').textContent = Math.round(imageZoom * 100) + '%';
+  $('image-zoom-out').disabled = imageZoom <= 1; $('image-zoom-in').disabled = imageZoom >= 8;
+}
+function zoomImage(zoom, x = 0, y = 0) {
+  const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
+  positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
+}
 function openImage(event) {
   event.preventDefault();
-  $('image-viewer').querySelector('img').src = event.currentTarget.href; $('image-viewer').showModal(); $('image-viewer').focus();
+  imagePointers.clear(); fullImage.src = event.currentTarget.href;
+  imageViewer.showModal(); positionImage(1, 0, 0); imageViewer.focus();
 }
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);
@@ -1566,8 +1585,49 @@ $('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
 $('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
-// Any tap on the sheet or its backdrop dismisses it; Escape is native.
-$('image-viewer').addEventListener('click', () => $('image-viewer').close());
+$('image-close').addEventListener('click', () => imageViewer.close());
+$('image-zoom-in').addEventListener('click', () => zoomImage(imageZoom * 2));
+$('image-zoom-out').addEventListener('click', () => zoomImage(imageZoom / 2));
+$('image-zoom-reset').addEventListener('click', () => positionImage(1, 0, 0));
+fullImage.addEventListener('load', () => positionImage());
+new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
+imageViewer.addEventListener('close', () => imagePointers.clear());
+imageViewer.addEventListener('keydown', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (['+', '='].includes(event.key)) zoomImage(imageZoom * 2);
+  else if (event.key === '-') zoomImage(imageZoom / 2);
+  else if (event.key === '0') positionImage(1, 0, 0);
+  else if (event.key.startsWith('Arrow')) positionImage(imageZoom,
+    imageX + (event.key === 'ArrowLeft' ? 50 : event.key === 'ArrowRight' ? -50 : 0),
+    imageY + (event.key === 'ArrowUp' ? 50 : event.key === 'ArrowDown' ? -50 : 0));
+  else return;
+  event.preventDefault();
+});
+function imageGesture() {
+  const [a, b = a] = [...imagePointers.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(a.x - b.x, a.y - b.y) };
+}
+imageStage.addEventListener('pointerdown', event => {
+  if (event.button !== 0 || imagePointers.size >= 2) return;
+  imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  // Touch and pen already capture implicitly; mouse drags need explicit capture.
+  if (event.pointerType === 'mouse') imageStage.setPointerCapture(event.pointerId);
+});
+imageStage.addEventListener('pointermove', event => {
+  if (!imagePointers.has(event.pointerId)) return;
+  const before = imageGesture();
+  imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  const after = imageGesture(), box = imageStage.getBoundingClientRect();
+  const zoom = Math.max(1, Math.min(8, before.distance ? imageZoom * after.distance / before.distance : imageZoom));
+  const x = before.x - box.x - box.width / 2, y = before.y - box.y - box.height / 2;
+  const ratio = zoom / imageZoom;
+  positionImage(zoom, x - (x - imageX) * ratio + after.x - before.x, y - (y - imageY) * ratio + after.y - before.y);
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => imagePointers.delete(event.pointerId));
+imageStage.addEventListener('dblclick', event => {
+  const box = imageStage.getBoundingClientRect();
+  zoomImage(imageZoom > 1 ? 1 : 2, event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
+});
 // Pull a bottom sheet down to dismiss it. A drag inside a scrolled list scrolls it instead.
 function dragToClose(sheet, dialog = sheet, list) {
   let startY, fromList, dy = 0;
@@ -1594,7 +1654,6 @@ function dragToClose(sheet, dialog = sheet, list) {
   sheet.addEventListener('touchend', release);
   sheet.addEventListener('touchcancel', release);
 }
-dragToClose($('image-viewer'));
 dragToClose($('project-picker').querySelector('.project-sheet'), $('project-picker'), $('project-options'));
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
