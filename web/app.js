@@ -614,6 +614,7 @@ function sessionRow(item) {
 function renderList() {
   // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
   if (rowSwipe) { rowSwipe.stale = true; return; }
+  const root = listRoot(), scrollTop = root.scrollTop, sidebarTop = $('sidebar').scrollTop;
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' :
     listSection === 'now' ? 'No sessions running.' : listSection === 'pinned' ? 'No pinned sessions.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
@@ -635,9 +636,10 @@ function renderList() {
       section.append(...items.map(sessionRow)); fragment.append(section);
     }
   } else fragment.append(...sessions.map(sessionRow));
-  listRoot().replaceChildren(fragment);
+  root.replaceChildren(fragment);
+  root.scrollTop = scrollTop; $('sidebar').scrollTop = sidebarTop;
   moreObserver.disconnect();
-  const last = [...listRoot().querySelectorAll('.session')].at(-1);
+  const last = [...root.querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);

@@ -4,7 +4,7 @@ import { BridgeSession } from '../../src/live-session.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
 for (const standalone of [false, true]) {
-  test(`returning to sessions keeps the list still in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page }, testInfo) => {
+  test(`returning to sessions keeps the list still in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page, browserName }, testInfo) => {
     if (standalone) await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
     const states = Array.from({ length: 24 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/project',
       status: i === 0 ? 'working' : 'idle', updatedAt: Date.now() - i * 1000,
@@ -31,37 +31,54 @@ for (const standalone of [false, true]) {
     const sidebar = page.locator('#sidebar');
     const now = page.getByRole('region', { name: 'Now', exact: true });
     await expect(now).toBeVisible();
-    for (const scrollTop of [0, 80]) {
-      await sidebar.evaluate((node, top) => { node.scrollTop = top; }, scrollTop);
+    const cdp = browserName === 'chromium' && await page.context().newCDPSession(page);
+    const touch = (type, x) => cdp ? cdp.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: 300 }],
+    }) : page.locator('main').evaluate((main, { type, x }) => main.dispatchEvent(Object.assign(
+      new Event(type.toLowerCase(), { bubbles: true, cancelable: true }), {
+        touches: type === 'touchEnd' ? [] : [{ clientX: x, clientY: 300 }],
+      })), { type, x });
+    await page.evaluate(() => addEventListener('touchstart', event => { window.nativeSwipePrevented = event.defaultPrevented; }));
+    for (const id of [2, 18]) {
+      const row = page.locator(`#sessions .session[data-id="${id}"]`);
+      await row.scrollIntoViewIfNeeded();
       const initialTop = await sidebar.evaluate(node => node.scrollTop);
+      if (id === 18) expect(initialTop).toBeGreaterThan(500);
       const initialNow = (await now.boundingBox()).y;
-      await page.getByRole('region', { name: 'Pinned', exact: true }).getByRole('button', { name: /Task 2/ }).tap();
-      await expect(page.locator('#transcript')).toContainText('Reply for task 2');
-      await expect(page.locator('#app')).not.toHaveClass(/opening/);
-      const nativePrevented = await page.locator('main').evaluate(main => {
-        const fire = (type, x) => main.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
-          touches: [{ clientX: x, clientY: 300 }],
-        }));
-        const prevented = !fire('touchstart', 5);
-        fire('touchmove', 180);
-        return prevented;
+      await sidebar.evaluate(node => {
+        window.sessionListFrames = [];
+        const sample = () => {
+          window.sessionListFrames.push({ top: node.scrollTop, visible: getComputedStyle(node).visibility === 'visible' });
+          window.sessionListFrame = requestAnimationFrame(sample);
+        };
+        window.sessionListFrame = requestAnimationFrame(sample);
       });
-      expect(nativePrevented).toBe(true);
+      await row.tap();
+      await expect(page.locator('#transcript')).toContainText(`Reply for task ${id}`);
+      await expect(page.locator('#app')).not.toHaveClass(/opening/);
+      await touch('touchStart', 5);
+      await touch('touchMove', 20);
+      expect(await page.evaluate(() => window.nativeSwipePrevented)).toBe(true);
       // The swipe must reveal the live list, not the browser's older history screenshot.
       await expect(sidebar).toHaveCSS('visibility', 'visible');
       states[0].updatedAt += 1000;
-      states[0].messages[0].text = `Working during swipe at ${scrollTop}`;
+      states[0].messages[0].text = `Working during swipe from task ${id}`;
       client.send(JSON.stringify({ type: 'sessions', ...scroll.update() }));
-      await expect(now).toContainText(`Working during swipe at ${scrollTop}`);
-      await expect(sidebar).toHaveJSProperty('scrollTop', initialTop);
-      expect((await now.boundingBox()).y).toBe(initialNow);
-      await page.screenshot({ path: testInfo.outputPath(`swiping-sessions-${scrollTop}.png`) });
-      await page.locator('main').dispatchEvent('touchend', { touches: [] });
+      await expect(now).toContainText(`Working during swipe from task ${id}`);
+      await touch('touchMove', 180);
+      await page.screenshot({ path: testInfo.outputPath(`swiping-sessions-${id}.png`) });
+      await touch('touchEnd', 180);
       await expect(page.locator('#app')).not.toHaveClass(/viewing/);
       await expect.poll(() => page.evaluate(() => history.state)).toBeNull();
       await expect(sidebar).toHaveJSProperty('scrollTop', initialTop);
       expect((await now.boundingBox()).y).toBe(initialNow);
-      await page.screenshot({ path: testInfo.outputPath(`returned-sessions-${scrollTop}.png`) });
+      await page.screenshot({ path: testInfo.outputPath(`returned-sessions-${id}.png`) });
+      const frames = await page.evaluate(() => {
+        cancelAnimationFrame(window.sessionListFrame);
+        return window.sessionListFrames;
+      });
+      await testInfo.attach(`sessions-scroll-${id}`, { body: JSON.stringify(frames), contentType: 'application/json' });
+      expect(frames.filter(frame => frame.visible && frame.top !== initialTop)).toEqual([]);
     }
   });
 }
