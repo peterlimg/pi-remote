@@ -19,7 +19,7 @@ test('focusing the message field has no tap overlay or border change', async ({ 
   }
 });
 
-test('compact composer keeps controls on one row across draft, working and offline states', async ({ page }, testInfo) => {
+test('compact composer keeps controls reachable across draft, working and offline states', async ({ page }, testInfo) => {
   const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
     model: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium', messages: [
       { id: 'reply', role: 'assistant', text: 'The changes are ready to review.' }
@@ -41,22 +41,28 @@ test('compact composer keeps controls on one row across draft, working and offli
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Review changes/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await expect(page.locator('#reasoning-value')).toHaveText('Medium');
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
   await expect(page.locator('#abort')).toBeHidden();
   await expect(page.locator('#commands')).toBeEnabled();
   const rowFits = async () => {
-    const controls = await page.locator('#attach, #model, #reasoning-control, #commands, #abort:not([hidden]), #send:not([hidden])')
+    const controls = await page.locator('#attach, #model, #reasoning-control, #usage-meter, #commands, #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
-      }));
+      }).sort((a, b) => a.y - b.y || a.x - b.x));
     for (const [i, control] of controls.entries()) {
       expect(control.height).toBeGreaterThanOrEqual(44);
       expect(control.width).toBeGreaterThanOrEqual(44);
-      expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
-      if (i) expect(control.x).toBeGreaterThanOrEqual(controls[i - 1].right);
+      expect(control.x).toBeGreaterThanOrEqual(8);
+      expect(control.right).toBeLessThanOrEqual(page.viewportSize().width - 8);
+      if (page.viewportSize().width >= 390) expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
+      if (i) {
+        const previous = controls[i - 1];
+        if (Math.abs(control.y - previous.y) < 1) expect(control.x).toBeGreaterThanOrEqual(previous.right - 1);
+        else expect(control.y).toBeGreaterThanOrEqual(previous.y + previous.height - 1);
+      }
     }
-    expect(controls.at(-1).right).toBeLessThanOrEqual(page.viewportSize().width - 8);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   };
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();

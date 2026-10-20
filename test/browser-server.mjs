@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { startHost } from '../src/host.mjs';
+import { browserPort, browserOrigin } from './browser-config.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until } from './helpers.mjs';
@@ -12,13 +13,13 @@ const dir = mkdtempSync(join(tmpdir(), 'pi-remote-browser-'));
 const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345', bridgeToken: 'browser-test-bridge-token-only-1234567890' };
 const scanRoot = join(dir, 'saved'); mkdirSync(scanRoot);
 for (let i = 0; i < 20; i++) writeFileSync(join(scanRoot, `damaged-${i}.jsonl`), 'invalid JSON\n');
-const host = await startHost({ dir, config, port: 8799, roots: [scanRoot] });
+const host = await startHost({ dir, config, port: browserPort, roots: [scanRoot] });
 const agents = [], locks = [];
 for (const title of ['Project Alpha', 'Project Beta']) {
   const file = join(dir, title + '.jsonl'); writeFileSync(file, '');
   const id = sessionKey(file), instanceId = randomUUID();
   const lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
-  const agent = await socket('ws://127.0.0.1:8799/bridge', config.bridgeToken);
+  const agent = await socket(browserOrigin.replace('http:', 'ws:') + '/bridge', config.bridgeToken);
   const state = { id, file, instanceId, cwd: '/projects/' + title, title, status: 'working',
     messages: [
       cleanMessage({ role: 'user', content: 'Check the relay config and tell me what to run.' }, 'user-1'),
@@ -48,6 +49,10 @@ for (const title of ['Project Alpha', 'Project Beta']) {
   agent.ws.on('message', raw => {
     const packet = JSON.parse(raw.toString());
     if (packet.type !== 'command') return;
+    if (packet.command.type === 'getUsage') {
+      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { contextUsage: state.contextUsage } }));
+      return;
+    }
     if (packet.command.type === 'getCommands') {
       agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { commands: [
         { name: title === 'Project Alpha' ? 'review' : 'deploy', description: 'Run a project command', source: 'extension' },

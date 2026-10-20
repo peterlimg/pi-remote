@@ -47,8 +47,8 @@ test('completed tools show Pi execution times live and from saved history, never
     agent.ws.on('message', raw => {
       const packet = JSON.parse(raw.toString());
       if (packet.type !== 'command') return;
-      if (packet.command.type === 'getCommands') {
-        agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { commands: [] } }));
+      if (['getCommands', 'getUsage'].includes(packet.command.type)) {
+        agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: packet.command.type === 'getCommands' ? { commands: [] } : {} }));
         return;
       }
       const message = { role: 'user', content: packet.command.text, timestamp: ++timestamp };

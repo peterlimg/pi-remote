@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { browserOrigin } from '../browser-config.mjs';
 
 test('mobile navigation preserves drafts and sends to the selected session', async ({ page }) => {
   const errors = [];
@@ -64,6 +65,7 @@ test('conversation header centers and truncates long titles without crowding its
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.locator('.session').click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await expect(page.locator('#project-name')).toHaveText('rill-conversation-scoring-with-a-long-project-name');
   for (const [width, colorScheme] of [[390, 'light'], [320, 'dark'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 });
@@ -135,11 +137,14 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
 test('tool summaries group consecutive activity and hide raw commands until expanded', async ({ page }, testInfo) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Beta/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   const shell = page.locator('[data-tool-id="run-checks"]');
   await expect(shell.locator('.tool-context')).toHaveText('npm run check && npm test');
   const group = page.locator('.tool-activity').last();
   await expect(group.locator('.tool-activity-label')).toHaveText('Ran 1 command, read 2 files');
-  await expect(group.locator(':scope > summary .tool-activity-line')).toHaveText('Last: read src/store/betslip/index.ts:60-85');
+  const lastActivity = group.locator(':scope > summary .tool-activity-line');
+  if (await page.locator('#status').textContent() === 'working') await expect(lastActivity).toHaveText('Last: read src/store/betslip/index.ts:60-85');
+  else await expect(lastActivity).toHaveCount(0);
   await expect(shell.locator('.tool-context')).toBeHidden();
   await expect(page.locator('.tool-preview')).toHaveCount(0);
   await group.scrollIntoViewIfNeeded();
@@ -231,7 +236,7 @@ test('desktop Enter and Alt+Enter send normal prompts, while Shift+Enter adds a 
     if (packet.op === 'command') commands.push(packet.command);
   }));
   try {
-    await page.goto('http://127.0.0.1:8799/#token=browser-test-token-only-123456789012345');
+    await page.goto(browserOrigin + '/#token=browser-test-token-only-123456789012345');
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     const prompt = page.locator('#prompt');
     await expect(page.locator('#send')).toBeEnabled();

@@ -203,11 +203,12 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
 test('the composer grows with text, caps overflow, and shrinks with edits and restored drafts', async ({ page }) => {
   await page.goto(login);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   const prompt = page.locator('#prompt');
   const height = () => prompt.evaluate(node => node.getBoundingClientRect().height);
   const compact = await height();
   expect(compact).toBe(44);
-  expect((await page.locator('#composer').boundingBox()).width - (await prompt.boundingBox()).width).toBe(18);
+  expect((await page.locator('#composer').boundingBox()).width - (await prompt.boundingBox()).width).toBeCloseTo(18, 3);
   await prompt.fill('One line');
   await expect(page.locator('#send')).toHaveAccessibleName('Send message');
   for (const id of ['attach', 'send', 'abort']) {

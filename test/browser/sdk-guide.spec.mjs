@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { browserOrigin } from '../browser-config.mjs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -123,7 +124,7 @@ test('motion pauses on demand and offscreen, with no animation under reduced mot
 test('the blog and native disclosure remain readable without JavaScript', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   try {
-    const page = await context.newPage(); await page.goto('http://127.0.0.1:8799/sdk-guide.html');
+    const page = await context.newPage(); await page.goto(browserOrigin + '/sdk-guide.html');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.locator('.operation-switch')).toBeHidden();
     await expect(page.locator('#operation-title')).toHaveText('Fork before later work');

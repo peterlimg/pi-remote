@@ -89,7 +89,7 @@ test('reasoning uses the model picker interaction and preserves drafts and sessi
   await expect(picker).toBeHidden();
   await expect(page.getByRole('searchbox', { name: 'Search models' })).toBeVisible();
   await effort.click();
-  await picker.getByRole('button', { name: 'Max', exact: true }).click();
+  await picker.getByRole('button', { name: 'Max', exact: true }).press('Enter');
   await expect(effort).toBeDisabled();
   await expect(picker.getByRole('button', { name: 'Low', exact: true })).toBeDisabled();
   await expect.poll(() => commands.length).toBe(1);

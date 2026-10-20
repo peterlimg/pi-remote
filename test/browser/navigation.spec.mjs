@@ -86,7 +86,8 @@ test('a failed conversation load stops the spinner and can be retried from the l
   await page.getByRole('button', { name: 'Show sessions' }).click();
   fail = false;
   await page.getByRole('button', { name: /Retry session/ }).tap();
-  await expect(page.locator('#transcript')).toHaveText('');
+  await expect(page.locator('#transcript .message, #transcript .hint, #transcript .conversation-loading')).toHaveCount(0);
+  await expect(page.locator('#agent-activity')).toBeHidden();
   await expect(page.locator('#transcript')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('#notice')).toBeHidden();
 });

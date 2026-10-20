@@ -10,6 +10,7 @@ import { attachClient } from './client-channel.mjs';
 import { serveStatic } from './http.mjs';
 import { connectRelay } from './relay.mjs';
 import { acceptSealed, e2eKey } from './e2e.mjs';
+import { createPairing } from './pairing.mjs';
 
 export async function startHost(options = {}) {
   const dir = options.dir || dataDir(), config = options.config || loadConfig(dir);
@@ -17,6 +18,7 @@ export async function startHost(options = {}) {
   const publicUrl = publicOrigin(options.publicUrl || process.env.PI_REMOTE_PUBLIC_URL || config.publicUrl || 'http://127.0.0.1:' + port);
   const relayUrl = options.relayUrl ?? process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
   let lock;
+  const pairing = createPairing(config);
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions });
   let closing;
   const logStop = message => {
@@ -28,11 +30,15 @@ export async function startHost(options = {}) {
     relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
     busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
-    if (req.url !== '/_pi/remote') { serveStatic(req, res); return; }
+    if (req.url !== '/_pi/remote' && req.url !== '/_pi/pair') { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Connection', 'close');
     if (req.headers.origin || !equalSecret(req.headers.authorization, 'Bearer ' + config.bridgeToken)) {
       res.writeHead(403); res.end('Forbidden'); return;
+    }
+    if (req.url === '/_pi/pair') {
+      if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(pairing.issue())); return;
     }
     if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
     if (req.method === 'DELETE' && req.headers['x-pi-remote-idle-only'] === '1' && service.busyWorkers) {
@@ -47,13 +53,14 @@ export async function startHost(options = {}) {
   const origins = new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port]);
   origins.add(publicUrl);
   http.on('upgrade', (req, socket, head) => {
-    const bridge = req.url === '/bridge';
-    if (closing || (!bridge && req.url !== '/ws') || (!bridge && !originAllowed(req.headers.origin, [...origins])) || (bridge && req.headers.origin)) {
+    const bridge = req.url === '/bridge', pair = req.url === '/pair';
+    if (closing || (!bridge && !pair && req.url !== '/ws') || (!bridge && !originAllowed(req.headers.origin, [...origins])) || (bridge && req.headers.origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
     }
     wss.handleUpgrade(req, socket, head, ws => {
-      const timer = setTimeout(() => ws.close(1008, 'Authentication required'), 5000);
       ws.on('error', () => {});
+      if (pair) { pairing.attach(ws); return; }
+      const timer = setTimeout(() => ws.close(1008, 'Authentication required'), 5000);
       ws.once('close', () => clearTimeout(timer));
       ws.once('message', raw => {
         clearTimeout(timer);
@@ -62,7 +69,7 @@ export async function startHost(options = {}) {
           if (auth.type !== 'auth' || !equalSecret(auth.token, bridge ? config.bridgeToken : config.clientToken)) throw new Error('Authentication failed');
           if (!bridge) {
             // Loopback browsers may stay plaintext; anything relayed is sealed in connectRelay.
-            if (auth.e2e === true) acceptSealed(ws, e2eKey(config), sealed => attachClient(sealed, service));
+            if (auth.e2e === true) acceptSealed(ws, e2eKey(config), sealed => attachClient(sealed, service, { pairing }));
             else attachClient(ws, service);
             return;
           }
@@ -105,7 +112,7 @@ export async function startHost(options = {}) {
     // Worker startup must not consume the background host's readiness timeout.
     void service.restore();
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
-    if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken, { key: e2eKey(config) });
+    if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken, { key: e2eKey(config), pairing });
   } catch (e) {
     logStop('stopping: error: ' + e.message);
     await service.close(); lock?.release();

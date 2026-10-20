@@ -6,7 +6,7 @@ import { loadConfig, dataDir } from '../src/config.mjs';
 import { startHost } from '../src/host.mjs';
 import { startRelay } from '../src/relay.mjs';
 import { unlockDead, sessionKey } from '../src/locks.mjs';
-import { pairingUrl, pairingQr, mobileUrl } from '../src/pairing.mjs';
+import { pairingUrl, pairingQr, mobileUrl, requestPairingCode } from '../src/pairing.mjs';
 import { ensureHost, stopHost, restartHost, hostStatus } from '../src/control.mjs';
 
 const [command = 'serve', ...args] = process.argv.slice(2);
@@ -46,10 +46,14 @@ try {
   } else if (command === 'pair') {
     const config = loadConfig();
     const running = await hostStatus(config);
-    const publicUrl = running?.publicUrl || config.publicUrl;
+    if (!running) throw new Error('Pi Remote is not running. Open /pi-remote in Pi first.');
+    const publicUrl = running.publicUrl || config.publicUrl;
+    const pairing = await requestPairingCode(config);
     const url = pairingUrl(config, publicUrl);
     if (mobileUrl(publicUrl)) console.log(pairingQr(url).join('\n'));
     else console.log('Local-only link. Use /pi-remote setup in Pi to configure phone access.');
+    console.log('Pairing code: ' + pairing.code + ' (single use, expires in 60 seconds)');
+    console.log('Enter it in Pi Remote at ' + new URL(url).origin);
     console.log(url);
     console.log('This link grants access to all exposed sessions. Keep it private. Revoke by rotating clientToken and restarting the host/relay.');
   } else if (command === 'relay-env') {

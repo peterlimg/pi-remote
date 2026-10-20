@@ -66,25 +66,46 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .boot h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
 .boot-status { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 20px 0 0; color: var(--muted); }
 .boot-status .connection-spinner { width: 12px; height: 12px; animation-duration: 1.6s; }
-.login { max-width: 400px; margin: 12vh auto; padding: 24px; }
-.login h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+.login { max-width: 420px; margin: clamp(32px, 10svh, 96px) auto; padding: 24px; }
+.login-heading { display: flex; align-items: center; gap: 16px; }
+.login-logo { flex-shrink: 0; }
+.login-heading > div { min-width: 0; }
+.login h1 { margin: 0 0 4px; font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; }
 .login p { color: var(--muted); }
-.login form { display: grid; gap: 12px; margin: 28px 0 20px; }
-.login input { font-size: 16px; }
-#scan-login { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 24px; border: 1px solid var(--line); }
+.login-heading p { margin: 0; font-size: 15px; }
+.login form { display: grid; gap: 14px; margin: 28px 0 0; }
+.login label { font-weight: 600; }
+.login input { width: 100%; min-width: 0; min-height: 50px; border-radius: 10px; font-size: 16px; background: var(--composer-bg); }
+.login button { min-height: 50px; border-radius: 10px; font-size: 16px; }
+.login .hint { margin: 0; font-size: 14px; line-height: 1.55; }
+.login code { padding: 2px 5px; border-radius: 4px; background: var(--panel); color: var(--text); font: 13px/1.4 var(--mono); white-space: nowrap; }
+.pair-instructions { display: grid; gap: 6px; }
+.login-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; color: var(--muted); font-size: 12px; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+#link-login { margin-top: 14px; }
+#link-login summary { min-height: 44px; padding: 10px 0; border-radius: 6px; color: var(--muted); }
+#link-login[open] summary { color: var(--text); }
+#link-login form { margin: 16px 0 12px; }
+#scan-login { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
 .qr-scanner { --bg: #000; --text: #fff; --accent: #fff; --error: #ffa4a4; }
 .qr-scanner .project-sheet { height: 100%; max-width: none; padding-top: env(safe-area-inset-top); border-radius: 0; animation: none; }
 .qr-scanner header { flex-shrink: 0; }
 .qr-scanner video { display: block; flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
 .qr-scanner p { flex-shrink: 0; margin: 12px 20px; font-size: 16px; }
-.login-error { padding: 16px; color: var(--error); text-align: center; }
+.login .login-error { margin: 16px 0 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--error) 25%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--error) 6%, var(--bg)); color: var(--error); font-size: 14px; }
+.access-banner { position: fixed; z-index: 8; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; max-width: 32rem; margin-inline: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); box-shadow: 0 4px 16px rgb(0 0 0 / .12); overflow-wrap: anywhere; }
+.access-banner p { margin-bottom: 12px; font-size: 16px; }
+.home-screen-hint { top: auto; bottom: max(12px, env(safe-area-inset-bottom)); }
+#pair-code { min-height: 64px; padding: 14px 16px; font: 500 28px/1.2 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: .24em; text-align: center; }
+#pair-code:focus { border-color: var(--accent); }
+#login-cancel, #login-logout { width: 100%; }
 .shell { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
 .shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { margin-left: auto; font-size: 12px; }
-/* Status sits in the header row, so it never pushes the list down. */
-#connection { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* Keep the full outage reason readable instead of clipping it on phones. */
+#connection { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; margin: 0; font-size: 12px; color: var(--muted); white-space: normal; }
 #connection[hidden] { display: none; }
 #connection::before { content: ''; width: 10px; height: 10px; flex-shrink: 0; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 .badge { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
@@ -307,8 +328,8 @@ pre.message-text { white-space: pre-wrap; }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #fast-mode { flex-shrink: 0; color: var(--accent); }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
-/* Pinch zoom can leave less space than the smallest layout-viewport breakpoint. */
-@container (max-width: 260px) {
+/* Narrow phones and pinch zoom need a separate settings row to preserve tap targets. */
+@container (max-width: 350px) {
   .composer-toolbar { flex-wrap: wrap; }
   .composer-settings { order: -1; width: 100%; }
   .composer textarea { max-height: 44px; }
@@ -433,6 +454,6 @@ pre.message-text { white-space: pre-wrap; }
   .composer-actions { gap: 4px; }
   .dialog { width: calc(100% - 16px); }
   .notice { padding: 12px 16px; }
-  .login { margin: 6vh auto; }
+  .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
 .boot-status { display: flex; align-items: center; gap: 10px; }

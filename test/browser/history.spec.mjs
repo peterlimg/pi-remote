@@ -54,6 +54,7 @@ test('all saved messages remain reachable with bounded scrollback while Pi keeps
     }));
     await page.goto(`http://127.0.0.1:${port}/#token=${config.clientToken}`);
     await page.getByRole('button', { name: /Full history/ }).click();
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
     const transcript = page.locator('#transcript'), messages = transcript.locator('article.message');
     await expect(messages.first()).toContainText('Message 550');
     await expect(transcript.getByRole('button', { name: /Load (older|newer) messages|Return to latest messages/ })).toHaveCount(0);

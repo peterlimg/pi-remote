@@ -172,6 +172,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Alpha/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   const picker = page.waitForEvent('filechooser');
   await page.getByLabel('Attach images and videos', { exact: true }).click();
   await (await picker).setFiles(file);

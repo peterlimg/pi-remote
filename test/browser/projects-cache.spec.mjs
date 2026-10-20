@@ -108,6 +108,7 @@ test('project prefetch survives dismissal and reconnect, but clears on sign out'
   await expect(status).toBeEmpty();
   await close();
   await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByText('Paste a private link instead', { exact: true }).click();
   await page.getByLabel('Private login link').fill('browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: 'Connect to computer' }).click();
   await expect.poll(() => requests.length).toBe(4);

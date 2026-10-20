@@ -56,7 +56,8 @@ test('activity groups follow message boundaries, count each call once and keep d
   await expect(groups).toHaveCount(4);
   await expect(groups.nth(2).locator('.tool-activity-label')).toHaveText('Used constructor 1 time, wrote 1 file');
   await expect(groups.nth(3).locator('.tool-activity-label')).toHaveText('Ran 1 command');
-  expect(await page.locator('#transcript').evaluate(node => [...node.children].map(child =>
+  await expect(page.locator('#agent-activity')).toBeHidden();
+  expect(await page.locator('#transcript').evaluate(node => [...node.children].filter(child => child.id !== 'agent-activity').map(child =>
     child.classList.contains('tool-activity') ? 'activity' : child.classList.contains('message') ? child.textContent.trim() : 'hint')))
     .toEqual(['activity', 'Check the changes.', 'activity', 'I found the failure.', 'activity', 'Try again.', 'activity']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

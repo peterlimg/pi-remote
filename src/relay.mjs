@@ -10,8 +10,8 @@ import { acceptSealed } from './e2e.mjs';
 // Sealed frames are base64 of JSON that may already carry base64 images; leave headroom.
 const MAX_RELAY_PAYLOAD = 6 * 1024 * 1024;
 // Bump when deployed relays must be updated: computers then ask their users to redeploy.
-// Version 2: the relay serves the phone app from the connected computer.
-export const RELAY_PROTOCOL = 2;
+// Version 3 adds unauthenticated, password-authenticated pairing channels.
+export const RELAY_PROTOCOL = 3;
 
 export async function startRelay({ hostToken, clientToken, publicUrl, port = 8788, bind = '127.0.0.1' }) {
   if (!hostToken || hostToken.length < 32 || !clientToken || clientToken.length < 32 || hostToken === clientToken) throw new Error('Relay requires two distinct secrets of at least 32 characters');
@@ -41,16 +41,30 @@ export async function startRelay({ hostToken, clientToken, publicUrl, port = 878
     }
     return current.assets.get(path);
   };
+  const openClient = (ws, pairing = false) => {
+    if (!host || host.readyState !== 1) { send(ws, { type: 'notice', error: 'Computer is offline' }); ws.close(1013, 'Computer offline'); return; }
+    if (clients.size >= 16) { ws.close(1013, 'Too many clients'); return; }
+    const id = randomUUID(); clients.set(id, ws); send(host, { type: 'open', id, ...(pairing ? { pairing: true } : {}) });
+    ws.on('message', raw => send(host || {}, { type: 'data', id, data: raw.toString() }));
+    ws.once('close', () => { clients.delete(id); if (host) send(host, { type: 'close', id }); });
+  };
   const http = createServer(async (req, res) => {
     const path = assetPath(req);
     serveStatic(req, res, path && await hostAsset(path));
   });
   http.on('upgrade', (req, socket, head) => {
-    if (!['/host', '/ws'].includes(req.url || '') || (req.url === '/ws' && !originAllowed(req.headers.origin, [origin]))) {
+    if (!['/host', '/ws', '/pair'].includes(req.url || '') || (req.url !== '/host' && !originAllowed(req.headers.origin, [origin]))) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
     }
     wss.handleUpgrade(req, socket, head, ws => {
       const isHost = req.url === '/host';
+      if (req.url === '/pair') {
+        protectSocket(ws); ws.on('error', () => {});
+        if (host && !host.pairing) { send(ws, { type: 'pair-error', error: 'Update Pi Remote on your computer to pair with a code.' }); ws.close(1000); return; }
+        const deadline = setTimeout(() => ws.close(1000), 15000);
+        ws.once('close', () => clearTimeout(deadline));
+        openClient(ws, true); return;
+      }
       const timer = setTimeout(() => ws.close(1008, 'Authentication required'), 5000);
       protectSocket(ws);
       ws.once('message', raw => {
@@ -68,7 +82,7 @@ export async function startRelay({ hostToken, clientToken, publicUrl, port = 878
             for (const client of clients.values()) client.close(1012, 'Computer reconnected');
             clients.clear(); stale.terminate();
           }
-          host = ws; send(ws, { type: 'ready', version: RELAY_PROTOCOL });
+          host = ws; ws.pairing = auth.version >= 3; send(ws, { type: 'ready', version: RELAY_PROTOCOL });
           if (auth.version >= 2) { ws.assets = new Map(); ws.pending = new Map(); }
           arrivals.emit('host');
           ws.on('message', raw => {
@@ -90,11 +104,7 @@ export async function startRelay({ hostToken, clientToken, publicUrl, port = 878
             host = undefined; for (const client of clients.values()) client.close(1012, 'Computer disconnected'); clients.clear();
           });
         } else {
-          if (!host || host.readyState !== 1) { send(ws, { type: 'notice', error: 'Computer is offline' }); ws.close(1013, 'Computer offline'); return; }
-          if (clients.size >= 16) { ws.close(1013, 'Too many clients'); return; }
-          const id = randomUUID(); clients.set(id, ws); send(host, { type: 'open', id });
-          ws.on('message', raw => send(host || {}, { type: 'data', id, data: raw.toString() }));
-          ws.once('close', () => { clients.delete(id); if (host) send(host, { type: 'close', id }); });
+          openClient(ws);
         }
       });
       ws.once('close', () => clearTimeout(timer));
@@ -116,7 +126,7 @@ class VirtualSocket extends EventEmitter {
     this.readyState = 3; send(this.host, { type: 'close', id: this.id }); this.emit('close');
   }
 }
-export function connectRelay(service, url, token, { key, allowInsecure = false } = {}) {
+export function connectRelay(service, url, token, { key, pairing, allowInsecure = false } = {}) {
   if (!key) throw new Error('Relay channels require an encryption key');
   const target = new URL(url);
   if (target.protocol !== 'wss:' && !(allowInsecure && target.protocol === 'ws:' && ['127.0.0.1', 'localhost'].includes(target.hostname))) throw new Error('Relay URL must use wss:// (loopback ws:// only in tests)');
@@ -143,7 +153,9 @@ export function connectRelay(service, url, token, { key, allowInsecure = false }
           if (virtual.has(packet.id) || virtual.size >= 16) throw new Error('Too many channels');
           const client = new VirtualSocket(ws, packet.id); virtual.set(packet.id, client);
           client.once('close', () => virtual.delete(packet.id));
-          acceptSealed(client, key, sealed => attachClient(sealed, service));
+          if (packet.pairing === true) {
+            if (pairing) pairing.attach(client); else client.close();
+          } else acceptSealed(client, key, sealed => attachClient(sealed, service, { pairing }));
         } else if (packet.type === 'data' && typeof packet.data === 'string') virtual.get(packet.id)?.emit('message', packet.data);
         else if (packet.type === 'close') virtual.get(packet.id)?.close();
       } catch { ws.close(1008, 'Invalid relay message'); }

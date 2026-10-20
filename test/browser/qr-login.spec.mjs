@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { pairingQr, pairingUrl } from '../../src/pairing.mjs';
+import { browserOrigin } from '../browser-config.mjs';
 
-const config = { publicUrl: 'http://127.0.0.1:8799', clientToken: 'browser-test-token-only-123456789012345',
+const config = { publicUrl: browserOrigin, clientToken: 'browser-test-token-only-123456789012345',
   bridgeToken: 'browser-test-bridge-token-only-1234567890' };
 const link = pairingUrl(config);
 const code = value => pairingQr(value).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
@@ -109,6 +110,7 @@ test('denied camera permission keeps the paste-login fallback available', async 
   await expect(page.locator('#qr-error')).toHaveText(/Camera access was denied/);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Scan QR code' })).toBeEnabled();
+  await page.getByText('Paste a private link instead', { exact: true }).click();
   await page.getByLabel('Private login link').fill(link);
   await page.getByRole('button', { name: 'Connect to computer' }).click();
   await expect(page.getByRole('button', { name: /Project Alpha/ })).toBeVisible();

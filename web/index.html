@@ -32,15 +32,36 @@
     </div>
   </section>
   <section id="login" class="login" hidden>
-    <h1>Pi Remote</h1>
-    <p>Connect to Pi on your computer.</p>
-    <button id="scan-login" type="button" class="secondary"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path d="M7 7h3v3H7zm7 0h3v3h-3zM7 14h3v3H7zm7 0h3v3h-3z"/></svg>Scan QR code</button>
-    <form id="login-form">
-      <label for="token">Private login link</label>
-      <input id="token" type="password" autocomplete="off" required placeholder="Paste the private link from your computer">
-      <button type="submit">Connect to computer</button>
+    <header class="login-heading">
+      <svg class="login-logo" viewBox="0 0 470 470" width="40" height="40" aria-hidden="true">
+        <path fill="#F09082" d="M0 0H352.07V234.71H234.71V117.36H0Z"/>
+        <path fill="#4D9ABF" d="M0 117.36H117.36V234.71H234.71V352.07H117.36V469.43H0Z"/>
+        <path fill="#F1BE58" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"/>
+      </svg>
+      <div><h1>Pi Remote</h1><p>Connect to Pi on your computer.</p></div>
+    </header>
+    <form id="pair-form">
+      <div class="pair-instructions">
+        <label for="pair-code">Pairing code</label>
+        <p id="pair-hint" class="hint">Run <code>/pi-remote</code> on your computer for a single-use code. It expires in 60 seconds.</p>
+      </div>
+      <input id="pair-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" aria-describedby="pair-hint">
+      <button id="pair-submit" type="submit">Pair with computer</button>
     </form>
-    <p class="hint">Run <code>/pi-remote</code> inside Pi on your computer, then scan the QR code or paste the private login link here.</p>
+    <div class="login-divider" aria-hidden="true">or</div>
+    <button id="scan-login" type="button" class="secondary"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path d="M7 7h3v3H7zm7 0h3v3h-3zM7 14h3v3H7zm7 0h3v3h-3z"/></svg>Scan QR code</button>
+    <details id="link-login">
+      <summary>Paste a private link instead</summary>
+      <form id="login-form">
+        <label for="token">Private login link</label>
+        <input id="token" type="password" autocomplete="off" required placeholder="Paste the private link from your computer">
+        <button type="submit">Connect to computer</button>
+      </form>
+      <p class="hint">Paste the whole private link from your computer, including <code>&amp;key=</code>.</p>
+    </details>
+    <p id="login-error" class="login-error" role="alert" hidden></p>
+    <button id="login-cancel" type="button" class="quiet" hidden>Back to saved login</button>
+    <button id="login-logout" type="button" class="quiet" hidden>Sign out</button>
   </section>
   <dialog id="qr-scanner" class="project-picker qr-scanner" aria-labelledby="qr-title" aria-describedby="qr-status">
     <div class="project-sheet">
@@ -131,7 +152,7 @@
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
           <label id="attach" class="quiet" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images and videos" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple></label>
-          <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span>Connecting</div>
+          <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span id="composer-connection-text">Connecting</span></div>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-expanded="false" aria-controls="settings-picker" hidden></button>
             <button id="reasoning-control" class="setting-control" type="button" aria-label="Reasoning effort" title="Change reasoning effort" aria-expanded="false" aria-controls="settings-picker" hidden><span id="reasoning-value"></span></button>
@@ -150,6 +171,14 @@
       </form>
     </main>
   </div>
-  <p id="login-error" class="login-error" role="alert" hidden></p>
+  <section id="access-warning" class="access-banner" aria-label="Login needs attention" hidden>
+    <p id="access-message" role="alert"></p>
+    <button id="repair" type="button">Pair again</button>
+  </section>
+  <section id="home-screen-hint" class="access-banner home-screen-hint" aria-label="Home Screen login" hidden>
+    <p id="home-screen-message" role="status"></p>
+    <p id="home-screen-code"></p>
+    <button id="home-screen-close" type="button" class="quiet">Dismiss</button>
+  </section>
 </body>
 </html>

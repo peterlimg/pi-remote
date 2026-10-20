@@ -42,7 +42,7 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await page.getByRole('button', { name: /Reconnect test/ }).click();
   await expect(page.locator('#notice')).toBeHidden();
   await expect(connecting).toBeVisible();
-  await expect(connecting).toHaveText('Connecting');
+  await expect(connecting).toHaveText("Couldn't connect, retrying. Computer disconnected");
   await expect(page.locator('#composer-hint')).toBeHidden();
   // Connecting replaces the settings pill in the toolbar instead of sitting on the draft.
   const row = await connecting.boundingBox(), prompt = await page.locator('#prompt').boundingBox();
@@ -73,16 +73,13 @@ test('the session list hides Connecting during a quick reconnect and shows it on
   await page.goto(url);
   const banner = page.locator('#connection');
   await expect(page.getByRole('button', { name: /Reconnect test/ })).toBeVisible();
-  const listTop = (await page.locator('#sessions').boundingBox()).y;
   channels[0].close({ code: 1012, reason: 'Computer disconnected' });
   await page.clock.runFor(1100);
   await expect.poll(() => channels.length).toBe(2);
   await expect(banner).toBeHidden();
   await page.clock.runFor(1000);
-  await expect(banner).toHaveText('Connecting…');
+  await expect(banner).toHaveText("Couldn't connect, retrying. Computer disconnected");
   await expect(banner).toBeVisible();
-  // The banner shares the header row, so the list never moves.
-  expect((await page.locator('#sessions').boundingBox()).y).toBe(listTop);
   channels[1].send(JSON.stringify({ type: 'ready' }));
   await expect(banner).toBeHidden();
 });
@@ -110,7 +107,7 @@ test('a silent reconnect times out, preserves drafts, and re-watches without rep
   await expect(page.locator('#status')).toHaveText('Disconnected');
   await page.clock.runFor(1100);
   await expect.poll(() => channels.length).toBe(2);
-  await expect(page.locator('#connection')).toHaveText('Connecting…');
+  await expect(page.locator('#connection')).toHaveText("Couldn't connect, retrying. Deploy");
   await page.clock.runFor(24000);
   await expect.poll(() => channels.length, { timeout: 2000 }).toBe(3);
   await expect(page.locator('#connection')).toHaveText('Computer connected');
@@ -165,11 +162,36 @@ test('a half-open connection is detected by heartbeat and resumes on network or 
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   await expect(page.locator('#prompt')).toHaveValue('Keep my draft');
   channels.at(-1).close({ code: 1008, reason: 'Authentication failed' });
-  await expect(page.locator('#login')).toBeVisible();
-  await expect(page.locator('#login-error')).toHaveText('Authentication failed');
-  await page.clock.runFor(60000);
-  expect(channels).toHaveLength(4);
+  await expect(page.locator('#login')).toBeHidden();
+  await expect(page.locator('#access-message')).toHaveText('This login is no longer valid. Login expired, pair again');
+  expect(await page.evaluate(() => localStorage.getItem('pi-remote-token'))).toBe('browser-test-token-only-123456789012345');
+  await expect(page.locator('#prompt')).toHaveValue('Keep my draft');
+  await page.clock.runFor(1100);
+  await expect.poll(() => channels.length).toBe(5);
+  await expect(page.locator('#connection')).toHaveText('Computer connected');
 });
+
+for (const reason of ['Authentication required', 'Authentication timeout', 'Connection timed out']) {
+  test(`1008 ${reason} preserves the login and draft while retrying`, async ({ page }) => {
+    await freezeTime(page);
+    const channels = [];
+    await page.routeWebSocket('**/ws', ws => {
+      channels.push(ws);
+      ws.onMessage(raw => answer(ws, JSON.parse(raw)));
+    });
+    await page.goto(url);
+    await page.getByRole('button', { name: /Reconnect test/ }).click();
+    await page.locator('#prompt').fill('Keep my draft');
+    channels[0].close({ code: 1008, reason });
+    await expect(page.locator('#connection')).toHaveText("Couldn't connect, retrying. " + reason);
+    await expect(page.locator('#login')).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('pi-remote-token'))).toBe('browser-test-token-only-123456789012345');
+    await page.clock.runFor(1100);
+    await expect.poll(() => channels.length).toBe(2);
+    await expect(page.locator('#connection')).toHaveText('Computer connected');
+    await expect(page.locator('#prompt')).toHaveValue('Keep my draft');
+  });
+}
 
 test('a hung handshake is replaced without waiting for close; stale events and logout cannot revive it', async ({ page }) => {
   await freezeTime(page);

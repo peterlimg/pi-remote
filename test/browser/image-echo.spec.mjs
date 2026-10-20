@@ -45,11 +45,14 @@ for (const earlyEcho of [true, false]) test(`image-only sends reconcile ${earlyE
   }
   if (!earlyEcho) {
     echo('first');
-    await expect(page.locator('.delivery-status')).toHaveCount(1);
+    await expect(page.locator('.message.user')).toHaveCount(3);
+    await expect(page.locator('.message.user').nth(1)).toHaveAttribute('data-message-id', 'first');
+    await expect(page.locator('.message.user').last()).not.toHaveAttribute('data-message-id', 'first');
+    await expect(page.locator('.delivery-status')).toHaveCount(0);
     // A second snapshot must not mistake the first echo for the second submission.
     client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
     await expect(page.locator('.message.user')).toHaveCount(3);
-    await expect(page.locator('.delivery-status')).toHaveCount(1);
+    await expect(page.locator('.delivery-status')).toHaveCount(0);
     echo('second');
     await expect(page.locator('.delivery-status')).toHaveCount(0);
     await expect(page.locator('.message.user')).toHaveCount(3);

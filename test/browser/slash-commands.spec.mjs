@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { browserOrigin } from '../browser-config.mjs';
 
 const url = '/#token=browser-test-token-only-123456789012345';
 
@@ -99,7 +100,7 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, hasTouch: false });
   const page = await context.newPage();
   try {
-    await page.goto('http://127.0.0.1:8799' + url);
+    await page.goto(browserOrigin + url);
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     const prompt = page.locator('#prompt'), menu = page.getByRole('listbox');
     await prompt.fill('/');

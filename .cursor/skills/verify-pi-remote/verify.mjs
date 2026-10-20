@@ -72,7 +72,8 @@ if (process.argv[2] === 'doctor') {
     const page = await context.newPage();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
-    await page.getByLabel('Device access token').fill(token);
+    await page.getByText('Paste a private link instead', { exact: true }).click();
+    await page.getByLabel('Private login link').fill(token);
     await page.getByRole('button', { name: 'Connect to computer' }).click();
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await expect(page.locator('#sessions .session')).toHaveCount(2);

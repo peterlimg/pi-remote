@@ -3,9 +3,38 @@ import { test, expect } from '@playwright/test';
 const token = 'browser-test-token-only-123456789012345';
 const key = 'pi-remote-token';
 
-test('manual login survives reopening and sign out clears it across tabs', async ({ page, context }) => {
+test('collapsed link fallback supports keyboard login, reopening and cross-tab sign out', async ({ page, context }, testInfo) => {
   await page.goto('/');
-  await expect(page.locator('#login .hint')).toHaveText('Run /pi-remote inside Pi on your computer, then scan the QR code or paste the private login link here.');
+  await expect(page.locator('#pair-hint')).toContainText('single-use code');
+  await expect(page.getByLabel('Pairing code', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Scan QR code' })).toBeVisible();
+  await expect(page.getByLabel('Private login link')).toBeHidden();
+  const viewport = page.viewportSize();
+  for (const [name, size, colorScheme] of [
+    ['mobile', viewport, 'light'], ['mobile-dark', viewport, 'dark'],
+    ['small-phone', { width: 320, height: 568 }, 'light'], ['desktop', { width: 1280, height: 900 }, 'light']
+  ]) {
+    await page.setViewportSize(size);
+    await page.emulateMedia({ colorScheme });
+    await expect(page.getByRole('button', { name: 'Pair with computer' })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Scan QR code' })).toBeInViewport({ ratio: 1 });
+    expect((await page.locator('#pair-code').boundingBox()).height).toBeGreaterThanOrEqual(64);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`login-collapsed-${name}.png`), fullPage: true });
+  }
+  await page.setViewportSize(viewport);
+  const fallback = page.getByText('Paste a private link instead', { exact: true });
+  expect((await fallback.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await fallback.focus();
+  await fallback.press('Enter');
+  await expect(page.getByLabel('Private login link')).toBeVisible();
+  await fallback.press('Space');
+  await expect(page.getByLabel('Private login link')).toBeHidden();
+  await fallback.press('Enter');
+  await expect(page.getByLabel('Private login link')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('login-expanded-mobile.png'), fullPage: true });
+  await fallback.press('Tab');
+  await expect(page.getByLabel('Private login link')).toBeFocused();
   await page.getByLabel('Private login link').fill(new URL('/#token=' + token, page.url()).href);
   await page.locator('#login-form button').click();
   await expect(page.locator('#connection')).toHaveText('Computer connected');
@@ -39,7 +68,7 @@ test('an existing tab login migrates to persistent storage', async ({ page }) =>
   await expect(page.locator('#connection')).toHaveText('Computer connected');
 });
 
-test('a new QR replaces stale credentials and rejected credentials are cleared', async ({ page }) => {
+test('a new QR replaces stale credentials and rejected credentials stay saved until sign out', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(key => {
     localStorage.setItem(key, 'stale-token');
@@ -51,10 +80,16 @@ test('a new QR replaces stale credentials and rejected credentials are cleared',
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(token);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
   await page.goto('/#token=invalid-token');
-  await expect(page.locator('#login-error')).toHaveText('Authentication failed');
-  await expect(page.locator('#login')).toBeVisible();
-  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();
+  await expect(page.locator('#access-message')).toHaveText('This login is no longer valid. Login expired, pair again');
+  await expect(page.locator('#login')).toBeHidden();
+  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe('invalid-token');
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
+  await page.getByRole('button', { name: 'Pair again', exact: true }).click();
+  await expect(page.getByLabel('Pairing code', { exact: true })).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe('invalid-token');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();
+  await expect(page.getByRole('button', { name: 'Back to saved login' })).toBeHidden();
 });
 
 test('a real server authentication timeout retries without deleting the token or draft', async ({ page }) => {

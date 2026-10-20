@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { setTimeout as realTimeout } from 'node:timers';
 import { WebSocketServer } from 'ws';
-import { connectRelay } from '../src/relay.mjs';
+import { connectRelay, RELAY_PROTOCOL } from '../src/relay.mjs';
 
 async function eventually(condition) {
   for (let i = 0; i < 100; i++) {
@@ -135,7 +135,7 @@ test('the computer gives its relay only phone app files and flags an older relay
   const disconnect = connectRelay({}, 'ws://127.0.0.1:' + http.address().port, 'h'.repeat(40), { key: 'k'.repeat(43), allowInsecure: true });
   t.after(async () => { disconnect(); wss.close(); await new Promise(resolve => http.close(resolve)); });
   await eventually(() => replies.size === 2);
-  assert.equal(auth.version, 2);
+  assert.equal(auth.version, RELAY_PROTOCOL);
   assert.equal(Buffer.from(replies.get('/app.js'), 'base64').toString(), bundled('/app.js'));
   assert.equal(replies.get('/../config.json'), undefined);
   assert.equal(disconnect.outdated(), true);

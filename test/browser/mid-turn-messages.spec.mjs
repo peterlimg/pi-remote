@@ -58,6 +58,7 @@ test('mid-turn text appears and sends immediately without queue or steering cont
   await page.getByRole('button', { name: /Mid-turn messages/ }).click();
   await expect(sent).toHaveText(text);
   await expect(prompt).toHaveValue('My next draft');
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   for (const [width, scheme] of [[390, 'light'], [320, 'dark'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme: scheme });
@@ -65,7 +66,8 @@ test('mid-turn text appears and sends immediately without queue or steering cont
     const send = await page.locator('#send').boundingBox(), reasoning = await page.locator('#reasoning-control').boundingBox();
     const actions = await page.locator('.composer-actions').boundingBox();
     expect(send.height).toBeGreaterThanOrEqual(44);
-    expect(reasoning.x + reasoning.width).toBeLessThanOrEqual(actions.x);
+    if (Math.abs(reasoning.y - actions.y) < 1) expect(reasoning.x + reasoning.width).toBeLessThanOrEqual(actions.x + 1);
+    else expect(reasoning.y + reasoning.height).toBeLessThanOrEqual(actions.y + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`mid-turn-${width}-${scheme}.png`) });
   }

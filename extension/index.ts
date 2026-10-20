@@ -8,7 +8,7 @@ import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
 import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
-import { pairingUrl, pairingQr, pairingLines, mobileUrl } from '../src/pairing.mjs';
+import { pairingUrl, pairingQr, pairingLines, mobileUrl, requestPairingCode } from '../src/pairing.mjs';
 import { progressWidget, wakeHint, connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
 // Structural typing keeps the bridge usable with Pi packages before/after the namespace rename.
@@ -326,10 +326,11 @@ export default function remoteExtension(pi: any) {
       if (mobileUrl(running.publicUrl) && !await checkRelay(context.ui, { ...config, publicUrl: running.publicUrl })) return;
       if (running.relayOutdated) context.ui.notify(relayOutdated, 'warning');
       if (stopped) return;
+      const pairing = await requestPairingCode(config);
       const url = pairingUrl(config, running.publicUrl), code = pairingQr(url);
       // UI-only: never persist the bearer link in session entries or model context.
       await context.ui.custom((tui: any, _theme: any, keys: any, done: any) => ({
-        render: (width: number) => pairingLines(url, code, width, tui.terminal.rows),
+        render: (width: number) => pairingLines(url, code, width, tui.terminal.rows, pairing),
         invalidate() {},
         handleInput(data: string) {
           if (keys.matches(data, 'tui.select.confirm') || keys.matches(data, 'tui.select.cancel') || data === '\u0003') done();

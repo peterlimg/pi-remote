@@ -56,7 +56,8 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(pane).toBeHidden();
     await page.locator('#model').click();
     await page.getByRole('button', { name: 'Second', exact: true }).click();
-    await expect(page.locator('#model')).toHaveText('org/second');
+    await expect(page.locator('#model')).toHaveText('Second');
+    expect(host.service.read(id).model).toBe('test/org/second');
     await meter.click();
     await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '5');
     await expect(pane).not.toContainText('5-hour limit');
@@ -96,7 +97,8 @@ test('usage follows session snapshots and never invents missing account limits',
         ws.send(JSON.stringify({ type: 'ready', supportsUsage: true }));
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
       } else if (p.op === 'watch') { selected = states.find(s => s.id === p.sessionId); snapshot(selected); reply({}); }
-      else if (p.op === 'commands') reply([]);
+      else if (p.op === 'commands' || p.op === 'projects') reply([]);
+      else if (p.op === 'ping') reply({ pong: true });
       else if (p.op === 'usage') {
         if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
         else reply({ model: selected.model, contextUsage: selected.contextUsage,

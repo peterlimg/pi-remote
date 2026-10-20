@@ -28,7 +28,7 @@ It launches `node test/browser-server.mjs`, waits for `http://127.0.0.1:8799/hea
 
 The fixture uses a real host, HTTP server, browser WebSocket, authentication, and bridge protocol. It seeds `Project Alpha` and `Project Beta` with conversations and tool output. The agents on `/bridge` are simulated. They acknowledge messages and publish them back; they do not run Pi tools, call models, or persist a real Pi conversation. Twenty deliberately malformed session files produce scan warnings until the first command clears them.
 
-Port 8799 is fixed in the existing fixture and specs. Only one run may use it. Stop and report an occupied port, never kill its owner or reuse someone else's instance. Each launch gets its own temporary data, locks, browser context, and scan root. Do not run the smoke helper and `npm run test:browser` concurrently.
+The helper uses fixed port 8799. The browser fixture and specs default to 8799 but accept `PI_REMOTE_TEST_PORT`, for example `PI_REMOTE_TEST_PORT=8811 npm run test:browser`. Only one run may use a given port. Stop and report an occupied port, never kill its owner or reuse someone else's instance. Each launch gets its own temporary data, locks, browser context, and scan root. Do not run the smoke helper and `npm run test:browser` concurrently.
 
 For a custom Playwright drive, start a fixture explicitly in a shell you keep open:
 
@@ -84,7 +84,8 @@ try {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8799/');
-  await page.getByLabel('Device access token').fill('browser-test-token-only-123456789012345');
+  await page.getByText('Paste a private link instead', { exact: true }).click();
+  await page.getByLabel('Private login link').fill('browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: 'Connect to computer' }).click();
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   await page.getByRole('button', { name: /Project Alpha/ }).click();

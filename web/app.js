@@ -110,11 +110,13 @@ const videoObserver = new IntersectionObserver(entries => {
     loadVideoPreview(threadVideos.get(entry.target.dataset.videoPath));
   }
 }, { root: $('transcript'), rootMargin: '160px' });
-let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
+let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0, connectionReason = '';
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let key = localStorage.getItem('pi-remote-key') || '';
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const ownSwipe = navigator.standalone === true;
+const standalone = ownSwipe || matchMedia('(display-mode: standalone)').matches;
+let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
 let swipeTimer, trackingSwipe = false, openingAnimation;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
@@ -123,6 +125,21 @@ let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listE
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
+function parseLogin(input) {
+  const value = input.trim().replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '').replace(/&amp;/gi, '&');
+  const start = value.search(/(?:^|[#?&/])token=/);
+  let nextToken, nextKey;
+  if (start >= 0) {
+    const params = new URLSearchParams(value.slice(start).replace(/^[#?&/]/, ''));
+    nextToken = params.get('token'); nextKey = params.get('key');
+  } else if (loopback && value && !/[\s:/#?&=]/.test(value)) nextToken = value;
+  if (!nextToken) throw new Error('Link incomplete: missing token=. Paste the whole private link.');
+  // Token-only shortcuts can reuse only the key saved for that exact token.
+  nextKey ??= nextToken === token ? key : '';
+  if (!nextKey && !loopback) throw new Error('Link incomplete: paste the whole link including &key=');
+  if (nextKey && !validKey(nextKey)) throw new Error('Link incomplete: the &key= encryption key is invalid. Paste the whole private link.');
+  return { token: nextToken, key: nextKey };
+}
 function rememberLogin(nextToken, nextKey) {
   // Older shortcuts may contain only a token; reuse a key only for that same token.
   key = nextKey ?? (nextToken === token ? key : ''); token = nextToken;
@@ -131,15 +148,26 @@ function rememberLogin(nextToken, nextKey) {
   sessionStorage.removeItem('pi-remote-token');
 }
 function readLoginHash() {
-  const params = new URLSearchParams(location.hash.slice(1)), nextToken = params.get('token');
-  if (!nextToken) return false;
-  rememberLogin(nextToken, params.get('key'));
+  const value = location.hash || location.search;
+  if (!/(?:^|[#?&])token=/.test(value)) return false;
+  loginLinkError = '';
+  try {
+    const credentials = parseLogin(value);
+    rememberLogin(credentials.token, credentials.key);
+    homeScreenLogin = !standalone && !loopback;
+    if (homeScreenLogin) {
+      $('home-screen-hint').hidden = false;
+      $('home-screen-message').textContent = 'Login saved. Open Pi Remote from your Home Screen.';
+    }
+  } catch (error) { loginLinkError = error.message; }
   history.replaceState(null, '', location.pathname);
   return true;
 }
 // Preserve existing tab logins when upgrading to persistent browser storage.
 if (!readLoginHash()) rememberLogin(token, key);
-window.addEventListener('hashchange', () => { if (readLoginHash()) connect(); });
+window.addEventListener('hashchange', () => {
+  if (readLoginHash()) { if (loginLinkError) showLogin(loginLinkError); else connect(); }
+});
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
 const COPIED_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
 // iOS Safari has no navigator.vibrate; toggling a hidden switch input (iOS 18+) plays a system haptic.
@@ -252,13 +280,33 @@ function transmit(ws, value) {
   // Seals complete in call order, so frames leave in counter order.
   ws.channel.then(sealed => sealed.seal(text)).then(frame => { if (ws.readyState === WebSocket.OPEN) ws.send(frame); }, () => {});
 }
-function loginFailed(text) { $('login-error').textContent = text; $('login-error').hidden = false; logout(); }
+function showLogin(text = '') {
+  manualClose = true; disconnect();
+  $('login-error').textContent = text; $('login-error').hidden = !text;
+  $('access-warning').hidden = true;
+  $('boot').hidden = true; $('app').hidden = true; $('login').hidden = false;
+  $('login-cancel').hidden = !token; $('login-logout').hidden = !token;
+}
+function loginFailed(text) {
+  $('access-message').textContent = text; $('access-warning').hidden = false;
+  reconnect(text);
+}
+async function homeScreenPairing() {
+  homeScreenLogin = false;
+  try {
+    const pairing = await request('pairingCode');
+    $('home-screen-code').textContent = 'If the app still asks for a login, enter ' + pairing.code + ' there. This code is single use and expires in 60 seconds.';
+    clearTimeout(homeScreenTimer);
+    homeScreenTimer = setTimeout(() => { $('home-screen-code').textContent = 'Code expired. Run /pi-remote on your computer for a new pairing code.'; }, Math.max(0, pairing.expiresAt - Date.now()));
+  } catch { $('home-screen-code').textContent = 'If the app still asks for a login, enter the pairing code shown by /pi-remote on your computer.'; }
+}
 // The first connection keeps the boot screen until sessions arrive, so the app never flashes empty.
 function showApp() { $('boot').hidden = true; $('app').hidden = false; }
 // Routine reconnects (foreground return, network change) finish in a moment; only a lasting outage shows the banner.
 let bannerTimer;
 function connection(text) {
   $('connection').textContent = text;
+  $('composer-connection-text').textContent = text;
   if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
@@ -277,30 +325,32 @@ function disconnect() {
     item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.'));
   }
 }
-function reconnect() {
+function reconnect(reason = 'Your computer is offline') {
   disconnect();
   if (manualClose || !token) return;
-  showApp(); connection('Computer disconnected. Retrying…');
+  connectionReason = reason;
+  showApp(); connection("Couldn't connect, retrying. " + reason);
   reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
 }
 function connect() {
   $('qr-scanner').close();
   disconnect(); manualClose = false;
-  if (key ? !validKey(key) : !loopback) { loginFailed('This login link has no encryption key. Scan the QR code on your computer again.'); return; }
+  if (key && !validKey(key)) { showLogin('Link incomplete: the &key= encryption key is invalid. Paste the whole private link.'); return; }
+  if (!key && !loopback) { showLogin('Link incomplete: paste the whole link including &key='); return; }
   $('login').hidden = true; if ($('app').hidden) $('boot').hidden = false;
-  connection('Connecting…');
+  connection(retry ? "Couldn't connect, retrying. " + connectionReason : 'Connecting…');
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   socket = ws;
   // Bound the whole attempt, including an open transport that never receives ready.
-  connectionTimer = setTimeout(reconnect, 20000);
+  connectionTimer = setTimeout(() => reconnect('Connection timed out'), 20000);
   ws.addEventListener('open', () => {
     if (socket !== ws) return;
     // A connected computer answers within seconds; relay close frames can be lost in its proxy.
-    clearTimeout(connectionTimer); connectionTimer = setTimeout(reconnect, 8000);
+    clearTimeout(connectionTimer); connectionTimer = setTimeout(() => reconnect('Connection timed out'), 8000);
     ws.send(JSON.stringify({ type: 'auth', token, ...(key ? { e2e: true } : {}) }));
     if (key) { ws.hello = hello(); ws.send(JSON.stringify(ws.hello.packet)); }
   });
-  const encryptionFailed = () => { if (socket === ws) loginFailed('Encryption check failed. Scan the QR code on your computer again.'); };
+  const encryptionFailed = () => { if (socket === ws) loginFailed('Encryption check failed. Pair again.'); };
   ws.addEventListener('message', event => {
     if (socket !== ws) return;
     if (!key) { receive(event.data); return; }
@@ -309,7 +359,7 @@ function connect() {
     let packet;
     try { packet = JSON.parse(event.data); } catch { return; }
     if (packet?.type === 'hello' && ws.hello) { ws.channel = channel(key, ws.hello.nonce, packet.nonce); ws.channel.catch(encryptionFailed); }
-    else if (packet?.type === 'notice') { notice(packet.error); if (packet.error === 'Computer is offline') reconnect(); }
+    else if (packet?.type === 'notice') { notice(packet.error); if (packet.error === 'Computer is offline') reconnect('Your computer is offline'); }
   });
   function receive(data) {
     if (socket !== ws) return;
@@ -334,7 +384,11 @@ function connect() {
           item.reject(new Error('Delivery outcome is unknown. Inspect the conversation before sending again.'));
         }
       }
-      connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true;
+      connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
+      if (homeScreenLogin) {
+        if (packet.supportsPairing) void homeScreenPairing();
+        else { homeScreenLogin = false; $('home-screen-code').textContent = 'If the app still asks for a login, enter the pairing code shown by /pi-remote on your computer.'; }
+      }
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       loadProjects();
@@ -369,19 +423,20 @@ function connect() {
   }
   ws.addEventListener('close', event => {
     if (socket !== ws) return;
-    // Host and relay also use 1008 when auth delivery exceeds five seconds.
-    if (event.code === 1008 && event.reason !== 'Authentication required') {
-      $('login-error').textContent = event.reason || 'Access denied. Check your token.';
-      $('login-error').hidden = false; logout(); return;
+    if (event.code === 1008 && ['Authentication failed', 'Invalid authentication'].includes(event.reason)) {
+      loginFailed('This login is no longer valid. Login expired, pair again'); return;
     }
-    reconnect();
+    if (event.code === 1008 && /[Ee]ncryption/.test(event.reason)) {
+      loginFailed('Encryption check failed. Pair again.'); return;
+    }
+    reconnect(event.reason || 'Your computer is offline');
   });
   ws.addEventListener('error', () => { if (socket === ws) reconnect(); });
 }
 // Any reply clears the timer; silence means a half-open socket.
 function probe() {
   if (connectionTimer) return;
-  connectionTimer = setTimeout(reconnect, 10000);
+  connectionTimer = setTimeout(() => reconnect('Connection timed out'), 10000);
   transmit(socket, { op: 'ping', id: crypto.randomUUID() });
 }
 // Mobile browsers suspend sockets and timers in the background. Start fresh on return.
@@ -401,6 +456,8 @@ window.addEventListener('storage', event => {
 function logout() {
   resetSwipe();
   manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close();
+  clearTimeout(homeScreenTimer); homeScreenLogin = false;
+  $('home-screen-hint').hidden = true; $('access-warning').hidden = true;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
@@ -417,6 +474,7 @@ function logout() {
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
+  $('login-cancel').hidden = true; $('login-logout').hidden = true;
   $('app').hidden = true; $('boot').hidden = true; $('login').hidden = false;
 }
 const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
@@ -1728,14 +1786,32 @@ $('scan-login').addEventListener('click', async event => {
 });
 $('login-form').addEventListener('submit', event => {
   event.preventDefault();
-  // Accept the full private link (token and key) or, on this computer, a bare token.
-  const value = $('token').value.trim();
-  let params;
-  try { params = new URLSearchParams(new URL(value).hash.slice(1)); } catch { /* Bare token. */ }
-  rememberLogin(params?.get('token') || value, params?.get('key'));
-  $('token').value = ''; connect();
+  try {
+    const credentials = parseLogin($('token').value);
+    rememberLogin(credentials.token, credentials.key);
+    $('token').value = ''; connect();
+  } catch (error) { $('login-error').textContent = error.message; $('login-error').hidden = false; }
 });
+$('pair-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('pair-submit'), controls = $('login').querySelectorAll('input, button');
+  for (const control of controls) control.disabled = true;
+  button.textContent = 'Pairing…'; $('login-error').hidden = true;
+  try {
+    let pairWithCode;
+    try { ({ pairWithCode } = await import('./pairing.js')); }
+    catch { throw new Error('Could not load pairing. Your computer may be offline, or your relay needs an update.'); }
+    const credentials = await pairWithCode($('pair-code').value.trim());
+    if (typeof credentials?.token !== 'string' || credentials.token.length < 32 || !validKey(credentials.key)) throw new Error('Login expired, pair again');
+    rememberLogin(credentials.token, credentials.key); $('pair-code').value = ''; connect();
+  } catch (error) { $('login-error').textContent = error.message; $('login-error').hidden = false; }
+  finally { for (const control of controls) control.disabled = false; button.textContent = 'Pair with computer'; }
+});
+$('repair').addEventListener('click', () => { showLogin(); $('pair-code').focus(); });
+$('login-cancel').addEventListener('click', connect);
+$('home-screen-close').addEventListener('click', () => { $('home-screen-hint').hidden = true; });
 $('logout').addEventListener('click', logout);
+$('login-logout').addEventListener('click', logout);
 $('search').addEventListener('input', () => {
   clearTimeout(searchTimer); listRequest++;
   searchQuery = $('search').value.trim().toLowerCase(); listLimit = 20;
@@ -2172,4 +2248,5 @@ $('resume').addEventListener('click', async () => {
   catch (e) { notice(e.message); }
   finally { updateControls(); }
 });
-if (token) connect(); else { $('boot').hidden = true; $('login').hidden = false; }
+if (loginLinkError) showLogin(loginLinkError);
+else if (token) connect(); else { $('boot').hidden = true; $('login').hidden = false; }
