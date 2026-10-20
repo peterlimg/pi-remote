@@ -3,11 +3,14 @@ import { cleanMessage } from '../../src/catalog.mjs';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 const file = { name: 'screenshot.png', mimeType: 'image/png', buffer: png };
-test('thread images load lazily, survive updates, open full size and retry failures', async ({ page }) => {
+for (const withCall of [true, false]) test(`thread images from ${withCall ? 'called' : 'orphan'} tools stay visible, survive updates and retry failures`, async ({ page }, info) => {
   const image = { type: 'image', mimeType: 'image/png', data: png.toString('base64') };
   const state = { id: 'images', title: 'Screenshot review', cwd: '/project', status: 'idle', messages: [
     cleanMessage({ role: 'user', content: [{ type: 'text', text: 'Compare these screenshots.' }, image, image] }, 'user'),
-    cleanMessage({ role: 'toolResult', toolName: 'read', toolCallId: 'read', content: [image] }, 'tool'),
+    ...(withCall ? [cleanMessage({ role: 'assistant', content: [
+      { type: 'toolCall', id: 'read', name: 'read', arguments: { path: '/project/screenshot.png' } }
+    ] }, 'call')] : []),
+    cleanMessage({ role: 'toolResult', toolName: 'read', toolCallId: 'read', content: [{ type: 'text', text: 'Screenshot tool output' }, image] }, 'tool'),
     cleanMessage({ role: 'assistant', content: 'The images are attached above.' }, 'reply')
   ] };
   let client, requests = 0, fail = true;
@@ -38,12 +41,19 @@ test('thread images load lazily, survive updates, open full size and retry failu
   await expect(previews).toHaveCount(2);
   await expect.poll(() => previews.evaluateAll(images => images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
   await expect(page.locator('.message.user')).not.toContainText('[image]');
-  expect(requests).toBe(3); // The collapsed tool image has not been fetched.
+  const toolImage = page.locator('#transcript > .thread-images img');
+  await expect(toolImage).toBeVisible();
+  await expect.poll(() => toolImage.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+  await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.tool-output')).toBeHidden();
+  expect(requests).toBe(4);
   const urls = await previews.evaluateAll(images => images.map(img => img.src));
+  const toolURL = await toolImage.getAttribute('src');
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state: { ...state, status: 'working' } }));
   await expect(page.locator('#abort')).toBeVisible();
   expect(await previews.evaluateAll(images => images.map(img => img.src))).toEqual(urls);
-  expect(requests).toBe(3);
+  expect(await toolImage.getAttribute('src')).toBe(toolURL);
+  expect(requests).toBe(4);
   await page.locator('.message.user .thread-images a').first().click();
   const viewer = page.locator('#image-viewer');
   await expect(viewer.locator('img')).toBeVisible();
@@ -68,12 +78,23 @@ test('thread images load lazily, survive updates, open full size and retry failu
   await expect(viewer).toBeHidden(); // Pulling the sheet down dismisses it.
   await page.locator('.tool-activity > summary').click();
   await page.locator('.tool summary').click();
-  const toolImage = page.locator('.tool .thread-images img');
-  await expect(toolImage).toBeVisible();
-  await expect.poll(() => toolImage.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+  await expect(page.locator('.tool-output')).toHaveText('Screenshot tool output');
+  await expect(page.locator('.tool .thread-images')).toHaveCount(0);
+  await expect(toolImage).toHaveCount(1);
+  expect(await toolImage.getAttribute('src')).toBe(toolURL);
+  expect(requests).toBe(4);
+  await page.locator('.tool summary').click();
+  await page.locator('.tool-activity > summary').click();
+  await toolImage.locator('..').click();
+  await expect(viewer).toBeVisible();
+  await expect(viewer.locator('img')).toHaveAttribute('src', toolURL);
+  await viewer.getByRole('button', { name: 'Close image' }).click();
+  await page.screenshot({ path: info.outputPath('tool-image-mobile.png'), fullPage: true });
+  await info.attach('tool-image-conversation', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('tool-image-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#transcript img')).toHaveCount(0);
   expect(await page.evaluate(async url => { try { await fetch(url); return true; } catch { return false; } }, urls[0])).toBe(false);

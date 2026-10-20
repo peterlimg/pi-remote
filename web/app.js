@@ -789,6 +789,7 @@ function loadThreadImage(image) {
 function appendThreadImages(parent, message, attachments) {
   if (!message?.images?.length) return;
   const gallery = el('div', undefined, 'thread-images');
+  gallery.dataset.scrollKey = 'images:' + message.id;
   for (const [index, reference] of message.images.entries()) {
     if ((!attachments && !/^[a-f0-9]{64}$/.test(reference.id)) || !IMAGE_TYPES.includes(reference.mimeType)) continue;
     const key = message.id + ':' + index;
@@ -1028,7 +1029,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     detail.append(summary);
     if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
     if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
-    appendThreadImages(detail, result);
     if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
     activity.node.append(detail);
   };
@@ -1041,6 +1041,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
       appendTool(message.toolCallId || message.id, message.toolName, '', message);
+      appendThreadImages(fragment, message);
       continue;
     }
     // Extensions prompt the agent as the user (e.g. a subagent wake); show one quiet line, not a bubble.
