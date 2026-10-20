@@ -156,6 +156,79 @@
 .changes-sheet > header h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .sheet-content { padding: 24px 20px 8px; overflow: auto; overscroll-behavior: contain; }
 .no-script { padding: 24px; }
+/* Round two: provenance is available on demand; the default view is the work itself. */
+.review-tabs { position: sticky; top: 0; z-index: 3; background: var(--bg); }
+.focused-review, .file-browser, .file-inspector { padding: 18px 20px 24px; }
+.review-task-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+#review-task { width: 100%; min-height: 44px; border: 0; border-radius: 10px; background: var(--panel); padding: 8px 12px; font-size: 16px; font-weight: 500; }
+.review-context, .inspector-context { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 44px; color: var(--muted); font-size: 11px; }
+.review-context > span:first-child, .inspector-context > span { display: flex; flex: 1; align-items: center; gap: 6px; color: var(--accent); font: 12px/1.5 var(--mono); overflow-wrap: anywhere; }
+.review-context > span:first-child svg, .inspector-context > span svg { width: 15px; height: 15px; }
+.review-location-details { flex: none; }
+.review-location-details > summary { display: grid; place-items: center; list-style: none; width: 44px; height: 44px; color: var(--muted); }
+.review-location-details > summary::-webkit-details-marker { display: none; }
+.review-location-details > summary svg { width: 18px; height: 18px; }
+.review-location-details[open] { flex-basis: 100%; width: 100%; }
+.review-location-details[open] > summary { margin-left: auto; }
+.review-location-details > div { padding: 12px; margin-bottom: 12px; border-radius: 10px; background: var(--panel); }
+.review-location-details p { margin: 0; }
+.review-location-details p + p { margin-top: 14px; }
+.review-location-details strong, .review-location-details span, .review-location-details code { display: block; margin-bottom: 4px; }
+.review-location-details code { font: 11px/1.7 var(--mono); overflow-wrap: anywhere; }
+.review-file-list { margin: 6px 0 12px; border-block: 1px solid var(--line); }
+.review-file-list button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border-radius: 0; background: transparent; color: var(--text); text-align: left; }
+.review-file-list button + button { border-top: 1px solid var(--line); }
+.review-file-list button[aria-pressed=true] { background: var(--user); color: var(--accent); }
+.review-file-list button > span:first-child { min-width: 0; font: 13px/1.6 var(--mono); overflow-wrap: anywhere; }
+.review-file-list small { display: block; color: var(--muted); font: 11px/1.6 var(--sans); }
+.review-diff-state { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; color: var(--muted); font-size: 11px; }
+.compact-diff .code-scroll { margin-bottom: 0; }
+.compact-diff .code-scroll pre { font-size: 12px; }
+.compact-diff .hunk { padding-block: 5px; }
+.review-footnote { margin: 20px 0 0; color: var(--muted); font-size: 11px; }
+#prototype-view[data-variant=E] { padding-bottom: 0; overflow: hidden; }
+.linked-workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.linked-chat { flex: 0 0 170px; min-height: 0; overflow: auto; padding: 16px 20px 12px; }
+.linked-chat .sample-user { margin-bottom: 14px; padding: 10px 14px; font-size: 14px; }
+.linked-chat > p { margin-bottom: 0; font-size: 14px; line-height: 1.6; }
+.inline-review { display: flex; flex-direction: column; flex: 1; min-height: 0; border-top: 1px solid var(--line); background: var(--composer-bg); }
+.inline-review > header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding: 2px 12px 2px 20px; }
+.inline-review h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.review-task-strip { display: flex; flex-shrink: 0; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.review-task-strip button { flex: 1; min-height: 44px; padding: 6px 12px; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 12px; }
+.review-task-strip button[aria-pressed=true] { border-bottom-color: var(--accent); color: var(--accent); }
+.inline-file-picker { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 16px; background: var(--panel); }
+.inline-file-picker select { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; padding: 6px 4px; border: 0; background: transparent; font: 12px var(--mono); }
+.inline-file-picker > span { display: flex; align-items: center; gap: 4px; color: var(--muted); font: 10px var(--mono); }
+.inline-file-picker > span svg { width: 13px; height: 13px; }
+.inline-code { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 12px; }
+.inline-code .review-diff-state { min-height: 30px; }
+.inline-code .code-scroll pre { font-size: 11px; }
+.linked-composer { display: flex; align-items: center; flex-shrink: 0; gap: 8px; margin: 10px 16px 8px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 26px; background: var(--composer-bg); }
+.linked-composer input { width: 0; flex: 1; min-width: 0; min-height: 36px; padding: 6px 0; border: 0; background: transparent; font-size: 14px; }
+.linked-composer > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--bg); }
+.linked-workspace:not(:has(.inline-review)) .linked-chat { flex: 1; }
+.reopen-review { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 0; border-block: 1px solid var(--line); background: var(--panel); color: var(--accent); font-size: 13px; }
+.reopen-review > svg:last-child { margin-left: auto; }
+.browser-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.browser-heading h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.browser-heading > span { color: var(--muted); font-size: 12px; }
+.worktree-filters { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; }
+.worktree-filters button { flex-shrink: 0; min-height: 44px; padding: 8px 10px; border-radius: 8px; background: transparent; color: var(--muted); font-size: 11px; }
+.worktree-filters button[aria-pressed=true] { background: var(--user); color: var(--accent); }
+.browser-location { margin-top: 18px; }
+.browser-location h3 { display: flex; align-items: center; gap: 6px; margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--muted); font: 12px/1.6 var(--mono); }
+.browser-location h3 svg { width: 15px; height: 15px; }
+.browser-file { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 68px; padding: 12px 0; border-radius: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }
+.browser-file > span:first-child { flex: 1; min-width: 0; }
+.browser-file strong { display: block; font: 12px/1.6 var(--mono); overflow-wrap: anywhere; }
+.browser-file small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.browser-file > svg { width: 14px; height: 14px; color: var(--muted); }
+.file-inspector > .text-button { margin: -8px 0 16px -8px; }
+.file-inspector > h2 { margin-bottom: 0; font: 600 19px/1.5 var(--mono); overflow-wrap: anywhere; }
+.inspector-task { margin: 0 0 20px; color: var(--muted); font-size: 12px; }
+@media (max-height: 760px) { .linked-chat { flex-basis: 146px; } }
+@media (min-width: 800px) { .focused-review, .file-browser, .file-inspector { padding-inline: 36px; } .linked-chat { padding-inline: 36px; } .inline-code { padding-inline: 36px; } .inline-review > header { padding-left: 36px; } }
 @keyframes changes-sheet-in { from { transform: translateY(24px); } to { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .changes-sheet[open] { animation: none; } }
 @media (prefers-color-scheme: dark) { .changes-prototype { --add-bg: #243e32; --add-text: #a8dbb8; --remove-bg: #472f33; --remove-text: #f4b0a9; } }

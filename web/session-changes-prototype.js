@@ -8,7 +8,9 @@ const icons = {
   check: '<path d="m5 12 4 4L19 6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   send: '<path d="M12 19V5m-6 6 6-6 6 6"/>',
-  warning: '<path d="m12 3 10 18H2ZM12 9v5m0 3v.1"/>'
+  warning: '<path d="m12 3 10 18H2ZM12 9v5m0 3v.1"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>'
 };
 const icon = name => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -59,20 +61,31 @@ const login = {
   ]
 };
 scenarios.tasks = { project: 'pi-remote', start: '~/workspace/pi-remote', locations: [navigation, login], tasks: [
-  { title: 'Fix mobile navigation', status: 'Working', locations: [{ ...navigation, files: navigation.files.slice(0, 2) }] },
-  { title: 'Improve pairing login', status: 'Working', locations: [{ ...login, files: login.files.slice(0, 2) }] },
-  { title: 'Add regression coverage', status: 'Committed', locations: [{ ...navigation, files: [navigation.files[2]] }, { ...login, files: [login.files[2]] }] }
+  { title: 'Fix mobile navigation', shortTitle: 'Navigation', status: 'Working', locations: [{ ...navigation, files: navigation.files.slice(0, 2) }] },
+  { title: 'Improve pairing login', shortTitle: 'Pairing', status: 'Working', locations: [{ ...login, files: login.files.slice(0, 2) }] },
+  { title: 'Add regression coverage', shortTitle: 'Tests', status: 'Committed', locations: [{ ...navigation, files: [navigation.files[2]] }, { ...login, files: [login.files[2]] }] }
 ] };
 const variants = [
   { key: 'A', name: 'Changes tab', description: 'A permanent place beside the conversation', render: renderA },
   { key: 'B', name: 'In the conversation', description: 'A task summary opens a review sheet', render: renderB },
-  { key: 'C', name: 'Locations first', description: 'Choose where the work actually happened', render: renderC }
+  { key: 'C', name: 'Locations first', description: 'Choose where the work actually happened', render: renderC },
+  // Round two compares three flat alternatives to the original nested layouts.
+  { key: 'D', name: 'Focused review', description: 'One task, one location label, no nesting', render: renderD },
+  { key: 'E', name: 'Chat + changes', description: 'Keep the conversation above the review', render: renderE },
+  { key: 'F', name: 'File browser', description: 'Choose a file, then read its diff', render: renderF }
 ];
 const view = document.querySelector('#prototype-view');
 const sheet = document.querySelector('#changes-sheet');
 let variant, scenario, conversation = false, locationIndex = null;
+let reviewTask, reviewFile, inspectorIndex, worktreeFilter, linkedReviewOpen;
 const data = () => scenarios[scenario];
 const allFiles = () => data().locations.flatMap(location => location.files);
+const reviewTasks = () => data().tasks || (data().locations.length ? [{ title: 'Fix mobile navigation', shortTitle: 'Navigation', status: 'Uncommitted', locations: data().locations }] : []);
+const reviewEntries = () => reviewTasks().flatMap((task, taskIndex) => task.locations.flatMap(location => location.files.map(file => ({ task, taskIndex, location, file }))));
+const taskEntries = () => reviewEntries().filter(entry => entry.taskIndex === reviewTask);
+function resetReview() {
+  reviewTask = data().tasks ? 1 : 0; reviewFile = 0; inspectorIndex = null; worktreeFilter = -1; linkedReviewOpen = true;
+}
 const counts = items => ({ added: items.flatMap(file => file.lines).filter(([type]) => type === '+').length, removed: items.flatMap(file => file.lines).filter(([type]) => type === '-').length });
 function stats(items) {
   const { added, removed } = counts(items);
@@ -81,8 +94,11 @@ function stats(items) {
 function scopeHeader(location) {
   return `<div class="location-heading"><div class="location-name">${icon('branch')}<strong>${location.name}</strong><span class="location-kind">${location.kind}</span></div><span class="branch-name">${location.branch}</span><code class="location-path">${location.path}</code><p class="folder-scope">${location.scope}</p></div>`;
 }
+function diffCode(file) {
+  return `<div class="code-scroll" tabindex="0" role="region" aria-label="Diff for ${file.name}"><pre><span class="hunk">${file.hunk}</span>${file.lines.map(([type, line]) => `<span class="code-line ${type === '+' ? 'line-added' : type === '-' ? 'line-removed' : ''}"><span class="line-sign">${type}</span>${escape(line)}</span>`).join('')}</pre></div>`;
+}
 function fileList(items) {
-  return `<div class="file-list">${items.map(file => `<details class="file-diff"><summary><span class="file-kind" aria-label="${file.kind === 'A' ? 'Added' : 'Modified'} file">${file.kind}</span><span class="file-info"><span class="file-path">${file.name}</span><span class="file-state">${file.state}</span></span>${stats([file])}<span class="file-chevron">${icon('chevron')}</span></summary><div class="diff-caption">Captured edit <span>${file.state}</span></div><div class="code-scroll" tabindex="0" role="region" aria-label="Diff for ${file.name}"><pre><span class="hunk">${file.hunk}</span>${file.lines.map(([type, line]) => `<span class="code-line ${type === '+' ? 'line-added' : type === '-' ? 'line-removed' : ''}"><span class="line-sign">${type}</span>${escape(line)}</span>`).join('')}</pre></div></details>`).join('')}</div>`;
+  return `<div class="file-list">${items.map(file => `<details class="file-diff"><summary><span class="file-kind" aria-label="${file.kind === 'A' ? 'Added' : 'Modified'} file">${file.kind}</span><span class="file-info"><span class="file-path">${file.name}</span><span class="file-state">${file.state}</span></span>${stats([file])}<span class="file-chevron">${icon('chevron')}</span></summary><div class="diff-caption">Captured edit <span>${file.state}</span></div>${diffCode(file)}</details>`).join('')}</div>`;
 }
 function exclusions() {
   return `<div class="exclusions"><details><summary>${icon('check')}<span>Other project changes stay out</span>${icon('chevron')}</summary><div class="excluded-content"><p>These are not counted as this session's work.</p><ul><li><code>README.md</code><span>Changed before this session</span></li><li><code>package.json</code><span>Changed by another session</span></li></ul></div></details>${scenario === 'empty' ? '' : `<details class="shared-edits"><summary>${icon('warning')}<span>1 shared file needs review</span>${icon('chevron')}</summary><div class="excluded-content"><p><code>${data().tasks ? '.worktrees/mobile-nav/web/index.html' : 'web/index.html'}</code> has overlapping edits. We cannot confidently separate who changed which lines.</p><p>No attributed diff available. It is excluded from this session's totals.</p></div></details>`}</div>`;
@@ -123,6 +139,35 @@ function renderC() {
   }
   return `<div class="locations-page"><div class="locations-intro"><h2>Where the work happened</h2><p>The session's starting folder is not its change scope.</p></div><div class="starting-location"><span>Session started in</span><code>${data().start}</code></div>${data().locations.length ? `<div class="location-route" aria-label="Actual work locations">${data().locations.map((location, index) => `<button class="work-location" type="button" data-location="${index}"><span class="work-location-icon">${icon('folder')}</span><span class="work-location-body"><span class="work-location-title"><strong>${location.name}</strong><span class="location-kind">${location.kind}</span></span><span class="branch-name">${icon('branch')}${location.branch}</span><code>${location.path}</code><span class="work-location-count">${location.files.length} session ${location.files.length === 1 ? 'file' : 'files'} ${stats(location.files)}</span></span>${icon('chevron')}</button>`).join('')}</div><p class="scope-note">Open a location to review its session edits, including committed files.</p>` : emptyState()}${exclusions()}</div>`;
 }
+function reviewTabs() {
+  return `<nav class="session-tabs review-tabs" aria-label="Session view"><button type="button" data-action="conversation" aria-pressed="${conversation}">Conversation</button><button type="button" data-action="changes" aria-pressed="${!conversation}">Changes <span>${allFiles().length}</span></button></nav>`;
+}
+function locationDetails(locations) {
+  return `<details class="review-location-details"><summary aria-label="Work location details">${icon('info')}</summary><div>${locations.map(location => `<p><strong>${location.name}</strong><span>${location.branch}</span><code>${location.path}</code></p>`).join('')}</div></details>`;
+}
+function selectedDiff(entry) {
+  return `<section class="compact-diff" aria-label="Selected file diff"><div class="review-diff-state"><span>${entry.file.state}</span>${stats([entry.file])}</div>${diffCode(entry.file)}</section>`;
+}
+function renderD() {
+  const task = reviewTasks()[reviewTask], entries = taskEntries();
+  if (conversation) return reviewTabs() + transcript();
+  if (!task) return reviewTabs() + emptyState();
+  return `${reviewTabs()}<div class="focused-review"><label class="review-task-label" for="review-task">Task</label><select id="review-task" data-review-task aria-label="Review task">${reviewTasks().map((item, index) => `<option value="${index}" ${index === reviewTask ? 'selected' : ''}>${item.title}</option>`).join('')}</select><div class="review-context"><span>${icon('branch')}${task.locations.map(location => location.name).join(' + ')}</span><span>${task.status}</span>${locationDetails(task.locations)}</div><div class="review-file-list" aria-label="Task files">${entries.map((entry, index) => `<button type="button" data-review-file="${index}" aria-pressed="${index === reviewFile}"><span>${entry.file.name}${task.locations.length > 1 ? `<small>${entry.location.name}</small>` : ''}</span>${index === reviewFile ? icon('check') : stats([entry.file])}</button>`).join('')}</div>${selectedDiff(entries[reviewFile])}<p class="review-footnote">Session edits only · 1 shared file excluded</p></div>`;
+}
+function renderE() {
+  const entries = taskEntries(), selected = entries[reviewFile];
+  return `<div class="linked-workspace"><section class="linked-chat" aria-label="Sample conversation"><div class="sample-user">Keep each task separate so I can review its changes.</div><p>${selected ? `Captured edits for <strong>${selected.task.title}</strong>. Other tasks stay separate.` : 'No session edits have been captured yet.'}</p></section>${linkedReviewOpen ? `<section class="inline-review" aria-label="Changes beside the conversation"><header><h2>Session changes</h2><button class="icon-button" type="button" data-action="toggle-linked" aria-label="Hide changes">${icon('close')}</button></header>${selected ? `<div class="review-task-strip" aria-label="Review task">${reviewTasks().map((task, index) => `<button type="button" data-review-task="${index}" aria-pressed="${index === reviewTask}">${task.shortTitle}</button>`).join('')}</div><div class="inline-file-picker"><select data-review-file aria-label="File to review">${entries.map((entry, index) => `<option value="${index}" ${index === reviewFile ? 'selected' : ''}>${reviewTasks()[reviewTask].locations.length > 1 ? entry.location.name + ' / ' : ''}${entry.file.name}</option>`).join('')}</select><span>${icon('branch')}${selected.location.name}</span></div><div class="inline-code">${selectedDiff(selected)}</div>` : emptyState()}</section>` : `<button type="button" class="reopen-review" data-action="toggle-linked">${icon('diff')}Review ${allFiles().length} session files${icon('chevron')}</button>`}<div class="linked-composer"><label class="sr-only" for="sample-message">Sample message, not connected</label><input id="sample-message" readonly placeholder="Message this session…"><span aria-hidden="true">${icon('send')}</span></div></div>`;
+}
+function renderF() {
+  const entries = reviewEntries();
+  if (conversation) return reviewTabs() + transcript();
+  if (!entries.length) return reviewTabs() + emptyState();
+  if (inspectorIndex !== null) {
+    const entry = entries[inspectorIndex];
+    return `${reviewTabs()}<div class="file-inspector"><button type="button" class="text-button" data-action="file-list">${icon('back')}Back to files</button><h2>${entry.file.name}</h2><div class="inspector-context"><span>${icon('branch')}${entry.location.name}</span>${locationDetails([entry.location])}</div><p class="inspector-task">${entry.task.title}</p>${selectedDiff(entry)}</div>`;
+  }
+  return `${reviewTabs()}<div class="file-browser"><div class="browser-heading"><h2>Session files</h2><span>${entries.length} files</span></div><div class="worktree-filters" aria-label="Filter worktrees"><button type="button" data-worktree-filter="-1" aria-pressed="${worktreeFilter === -1}">All worktrees</button>${data().locations.map((location, index) => `<button type="button" data-worktree-filter="${index}" aria-pressed="${worktreeFilter === index}">${location.name}</button>`).join('')}</div>${data().locations.filter((location, index) => worktreeFilter === -1 || worktreeFilter === index).map(location => `<section class="browser-location" aria-label="Files in ${location.name}"><h3>${icon('branch')}${location.name}</h3>${entries.map((entry, index) => entry.location.path === location.path ? `<button type="button" class="browser-file" data-inspect-file="${index}"><span><strong>${entry.file.name}</strong><small>${entry.task.shortTitle} · ${entry.file.state}</small></span>${stats([entry.file])}${icon('chevron')}</button>` : '').join('')}</section>`).join('')}</div>`;
+}
 function render() {
   const current = variants.find(item => item.key === variant);
   document.querySelector('#variant-label').textContent = `${current.key} · ${current.name}`;
@@ -131,6 +176,7 @@ function render() {
   document.querySelector('.conversation-heading h1').textContent = data().tasks ? 'Polish the mobile experience' : 'Fix mobile navigation';
   document.querySelector('#scenario').value = scenario;
   view.dataset.variant = variant;
+  document.body.dataset.reviewRound = 'DEF'.includes(variant) ? 'compact' : 'initial';
   view.innerHTML = current.render();
   view.scrollTop = 0;
   document.querySelector('#sheet-content').innerHTML = changesContent();
@@ -139,7 +185,7 @@ function readURL() {
   const params = new URLSearchParams(location.search);
   variant = variants.some(item => item.key === params.get('variant')) ? params.get('variant') : 'A';
   scenario = Object.hasOwn(scenarios, params.get('scenario')) ? params.get('scenario') : 'worktree';
-  conversation = false; locationIndex = null;
+  conversation = false; locationIndex = null; resetReview();
   render();
 }
 function updateURL() {
@@ -148,15 +194,16 @@ function updateURL() {
   history.replaceState(null, '', url);
 }
 function cycle(direction) {
-  const index = variants.findIndex(item => item.key === variant);
-  variant = variants[(index + direction + variants.length) % variants.length].key;
-  conversation = false; locationIndex = null;
+  const options = 'DEF'.includes(variant) ? variants.slice(3) : variants.slice(0, 3);
+  const index = options.findIndex(item => item.key === variant);
+  variant = options[(index + direction + options.length) % options.length].key;
+  conversation = false; locationIndex = null; resetReview();
   updateURL(); render(); window.scrollTo(0, 0);
 }
 document.querySelector('#previous-variant').addEventListener('click', () => cycle(-1));
 document.querySelector('#next-variant').addEventListener('click', () => cycle(1));
 document.querySelector('#scenario').addEventListener('change', event => {
-  scenario = event.target.value; locationIndex = null; updateURL(); render();
+  scenario = event.target.value; locationIndex = null; resetReview(); updateURL(); render();
 });
 document.querySelector('#scope-info').addEventListener('click', event => {
   const explanation = document.querySelector('#scope-explanation');
@@ -172,10 +219,29 @@ view.addEventListener('click', event => {
   if (button.dataset.action === 'changes') conversation = false;
   if (button.dataset.action === 'locations') locationIndex = null;
   if (button.hasAttribute('data-location')) locationIndex = Number(button.dataset.location);
+  if (button.hasAttribute('data-review-task')) { reviewTask = Number(button.dataset.reviewTask); reviewFile = 0; }
+  if (button.hasAttribute('data-review-file')) reviewFile = Number(button.dataset.reviewFile);
+  if (button.hasAttribute('data-inspect-file')) inspectorIndex = Number(button.dataset.inspectFile);
+  if (button.hasAttribute('data-worktree-filter')) worktreeFilter = Number(button.dataset.worktreeFilter);
+  if (button.dataset.action === 'file-list') inspectorIndex = null;
+  if (button.dataset.action === 'toggle-linked') linkedReviewOpen = !linkedReviewOpen;
   render();
   if (button.dataset.action === 'conversation' || button.dataset.action === 'changes') view.querySelector(`[data-action="${button.dataset.action}"]`).focus({ preventScroll: true });
   if (button.hasAttribute('data-location')) view.querySelector('.location-back').focus({ preventScroll: true });
   if (button.dataset.action === 'locations') view.querySelector('[data-location]')?.focus({ preventScroll: true });
+  for (const name of ['review-task', 'review-file', 'worktree-filter']) {
+    if (button.hasAttribute('data-' + name)) view.querySelector(`[data-${name}="${button.getAttribute('data-' + name)}"]`)?.focus({ preventScroll: true });
+  }
+  if (button.hasAttribute('data-inspect-file')) view.querySelector('[data-action="file-list"]').focus({ preventScroll: true });
+  if (button.dataset.action === 'file-list') view.querySelector('[data-inspect-file]')?.focus({ preventScroll: true });
+  if (button.dataset.action === 'toggle-linked') view.querySelector('[data-action="toggle-linked"]').focus({ preventScroll: true });
+});
+view.addEventListener('change', event => {
+  if (event.target.matches('select[data-review-task]')) { reviewTask = Number(event.target.value); reviewFile = 0; }
+  else if (event.target.matches('select[data-review-file]')) reviewFile = Number(event.target.value);
+  else return;
+  const selector = event.target.matches('[data-review-task]') ? 'select[data-review-task]' : 'select[data-review-file]';
+  render(); view.querySelector(selector)?.focus({ preventScroll: true });
 });
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || sheet.open || event.target.closest('input, textarea, select, [contenteditable], .code-scroll')) return;

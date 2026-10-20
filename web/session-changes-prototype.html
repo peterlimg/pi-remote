@@ -11,7 +11,7 @@
   <script type="module" src="/session-changes-prototype.js"></script>
 </head>
 <body class="changes-prototype">
-  <!-- Throwaway: compare a Changes tab, an in-chat sheet, and a location-first browser with synthetic session edits. -->
+  <!-- Throwaway: A-C are the original layouts; D-F compare focused review, a chat dock, and a file browser using the same fixtures. -->
   <div class="prototype-controls">
     <p>Prototype <span>Sample data only</span></p>
     <label for="scenario">Work happens in
@@ -37,7 +37,7 @@
       <p>The task example assumes separate edit records for each task. Several tasks can share a worktree, and one task can span several worktrees.</p>
       <p>This is a UI experiment. No files, Git repositories, or real sessions are read or changed.</p>
     </section>
-    <main id="prototype-view" aria-label="Session changes prototype"></main>
+    <main id="prototype-view" aria-label="Session changes prototype" tabindex="0"></main>
   </div>
   <nav class="prototype-switcher" aria-label="Compare prototype layouts">
     <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
