@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync, utimesSync, rmSync } from 'node:fs';
 import { videoMessage } from '../../web/videos.js';
 
 const original = readFileSync(new URL('../fixtures/video.webm', import.meta.url));
@@ -106,10 +106,11 @@ test('video picker previews, removes and sends original bytes through the real h
   expect(errors).toEqual([]);
 });
 
-test('agent-generated videos play and download through the real host', async ({ page }, info) => {
+test('agent-generated videos play, cache and download through the real host', async ({ page }, info) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'canShare', { value: () => false }));
-  const errors = [];
+  const errors = [], packets = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
   await page.goto('/#token=' + token);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await page.locator('#prompt').fill('Send the edited video');
@@ -141,9 +142,73 @@ test('agent-generated videos play and download through the real host', async ({ 
   await player.dispatchEvent('error');
   await expect(message).toContainText('This browser cannot play this video.');
   await expect(link).toBeVisible();
+  const byteReads = () => packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined).length;
+  const downloadedReads = byteReads();
+  expect(downloadedReads).toBeGreaterThan(0);
   await page.reload();
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(play).toBeVisible();
+  await play.click();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  expect(byteReads()).toBe(downloadedReads);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await page.getByRole('button', { name: /Project Beta/ }).click();
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await play.click();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  expect(byteReads()).toBe(downloadedReads);
+  const cachedDownload = page.waitForEvent('download');
+  await link.click();
+  expect(readFileSync(await (await cachedDownload).path())).toEqual(original);
+  const path = packets.find(packet => packet.op === 'videoRead' && packet.offset !== undefined).path, before = statSync(path);
+  utimesSync(path, before.atime, new Date(before.mtimeMs + 1000));
+  await page.reload();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await play.click();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  expect(byteReads()).toBe(downloadedReads * 2); // Same-sized files still need revision validation.
+  await page.getByRole('button', { name: 'Show sessions' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(name => name.startsWith('pi-remote-videos-')))).toEqual([]);
+  await page.goto('/#token=' + token);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await play.click();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  expect(byteReads()).toBe(downloadedReads * 3);
+  rmSync(path);
+  await page.reload();
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(message.getByRole('button', { name: 'Video unavailable. Retry', exact: true })).toBeVisible();
+  await expect(player).toHaveCount(0);
+  expect(byteReads()).toBe(downloadedReads * 3);
+  expect(errors).toEqual([]);
+});
+
+for (const failure of ['unavailable', 'full']) test(`video playback survives ${failure} browser storage`, async ({ page }) => {
+  await page.addInitScript(failure => {
+    if (failure === 'unavailable') Object.defineProperty(window, 'caches', { get() { throw new DOMException('Storage blocked', 'SecurityError'); } });
+    else Cache.prototype.put = async () => { throw new DOMException('Storage full', 'QuotaExceededError'); };
+  }, failure);
+  const errors = [], packets = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
+  await page.goto('/#token=' + token);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.locator('#prompt').fill('Send the edited video');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  const message = page.locator('.message.assistant').filter({ hasText: 'Here is your edited video.' }).last();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt) {
+      await page.reload();
+      await page.getByRole('button', { name: /Project Alpha/ }).click();
+    }
+    await message.getByRole('button', { name: 'Play edited.webm', exact: true }).click();
+    await expect.poll(() => message.locator('video').evaluate(video => video.videoWidth)).toBe(160);
+    await expect(page.locator('#notice')).toBeHidden();
+  }
+  expect(packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined)).toHaveLength(2);
   expect(errors).toEqual([]);
 });
 

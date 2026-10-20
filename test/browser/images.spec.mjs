@@ -69,13 +69,13 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   await viewer.getByRole('button', { name: 'Close image' }).click();
   await expect(viewer).toBeHidden();
   await page.locator('.message.user .thread-images a').first().click();
-  await viewer.evaluate(sheet => {
-    const touch = y => [new Touch({ identifier: 1, target: sheet, clientX: 10, clientY: y })];
-    sheet.dispatchEvent(new TouchEvent('touchstart', { touches: touch(0), bubbles: true }));
-    sheet.dispatchEvent(new TouchEvent('touchmove', { touches: touch(innerHeight), bubbles: true, cancelable: true }));
-    sheet.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
+  await viewer.locator('.image-stage').evaluate(stage => {
+    const box = stage.getBoundingClientRect();
+    const pointer = (type, dy) => stage.dispatchEvent(new PointerEvent(type, { pointerId: 1, pointerType: 'touch',
+      button: 0, clientX: box.x + box.width / 2, clientY: box.y + 100 + dy, bubbles: true }));
+    pointer('pointerdown', 0); pointer('pointermove', 160); pointer('pointerup', 160);
   });
-  await expect(viewer).toBeHidden(); // Pulling the sheet down dismisses it.
+  await expect(viewer).toBeHidden(); // Pulling down closes an image that fits the width.
   await page.locator('.tool-activity > summary').click();
   await page.locator('.tool summary').click();
   await expect(page.locator('.tool-output')).toHaveText('Screenshot tool output');

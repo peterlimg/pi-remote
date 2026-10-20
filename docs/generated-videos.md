@@ -2,7 +2,7 @@
 
 Pi Remote renders generated videos as conversation attachments. Tap the preview to load the video, then use the player's controls or **Download video**. Phones that support file sharing open the native share sheet; choose **Save Video** or **Save to Files** on iOS. Other browsers use a download link that cannot replace the chat tab. Saving also works when the browser cannot decode the video. Canceling the share sheet leaves the conversation open.
 
-For still images and screenshots, use the `read` tool on the image file. Image attachments appear directly in the conversation, outside collapsed tool details, and open full size on tap. Do not convert a still image to a video just to display it.
+For still images and screenshots, use the `read` tool on the image file. Image attachments appear directly in the conversation, outside collapsed tool details, and open full-screen on tap. On phones, images initially fit the screen width without cropping the sides. Pinch to zoom and drag to inspect details, or use the viewer's zoom buttons. Pull down from the image's top to close the preview when it fits the screen width; zoomed drags still pan. For UI evidence, capture the relevant region or a phone-sized viewport rather than a whole desktop page with large empty margins. Do not convert a still image to a video just to display it.
 
 For agents:
 
@@ -18,4 +18,4 @@ Generated video files (on this computer):
 
 `videoMessage(text, paths, 'assistant')` in `web/videos.js` produces this format for integrations.
 
-Only explicit attachments in the watched conversation can be read. Reads use the authenticated WebSocket, including end-to-end encryption when using a relay. Local paths, Markdown links, tool output, files in another conversation, and symlinks do not grant file access. No public download URL is created. Switching conversations releases browser video blobs.
+Only explicit attachments in the watched conversation can be read. Reads use the authenticated WebSocket, including end-to-end encryption when using a relay. Local paths, Markdown links, tool output, files in another conversation, and symlinks do not grant file access. No public download URL is created. Switching conversations releases player URLs and memory. Watched videos are cached on the device, up to 400 MiB per login, with the oldest downloads removed first. Reopening a video checks its authorization and file revision on the computer before reusing cached bytes. Signing out or changing credentials clears that login's cache. If browser storage is blocked, full, or evicted, playback falls back to downloading again. The cache belongs to the site's origin, so a different tunnel domain has a separate cache. Save to Photos or Files for a permanent copy.

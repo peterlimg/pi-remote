@@ -1,3 +1,7 @@
+export const sessionGroup = item => ['working', 'waiting', 'starting'].includes(item.status) ? 'now' : item.pinned ? 'pinned' : 'recent';
+export const activityOrder = (a, b) => (b.status === 'waiting') - (a.status === 'waiting') ||
+  (b.lastPromptAt ?? b.updatedAt) - (a.lastPromptAt ?? a.updatedAt) || a.id.localeCompare(b.id);
+
 export function loadedSkill(message) {
   if (message?.role !== 'user') return;
   const text = message.text || '';

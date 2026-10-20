@@ -19,11 +19,12 @@ export async function readVideo(dir, path, offset) {
     fd = openSync(path, 'r');
     const info = fstatSync(fd), size = info.size;
     if (!info.isFile() || size <= 0 || size > MAX_VIDEO_BYTES) throw new Error();
+    const revision = [info.dev, info.ino, size, info.mtimeMs, info.ctimeMs].join(':');
     if (offset !== undefined) {
       if (!Number.isSafeInteger(offset) || offset < 0 || offset >= size) throw new Error();
       const data = Buffer.alloc(Math.min(VIDEO_CHUNK_BYTES, size - offset));
       const length = readSync(fd, data, 0, data.length, offset);
-      return { size, data: data.subarray(0, length).toString('base64') };
+      return { size, revision, data: data.subarray(0, length).toString('base64') };
     }
     const mimeType = videoTypes[extname(path).toLowerCase()] || 'application/octet-stream';
     let poster;
@@ -34,7 +35,7 @@ export async function readVideo(dir, path, offset) {
       { encoding: 'buffer', timeout: 10000, maxBuffer: 256 * 1024 });
       if (stdout.length) poster = { type: 'image', mimeType: 'image/jpeg', data: stdout.toString('base64') };
     } catch {} // Playback still works when ffmpeg or a thumbnail decoder is unavailable.
-    return { size, mimeType, poster };
+    return { size, revision, mimeType, poster };
   } catch { throw new Error('Video is unavailable. It may have been removed from the computer.'); }
   finally { if (fd !== undefined) closeSync(fd); }
 }

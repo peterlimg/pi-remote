@@ -71,7 +71,7 @@ export function branchMessages(branch, key) {
   return branch.flatMap(entry => {
     if (entry.type === 'custom' && entry.customType === EXTENSION_INPUT) pending.push(entry.data?.text);
     const message = entry.type === 'custom_message' ? { role: 'custom', content: entry.content, display: entry.display,
-      timestamp: Date.parse(entry.timestamp) } : entry.type === 'message' ? entry.message : undefined;
+      customType: entry.customType, details: entry.details, timestamp: Date.parse(entry.timestamp) } : entry.type === 'message' ? entry.message : undefined;
     if (!message || !shown(message)) return [];
     const item = cleanMessage(message, key({ ...entry, message }));
     if (item.role === 'assistant' && item.stopReason === 'error' && omitted.get(entry.id)) item.retryAttempt = true;
@@ -79,6 +79,40 @@ export function branchMessages(branch, key) {
     noteTaskTiming(item, task);
     return [item];
   });
+}
+const subagentLabels = new Map([
+  ['subagent-supervisor-unanswered', 'Subagent guidance unanswered'],
+  ['subagent-supervisor-blocked', 'Subagent guidance blocked'],
+  ['subagent-completion-unanswered', 'Subagent results awaiting review'],
+  ['subagent-completion-unhandled', 'Subagent results need attention'],
+  ['subagent-wait-subscription', 'Subagent wait finished'],
+  ['subagent-workflow-result-write-failed', 'Subagent result could not be saved'],
+  ['subagent_watchdog_warning', 'Subagent review warning'],
+  ['subagent_watchdog_clarification', 'Subagent review needs clarification']
+]);
+// Only a bounded label crosses the wire; extension details can contain large result payloads.
+function subagentLabel({ role, customType, details }) {
+  if (role !== 'custom' || typeof customType !== 'string' || !/^subagent[-_]/.test(customType)) return;
+  if (customType.startsWith('subagent-slash-')) return;
+  const agent = typeof details?.agent === 'string' && details.agent.trim() ? details.agent.trim().slice(0, 120) : 'Subagent';
+  if (customType === 'subagent_supervisor_request') return agent + (details?.reason === 'progress_update' ? ' sent a progress update'
+    : details?.reason === 'interview_request' ? ' requested structured guidance' : ' requested guidance');
+  if (customType === 'subagent-notify') {
+    const runs = details?.runs;
+    if (Array.isArray(runs) && runs.length > 1) return `${runs.length} subagent results${runs.some(run => ['failed', 'paused', 'stopped'].includes(run?.status)) ? ' need attention' : ''}`;
+    const run = Array.isArray(runs) ? runs[0] : undefined;
+    return typeof run?.agent === 'string' && ['completed', 'failed', 'paused', 'stopped'].includes(run.status)
+      ? run.agent.slice(0, 120) + ' ' + run.status : 'Subagent result';
+  }
+  if (customType === 'subagent-incremental-child-notify') return 'Subagent workflow ' +
+    (['completed', 'failed', 'paused', 'stopped'].includes(details?.outcome) ? details.outcome : 'update');
+  if (customType === 'subagent_steering_notice') return 'Subagent guidance ' +
+    (['failed', 'partial', 'recovered'].includes(details?.state) ? details.state : 'update');
+  if (customType === 'subagent_control_notice') {
+    const event = details?.event, name = typeof event?.agent === 'string' ? event.agent.slice(0, 120) : agent;
+    return name + (event?.type === 'needs_attention' ? ' needs attention' : ' status update');
+  }
+  return subagentLabels.get(customType) || 'Subagent update';
 }
 export function cleanMessage(message, key) {
   const content = Array.isArray(message.content) ? message.content : undefined;
@@ -97,7 +131,10 @@ export function cleanMessage(message, key) {
     truncated ||= text.length < args.length;
     return { id: call.id, name: call.name, text };
   });
+  const activityLabel = subagentLabel(message);
   return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
+    ...(message.role === 'custom' && typeof message.customType === 'string' ? { customType: message.customType.slice(0, 120) } : {}),
+    ...(activityLabel ? { activityLabel } : {}),
     ...(images.size ? { images: [...images.values()] } : {}),
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
     isError: !!message.isError, timestamp: message.timestamp, stopReason: message.stopReason,

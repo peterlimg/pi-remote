@@ -1,6 +1,6 @@
-import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts } from './protocol.js';
+import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts, sessionGroup, activityOrder } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
-import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage } from './videos.js';
+import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage, VideoCache } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
@@ -113,6 +113,7 @@ const videoObserver = new IntersectionObserver(entries => {
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0, connectionReason = '';
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let key = localStorage.getItem('pi-remote-key') || '';
+let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefined;
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const ownSwipe = navigator.standalone === true;
 const standalone = ownSwipe || matchMedia('(display-mode: standalone)').matches;
@@ -122,6 +123,8 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let supportsSessionSections = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
@@ -142,7 +145,10 @@ function parseLogin(input) {
 }
 function rememberLogin(nextToken, nextKey) {
   // Older shortcuts may contain only a token; reuse a key only for that same token.
-  key = nextKey ?? (nextToken === token ? key : ''); token = nextToken;
+  const resolvedKey = nextKey ?? (nextToken === token ? key : '');
+  if (nextToken !== token || resolvedKey !== key) { videoCache?.clear(); videoCache = undefined; }
+  key = resolvedKey; token = nextToken;
+  if (token && !videoCache) videoCache = new VideoCache(JSON.stringify([token, key]));
   if (token) localStorage.setItem('pi-remote-token', token);
   if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
   sessionStorage.removeItem('pi-remote-token');
@@ -374,6 +380,8 @@ function connect() {
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
       supportsCommandResults = packet.supportsCommandResults === true;
+      supportsSessionSections = packet.supportsSessionSections === true;
+      if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
         if (!item.recovering) continue;
@@ -392,7 +400,7 @@ function connect() {
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => { if (socket === ws) probe(); }, 20000);
       loadProjects();
-      if (listLimit > 20 || searchQuery || listError) loadList();
+      if (supportsSessionSections || listLimit > 20 || searchQuery || listError) loadList();
       if (selected) {
         const id = selected;
         request('watch', { sessionId: id }).then(() => loadUsage(id)).catch(e => notice(e.message));
@@ -455,7 +463,8 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   resetSwipe();
-  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close();
+  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close();
+  videoCache?.clear(); videoCache = undefined;
   clearTimeout(homeScreenTimer); homeScreenLogin = false;
   $('home-screen-hint').hidden = true; $('access-warning').hidden = true;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
@@ -471,6 +480,7 @@ function logout() {
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
+  listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20;
   renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -491,6 +501,8 @@ function age(date) {
 // Match the host: user prompts move rows, background activity only refreshes their contents.
 const listOrder = (a, b) => !!b.pinned - !!a.pinned || (b.lastPromptAt ?? b.updatedAt) - (a.lastPromptAt ?? a.updatedAt) || a.id.localeCompare(b.id);
 function receiveList(packet) {
+  // Section-aware phones request their overview after ready; ignore the initial legacy page.
+  if (supportsSessionSections && packet.section === undefined) return;
   // A relay deploy can reach the browser before its computer host is restarted.
   if (packet.total === undefined) {
     legacyList = packet;
@@ -510,8 +522,10 @@ function receiveList(packet) {
     if ((packet.query ?? '') !== searchQuery) return;
     rows = packet.sessions; listLoading = false; listError = '';
   }
-  sessions = rows.sort(listOrder); allowResume = packet.allowResume === true;
-  listMatched = packet.matched ?? sessions.length;
+  sessions = rows.sort(packet.section === 'now' ? activityOrder : listOrder);
+  if (supportsSessionSections && (packet.section !== listSection || packet.query !== searchQuery)) return;
+  allowResume = packet.allowResume === true;
+  listMatched = packet.matched ?? sessions.length; listLoaded = packet.loaded ?? sessions.length; listGroups = packet.groups;
   showApp();
   markSeen();
   selectedSummary = sessions.find(item => item.id === selected) || selectedSummary;
@@ -522,7 +536,7 @@ async function loadList() {
   const generation = ++listRequest;
   listLoading = true; listError = ''; renderPagination();
   try {
-    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery });
+    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery, ...(supportsSessionSections ? { section: listSection } : {}) });
     const current = generation === listRequest;
     if (current) { listLoading = false; listError = ''; }
     if (current && !page.changes) receiveList(page);
@@ -533,8 +547,8 @@ async function loadList() {
   }
 }
 function renderPagination() {
-  $('sessions').setAttribute('aria-busy', String(listLoading));
-  $('sessions').inert = listLoading;
+  listRoot().setAttribute('aria-busy', String(listLoading));
+  listRoot().inert = listLoading;
   $('list-retry').hidden = !listError; $('list-retry').disabled = !connected || listLoading;
   // Scrolling loads more by itself; the line only speaks up while loading or after a failure.
   $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' : '';
@@ -544,70 +558,109 @@ function renderPagination() {
 // Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
 const moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 400px' });
 function loadMore() {
-  if (!connected || listLoading || listError || sessions.length < listLimit || sessions.length >= listMatched) return;
+  if (!connected || listLoading || listError || listLoaded < listLimit || listLoaded >= listMatched) return;
   listLimit += 20; loadList();
+}
+function sessionRow(item) {
+  const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
+  button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
+  const icon = statusIcon(item.status);
+  if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
+  const indicators = el('span', undefined, 'session-indicators');
+  indicators.append(icon);
+  const typeIcon = sessionTypeIcon(item);
+  if (typeIcon) indicators.append(typeIcon);
+  if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
+  button.append(indicators);
+  const body = el('div', undefined, 'session-body');
+  const top = el('div', undefined, 'session-top');
+  const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
+  const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
+  top.append(title);
+  if (item.pinned) {
+    const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.title = 'Pinned';
+    pin.innerHTML = pinSvg; top.append(pin);
+  }
+  body.append(top);
+  if (item.preview && item.preview !== item.title) {
+    body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
+  }
+  const meta = el('div', undefined, 'session-meta');
+  // Ready and Saved are the resting states; only label what needs attention.
+  if (!['idle', 'saved'].includes(item.status)) {
+    const status = el('span', statusLabels[item.status] || item.status, 'session-state');
+    status.dataset.status = item.status;
+    meta.append(status);
+  }
+  if (!isBlank(item.cwd)) {
+    const project = el('span', projectName(item.cwd), 'session-project');
+    project.title = displayPaths(item.cwd);
+    meta.append(project);
+  }
+  const date = new Date(item.updatedAt);
+  if (Number.isFinite(date.getTime())) {
+    const time = el('time', age(date), 'session-time');
+    time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
+    meta.append(time);
+  }
+  body.append(meta);
+  button.append(body);
+  // The finger lifting after a swipe must not also open the session.
+  button.addEventListener('click', () => {
+    if (Date.now() - swipedAt <= 400) return;
+    selectSession(item.id); $('session-collection').close();
+  });
+  return button;
 }
 function renderList() {
   // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
   if (rowSwipe) { rowSwipe.stale = true; return; }
-  const matches = sessions;
-  $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' : 'No sessions yet. Start Pi with the remote extension loaded.';
+  $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' :
+    listSection === 'now' ? 'No sessions running.' : listSection === 'pinned' ? 'No pinned sessions.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
-  for (const item of matches) {
-    const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
-    button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
-    const icon = statusIcon(item.status);
-    if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
-    const indicators = el('span', undefined, 'session-indicators');
-    indicators.append(icon);
-    const typeIcon = sessionTypeIcon(item);
-    if (typeIcon) indicators.append(typeIcon);
-    if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
-    button.append(indicators);
-    const body = el('div', undefined, 'session-body');
-    const top = el('div', undefined, 'session-top');
-    const titleText = sessionTitle(item.title, cache.get(item.id)?.messages);
-    const title = el('strong', titleText, titleText === 'Untitled session' ? 'untitled' : undefined); title.title = titleText;
-    top.append(title);
-    if (item.pinned) {
-      const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.title = 'Pinned';
-      pin.innerHTML = pinSvg; top.append(pin);
+  if (listGroups && listSection === 'overview' && !searchQuery) {
+    for (const [group, label] of [['now', 'Now'], ['pinned', 'Pinned'], ['recent', 'Recent']]) {
+      if (!listGroups[group]) continue;
+      const section = el('section', undefined, 'session-group session-group-' + group); section.setAttribute('aria-label', label);
+      const header = el('div', undefined, 'session-group-heading');
+      header.append(el('h3', label), el('span', String(listGroups[group]), 'badge'));
+      if (group === 'pinned' || group === 'now' && listGroups[group] > 3) {
+        const more = el('button', 'View all', 'quiet'); more.type = 'button'; more.dataset.collection = group;
+        more.setAttribute('aria-label', 'View all ' + (group === 'now' ? 'active' : 'pinned') + ' sessions');
+        more.addEventListener('click', () => openCollection(group)); header.append(more);
+      }
+      section.append(header);
+      const items = sessions.filter(item => sessionGroup(item) === group);
+      if (group === 'now') items.sort(activityOrder);
+      section.append(...items.map(sessionRow)); fragment.append(section);
     }
-    body.append(top);
-    if (item.preview && item.preview !== item.title) {
-      body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
-    }
-    const meta = el('div', undefined, 'session-meta');
-    // Ready and Saved are the resting states; only label what needs attention.
-    if (!['idle', 'saved'].includes(item.status)) {
-      const status = el('span', statusLabels[item.status] || item.status, 'session-state');
-      status.dataset.status = item.status;
-      meta.append(status);
-    }
-    if (!isBlank(item.cwd)) {
-      const project = el('span', projectName(item.cwd), 'session-project');
-      project.title = displayPaths(item.cwd);
-      meta.append(project);
-    }
-    const date = new Date(item.updatedAt);
-    if (Number.isFinite(date.getTime())) {
-      const time = el('time', age(date), 'session-time');
-      time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
-      meta.append(time);
-    }
-    body.append(meta);
-    button.append(body);
-    // The finger lifting after a swipe must not also open the session.
-    button.addEventListener('click', () => { if (Date.now() - swipedAt > 400) selectSession(item.id); }); fragment.append(button);
-  }
-  $('sessions').replaceChildren(fragment);
+  } else fragment.append(...sessions.map(sessionRow));
+  listRoot().replaceChildren(fragment);
   moreObserver.disconnect();
-  const last = [...$('sessions').querySelectorAll('.session')].at(-1);
+  const last = [...listRoot().querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
 }
+function openCollection(section) {
+  overviewLimit = listLimit; listSection = section; listLimit = 20;
+  moreObserver.disconnect(); $('collection-sessions').replaceChildren();
+  $('collection-feedback').append($('list-empty'), $('list-page').parentElement);
+  $('session-collection-title').textContent = section === 'now' ? 'Active sessions' : 'Pinned sessions';
+  $('session-collection').showModal(); $('session-collection').focus();
+  loadList();
+}
+$('session-collection-close').addEventListener('click', () => $('session-collection').close());
+$('session-collection').addEventListener('click', event => { if (event.target === $('session-collection')) $('session-collection').close(); });
+$('session-collection').addEventListener('close', () => {
+  const section = listSection;
+  $('search-bar').before($('list-empty'), $('list-page').parentElement);
+  listSection = 'overview'; listLimit = overviewLimit; moreObserver.disconnect();
+  if (!manualClose) loadList().then(() => {
+    if (document.activeElement === document.body) $('sessions').querySelector(`[data-collection="${section}"]`)?.focus({ preventScroll: true, focusVisible: false });
+  });
+});
 const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
 async function togglePin(id) {
   try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
@@ -616,11 +669,11 @@ async function togglePin(id) {
 // Swipe a row right to pin or unpin it, like Messages. Vertical drags still scroll the list.
 const pinSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
-$('sessions').addEventListener('touchstart', event => {
+for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchstart', event => {
   const row = event.target.closest('.session'), touch = event.touches[0];
   rowSwipe = row && event.touches.length === 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
 }, { passive: true });
-$('sessions').addEventListener('touchmove', event => {
+for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchmove', event => {
   if (!rowSwipe) return;
   const touch = event.touches[0], dx = touch.clientX - rowSwipe.x, dy = touch.clientY - rowSwipe.y;
   if (!rowSwipe.active) {
@@ -647,8 +700,10 @@ function endRowSwipe() {
   }
   if (swipe.stale) setTimeout(renderList, swipe.active ? 200 : 0);
 }
-$('sessions').addEventListener('touchend', endRowSwipe);
-$('sessions').addEventListener('touchcancel', endRowSwipe);
+for (const list of [$('sessions'), $('collection-sessions')]) {
+  list.addEventListener('touchend', endRowSwipe);
+  list.addEventListener('touchcancel', endRowSwipe);
+}
 function sessionTypeIcon(item) {
   const choice = sessionIcons.get(item.id);
   const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');
@@ -804,9 +859,31 @@ function clearThreadImages(keep = new Set()) {
     threadImages.delete(id);
   }
 }
+const imageViewer = $('image-viewer'), imageStage = $('image-stage'), fullImage = imageViewer.querySelector('img');
+const imagePointers = new Map();
+let imageZoom = 1, imageX = 0, imageY = 0, imagePull;
+function resetImagePull() {
+  imagePull = undefined; imageViewer.style.transform = '';
+}
+function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
+  imageZoom = Math.max(1, Math.min(8, zoom));
+  const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
+  const limitX = Math.max(0, (fullImage.naturalWidth * fit * imageZoom - imageStage.clientWidth) / 2);
+  const limitY = Math.max(0, (fullImage.naturalHeight * fit * imageZoom - imageStage.clientHeight) / 2);
+  imageX = Math.max(-limitX, Math.min(limitX, x)); imageY = Math.max(-limitY, Math.min(limitY, y));
+  fullImage.style.transform = `translate(${imageX}px, ${imageY}px) scale(${imageZoom})`;
+  imageStage.classList.toggle('zoomed', imageZoom > 1);
+  $('image-zoom-reset').textContent = Math.round(imageZoom * 100) + '%';
+  $('image-zoom-out').disabled = imageZoom <= 1; $('image-zoom-in').disabled = imageZoom >= 8;
+}
+function zoomImage(zoom, x = 0, y = 0) {
+  const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
+  positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
+}
 function openImage(event) {
   event.preventDefault();
-  $('image-viewer').querySelector('img').src = event.currentTarget.href; $('image-viewer').showModal(); $('image-viewer').focus();
+  resetImagePull(); imagePointers.clear(); fullImage.src = event.currentTarget.href;
+  imageViewer.showModal(); positionImage(1, 0, 0); imageViewer.focus();
 }
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);
@@ -924,6 +1001,7 @@ async function loadVideoPreview(video) {
     if (!Number.isSafeInteger(info.size) || info.size <= 0 || info.size > MAX_VIDEO_BYTES) throw new Error('Invalid video size');
     video.info = info;
     video.button.setAttribute('aria-label', `Play ${video.name}`);
+    if (video.posterURL) { URL.revokeObjectURL(video.posterURL); video.posterURL = undefined; }
     if (info.poster) {
       const [poster] = validateImages([info.poster]);
       video.posterURL = URL.createObjectURL(new Blob([Uint8Array.from(atob(poster.data), c => c.charCodeAt(0))], { type: poster.mimeType }));
@@ -940,25 +1018,34 @@ async function playThreadVideo(video) {
   if (video.loading) return;
   if (!video.info) await loadVideoPreview(video);
   if (!video.info || threadVideos.get(video.path) !== video) return;
-  const ws = socket, chunks = [];
+  const ws = socket, storage = videoCache, cacheId = JSON.stringify([video.sessionId, video.path]);
   const check = () => {
     if (socket !== ws || threadVideos.get(video.path) !== video) throw new Error('Video loading interrupted');
   };
   video.loading = true; video.button.disabled = true;
   try {
-    for (let offset = 0; offset < video.info.size;) {
+    let file = await storage?.get(cacheId, video.info);
+    check();
+    if (!file) {
+      const chunks = [];
+      for (let offset = 0; offset < video.info.size;) {
+        check();
+        video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
+        const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
+        check();
+        if (result.size !== video.info.size || result.revision !== video.info.revision || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
+        const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
+        if (!bytes.length || bytes.length > Math.min(VIDEO_CHUNK_BYTES, video.info.size - offset)) throw new Error('Invalid video chunk');
+        chunks.push(bytes); offset += bytes.length;
+      }
+      file = new Blob(chunks, { type: video.info.mimeType });
+      await storage?.put(cacheId, video.info, file);
       check();
-      video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
-      const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
-      check();
-      if (result.size !== video.info.size || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
-      const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
-      if (!bytes.length || bytes.length > Math.min(VIDEO_CHUNK_BYTES, video.info.size - offset)) throw new Error('Invalid video chunk');
-      chunks.push(bytes); offset += bytes.length;
     }
-    showThreadVideo(video, new Blob(chunks, { type: video.info.mimeType }));
+    showThreadVideo(video, file);
     video.player.play().catch(() => {}); // Safari may require another tap after the download.
   } catch (error) {
+    video.info = undefined;
     video.button.textContent = 'Could not load video. Retry'; video.button.title = error.message;
   } finally { video.loading = false; video.button.disabled = false; }
 }
@@ -1102,14 +1189,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       appendThreadImages(fragment, message);
       continue;
     }
-    // Extensions prompt the agent as the user (e.g. a subagent wake); show one quiet line, not a bubble.
-    if (message.source === 'extension') {
+    // Internal notices and extension prompts belong in quiet activity rows, not chat bubbles.
+    if (message.source === 'extension' || message.activityLabel) {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
       node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      summary.append(el('span', 'Prompted by an extension', 'tool-activity-label'));
+      const label = el('span', message.activityLabel || 'Prompted by an extension', 'tool-activity-label');
+      label.title = label.textContent; summary.append(label);
       node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
+      appendThreadImages(node, message);
+      if (message.truncated) node.append(el('p', 'Message shortened for mobile.', 'hint'));
       fragment.append(node);
       continue;
     }
@@ -1606,8 +1696,83 @@ $('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
 $('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
-// Any tap on the sheet or its backdrop dismisses it; Escape is native.
-$('image-viewer').addEventListener('click', () => $('image-viewer').close());
+$('image-close').addEventListener('click', () => imageViewer.close());
+$('image-zoom-in').addEventListener('click', () => zoomImage(imageZoom * 2));
+$('image-zoom-out').addEventListener('click', () => zoomImage(imageZoom / 2));
+$('image-zoom-reset').addEventListener('click', () => positionImage(1, 0, 0));
+fullImage.addEventListener('load', () => {
+  if (!imageViewer.open) return;
+  const width = imageStage.clientWidth / fullImage.naturalWidth, height = imageStage.clientHeight / fullImage.naturalHeight;
+  const fit = Math.min(width, height);
+  if (!fit) return;
+  // Fit phone images to the width without cropping either side.
+  const zoom = matchMedia('(max-width: 700px)').matches ? Math.min(8, width / fit) : 1;
+  const top = Math.max(0, (fullImage.naturalHeight * fit * zoom - imageStage.clientHeight) / 2);
+  positionImage(zoom, 0, top);
+});
+new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
+imageViewer.addEventListener('close', () => { imagePointers.clear(); resetImagePull(); });
+imageViewer.addEventListener('keydown', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (['+', '='].includes(event.key)) zoomImage(imageZoom * 2);
+  else if (event.key === '-') zoomImage(imageZoom / 2);
+  else if (event.key === '0') positionImage(1, 0, 0);
+  else if (event.key.startsWith('Arrow')) positionImage(imageZoom,
+    imageX + (event.key === 'ArrowLeft' ? 50 : event.key === 'ArrowRight' ? -50 : 0),
+    imageY + (event.key === 'ArrowUp' ? 50 : event.key === 'ArrowDown' ? -50 : 0));
+  else return;
+  event.preventDefault();
+});
+function imageGesture() {
+  const [a, b = a] = [...imagePointers.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(a.x - b.x, a.y - b.y) };
+}
+imageStage.addEventListener('pointerdown', event => {
+  if (event.button !== 0 || imagePointers.size >= 2) return;
+  imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  resetImagePull();
+  if (event.pointerType === 'touch' && imagePointers.size === 1) {
+    const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
+    const width = fullImage.naturalWidth * fit * imageZoom;
+    const top = imageY + (imageStage.clientHeight - fullImage.naturalHeight * fit * imageZoom) / 2;
+    // A tall image must pan back to its top before a new pull can dismiss it.
+    if (width <= imageStage.clientWidth + 1 && top >= -1) imagePull = { x: event.clientX, y: event.clientY, distance: 0 };
+  }
+  // Touch and pen already capture implicitly; mouse drags need explicit capture.
+  if (event.pointerType === 'mouse') imageStage.setPointerCapture(event.pointerId);
+});
+imageStage.addEventListener('pointermove', event => {
+  if (!imagePointers.has(event.pointerId)) return;
+  const before = imageGesture();
+  imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (imagePull) {
+    const dx = event.clientX - imagePull.x, dy = event.clientY - imagePull.y;
+    if (!imagePull.distance) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      if (dy <= 0 || Math.abs(dx) > dy) resetImagePull();
+    }
+    if (imagePull) {
+      imagePull.distance = Math.max(0, dy);
+      imageViewer.style.transform = `translateY(${imagePull.distance}px)`;
+      return;
+    }
+  }
+  const after = imageGesture(), box = imageStage.getBoundingClientRect();
+  const zoom = Math.max(1, Math.min(8, before.distance ? imageZoom * after.distance / before.distance : imageZoom));
+  const x = before.x - box.x - box.width / 2, y = before.y - box.y - box.height / 2;
+  const ratio = zoom / imageZoom;
+  positionImage(zoom, x - (x - imageX) * ratio + after.x - before.x, y - (y - imageY) * ratio + after.y - before.y);
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => {
+  if (!imagePointers.has(event.pointerId)) return;
+  const dismiss = type === 'pointerup' && imagePull?.distance >= 80;
+  imagePointers.delete(event.pointerId); resetImagePull();
+  if (dismiss) imageViewer.close();
+});
+imageStage.addEventListener('dblclick', event => {
+  const box = imageStage.getBoundingClientRect();
+  zoomImage(imageZoom > 1 ? 1 : 2, event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
+});
 // Pull a bottom sheet down to dismiss it. A drag inside a scrolled list scrolls it instead.
 function dragToClose(sheet, dialog = sheet, list) {
   let startY, fromList, dy = 0;
@@ -1634,7 +1799,6 @@ function dragToClose(sheet, dialog = sheet, list) {
   sheet.addEventListener('touchend', release);
   sheet.addEventListener('touchcancel', release);
 }
-dragToClose($('image-viewer'));
 dragToClose($('project-picker').querySelector('.project-sheet'), $('project-picker'), $('project-options'));
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;

@@ -29,3 +29,64 @@ export function splitVideoMessage(text = '', role = 'user') {
     return { text: text.slice(0, index).trimEnd(), paths };
   } catch { return unchanged; }
 }
+
+const VIDEO_CACHE_BYTES = 400 * 1024 * 1024;
+
+// Storage restrictions or a full disk must never prevent playback.
+export class VideoCache {
+  constructor(scope) { this.scope = scope; this.queue = Promise.resolve(); this.closed = false; }
+  async cacheName() {
+    if (!this.name) {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.scope));
+      this.name = 'pi-remote-videos-v1-' + Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+    return this.name;
+  }
+  url(id) { return location.origin + '/_pi/video-cache/' + encodeURIComponent(id); }
+  run(action) {
+    this.queue = this.queue.then(async () => {
+      if (this.closed) return;
+      const name = await this.cacheName();
+      if (!this.closed) return action(await caches.open(name));
+    }).catch(() => {});
+    return this.queue;
+  }
+  get(id, info) {
+    if (typeof info.revision !== 'string' || !info.revision) return Promise.resolve();
+    return this.run(async cache => {
+      const url = this.url(id), response = await cache.match(url);
+      if (!response) return;
+      if (response.headers.get('X-Pi-Remote-Revision') === info.revision) {
+        const file = await response.blob();
+        if (file.size === info.size && file.type === info.mimeType) return file;
+      }
+      await cache.delete(url);
+    });
+  }
+  put(id, info, file) {
+    if (typeof info.revision !== 'string' || !info.revision || file.size !== info.size || file.size > MAX_VIDEO_BYTES) return Promise.resolve();
+    return this.run(async cache => {
+      const url = this.url(id);
+      await cache.delete(url);
+      await cache.put(url, new Response(file, { headers: {
+        'Content-Length': String(file.size), 'X-Pi-Remote-Revision': info.revision
+      } }));
+      const entries = [];
+      let total = 0;
+      for (const request of await cache.keys()) {
+        const response = await cache.match(request), size = Number(response?.headers.get('Content-Length'));
+        if (!Number.isSafeInteger(size) || size <= 0) { await cache.delete(request); continue; }
+        entries.push([request, size]); total += size;
+      }
+      for (const [request, size] of entries) {
+        if (total <= VIDEO_CACHE_BYTES) break;
+        await cache.delete(request); total -= size;
+      }
+    });
+  }
+  clear() {
+    this.closed = true;
+    this.queue = this.queue.then(async () => { await caches.delete(await this.cacheName()); }).catch(() => {});
+    return this.queue;
+  }
+}
