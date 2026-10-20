@@ -1,6 +1,6 @@
 import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
-import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage } from './videos.js';
+import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage, VideoCache } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
@@ -113,6 +113,7 @@ const videoObserver = new IntersectionObserver(entries => {
 let socket, selected, sessions = [], connected = false, manualClose = false, reconnectTimer, connectionTimer, heartbeatTimer, retry = 0;
 let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('pi-remote-token') || '';
 let key = localStorage.getItem('pi-remote-key') || '';
+let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefined;
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const ownSwipe = navigator.standalone === true;
 let swipeTimer, trackingSwipe = false, openingAnimation;
@@ -125,7 +126,10 @@ const sending = new Map(), changingReasoning = new Set(), commandCatalog = new M
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 function rememberLogin(nextToken, nextKey) {
   // Older shortcuts may contain only a token; reuse a key only for that same token.
-  key = nextKey ?? (nextToken === token ? key : ''); token = nextToken;
+  const resolvedKey = nextKey ?? (nextToken === token ? key : '');
+  if (nextToken !== token || resolvedKey !== key) { videoCache?.clear(); videoCache = undefined; }
+  key = resolvedKey; token = nextToken;
+  if (token && !videoCache) videoCache = new VideoCache(JSON.stringify([token, key]));
   if (token) localStorage.setItem('pi-remote-token', token);
   if (key) localStorage.setItem('pi-remote-key', key); else localStorage.removeItem('pi-remote-key');
   sessionStorage.removeItem('pi-remote-token');
@@ -401,6 +405,7 @@ window.addEventListener('storage', event => {
 function logout() {
   resetSwipe();
   manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close();
+  videoCache?.clear(); videoCache = undefined;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
@@ -866,6 +871,7 @@ async function loadVideoPreview(video) {
     if (!Number.isSafeInteger(info.size) || info.size <= 0 || info.size > MAX_VIDEO_BYTES) throw new Error('Invalid video size');
     video.info = info;
     video.button.setAttribute('aria-label', `Play ${video.name}`);
+    if (video.posterURL) { URL.revokeObjectURL(video.posterURL); video.posterURL = undefined; }
     if (info.poster) {
       const [poster] = validateImages([info.poster]);
       video.posterURL = URL.createObjectURL(new Blob([Uint8Array.from(atob(poster.data), c => c.charCodeAt(0))], { type: poster.mimeType }));
@@ -882,25 +888,34 @@ async function playThreadVideo(video) {
   if (video.loading) return;
   if (!video.info) await loadVideoPreview(video);
   if (!video.info || threadVideos.get(video.path) !== video) return;
-  const ws = socket, chunks = [];
+  const ws = socket, storage = videoCache, cacheId = JSON.stringify([video.sessionId, video.path]);
   const check = () => {
     if (socket !== ws || threadVideos.get(video.path) !== video) throw new Error('Video loading interrupted');
   };
   video.loading = true; video.button.disabled = true;
   try {
-    for (let offset = 0; offset < video.info.size;) {
+    let file = await storage?.get(cacheId, video.info);
+    check();
+    if (!file) {
+      const chunks = [];
+      for (let offset = 0; offset < video.info.size;) {
+        check();
+        video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
+        const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
+        check();
+        if (result.size !== video.info.size || result.revision !== video.info.revision || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
+        const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
+        if (!bytes.length || bytes.length > Math.min(VIDEO_CHUNK_BYTES, video.info.size - offset)) throw new Error('Invalid video chunk');
+        chunks.push(bytes); offset += bytes.length;
+      }
+      file = new Blob(chunks, { type: video.info.mimeType });
+      await storage?.put(cacheId, video.info, file);
       check();
-      video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
-      const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
-      check();
-      if (result.size !== video.info.size || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
-      const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
-      if (!bytes.length || bytes.length > Math.min(VIDEO_CHUNK_BYTES, video.info.size - offset)) throw new Error('Invalid video chunk');
-      chunks.push(bytes); offset += bytes.length;
     }
-    showThreadVideo(video, new Blob(chunks, { type: video.info.mimeType }));
+    showThreadVideo(video, file);
     video.player.play().catch(() => {}); // Safari may require another tap after the download.
   } catch (error) {
+    video.info = undefined;
     video.button.textContent = 'Could not load video. Retry'; video.button.title = error.message;
   } finally { video.loading = false; video.button.disabled = false; }
 }
