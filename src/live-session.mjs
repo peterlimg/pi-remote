@@ -141,16 +141,19 @@ export class BridgeSession extends LiveSession {
   syncTitle(title) { if (!this.socket) super.syncTitle(title); }
   read(readSaved) {
     const state = super.read();
-    // Already-running terminals may still send the old text-only message format.
-    if (!state.messages?.some(message => !message.images && message.text?.includes('[image]'))) return state;
+    // Already-running terminals can omit image references and custom-message metadata.
+    const missing = message => !message.images && message.text?.includes('[image]') || message.role === 'custom' && !message.customType;
+    if (!state.messages?.some(missing)) return state;
     try {
       const saved = readSaved();
       if (!saved) return state;
       return { ...state, messages: state.messages.map(message => {
-        if (message.images || !message.text?.includes('[image]')) return message;
+        if (!missing(message)) return message;
         const original = saved.messages.find(item => item.id === message.id || (message.timestamp !== undefined &&
           item.timestamp === message.timestamp && item.role === message.role && item.toolCallId === message.toolCallId));
-        return original?.images ? { ...message, text: original.text, images: original.images } : message;
+        if (original?.images && !message.images) message = { ...message, text: original.text, images: original.images };
+        if (original?.customType && !message.customType) message = { ...message, customType: original.customType, activityLabel: original.activityLabel };
+        return message;
       }) };
     } catch { return state; } // History may not have been flushed yet.
   }

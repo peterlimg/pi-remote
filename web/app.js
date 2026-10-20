@@ -1059,14 +1059,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       appendThreadImages(fragment, message);
       continue;
     }
-    // Extensions prompt the agent as the user (e.g. a subagent wake); show one quiet line, not a bubble.
-    if (message.source === 'extension') {
+    // Internal notices and extension prompts belong in quiet activity rows, not chat bubbles.
+    if (message.source === 'extension' || message.activityLabel) {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
       node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      summary.append(el('span', 'Prompted by an extension', 'tool-activity-label'));
+      const label = el('span', message.activityLabel || 'Prompted by an extension', 'tool-activity-label');
+      label.title = label.textContent; summary.append(label);
       node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
+      appendThreadImages(node, message);
+      if (message.truncated) node.append(el('p', 'Message shortened for mobile.', 'hint'));
       fragment.append(node);
       continue;
     }
