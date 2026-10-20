@@ -115,8 +115,7 @@ let token = localStorage.getItem('pi-remote-token') || sessionStorage.getItem('p
 let key = localStorage.getItem('pi-remote-key') || '';
 let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefined;
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
-const ownSwipe = navigator.standalone === true;
-const standalone = ownSwipe || matchMedia('(display-mode: standalone)').matches;
+const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
 let swipeTimer, trackingSwipe = false, openingAnimation;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
@@ -814,7 +813,7 @@ async function selectSession(id) {
   renderSessionIconChoice();
   renderProject(selectedSummary?.cwd);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
-  if (!ownSwipe && !history.state?.session) history.pushState({ session: true }, '');
+  if (!standalone && !history.state?.session) history.pushState({ session: true }, '');
   $('app').classList.add('viewing');
   if (entering) {
     $('app').classList.add('opening'); $('sidebar').inert = true;
@@ -2084,17 +2083,19 @@ $('back').addEventListener('click', () => {
   else $('app').classList.remove('viewing');
 });
 window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app').classList.remove('viewing'); });
-// iOS home-screen apps have no Back button, and their history edge-swipe slides in a screenshot taken when the
-// thread opened, so the list visibly changes once the swipe lands. There, drag the thread off the live list instead.
-if (ownSwipe) {
+// Browser edge-swipes reveal an old history screenshot, so rows and scroll can jump when the swipe lands.
+// Drag the thread off the live list in both browser and home-screen mode instead.
+{
   const app = $('app'), main = document.querySelector('main');
   let startX, startY, dx;
   main.addEventListener('touchstart', event => {
     resetSwipe();
     const touch = event.touches[0];
-    trackingSwipe = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing');
+    trackingSwipe = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing') &&
+      matchMedia('(max-width: 700px)').matches && !event.target.closest('button, a, input, textarea, summary, dialog');
+    if (trackingSwipe) event.preventDefault();
     startX = touch.clientX; startY = touch.clientY; dx = 0;
-  }, { passive: true });
+  }, { passive: false });
   main.addEventListener('touchmove', event => {
     if (!trackingSwipe) return;
     const touch = event.touches[0];
@@ -2117,7 +2118,10 @@ if (ownSwipe) {
     main.style.transform = back ? 'translateX(100%)' : '';
     swipeTimer = setTimeout(() => {
       resetSwipe();
-      if (back) { closePicker(); app.classList.remove('viewing'); }
+      if (back) {
+        closePicker(); app.classList.remove('viewing');
+        if (history.state?.session) history.back();
+      }
     }, 200);
   };
   main.addEventListener('touchend', release);
