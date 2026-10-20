@@ -26,7 +26,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(pane).toContainText('64,000 / 200,000 tokens');
     await expect(pane.getByRole('progressbar', { name: 'Current context usage', exact: true })).toHaveAttribute('value', '32');
     await expect(pane.getByRole('progressbar', { name: '5-hour limit', exact: true })).toHaveAttribute('value', '25');
-    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '1');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '2');
     await expect(pane).toContainText('resets in 2h');
     await expect(pane).toContainText('resets tomorrow');
     await expect(page.getByRole('button', { name: 'Refresh usage', exact: true })).toHaveCount(0);
@@ -38,7 +38,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await page.screenshot({ path: testInfo.outputPath('usage-mobile.png') });
     await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
     await meter.tap();
-    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '2');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '4');
     await page.keyboard.press('Escape');
     await expect(pane).toBeHidden();
     await expect(meter).toBeFocused();
@@ -48,7 +48,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(page.locator('#status')).toHaveText('working');
     await page.locator('#prompt').fill('Still a draft');
     await meter.click();
-    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '4');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '7');
     await expect(page.locator('#status')).toHaveText('working');
     await expect(page.locator('#abort')).toBeVisible();
     await expect(page.locator('#prompt')).toHaveValue('Still a draft');
@@ -59,7 +59,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(page.locator('#model')).toHaveText('Second');
     expect(host.service.read(id).model).toBe('test/org/second');
     await meter.click();
-    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '5');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '9');
     await expect(pane).not.toContainText('5-hour limit');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -72,10 +72,42 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(pane).toContainText('Waiting for the next model response after compaction.');
     await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
     await expect(pane.getByRole('progressbar', { name: 'Current context usage', exact: true })).toHaveCount(0);
-    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '6');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '11');
     await page.reload();
     await page.locator('#sessions button.session').click();
     await expect(meter).toHaveAccessibleName('Usage: Context usage unavailable');
+  } finally {
+    await page.close(); await host.close(); rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reopening usage refreshes a cached provider failure', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-usage-retry-')), file = join(dir, 'usage.jsonl');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
+  const config = loadConfig(dir), id = sessionKey(file);
+  const host = await startHost({ dir, config, port: 0, roots: [dir], allowResume: true, relayUrl: '',
+    workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url)), '--usage-fails-until-refresh'] } });
+  try {
+    expect((await host.service.resume(id, randomUUID())).ok).toBe(true);
+    await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
+    await page.locator('#sessions button.session').click();
+    const meter = page.locator('#usage-meter'), pane = page.getByRole('region', { name: 'Usage', exact: true });
+    await page.locator('#prompt').fill('Keep this draft');
+    await meter.tap();
+    await expect(pane).toContainText('Query failed: fetch failed');
+    await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
+    await meter.tap();
+    await expect(pane.getByRole('progressbar', { name: '5-hour limit', exact: true })).toHaveAttribute('value', '25');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '4');
+    await expect(pane).not.toContainText('Query failed');
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+    await expect(page.locator('#status')).toHaveText('idle');
+    await expect(page.locator('#dialog')).toBeHidden();
+    expect(host.service.read(id).messages).toHaveLength(0);
+    await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
+    await meter.tap();
+    await expect(pane.getByRole('progressbar', { name: '5-hour limit', exact: true })).toHaveAttribute('value', '25');
+    await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '6');
   } finally {
     await page.close(); await host.close(); rmSync(dir, { recursive: true, force: true });
   }

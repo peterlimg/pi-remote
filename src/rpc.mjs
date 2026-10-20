@@ -31,9 +31,8 @@ export class RpcWorker extends EventEmitter {
         const item = this.pending.get(value.id); this.pending.delete(value.id); clearTimeout(item.timer);
         if (value.success) item.resolve(value.data); else item.reject(new Error(value.error || 'Pi command failed'));
       } else if (this.captureUsage && value.type === 'extension_ui_request' && value.method === 'select' && value.title?.split(/\r?\n/)[0] === 'Provider usage') {
-        this.captureUsage(value);
-        this.process.stdin.write(JSON.stringify({ type: 'extension_ui_response', id: value.id,
-          ...(value.options?.includes('Close') ? { value: 'Close' } : { cancelled: true }) }) + '\n');
+        const answer = this.captureUsage(value);
+        this.process.stdin.write(JSON.stringify({ type: 'extension_ui_response', id: value.id, ...answer }) + '\n');
       } else this.emit('event', this.expandMessageEvent(value));
     });
     const stop = error => {
@@ -96,8 +95,15 @@ export class RpcWorker extends EventEmitter {
   async providerUsage(command) {
     if (this.usageQuery) return this.usageQuery;
     this.usageQuery = (async () => {
-      let report;
-      this.captureUsage = value => { report = { title: value.title, message: value.message }; };
+      let report, refreshed = false;
+      this.captureUsage = value => {
+        if (!refreshed && value.options?.includes('Refresh current usage')) {
+          refreshed = true;
+          return { value: 'Refresh current usage' };
+        }
+        report = { title: value.title, message: value.message };
+        return value.options?.includes('Close') ? { value: 'Close' } : { cancelled: true };
+      };
       try {
         await this.request('prompt', { message: '/' + command, streamingBehavior: 'steer' });
         if (!report) throw new Error('The usage extension returned no report. Try /usage in Pi.');

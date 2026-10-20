@@ -12,12 +12,14 @@ if (process.argv.includes('--startup-pid')) writeFileSync(process.argv[process.a
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp, retryTimer;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
+let usageRefreshes = 0;
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
-  title: `Provider usage\n${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`, options: ['Refresh current usage', 'Close'] });
+  title: 'Provider usage\n' + (process.argv.includes('--usage-fails-until-refresh') && usageRefreshes < 2 ? 'Query failed: fetch failed' :
+    `${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`), options: ['Refresh current usage', 'Close'] });
 const parser = new JsonLines(command => {
   if (command.type === 'extension_ui_response') {
     if (command.id.startsWith('usage-')) {
-      if (command.value === 'Refresh current usage') showUsage();
+      if (command.value === 'Refresh current usage') { usageRefreshes++; showUsage(); }
       else if (usageCommand) {
         out({ id: usageCommand.id, type: 'response', success: true });
         usageCommand = undefined;
