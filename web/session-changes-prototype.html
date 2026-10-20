@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fafaf8">
+  <title>Session changes prototypes · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/session-changes-prototype.css">
+  <script type="module" src="/session-changes-prototype.js"></script>
+</head>
+<body class="changes-prototype">
+  <!-- Throwaway: compare a Changes tab, an in-chat sheet, and a location-first browser with synthetic session edits. -->
+  <div class="prototype-controls">
+    <p>Prototype <span>Sample data only</span></p>
+    <label for="scenario">Work happens in
+      <select id="scenario">
+        <option value="worktree">A worktree</option>
+        <option value="project">This checkout</option>
+        <option value="nested">Nested projects</option>
+        <option value="empty">No captured edits</option>
+      </select>
+    </label>
+  </div>
+  <div class="session-frame">
+    <header class="conversation-header">
+      <a class="back-to-app" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
+      <div class="conversation-heading"><h1>Fix mobile navigation</h1><p id="prototype-project">pi-remote</p></div>
+      <button id="scope-info" class="icon-button" type="button" aria-label="How session changes are scoped" aria-expanded="false" aria-controls="scope-explanation"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><g fill="currentColor" stroke="none"><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></g></svg></button>
+    </header>
+    <section id="scope-explanation" class="scope-explanation" hidden>
+      <h2>What counts as this session's work?</h2>
+      <p>These examples assume a snapshot before the session and a record of its edits, including commits. The starting folder is context, not the diff scope.</p>
+      <p>Pre-existing and other sessions' edits stay separate. Overlapping edits need review. Git status alone cannot establish ownership.</p>
+      <p>This is a UI experiment. No files, Git repositories, or real sessions are read or changed.</p>
+    </section>
+    <main id="prototype-view" aria-label="Session changes prototype"></main>
+  </div>
+  <nav class="prototype-switcher" aria-label="Compare prototype layouts">
+    <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+    <div><span id="variant-label" aria-live="polite">A · Changes tab</span><small id="variant-description">A permanent place beside the conversation</small></div>
+    <button id="next-variant" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+  </nav>
+  <dialog id="changes-sheet" class="changes-sheet" aria-labelledby="sheet-title">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <header><h2 id="sheet-title">Session changes</h2><button id="close-sheet" type="button" class="text-button">Done</button></header>
+    <div id="sheet-content" class="sheet-content"></div>
+  </dialog>
+  <noscript><p class="no-script">Enable JavaScript to compare these interactive prototypes. This page uses sample data and does not connect to your sessions.</p></noscript>
+</body>
+</html>
