@@ -42,7 +42,8 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await page.getByRole('button', { name: /Reconnect test/ }).click();
   await expect(page.locator('#notice')).toBeHidden();
   await expect(connecting).toBeVisible();
-  await expect(connecting).toHaveText("Couldn't connect, retrying. Computer disconnected");
+  await expect(connecting).toHaveText('Reconnecting…');
+  await expect(connecting).toHaveAttribute('aria-label', "Couldn't connect, retrying. Computer disconnected");
   await expect(page.locator('#composer-hint')).toBeHidden();
   // Connecting replaces the settings pill in the toolbar instead of sitting on the draft.
   const row = await connecting.boundingBox(), prompt = await page.locator('#prompt').boundingBox();
@@ -60,6 +61,46 @@ test('connecting stays in the composer and disappears on recovery without stale 
   await expect(page.locator('#send')).toBeEnabled();
   await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
   await expect(page.locator('#notice')).toHaveText('An unrelated warning');
+});
+
+test('a tunnel interruption keeps a compact status and recovers without calling the computer offline', async ({ page }, testInfo) => {
+  await freezeTime(page);
+  const channels = [], commands = [];
+  let recovered = false;
+  await page.routeWebSocket('**/ws', ws => {
+    channels.push(ws);
+    const attempt = channels.length;
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.op === 'command') commands.push(packet);
+      if (attempt === 1 || recovered) answer(ws, packet);
+    });
+  });
+  await page.goto(url);
+  await page.getByRole('button', { name: /Reconnect test/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  await page.locator('#prompt').fill('Keep this draft through the tunnel reload');
+  channels[0].close({ code: 1001 }); // Route reloads close the transport without a host error.
+  await expect(page.locator('#connection')).toHaveText("Couldn't connect, retrying. Connection interrupted");
+  const connecting = page.locator('#composer-connection');
+  await expect(connecting).toHaveText('Reconnecting…');
+  await expect(connecting).toHaveAttribute('aria-label', "Couldn't connect, retrying. Connection interrupted");
+  for (const width of [390, 320, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(connecting).toBeVisible();
+    expect((await connecting.boundingBox()).height).toBeLessThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('tunnel-reconnect-' + width + '.png') });
+  }
+  await page.clock.runFor(16000);
+  expect(channels.length).toBeGreaterThan(1);
+  recovered = true;
+  answer(channels.at(-1), { type: 'auth' });
+  await expect(connecting).toBeHidden();
+  await expect(page.locator('#connection')).toHaveText('Computer connected');
+  await expect(page.locator('#send')).toBeEnabled();
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft through the tunnel reload');
+  expect(commands).toHaveLength(0);
 });
 
 test('the session list hides Connecting during a quick reconnect and shows it once the outage lasts', async ({ page }) => {

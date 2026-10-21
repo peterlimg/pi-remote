@@ -309,9 +309,11 @@ async function homeScreenPairing() {
 function showApp() { $('boot').hidden = true; $('app').hidden = false; }
 // Routine reconnects (foreground return, network change) finish in a moment; only a lasting outage shows the banner.
 let bannerTimer;
-function connection(text) {
+function connection(text, compact = text) {
   $('connection').textContent = text;
-  $('composer-connection-text').textContent = text;
+  $('composer-connection-text').textContent = compact;
+  $('composer-connection').title = text;
+  $('composer-connection').setAttribute('aria-label', text);
   if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
@@ -330,11 +332,11 @@ function disconnect() {
     item.reject(new Error('Connection lost. Delivery may have occurred; inspect the session before retrying.'));
   }
 }
-function reconnect(reason = 'Your computer is offline') {
+function reconnect(reason = 'Connection interrupted') {
   disconnect();
   if (manualClose || !token) return;
   connectionReason = reason;
-  showApp(); connection("Couldn't connect, retrying. " + reason);
+  showApp(); connection("Couldn't connect, retrying. " + reason, 'Reconnecting…');
   reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
 }
 function connect() {
@@ -343,7 +345,7 @@ function connect() {
   if (key && !validKey(key)) { showLogin('Link incomplete: the &key= encryption key is invalid. Paste the whole private link.'); return; }
   if (!key && !loopback) { showLogin('Link incomplete: paste the whole link including &key='); return; }
   $('login').hidden = true; if ($('app').hidden) $('boot').hidden = false;
-  connection(retry ? "Couldn't connect, retrying. " + connectionReason : 'Connecting…');
+  connection(retry ? "Couldn't connect, retrying. " + connectionReason : 'Connecting…', retry ? 'Reconnecting…' : 'Connecting…');
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   socket = ws;
   // Bound the whole attempt, including an open transport that never receives ready.
@@ -437,7 +439,7 @@ function connect() {
     if (event.code === 1008 && /[Ee]ncryption/.test(event.reason)) {
       loginFailed('Encryption check failed. Pair again.'); return;
     }
-    reconnect(event.reason || 'Your computer is offline');
+    reconnect(event.reason || undefined);
   });
   ws.addEventListener('error', () => { if (socket === ws) reconnect(); });
 }
