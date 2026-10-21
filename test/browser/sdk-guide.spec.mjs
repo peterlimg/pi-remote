@@ -22,6 +22,14 @@ for (const view of [
       await page.evaluate(() => document.fonts.ready);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText('Claude thinks.Pi does the work.');
       await expect(page.locator('figure')).toHaveCount(4);
+      await expect(page.locator('.article-header')).toHaveCSS('background-color', 'rgb(230, 91, 61)');
+      const print = page.locator('.print-art');
+      await print.evaluate(image => image.decode());
+      await expect(print).toHaveJSProperty('naturalWidth', 558);
+      await expect(print).toHaveJSProperty('naturalHeight', 500);
+      const titleBox = await page.locator('h1').boundingBox(), printBox = await print.boundingBox();
+      expect(printBox.x >= titleBox.x + titleBox.width || printBox.y >= titleBox.y + titleBox.height).toBe(true);
+      expect(await page.locator('figure').evaluateAll(figures => figures.every(figure => getComputedStyle(figure).borderRadius === '0px'))).toBe(true);
       await expect(page.locator('.byline time')).toHaveAttribute('datetime', '2026-10-19');
       await expect(page.locator('#worker-gap')).toContainText('before either child reached the SDK');
       await expect(page.locator('#delegate-fix')).toContainText('complete canonical Pi base');
@@ -42,14 +50,14 @@ for (const view of [
       const contrast = await page.evaluate(() => {
         const rgb = color => color.match(/[\d.]+/g).map(Number);
         const lum = color => rgb(color).slice(0, 3).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-        return ['h1 span', '.prose', '.byline', 'figcaption', '.pi-word', '.sdk-word', '.guard-word', '.worker-figure figcaption'].map(selector => {
+        return ['h1 span', 'h1 .hero-result', '.prose', '.byline', 'figcaption', '.pi-word', '.sdk-word', '.guard-word', '.worker-figure figcaption'].map(selector => {
           const element = document.querySelector(selector); let background = element;
           while (background.parentElement && rgb(getComputedStyle(background).backgroundColor)[3] === 0) background = background.parentElement;
           const a = lum(getComputedStyle(element).color), b = lum(getComputedStyle(background).backgroundColor);
           return { selector, ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05) };
         });
       });
-      for (const color of contrast) expect(color.ratio, color.selector).toBeGreaterThanOrEqual(4.5);
+      for (const color of contrast) expect(color.ratio, color.selector).toBeGreaterThanOrEqual(color.selector === 'h1 .hero-result' ? 3 : 4.5);
       await page.getByRole('button', { name: 'Pause motion' }).click();
       if (process.env.PI_GUIDE_EVIDENCE) {
         mkdirSync(process.env.PI_GUIDE_EVIDENCE, { recursive: true });
@@ -92,6 +100,7 @@ test('motion pauses on demand and offscreen, with no animation under reduced mot
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/sdk-guide.html');
   const figure = page.locator('.tool-figure'), svg = figure.locator('svg:visible');
+  await figure.scrollIntoViewIfNeeded();
   await expect(figure).toHaveAttribute('data-playing', 'true');
   const packetDurations = await figure.locator('animateMotion').evaluateAll(elements => elements.map(element => element.getSimpleDuration()));
   expect(packetDurations).toHaveLength(8);
@@ -153,10 +162,10 @@ test('the article exposes a static large-image preview to X without JavaScript',
       ['meta[name="twitter:title"]', title]
     ]) await expect(page.locator(selector)).toHaveAttribute('content', content);
     const image = await page.locator('meta[property="og:image"]').getAttribute('content');
-    expect(image).toBe(canonical + 'sdk-guide-social.png?v=assembly-1');
+    expect(image).toBe(canonical + 'sdk-guide-social.png?v=signal-print-1');
     await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute('content', image);
     const alt = await page.locator('meta[property="og:image:alt"]').getAttribute('content');
-    expect(alt).toContain('orange asterisk'); expect(alt).toContain('green Pi sculpture');
+    expect(alt).toContain('stippled ink'); expect(alt).toContain('Pi lettering on orange');
     expect(alt).toContain('Tools, permissions and history stay in Pi'); expect(alt.length).toBeLessThanOrEqual(420);
     await expect(page.locator('meta[name="twitter:image:alt"]')).toHaveAttribute('content', alt);
     const imagePath = new URL(image).pathname + new URL(image).search;
@@ -173,7 +182,7 @@ test('the article exposes a static large-image preview to X without JavaScript',
 });
 
 test('the article assets are explicit and font permission stays scoped to the article', async ({ request }) => {
-  for (const [path, type] of [['/sdk-guide.css', 'text/css'], ['/sdk-guide.js', 'text/javascript'], ['/sdk-guide-font.woff2', 'font/woff2']]) {
+  for (const [path, type] of [['/sdk-guide.css', 'text/css'], ['/sdk-guide.js', 'text/javascript'], ['/sdk-guide-font.woff2', 'font/woff2'], ['/sdk-guide-print.png', 'image/png']]) {
     const response = await request.get(path); expect(response.status()).toBe(200); expect(response.headers()['content-type']).toContain(type);
   }
   expect((await request.get('/')).headers()['content-security-policy']).not.toContain('font-src');

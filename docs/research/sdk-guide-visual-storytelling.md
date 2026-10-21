@@ -15,11 +15,11 @@ Direct fetches of the essay sites were blocked by the local fetch tool's fake-IP
 
 THESIS: A technical essay about one invariant: Pi owns execution and history even when its native Claude context changes. Replace repetitive boxed lists and a large question index with narrative prose and a few wide illustrations.
 
-OWN-WORLD: Pi's green, mineral paper and ink, contrasting SDK blue, amber guards. Self-hosted Bricolage Grotesque headings, quiet body type, precise SVG wiring.
+OWN-WORLD: C, Signal print. Vermilion orange, ivory paper and near-black ink, with a seeded stippled Pi print. Self-hosted Bricolage headings, quiet reading type, square print panels and heavier SVG wiring. Pi records use ink, SDK proposals use burnt orange, and guards keep a distinct amber.
 
 STORY: Tool ownership leads into two histories, validated replacement, branch behavior and the remaining worker-resume gap. Verification and terminology remain available in the appendix.
 
-FIRST VIEWPORT: A compact masthead, a strong two-line title and an animated request/result loop. Motion illustrates direction and ownership, not an entrance effect.
+FIRST VIEWPORT: Orange masthead and full-width cover, a native-text ink-and-ivory headline and the stippled Pi print. A stacked phone composition avoids art/text overlap. Cream reading sections and four reworked illustration panels follow; motion still illustrates ownership, not an entrance effect.
 
 FORM: Illustrated blog, with reader-controlled branch comparisons. No lesson navigation, progress score, quizzes or Next/Back teaching flow.
 
@@ -31,9 +31,9 @@ Animate only visible figures. SVG request packets follow actual diagram connecto
 
 ## Social preview
 
-The user selected A, Assembly, from [the three cover prototypes](https://github.com/peterlimg/pi-remote/blob/c2f0a4f628cc33bf23d850424572fc24fc69b345/web/sdk-cover-prototypes/choices.md). The cover is a static 1200 × 600 PNG, with an orange asterisk suspended above a green Pi sculpture on a dark green field. Bricolage type carries the title and Pi-owned tools, permissions and history statement. It is cover artwork, not an implementation diagram, and adds no readiness or performance claim. The article's own illustrations and palette are unchanged.
+The user selected C, Signal print, from [the three cover prototypes](https://github.com/peterlimg/pi-remote/blob/c2f0a4f628cc33bf23d850424572fc24fc69b345/web/sdk-cover-prototypes/choices.md), for both the share cover and the blog. The static 1200 × 600 cover uses orange, ink and ivory, with Pi lettering cut out of a seeded stippled field. The article carries the same typography, colors and print treatment through its header and all four illustrations. Technical prose, ownership boundaries, controls, motion timings and explicit gaps stay unchanged.
 
-The authored source is `scripts/sdk-guide-social.html`; `node scripts/render-sdk-social.mjs` renders its 3D geometry offline with the existing self-hosted font. The PNG embeds that provenance. The source, renderer, unused variants and prototype switcher are not part of the static deployment allowlist. All share links, including `#worker-gap`, use the article's overall preview. The Open Graph and X image URLs share an `assembly-1` version query; this changes the image cache key but does not prove X has refreshed the page's cached card.
+The authored source is `scripts/sdk-guide-social.html`; `node scripts/render-sdk-social.mjs` draws the ink field offline with the existing self-hosted font. It exports the cover and `web/sdk-guide-print.png`, a transparent 558 × 500 plate used beside the article's native-text headline. Both PNGs embed their provenance. The source, renderer, unused variants and prototype switcher are not part of the static deployment allowlist. All share links, including `#worker-gap`, use the article's overall preview. The Open Graph and X image URLs share a `signal-print-1` version query; this changes the image cache key but does not prove X has refreshed the page's cached card.
 
 ## Font provenance
 

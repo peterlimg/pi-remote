@@ -8,6 +8,7 @@ const files = new Map([
   ['/sdk-guide.js', ['sdk-guide.js', 'text/javascript; charset=utf-8']],
   ['/sdk-guide-font.woff2', ['sdk-guide-font.woff2', 'font/woff2']],
   ['/sdk-guide-social.png', ['sdk-guide-social.png', 'image/png']],
+  ['/sdk-guide-print.png', ['sdk-guide-print.png', 'image/png']],
   ['/session-changes-prototype.html', ['session-changes-prototype.html', 'text/html; charset=utf-8']],
   ['/session-changes-prototype.css', ['session-changes-prototype.css', 'text/css; charset=utf-8']],
   ['/session-changes-prototype.js', ['session-changes-prototype.js', 'text/javascript; charset=utf-8']],

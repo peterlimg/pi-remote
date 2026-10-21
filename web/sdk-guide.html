@@ -12,16 +12,16 @@
   <meta property="og:url" content="https://claude-sdk-in-pi.vercel.app/">
   <meta property="og:title" content="Claude thinks. Pi does the work.">
   <meta property="og:description" content="How the Claude Agent SDK works inside Pi while Pi keeps its tools, permissions and history.">
-  <meta property="og:image" content="https://claude-sdk-in-pi.vercel.app/sdk-guide-social.png?v=assembly-1">
+  <meta property="og:image" content="https://claude-sdk-in-pi.vercel.app/sdk-guide-social.png?v=signal-print-1">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="600">
-  <meta property="og:image:alt" content="Claude thinks. Pi does the work. An orange asterisk floats above a green Pi sculpture on dark green. Tools, permissions and history stay in Pi.">
+  <meta property="og:image:alt" content="Claude thinks. Pi does the work. A stippled ink field reveals Pi lettering on orange. Tools, permissions and history stay in Pi.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Claude thinks. Pi does the work.">
   <meta name="twitter:description" content="How the Claude Agent SDK works inside Pi while Pi keeps its tools, permissions and history.">
-  <meta name="twitter:image" content="https://claude-sdk-in-pi.vercel.app/sdk-guide-social.png?v=assembly-1">
-  <meta name="twitter:image:alt" content="Claude thinks. Pi does the work. An orange asterisk floats above a green Pi sculpture on dark green. Tools, permissions and history stay in Pi.">
+  <meta name="twitter:image" content="https://claude-sdk-in-pi.vercel.app/sdk-guide-social.png?v=signal-print-1">
+  <meta name="twitter:image:alt" content="Claude thinks. Pi does the work. A stippled ink field reveals Pi lettering on orange. Tools, permissions and history stay in Pi.">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="preload" href="sdk-guide-font.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="sdk-guide.css">
@@ -37,17 +37,21 @@
   <main>
   <article id="article">
     <header class="article-header">
-      <h1><span>Claude thinks.</span><br>Pi does the work.</h1>
-      <p class="standfirst">Building a Claude SDK provider without handing over Pi's tools, instructions or history. The interesting part starts when the conversation needs to change.</p>
-      <div class="byline"><span>Notes from building Pi Remote</span><time datetime="2026-10-19">Updated October 19, 2026</time><a href="#what-remains">Experimental, with known gaps</a></div>
+      <div class="article-cover">
+        <h1><span>Claude thinks.</span><span class="hero-result">Pi does the work.</span></h1>
+        <img class="print-art" src="sdk-guide-print.png" width="558" height="500" alt="" aria-hidden="true" fetchpriority="high" decoding="async">
+        <p class="standfirst">Building a Claude SDK provider without handing over Pi's tools, instructions or history. The interesting part starts when the conversation needs to change.</p>
+        <div class="byline"><span>Notes from building Pi Remote</span><time datetime="2026-10-19">Updated October 19, 2026</time><a href="#what-remains">Experimental, with known gaps</a></div>
+      </div>
     </header>
 
     <figure class="wide tool-figure animated-figure" data-motion aria-label="Tool proposals travel from Claude through the adapter to Pi. Recorded results travel back.">
       <div class="figure-header"><span>The tool loop</span><span>Illustration only. No tools run.</span></div>
       <svg class="diagram-svg desktop-diagram" viewBox="0 0 1000 330" aria-hidden="true">
+        <defs><pattern id="tool-print-desktop" width="7" height="7" patternUnits="userSpaceOnUse"><rect class="print-base" width="7" height="7"/><circle class="print-dot" cx="2" cy="2" r=".9"/></pattern></defs>
         <path class="wire request-wire" d="M750 145H580M420 145H250"/><path class="wire result-wire" d="M250 185H420M580 185H750"/>
         <path class="arrow request-ink" d="m590 140-10 5 10 5m-330-10-10 5 10 5"/><path class="arrow pi-ink" d="m410 180 10 5-10 5m330-10 10 5-10 5"/>
-        <circle class="pi-fill module-outline" cx="180" cy="165" r="70"/><rect class="bridge-fill module-outline" x="420" y="125" width="160" height="80" rx="9"/><circle class="sdk-fill module-outline" cx="820" cy="165" r="70"/>
+        <circle class="pi-fill module-outline" cx="180" cy="165" r="70"/><rect class="bridge-fill module-outline" x="420" y="125" width="160" height="80"/><circle class="sdk-fill module-outline" cx="820" cy="165" r="70" fill="url(#tool-print-desktop)"/>
         <text class="module-name pi-ink" x="180" y="162">Pi</text><text class="module-role" x="180" y="188">Execution</text>
         <text class="bridge-name" x="500" y="162">SDK adapter</text><text class="module-role" x="500" y="184">Translation</text>
         <text class="module-name sdk-ink" x="820" y="162">Claude</text><text class="module-role" x="820" y="188">Model inference</text>
@@ -59,9 +63,10 @@
         <circle class="packet result-packet" r="5"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M580 185H750"/></circle>
       </svg>
       <svg class="diagram-svg mobile-diagram" viewBox="0 0 360 440" aria-hidden="true">
+        <defs><pattern id="tool-print-mobile" width="7" height="7" patternUnits="userSpaceOnUse"><rect class="print-base" width="7" height="7"/><circle class="print-dot" cx="2" cy="2" r=".9"/></pattern></defs>
         <path class="wire request-wire" d="M195 285V238M195 172V125"/><path class="wire result-wire" d="M165 125V172M165 238V285"/>
         <path class="arrow request-ink" d="m190 248 5-10 5 10m-10-113 5-10 5 10"/><path class="arrow pi-ink" d="m160 162 5 10 5-10m-10 113 5 10 5-10"/>
-        <circle class="pi-fill module-outline" cx="180" cy="65" r="60"/><rect class="bridge-fill module-outline" x="110" y="172" width="140" height="66" rx="8"/><circle class="sdk-fill module-outline" cx="180" cy="345" r="60"/>
+        <circle class="pi-fill module-outline" cx="180" cy="65" r="60"/><rect class="bridge-fill module-outline" x="110" y="172" width="140" height="66"/><circle class="sdk-fill module-outline" cx="180" cy="345" r="60" fill="url(#tool-print-mobile)"/>
         <text class="module-name pi-ink" x="180" y="61">Pi</text><text class="module-role" x="180" y="85">Execution</text><text class="bridge-name" x="180" y="201">SDK adapter</text><text class="module-role" x="180" y="222">Translation</text><text class="module-name sdk-ink" x="180" y="341">Claude</text><text class="module-role" x="180" y="365">Model</text>
         <text class="mobile-side pi-ink" x="24" y="145">Actual<tspan x="24" dy="21">result</tspan></text><text class="mobile-side request-ink" x="255" y="265">Tool<tspan x="255" dy="21">proposal</tspan></text><text class="diagram-note" x="180" y="432">Pi keeps permissions and execution.</text>
         <circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M195 285V238"/></circle><circle class="packet request-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M195 172V125"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M165 125V172"/></circle><circle class="packet result-packet" r="4"><animateMotion begin="indefinite" dur="1.2s" repeatCount="indefinite" path="M165 238V285"/></circle>
