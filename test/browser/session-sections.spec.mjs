@@ -25,7 +25,8 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     utimesSync(file, timestamp / 1000, timestamp / 1000);
     return file;
   };
-  const pinned = Array.from({ length: 30 }, (_, i) => seed(`Pinned task ${i}`, i));
+  const pinnedTitles = ['Investigate Claude SDK session history and reconnect recovery', 'Pinned task 1', 'Review architecture of web app.js'];
+  const pinned = Array.from({ length: 30 }, (_, i) => seed(pinnedTitles[i] ?? `Pinned task ${i}`, i));
   for (let i = 0; i < 45; i++) seed(`Recent task ${i}`, 100 + i);
   const titles = ['Review authentication flow', 'Design the sessions page', 'Investigate Claude SDK session'];
   const activeFiles = titles.map((title, i) => seed(title, 200 + i));
@@ -55,27 +56,43 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     const pinsGroup = page.getByRole('region', { name: 'Pinned', exact: true });
     const recentGroup = page.getByRole('region', { name: 'Recent', exact: true });
     await expect(nowGroup.locator('.session strong')).toHaveText(titles);
-    await expect(pinsGroup.locator('.session strong')).toHaveText(['Pinned task 0', 'Pinned task 1', 'Pinned task 2']);
+    await expect(pinsGroup.locator('.session strong')).toHaveText(pinnedTitles);
     await expect(pinsGroup.locator('.badge')).toHaveText('31');
     await expect(recentGroup.locator('.session')).toHaveCount(20);
     await expect(page.locator('#sessions .session')).toHaveCount(26);
     await expect(nowGroup.locator('.session').last().getByRole('img', { name: 'Pinned', exact: true })).toBeVisible();
     await expect(pinsGroup.locator('.session-preview').first()).toBeHidden();
-    await expect(pinsGroup.locator('time').first()).toBeHidden();
+    await expect(recentGroup.locator('.session-preview').first()).toBeVisible();
+    await expect(pinsGroup.locator('time').first()).toBeVisible();
     const bounds = await nowGroup.boundingBox();
     expect(bounds.y + bounds.height).toBeLessThan(page.viewportSize().height - 70);
-    const noOverflow = async () => expect(await page.evaluate(() => {
-      const sidebar = document.getElementById('sidebar');
-      return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
-    })).toBe(true);
-    await noOverflow();
+    const checkLayout = async () => {
+      expect(await page.evaluate(() => {
+        const sidebar = document.getElementById('sidebar');
+        return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
+      })).toBe(true);
+      for (const group of [pinsGroup, recentGroup]) {
+        await expect(group.locator('strong').first()).toHaveCSS('font-size', '17px');
+        await expect(group.locator('strong').first()).toHaveCSS('-webkit-line-clamp', '2');
+        await expect(group.locator('.session-meta').first()).toHaveCSS('font-size', '14px');
+      }
+      const review = pinsGroup.locator('.session').last();
+      const icon = await review.getByRole('img', { name: 'PR review', exact: true }).boundingBox();
+      const meta = await review.locator('.session-meta').boundingBox();
+      expect(Math.abs(icon.y + icon.height / 2 - meta.y - meta.height / 2)).toBeLessThanOrEqual(1);
+      expect(icon.x).toBeGreaterThanOrEqual(meta.x);
+      const short = await pinsGroup.locator('.session').nth(1).boundingBox();
+      const long = await pinsGroup.locator('.session').first().boundingBox();
+      expect(long.height).toBeGreaterThan(short.height);
+    };
+    await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-phone.png') });
     await page.setViewportSize({ width: 320, height: 720 });
-    await noOverflow();
+    await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-narrow.png') });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await noOverflow();
+    await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-desktop-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: 'light' });
@@ -83,6 +100,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await page.getByRole('button', { name: 'View all pinned sessions' }).click();
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await expect(collection.locator('.session')).toHaveCount(20);
+    await expect(collection.locator('.session-meta .session-type-icon')).toHaveCount(1);
     await collection.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(collection.locator('.session')).toHaveCount(31);
     // Pin/unpin uses the same gesture and real API inside the collection.

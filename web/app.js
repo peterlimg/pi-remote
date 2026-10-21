@@ -570,8 +570,6 @@ function sessionRow(item) {
   if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
   indicators.append(icon);
-  const typeIcon = sessionTypeIcon(item);
-  if (typeIcon) indicators.append(typeIcon);
   if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
   button.append(indicators);
   const body = el('div', undefined, 'session-body');
@@ -595,9 +593,14 @@ function sessionRow(item) {
     status.dataset.status = item.status;
     meta.append(status);
   }
-  if (!isBlank(item.cwd)) {
-    const project = el('span', projectName(item.cwd), 'session-project');
-    project.title = displayPaths(item.cwd);
+  const typeIcon = sessionTypeIcon(item);
+  if (typeIcon || !isBlank(item.cwd)) {
+    const project = el('span', undefined, 'session-project');
+    if (typeIcon) project.append(typeIcon);
+    if (!isBlank(item.cwd)) {
+      project.append(el('span', projectName(item.cwd), 'session-project-name'));
+      project.title = displayPaths(item.cwd);
+    }
     meta.append(project);
   }
   const date = new Date(item.updatedAt);

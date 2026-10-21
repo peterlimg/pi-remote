@@ -155,9 +155,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-group-heading button { margin-left: auto; padding-inline: 0; font-size: 13px; font-weight: 500; }
 .session-group-now h3 { color: var(--accent); }
 :is(.session-group-now, .session-group-pinned) .session-preview { display: none; }
-.session-group-pinned .session strong { -webkit-line-clamp: 1; font-size: 16px; line-height: 1.4; }
-.session-group-pinned .session-meta { font-size: 13px; margin-top: 2px; }
-.session-group-pinned .session-time { display: none; }
 .session-group .session + .session { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); border-radius: 0; }
 #list-empty { padding: 8px; }
 .list-pagination { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; margin-top: 8px; }
@@ -165,8 +162,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #list-page { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
 #list-retry { width: 100%; }
 .session { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
-.session-indicators { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.session-type-icon { display: grid; place-items: center; width: 16px; height: 20px; color: var(--muted); font-size: 12px; line-height: 1; }
+.session-indicators { display: flex; flex-direction: column; align-items: center; }
+.session-type-icon { display: grid; place-items: center; flex-shrink: 0; width: 16px; height: 16px; color: var(--muted); font-size: 12px; line-height: 1; }
 .session-icon { display: grid; place-items: center; height: 26px; margin-top: 2px; color: var(--muted); }
 .session-icon[data-status=waiting] { color: var(--warning); }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
@@ -194,7 +191,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere; font-size: 17px; line-height: 1.5; font-weight: 500; }
 .session-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: 15px; font-weight: 400; color: var(--muted); }
 .session-meta { margin-top: 2px; gap: 6px; font-size: 14px; font-weight: 400; color: var(--muted); }
-.session-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-project { display: flex; align-items: center; min-width: 0; overflow: hidden; }
+.session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-type-icon + .session-project-name { margin-left: 6px; }
 .session-state { flex-shrink: 0; }
 .session-state[data-status=working] { color: var(--accent); font-weight: 600; }
 .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }

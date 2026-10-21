@@ -5,7 +5,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 ## Sub-features
 
 - `sessions-select`: select from the mobile list or desktop sidebar.
-- `sessions-sections`: Now, three compact pins, then Recent; View all opens a live, scrollable collection.
+- `sessions-sections`: Now, three compact pins, then Recent; View all opens a live, scrollable collection. Pins share Recent's typography and two-line title limit but hide previews. Session type icons sit beside the project label, separate from the status indicator.
 - `sessions-search`: filter by task or project and recover from an empty result.
 - `sessions-close`: swipe left to hide a session, Undo, or search and select it to reopen.
 - `sessions-pages`: move through saved and online session pages.

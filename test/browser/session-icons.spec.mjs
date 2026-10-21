@@ -29,9 +29,9 @@ test('session icons detect reviews, stay separate from status and support persis
   await expect(saved.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
   await expect(normal.locator('.session-type-icon')).toHaveCount(0);
   await expect(review.locator('.session-icon')).toHaveAttribute('data-status', 'waiting');
-  const statusBox = await review.locator('.session-icon').boundingBox();
-  const typeBox = await review.locator('.session-type-icon').boundingBox();
-  expect(typeBox.y).toBeGreaterThanOrEqual(statusBox.y + statusBox.height);
+  const typeBox = await review.locator('.session-project .session-type-icon').boundingBox();
+  const metaBox = await review.locator('.session-meta').boundingBox();
+  expect(Math.abs(typeBox.y + typeBox.height / 2 - metaBox.y - metaBox.height / 2)).toBeLessThanOrEqual(1);
   expect(typeBox.width).toBe(16);
   await page.screenshot({ path: testInfo.outputPath('icons-mobile.png') });
   await writeFile(testInfo.outputPath('icons-mobile.aria.txt'), await page.locator('body').ariaSnapshot());
@@ -75,7 +75,7 @@ test('session icons detect reviews, stay separate from status and support persis
   await expect(picker.getByRole('button', { name: 'Star', exact: true })).toHaveCSS('font-size', '24px');
   await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
   await backToList();
-  await expect(normal.locator('.session-type-icon')).toHaveText('⭐');
+  await expect(normal.locator('.session-project .session-type-icon')).toHaveText('⭐');
   await expect(normal.locator('.session-type-icon')).toHaveCSS('font-size', '12px');
   await page.screenshot({ path: testInfo.outputPath('small-list-emoji.png') });
   await openSettings(normal);
