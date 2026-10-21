@@ -17,7 +17,8 @@
     "check": "tsc --noEmit && node scripts/check.mjs",
     "test:browser": "playwright test",
     "test:lifecycle": "node test/lifecycle-e2e.mjs",
-    "test:provider-parity": "node test/provider-parity.mjs"
+    "test:provider-parity": "node test/provider-parity.mjs",
+    "prototype:sdk-covers": "python3 -m http.server 8873 --bind 127.0.0.1 --directory web/sdk-cover-prototypes"
   },
   "dependencies": {
     "jsqr": "1.4.0",

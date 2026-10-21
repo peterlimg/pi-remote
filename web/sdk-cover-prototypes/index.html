@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Choose an SDK article cover</title>
+  <link rel="stylesheet" href="gallery.css">
+  <script src="gallery.js" defer></script>
+</head>
+<body>
+  <header><h1>Which direction?</h1><p>Three cover prototypes. The live article and share image are unchanged.</p><a href="?variant=all">Compare all three</a></header>
+  <main>
+    <figure data-cover="A"><a href="?variant=A"><img src="A.png" width="1200" height="600" alt="Option A, assembly. An orange asterisk floats above a green Pi sculpture on a deep green background beside the article headline."></a><figcaption><h2>A. Assembly</h2><p>A sculptural image with real depth, lighting and an exploded composition.</p></figcaption></figure>
+    <figure data-cover="B"><a href="?variant=B"><img src="B.png" width="1200" height="600" alt="Option B, overprint. Huge lime Pi lettering meets an asymmetric white headline on a saturated blue background."></a><figcaption><h2>B. Overprint</h2><p>A type-led poster. Big scale, cobalt and lime, no explanatory diagram.</p></figcaption></figure>
+    <figure data-cover="C"><a href="?variant=C"><img src="C.png" width="1200" height="600" alt="Option C, signal print. A dense stippled ink field opens into Pi letterforms beside the headline on an orange background."></a><figcaption><h2>C. Signal print</h2><p>A computational screenprint with dense ink, negative space and a warmer palette.</p></figcaption></figure>
+  </main>
+  <nav class="switcher" aria-label="Prototype variants">
+    <a data-step="-1" href="?variant=C" aria-label="Previous cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></a>
+    <span id="selection" aria-live="polite">All three</span>
+    <a data-step="1" href="?variant=A" aria-label="Next cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></a>
+  </nav>
+</body>
+</html>
