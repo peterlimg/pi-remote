@@ -315,6 +315,41 @@ test('the app follows keyboard viewport changes without resizing the document', 
   await expect(page.locator('#login')).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.body).position)).toBe('static');
 });
+for (const entry of ['foreground return', 'page refresh']) {
+  test(`a stale viewport offset cannot push the thread offscreen on ${entry}`, async ({ page }, testInfo) => {
+    // iOS can retain its keyboard offset after the visible viewport is full-height again.
+    await page.addInitScript(({ width, height, offsetTop }) => {
+      const viewport = new EventTarget();
+      Object.assign(viewport, { width, height, offsetLeft: 0, offsetTop, scale: 1 });
+      Object.defineProperty(window, 'visualViewport', { value: viewport });
+      window.changeViewport = values => {
+        Object.assign(viewport, values);
+        viewport.dispatchEvent(new Event('resize'));
+      };
+    }, { ...page.viewportSize(), offsetTop: entry === 'page refresh' ? 260 : 0 });
+    await page.goto(login);
+    if (entry === 'page refresh') await page.reload();
+    await page.getByRole('button', { name: /Project Alpha/ }).click();
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
+    if (entry === 'foreground return') await page.evaluate(() => {
+      Object.assign(visualViewport, { offsetTop: 260 });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.screenshot({ path: testInfo.outputPath('viewport-return.png') });
+    expect(await page.locator('#app').boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
+    await expect(page.locator('#composer')).toBeInViewport();
+    await page.locator('#prompt').fill('Keep this draft');
+    expect(await page.locator('#app').boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
+    await page.evaluate(() => window.changeViewport({ height: 350, offsetTop: 40 }));
+    expect(await page.locator('#app').boundingBox()).toEqual({ x: 0, y: 40, width: page.viewportSize().width, height: 350 });
+    // Blur restores the full shell before iOS sends another viewport event.
+    await page.locator('#prompt').blur();
+    expect(await page.locator('#app').boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize() });
+    await expect(page.locator('#send')).toBeInViewport();
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+  });
+}
+
 test('sending an image keeps the thread bottom visible once Pi starts working', async ({ page }) => {
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
   const state = { id: 'send', title: 'Long thread', cwd: '/project', status: 'idle', messages: [
