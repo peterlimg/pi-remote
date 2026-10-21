@@ -28,7 +28,7 @@ npx vercel deploy --cwd "$publish/claude-sdk-in-pi" \
   --scope peterlimgs-projects --dry --json --yes
 ```
 
-Inspect the dry run. Exactly eight files should be included: the seven named public assets and `vercel.json`. The authored `sdk-guide-social.svg` and its renderer are not upload assets. `.env.local`, `.vercel` and `.gitignore` must be excluded. No sessions, credentials, project instructions or other repository files belong in the upload.
+Inspect the dry run. Exactly eight files should be included: the seven named public assets and `vercel.json`. The authored `scripts/sdk-guide-social.html` and its renderer are not upload assets. `.env.local`, `.vercel` and `.gitignore` must be excluded. No sessions, credentials, project instructions or other repository files belong in the upload.
 
 ```sh
 npx vercel deploy --cwd "$publish/claude-sdk-in-pi" \
@@ -41,12 +41,12 @@ Verify the production address without a Vercel login, not only through the CLI's
 
 ## X and Open Graph preview
 
-The HTML contains canonical/Open Graph URLs, `twitter:card=summary_large_image`, title/description, image alt text and an absolute HTTPS PNG URL. The static 1200 × 600 image uses the article's existing font and palette. Crawlers do not need JavaScript or a login.
+The HTML contains canonical/Open Graph URLs, `twitter:card=summary_large_image`, title/description, image alt text and an absolute HTTPS PNG URL. The static 1200 × 600 image uses the selected Assembly cover, an orange asterisk above a green Pi sculpture, and the article's self-hosted font. Crawlers do not need JavaScript, WebGL or a login. The image URL includes a version query so a changed image has a new crawler cache key.
 
-After changing `web/sdk-guide-social.svg`, regenerate the PNG before publishing:
+After changing `scripts/sdk-guide-social.html`, regenerate the PNG before publishing:
 
 ```sh
 node scripts/render-sdk-social.mjs
 ```
 
-The renderer uses the existing Playwright dependency and local font, checks text bounds and dimensions, and embeds source provenance in the PNG. Only the rendered PNG is deployed. Verify HTTP 200 for the article and image with a `Twitterbot/1.0` user agent, `image/png`, dimensions and a size below 5 MB. X may retain an older cached card; a successful public crawler fetch does not prove the in-app preview has refreshed. No X post is created by this publishing workflow.
+The renderer uses the existing Playwright dependency and local font, renders the 3D geometry offline, checks the sculpture, text bounds and dimensions, and embeds source provenance in the PNG. Only the rendered PNG is deployed. Verify HTTP 200 for the article and image with a `Twitterbot/1.0` user agent, `image/png`, dimensions and a size below 5 MB. X may retain an older cached card; a successful public crawler fetch does not prove the in-app preview has refreshed. No X post is created by this publishing workflow.

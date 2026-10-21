@@ -31,9 +31,9 @@ Animate only visible figures. SVG request packets follow actual diagram connecto
 
 ## Social preview
 
-The X/Open Graph image extends the article's existing visual world rather than introducing another identity. It is a static 1200 × 600 PNG, with the two-line Bricolage headline above a Pi → adapter → Claude result loop and the opposite proposal direction. The wide title remains the primary reading at thumbnail size. Mineral paper, Pi green and SDK blue retain their article meanings. No readiness or performance claim is added.
+The user selected A, Assembly, from [the three cover prototypes](https://github.com/peterlimg/pi-remote/blob/c2f0a4f628cc33bf23d850424572fc24fc69b345/web/sdk-cover-prototypes/choices.md). The cover is a static 1200 × 600 PNG, with an orange asterisk suspended above a green Pi sculpture on a dark green field. Bricolage type carries the title and Pi-owned tools, permissions and history statement. It is cover artwork, not an implementation diagram, and adds no readiness or performance claim. The article's own illustrations and palette are unchanged.
 
-The authored source is `web/sdk-guide-social.svg`; `node scripts/render-sdk-social.mjs` renders it with the existing self-hosted font. The PNG embeds that provenance. The authoring SVG and renderer are not part of the static deployment allowlist. All share links, including `#worker-gap`, use the article's overall preview.
+The authored source is `scripts/sdk-guide-social.html`; `node scripts/render-sdk-social.mjs` renders its 3D geometry offline with the existing self-hosted font. The PNG embeds that provenance. The source, renderer, unused variants and prototype switcher are not part of the static deployment allowlist. All share links, including `#worker-gap`, use the article's overall preview. The Open Graph and X image URLs share an `assembly-1` version query; this changes the image cache key but does not prove X has refreshed the page's cached card.
 
 ## Font provenance
 
