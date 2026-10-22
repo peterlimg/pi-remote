@@ -181,18 +181,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session.dragging.closing::before { content: 'Close'; right: auto; left: calc(100% + 4px); }
 .session.swipe-ready::before { background: var(--accent); color: var(--bg); }
 .session.closing.swipe-ready::before { background: var(--error); }
-.session-close-dialog { position: fixed; inset: 0; width: min(320px, calc(100% - 40px)); max-width: none; max-height: calc(var(--viewport-height, 100dvh) - 32px); padding: 0; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); }
-.session-close-dialog::backdrop { background: rgb(0 0 0 / .35); }
-/* No slide-in: autofocus can scroll an animated sheet before it reaches its final position. */
-.session-close-sheet { margin: 0; padding-top: 20px; text-align: center; }
-.session-close-sheet h2 { margin: 0 20px; font-size: 17px; line-height: 1.4; font-weight: 600; }
-.session-close-sheet p { margin: 8px 20px 0; overflow-wrap: anywhere; color: var(--muted); font-size: 14px; line-height: 1.45; }
-#session-close-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.session-close-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; border-top: 1px solid var(--line); }
-.session-close-actions button { min-height: 50px; padding: 10px 8px; border-radius: 0; background: transparent; color: var(--accent); font-size: 16px; font-weight: 500; }
-.session-close-actions button + button { border-left: 1px solid var(--line); }
-.session-close-actions button:focus-visible { outline-offset: -4px; }
-#session-close-confirm-button { color: var(--error); }
 .session-feedback { position: sticky; bottom: 70px; z-index: 1; display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--muted); box-shadow: 0 2px 8px rgb(0 0 0 / .12); font-size: 13px; }
 .session-feedback span { flex: 1; min-width: 0; }
 .session-feedback button { flex-shrink: 0; }

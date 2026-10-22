@@ -82,11 +82,18 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       for (const fraction of [.2, .6, 1]) await touch('touchMove', [{ x: x + dx * fraction, y: y + dy * fraction }]);
     };
     const release = type => touch(type, []);
-    const confirmation = page.getByRole('dialog', { name: 'Close session?', exact: true });
-    const confirmClose = async () => {
-      await expect(confirmation).toBeVisible();
-      await confirmation.getByRole('button', { name: 'Close session', exact: true }).click();
-      await expect(confirmation).toBeHidden();
+    const confirmations = [];
+    const confirmClose = async (trigger, accepted = true) => {
+      const count = frames.filter(frame => frame.op === 'closeSession').length;
+      const next = page.waitForEvent('dialog', { timeout: 3000 });
+      const activation = trigger();
+      const dialog = await next;
+      expect(dialog.type()).toBe('confirm');
+      expect(dialog.message()).toBe('Close this session?\n\nHistory is kept. Running work continues.');
+      expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(count);
+      confirmations.push({ type: dialog.type(), message: dialog.message(), accepted });
+      if (accepted) await dialog.accept(); else await dialog.dismiss();
+      await activation;
     };
     for (const [dx, dy, end] of [[-35, 0, 'touchEnd'], [-110, 0, 'touchCancel'], [0, -90, 'touchEnd']]) {
       await drag(savedRow, dx, dy); await release(end);
@@ -107,46 +114,20 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(savedRow).toHaveClass(/closing.*swipe-ready|swipe-ready.*closing/);
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
     await page.screenshot({ path: testInfo.outputPath('swipe-close-phone.png') });
-    // Final-state screenshots miss focus-induced jumps during the opening animation.
-    const openingFrames = page.evaluate(() => new Promise(resolve => {
-      const dialog = document.getElementById('session-close-confirm'), frames = [];
-      const sample = () => {
-        if (dialog.open) {
-          const rect = dialog.querySelector('form').getBoundingClientRect();
-          frames.push({ top: rect.top, bottom: rect.bottom, scrollTop: dialog.scrollTop });
-          if (frames.length === 20) { resolve(frames); return; }
-        }
-        requestAnimationFrame(sample);
-      };
-      requestAnimationFrame(sample);
-    }));
-    await release('touchEnd');
-    await expect(confirmation).toBeVisible();
-    const opening = await openingFrames;
-    const openingPath = testInfo.outputPath('confirmation-opening.json');
-    writeFileSync(openingPath, JSON.stringify(opening));
-    await testInfo.attach('confirmation-opening-frames', { path: openingPath, contentType: 'application/json' });
-    const tops = opening.map(frame => frame.top);
-    expect(Math.max(...tops) - Math.min(...tops), 'confirmation must stay still from its first frame').toBeLessThan(1);
-    expect(opening.every(frame => frame.scrollTop === 0)).toBe(true);
-    await expect(confirmation).toContainText('Untitled session');
-    await expect(confirmation).toContainText('History is kept. Running work continues.');
-    await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await confirmClose(() => release('touchEnd'), false);
+    await expect(page.locator('#session-close-confirm')).toHaveCount(0);
     await expect(savedRow).toHaveCount(1);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
-    expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(0);
-    await page.screenshot({ path: testInfo.outputPath('confirm-close-phone.png') });
-    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).tap();
-    await expect(confirmation).toBeHidden();
-    await expect(savedRow).toHaveCount(1);
-    await drag(savedRow, -110); await release('touchEnd');
-    await expect(confirmation).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(confirmation).toBeHidden();
+    // The first action after Cancel must work without a stuck form or modal overlay.
+    await page.getByRole('button', { name: 'Search sessions', exact: true }).tap({ timeout: 1000 });
+    await expect(page.getByRole('searchbox', { name: 'Search sessions', exact: true })).toBeFocused({ timeout: 1000 });
+    await page.getByRole('button', { name: 'Close search', exact: true }).tap();
+    await drag(savedRow, -110);
+    await confirmClose(() => release('touchEnd'), false);
     await expect(savedRow).toHaveCount(1);
     expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(0);
-    await drag(savedRow, -110); await release('touchEnd');
-    await confirmClose();
+    await drag(savedRow, -110);
+    await confirmClose(() => release('touchEnd'));
     await expect(savedRow).toHaveCount(0);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(0);
     await expect(page.locator('#app')).not.toHaveClass(/viewing/);
@@ -169,16 +150,12 @@ test('closing requires confirmation, syncs across phones and keeps history, with
 
     await page.getByRole('button', { name: 'View all pinned sessions' }).tap();
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
-    await drag(collection.locator('.session'), -110); await release('touchEnd');
-    await expect(confirmation).toContainText('Pinned task');
-    expect((await confirmation.boundingBox()).height).toBeLessThan(320);
-    await page.screenshot({ path: testInfo.outputPath('confirm-close-long-title.png') });
-    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).tap();
-    await expect(confirmation).toBeHidden();
+    await drag(collection.locator('.session'), -110);
+    await confirmClose(() => release('touchEnd'), false);
     await expect(collection).toBeVisible();
     await expect(collection.locator('.session')).toHaveCount(1);
-    await drag(collection.locator('.session'), -110); await release('touchEnd');
-    await confirmClose();
+    await drag(collection.locator('.session'), -110);
+    await confirmClose(() => release('touchEnd'));
     await expect(collection.locator('.session')).toHaveCount(0);
     await expect(collection.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
     await collection.getByRole('button', { name: 'Undo', exact: true }).tap();
@@ -189,15 +166,14 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(feedback).toBeHidden();
     expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(closesBeforeDismiss);
     await page.getByRole('button', { name: 'Close sessions', exact: true }).tap();
-    await drag(rows.filter({ hasText: 'Running task' }), -110); await release('touchEnd');
-    await expect(confirmation).toContainText('Running task');
-    await confirmClose();
+    await drag(rows.filter({ hasText: 'Running task' }), -110);
+    await confirmClose(() => release('touchEnd'));
     await expect(rows.filter({ hasText: 'Running task' })).toHaveCount(0);
     expect(host.service.live.get(running.id).state.status).toBe('working');
     expect(agent.ws.readyState).toBe(1);
     expect(commands).toEqual([]); // No abort, process exit, or other Pi command.
-    await drag(savedRow, -110); await release('touchEnd');
-    await confirmClose();
+    await drag(savedRow, -110);
+    await confirmClose(() => release('touchEnd'));
     await expect(savedRow).toHaveCount(0);
     await expect(feedback.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
     await page.clock.fastForward(8001);
@@ -231,12 +207,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await savedRow.click();
     await page.getByLabel('Session details', { exact: true }).click();
     await page.getByRole('button', { name: 'Close session', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
-    await page.screenshot({ path: testInfo.outputPath('confirm-close-desktop-dark.png') });
-    await confirmation.getByRole('button', { name: 'Close session', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await expect(confirmation).toBeHidden();
+    await confirmClose(() => page.keyboard.press('Enter'));
     await expect(savedRow).toHaveCount(0);
     await expect(page.locator('#empty')).toBeVisible();
     await expect(page.locator('#composer')).toBeHidden();
@@ -250,14 +221,16 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     // A failed disk write leaves the row and history untouched and reports a safe error.
     mkdirSync(closedFile + '.tmp');
     await page.getByLabel('Session details', { exact: true }).click();
-    await page.getByRole('button', { name: 'Close session', exact: true }).click();
-    await confirmClose();
+    await confirmClose(() => page.getByRole('button', { name: 'Close session', exact: true }).click());
     await expect(page.locator('#notice')).toHaveText('Could not save closed sessions. Try again.');
     await expect(savedRow).toHaveCount(1);
     expect(host.service.closedSessions.has(saved.id)).toBe(false);
     rmSync(closedFile + '.tmp', { recursive: true });
     for (const [file, text] of originals) expect(readFileSync(file, 'utf8')).toBe(text);
     expect(errors).toEqual([]);
+    const confirmationPath = testInfo.outputPath('native-confirmations.json');
+    writeFileSync(confirmationPath, JSON.stringify(confirmations));
+    await testInfo.attach('native-confirmations', { path: confirmationPath, contentType: 'application/json' });
     await testInfo.attach('session-close', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
     await testInfo.attach('session-close-frames', { body: JSON.stringify(frames), contentType: 'application/json' });
   } finally {
