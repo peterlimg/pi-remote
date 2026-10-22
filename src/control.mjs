@@ -93,6 +93,23 @@ export async function ensureHost(config = loadConfig(), dir = dataDir(), { idleO
   }
 }
 
+export async function handoffSession(id, config = loadConfig()) {
+  let response;
+  try {
+    response = await fetch('http://127.0.0.1:' + config.port + '/_pi/handoff', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + config.bridgeToken, 'X-Pi-Remote-Session': id },
+      signal: AbortSignal.timeout(10000), redirect: 'error'
+    });
+  } catch (error) {
+    throw new Error('Cannot reach Pi Remote to release this session. Check /pi-remote status, then /reload.', { cause: error });
+  }
+  if (response.status === 404 || response.status === 405) throw new Error('Update and restart Pi Remote on this computer before resuming a phone session here.');
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || 'Pi Remote could not release this session. Check /pi-remote status, then /reload.');
+  }
+}
+
 function shutdownDisconnect(error) {
   for (let cause = error; cause; cause = cause.cause) {
     if (cause.code === 'ECONNRESET' || cause.code === 'ECONNREFUSED') return true;

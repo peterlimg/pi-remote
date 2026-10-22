@@ -7,7 +7,7 @@ import { branchMessages, lastPromptTime, omittedMessages, EXTENSION_INPUT } from
 import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
-import { ensureHost, stopHost, hostStatus } from '../src/control.mjs';
+import { ensureHost, stopHost, hostStatus, handoffSession } from '../src/control.mjs';
 import { pairingUrl, pairingQr, pairingLines, mobileUrl, requestPairingCode } from '../src/pairing.mjs';
 import { progressWidget, wakeHint, connectionScreen, opentunnelInstalled, installOpentunnel, openTunnel, deploymentScreen, checkRelay, progress, relayGone, fullScreen } from '../src/setup.mjs';
 
@@ -218,7 +218,13 @@ export default function remoteExtension(pi: any) {
     }
     try {
       const id = sessionKey(file);
-      lock = acquireSessionLock(join(dataDir(), 'locks'), id, { file, instanceId });
+      const claim = () => acquireSessionLock(join(dataDir(), 'locks'), id, { file, instanceId });
+      try { lock = claim(); }
+      catch (error: any) {
+        if (error.code !== 'ELOCKED') throw error;
+        await handoffSession(id);
+        lock = claim();
+      }
       journal = new CommandJournal(join(dataDir(), 'extension-commands'));
       state = initialState({ id, file, piSessionId: ctx.sessionManager.getSessionId(),
         cwd: ctx.cwd, title: pi.getSessionName?.() || 'Pi · ' + ctx.cwd.split('/').pop(), instanceId });

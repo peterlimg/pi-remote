@@ -54,6 +54,12 @@ Automatic restoration starts one worker at a time to bound cold-start load. Shut
 
 Restart-safe and SDK-resumable are different capabilities. Stopping an already failed, quiescent worker cannot undo its tools, but it does not resolve an unknown tool result. Native checkpoint, history, configuration, and tool-result validation remain in the SDK provider. There is no automatic tool replay or permissive history fallback.
 
+## Resume on the Mac
+
+When a terminal resumes a phone-owned session, the extension requests `POST /_pi/handoff` over authenticated loopback HTTP. The host releases only its own restart-safe worker, including the outstanding-request check. New phone commands are refused while that worker exits. The terminal then claims the normal exclusive lock and reconnects the phone through its bridge. Other terminal owners cannot be displaced.
+
+A working session, open dialog, pending command or unfinished checkpoint refuses the handoff without stopping the worker. Wait for it to settle, then `/reload` or resume again on the Mac. A failed provider turn still requires its existing recovery checks; handoff does not bypass them.
+
 ## Safe restart path
 
 ```text
@@ -90,3 +96,5 @@ This is an E2E test of the real host, WebSocket authentication, mobile Chromium,
 The replay gates permission, tool completion, checkpoint saving, and final settlement independently. It delays one real HTTP status response beyond the ten-second client timeout and requires both queued restart jobs to survive, remain blocked by permission, and later complete. It also checks both receipt orders, in-flight input, generic-provider settlement, rejected requests, concurrent restart jobs, authentication refusal, two complete host restarts, unchanged history, no completed-tool replay, and fail-closed recovery after a forced interruption. Its artifact includes the observed lifecycle transition trace. CI runs it once in the browser job.
 
 For a historical-controller counterexample, `PI_TEST_RESTART_SCRIPT` can point this E2E at a captured older restart script. The test must detect a host stopping while permission or tool work is outstanding. Live SDK acceptance remains a separate check and must not be inferred from the replay test.
+
+`node test/terminal-handoff-e2e.mjs` uses real Pi processes and a local input/command fixture, without model calls. It checks idle handoff, continued local and phone input, busy-command refusal and retry, exclusive terminal ownership, control authentication and preserved history. It uses the same installed Pi entry as `test/pi-smoke.mjs`, optionally selected with `PI_REMOTE_SMOKE_PI_ENTRY`. CI runs it in the Pi smoke job.

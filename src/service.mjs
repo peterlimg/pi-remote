@@ -347,6 +347,14 @@ export class SessionService extends EventEmitter {
       return { resumed: true };
     } catch (e) { await item.close(); throw e; }
   }
+  async handoff(id) {
+    if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) throw Object.assign(new Error('Invalid session ID.'), { code: 'EHANDOFF' });
+    if (this.stopping) throw Object.assign(new Error('Pi Remote is stopping. Try again shortly.'), { code: 'EHANDOFF' });
+    const item = this.live.get(id);
+    if (!item?.managed) throw Object.assign(new Error('This session is not owned by this host. Close its other Pi terminal before resuming here.'), { code: 'EHANDOFF' });
+    await item.handoff();
+    return { released: true };
+  }
   async answer(id, requestId, answer) {
     return this.journal.execute(id, requestId, { type: 'answer', answer }, async () => {
       const item = this.live.get(id);

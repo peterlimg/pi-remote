@@ -95,6 +95,7 @@ export class WorkerSession extends LiveSession {
   restore(info, history) { this.restoreState(info, history); this.notify(); }
   async dispatch(command) {
     const worker = this.worker;
+    if (this.handingOff) throw new Error('This session is moving to a Pi terminal. Try again shortly.');
     if (!worker) throw new Error('Session is not connected. Resume a saved session first.');
     if (['prompt', 'steer', 'followUp'].includes(command.type) && !command.text.trimStart().startsWith('/')) {
       this.advance({ type: 'request_started' });
@@ -125,6 +126,12 @@ export class WorkerSession extends LiveSession {
     this.worker.process.stdin.write(JSON.stringify(response) + '\n');
     this.state.dialog = undefined; this.notify();
     return { accepted: true };
+  }
+  async handoff() {
+    if (this.handingOff || !this.managed?.restartSafe) throw Object.assign(new Error('This session is still working or saving a checkpoint. Wait for it to finish, then /reload or resume it again.'), { code: 'EHANDOFF' });
+    // Refuse new phone commands between the idle check and the worker's exit.
+    this.handingOff = true;
+    try { await this.close(); } finally { this.handingOff = false; }
   }
   async close() { try { await this.worker?.close(); } finally { this.lock?.release(); } }
 }

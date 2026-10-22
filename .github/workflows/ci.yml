@@ -52,6 +52,7 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm install --no-save @earendil-works/pi-coding-agent@0.85.1
       - run: node test/pi-smoke.mjs
+      - run: node test/terminal-handoff-e2e.mjs
   claude-sdk-provider:
     runs-on: ubuntu-latest
     defaults:

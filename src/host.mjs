@@ -30,7 +30,7 @@ export async function startHost(options = {}) {
     relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
     busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
-    if (req.url !== '/_pi/remote' && req.url !== '/_pi/pair') { serveStatic(req, res); return; }
+    if (!['/_pi/remote', '/_pi/pair', '/_pi/handoff'].includes(req.url)) { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Connection', 'close');
     if (req.headers.origin || !equalSecret(req.headers.authorization, 'Bearer ' + config.bridgeToken)) {
@@ -39,6 +39,18 @@ export async function startHost(options = {}) {
     if (req.url === '/_pi/pair') {
       if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(pairing.issue())); return;
+    }
+    if (req.url === '/_pi/handoff') {
+      if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+      void service.handoff(req.headers['x-pi-remote-session']).then(value => {
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value));
+      }, error => {
+        const expected = error.code === 'EHANDOFF';
+        if (!expected) logStop('handoff failed: ' + error.message);
+        res.writeHead(expected ? 409 : 500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: expected ? error.message : 'Could not release this session. Try again.' }));
+      });
+      return;
     }
     if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
     if (req.method === 'DELETE' && req.headers['x-pi-remote-idle-only'] === '1' && service.busyWorkers) {

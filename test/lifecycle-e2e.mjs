@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, devices, expect } from '@playwright/test';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
-import { hostStatus, stopHost, ensureHost } from '../src/control.mjs';
+import { hostStatus, stopHost, ensureHost, handoffSession } from '../src/control.mjs';
 import { restartAndResume } from '../scripts/restart-and-resume.mjs';
 import { sessionKey, processExists } from '../src/locks.mjs';
 
@@ -65,6 +65,7 @@ try {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   page = await context.newPage();
   await page.goto(config.publicUrl);
+  await page.getByText('Paste a private link instead', { exact: true }).click();
   await page.getByLabel('Private login link').fill(config.clientToken);
   await page.getByRole('button', { name: 'Connect to computer' }).click();
   await expect(page.locator('#connection')).toHaveText('Computer connected');
@@ -86,6 +87,7 @@ try {
   await send('pending');
   await expect(page.locator('#dialog')).toContainText('Allow replay probe?');
   assert.equal((await state()).phase, 'input');
+  await assert.rejects(handoffSession(id, config), /still working or saving a checkpoint/);
   const [handleRequest] = host.http.listeners('request');
   assert.equal(host.http.listeners('request').length, 1);
   let delayedStatus = false;
@@ -115,6 +117,7 @@ try {
   assert.equal((await host.service.command(id, randomUUID(), { type: 'steer', text: 'Recorded in-flight input' })).ok, true);
   assert.equal((await state()).phase, 'tools');
   assert.equal((await state()).pendingTools, 1);
+  await assert.rejects(handoffSession(id, config), /still working or saving a checkpoint/);
   result.inFlightInputPreservesPendingTools = true;
   await delay(300);
   assert.equal(host.status().closing, false);
@@ -124,14 +127,17 @@ try {
   await expect.poll(async () => (await state()).phase).toBe('checkpointing');
   assert.equal(host.service.read(id).status, 'idle');
   assert.equal((await state()).restartSafe, false);
+  await assert.rejects(handoffSession(id, config), /still working or saving a checkpoint/);
   await delay(300);
   assert.equal(host.status().closing, false);
   result.agentEndIsNotRestartSafe = true;
   writeFileSync(join(scratch, 'checkpoint-save'), 'done');
   await expect.poll(async () => (await state()).waitFor).toEqual(['settled']);
+  await assert.rejects(handoffSession(id, config), /still working or saving a checkpoint/);
   await delay(300);
   assert.equal(host.status().closing, false);
   result.checkpointAloneIsNotRestartSafe = true;
+  result.macHandoffRefusedUntilCheckpointAndSettlement = true;
   writeFileSync(join(scratch, 'turn-settle'), 'done');
   result.stage = 'restart-and-restore';
   await expect.poll(async () => { try { const s = await hostStatus(config); return s && s.pid !== oldPid && !s.closing; } catch { return false; } }, { timeout: 15000 }).toBe(true);
