@@ -181,6 +181,11 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session.dragging.closing::before { content: 'Close'; right: auto; left: calc(100% + 4px); }
 .session.swipe-ready::before { background: var(--accent); color: var(--bg); }
 .session.closing.swipe-ready::before { background: var(--error); }
+.session-close-sheet { height: auto; max-width: 420px; max-height: 100%; overflow: auto; gap: 12px; padding: 20px 20px max(20px, var(--safe-bottom)); font-size: 16px; }
+.session-close-sheet p { margin: 0; overflow-wrap: anywhere; }
+#session-close-name { font-weight: 600; }
+.session-close-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#session-close-confirm-button { background: var(--error); }
 .session-feedback { position: sticky; bottom: 70px; z-index: 1; display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--muted); box-shadow: 0 2px 8px rgb(0 0 0 / .12); font-size: 13px; }
 .session-feedback span { flex: 1; min-width: 0; }
 .session-feedback button { flex-shrink: 0; }

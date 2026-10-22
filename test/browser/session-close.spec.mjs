@@ -9,7 +9,7 @@ import { acquireLock, sessionKey } from '../../src/locks.mjs';
 import { readSession } from '../../src/catalog.mjs';
 import { socket, until } from '../helpers.mjs';
 
-test('swipe closes sessions across phones without deleting history or stopping work, with undo and search recovery', async ({ page, browser }, testInfo) => {
+test('closing requires confirmation, syncs across phones and keeps history, with expiring feedback and recovery', async ({ page, browser }, testInfo) => {
   test.setTimeout(60000);
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-close-')), root = join(dir, 'sessions');
   mkdirSync(root);
@@ -55,6 +55,7 @@ test('swipe closes sessions across phones without deleting history or stopping w
     for (const values of [{ sessionId: '../bad', closed: true }, { sessionId: saved.id, closed: 'yes' }, { sessionId: '0'.repeat(64), closed: true }]) {
       expect((await peer.request('closeSession', values)).ok).toBe(false);
     }
+    await page.clock.install();
     await page.goto(url + '/#token=' + config.clientToken);
     const recent = page.getByRole('region', { name: 'Recent', exact: true });
     await expect(recent.locator('.session')).toHaveCount(20);
@@ -73,6 +74,12 @@ test('swipe closes sessions across phones without deleting history or stopping w
       });
     };
     const release = type => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [] });
+    const confirmation = page.getByRole('dialog', { name: 'Close session?', exact: true });
+    const confirmClose = async () => {
+      await expect(confirmation).toBeVisible();
+      await confirmation.getByRole('button', { name: 'Close session', exact: true }).click();
+      await expect(confirmation).toBeHidden();
+    };
     for (const [dx, dy, end] of [[-35, 0, 'touchEnd'], [-110, 0, 'touchCancel'], [0, -90, 'touchEnd']]) {
       await drag(savedRow, dx, dy); await release(end);
       await expect(page.locator('.session.dragging')).toHaveCount(0);
@@ -93,6 +100,25 @@ test('swipe closes sessions across phones without deleting history or stopping w
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
     await page.screenshot({ path: testInfo.outputPath('swipe-close-phone.png') });
     await release('touchEnd');
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText('Untitled session');
+    await expect(confirmation).toContainText('History is kept and active work continues.');
+    await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await expect(savedRow).toHaveCount(1);
+    await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
+    expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(0);
+    await page.screenshot({ path: testInfo.outputPath('confirm-close-phone.png') });
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).tap();
+    await expect(confirmation).toBeHidden();
+    await expect(savedRow).toHaveCount(1);
+    await drag(savedRow, -110); await release('touchEnd');
+    await expect(confirmation).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toBeHidden();
+    await expect(savedRow).toHaveCount(1);
+    expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(0);
+    await drag(savedRow, -110); await release('touchEnd');
+    await confirmClose();
     await expect(savedRow).toHaveCount(0);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(0);
     await expect(page.locator('#app')).not.toHaveClass(/viewing/);
@@ -102,26 +128,50 @@ test('swipe closes sessions across phones without deleting history or stopping w
     await page.screenshot({ path: testInfo.outputPath('closed-session-phone.png') });
     expect(JSON.parse(readFileSync(closedFile, 'utf8'))).toEqual([saved.id]);
     expect(statSync(closedFile).mode & 0o777).toBe(0o600);
+    await page.clock.fastForward(4000);
     await page.getByRole('button', { name: 'Undo', exact: true }).tap();
     await expect(savedRow).toHaveCount(1);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
+    const feedback = page.locator('#session-feedback');
+    await expect(feedback).toContainText('Session reopened.');
+    await page.clock.fastForward(4001);
+    await expect(feedback).toBeVisible(); // Replacing a toast resets its expiry.
+    await page.clock.fastForward(4000);
+    await expect(feedback).toBeHidden();
 
     await page.getByRole('button', { name: 'View all pinned sessions' }).tap();
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await drag(collection.locator('.session'), -110); await release('touchEnd');
+    await expect(confirmation).toContainText('Pinned task');
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).tap();
+    await expect(confirmation).toBeHidden();
+    await expect(collection).toBeVisible();
+    await expect(collection.locator('.session')).toHaveCount(1);
+    await drag(collection.locator('.session'), -110); await release('touchEnd');
+    await confirmClose();
     await expect(collection.locator('.session')).toHaveCount(0);
     await expect(collection.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
     await collection.getByRole('button', { name: 'Undo', exact: true }).tap();
     await expect(collection.locator('.session')).toHaveCount(1);
     expect(host.service.pins.has(pinned.id)).toBe(true);
+    const closesBeforeDismiss = frames.filter(frame => frame.op === 'closeSession').length;
+    await collection.getByRole('button', { name: 'Dismiss', exact: true }).tap();
+    await expect(feedback).toBeHidden();
+    expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(closesBeforeDismiss);
     await page.getByRole('button', { name: 'Close sessions', exact: true }).tap();
     await drag(rows.filter({ hasText: 'Running task' }), -110); await release('touchEnd');
+    await expect(confirmation).toContainText('Running task');
+    await confirmClose();
     await expect(rows.filter({ hasText: 'Running task' })).toHaveCount(0);
     expect(host.service.live.get(running.id).state.status).toBe('working');
     expect(agent.ws.readyState).toBe(1);
     expect(commands).toEqual([]); // No abort, process exit, or other Pi command.
     await drag(savedRow, -110); await release('touchEnd');
+    await confirmClose();
     await expect(savedRow).toHaveCount(0);
+    await expect(feedback.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+    await page.clock.fastForward(8001);
+    await expect(feedback).toBeHidden();
     host.service.scan();
     await page.reload();
     await expect(savedRow).toHaveCount(0);
@@ -152,6 +202,11 @@ test('swipe closes sessions across phones without deleting history or stopping w
     await page.getByLabel('Session details', { exact: true }).click();
     await page.getByRole('button', { name: 'Close session', exact: true }).focus();
     await page.keyboard.press('Enter');
+    await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath('confirm-close-desktop-dark.png') });
+    await confirmation.getByRole('button', { name: 'Close session', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(confirmation).toBeHidden();
     await expect(savedRow).toHaveCount(0);
     await expect(page.locator('#empty')).toBeVisible();
     await expect(page.locator('#composer')).toBeHidden();
@@ -166,6 +221,7 @@ test('swipe closes sessions across phones without deleting history or stopping w
     mkdirSync(closedFile + '.tmp');
     await page.getByLabel('Session details', { exact: true }).click();
     await page.getByRole('button', { name: 'Close session', exact: true }).click();
+    await confirmClose();
     await expect(page.locator('#notice')).toHaveText('Could not save closed sessions. Try again.');
     await expect(savedRow).toHaveCount(1);
     expect(host.service.closedSessions.has(saved.id)).toBe(false);

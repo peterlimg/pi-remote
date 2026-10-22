@@ -465,7 +465,7 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   resetSwipe();
-  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close();
+  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close(); $('session-close-confirm').close();
   videoCache?.clear(); videoCache = undefined;
   clearTimeout(homeScreenTimer); homeScreenLogin = false;
   $('home-screen-hint').hidden = true; $('access-warning').hidden = true;
@@ -674,15 +674,32 @@ async function togglePin(id) {
   try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
   catch (e) { notice(e.message, id); }
 }
+let sessionFeedbackTimer;
 function sessionFeedback(text, undoId) {
+  clearTimeout(sessionFeedbackTimer);
   const box = $('session-feedback'); box.replaceChildren(); box.hidden = !text;
   if (!text) return;
   box.append(el('span', text));
   if (undoId) {
     const undo = el('button', 'Undo', 'quiet'); undo.type = 'button';
-    undo.addEventListener('click', () => closeSession(undoId, false)); box.append(undo);
+    undo.addEventListener('click', () => { sessionFeedback(''); closeSession(undoId, false); }); box.append(undo);
   }
+  const dismiss = el('button', 'Dismiss', 'quiet'); dismiss.type = 'button';
+  dismiss.addEventListener('click', () => sessionFeedback('')); box.append(dismiss);
+  sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 8000);
 }
+function confirmCloseSession(id) {
+  const item = sessions.find(item => item.id === id) || (selected === id ? selectedSummary : undefined);
+  const dialog = $('session-close-confirm');
+  dialog.dataset.sessionId = id; dialog.returnValue = '';
+  $('session-close-name').textContent = sessionTitle(item?.title, cache.get(id)?.messages);
+  dialog.showModal();
+}
+$('session-close-confirm').addEventListener('click', event => { if (event.target === $('session-close-confirm')) $('session-close-confirm').close(); });
+$('session-close-confirm').addEventListener('close', () => {
+  const dialog = $('session-close-confirm');
+  if (dialog.returnValue === 'close') closeSession(dialog.dataset.sessionId);
+});
 async function closeSession(id, closed = true) {
   try {
     await request('closeSession', { sessionId: id, closed });
@@ -701,7 +718,7 @@ async function closeSession(id, closed = true) {
     sessionFeedback(closed ? 'Session closed. History is kept; active work continues.' : 'Session reopened.', closed ? id : undefined);
   } catch (e) { sessionFeedback(e.message); if (selected === id) notice(e.message, id); }
 }
-$('session-close').addEventListener('click', () => closeSession(selected));
+$('session-close').addEventListener('click', () => confirmCloseSession(selected));
 // Swipe right to pin or unpin, left to close. Vertical drags still scroll the list.
 const rowSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
@@ -737,7 +754,7 @@ function endRowSwipe(commit = true) {
     swipedAt = Date.now();
     setTimeout(() => swipe.row.classList.remove('dragging', 'closing'), duration);
     if (commit && Math.abs(swipe.dx) > rowSwipeDistance) {
-      if (swipe.dx < 0) closeSession(swipe.row.dataset.id);
+      if (swipe.dx < 0) confirmCloseSession(swipe.row.dataset.id);
       else togglePin(swipe.row.dataset.id);
     }
   }
