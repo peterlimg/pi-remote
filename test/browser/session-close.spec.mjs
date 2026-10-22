@@ -9,7 +9,7 @@ import { acquireLock, sessionKey } from '../../src/locks.mjs';
 import { readSession } from '../../src/catalog.mjs';
 import { socket, until } from '../helpers.mjs';
 
-test('closing requires confirmation, syncs across phones and keeps history, with expiring feedback and recovery', async ({ page, browser }, testInfo) => {
+test('closing requires confirmation, syncs across phones and keeps history, with expiring feedback and recovery', async ({ page, browser, browserName }, testInfo) => {
   test.setTimeout(60000);
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-close-')), root = join(dir, 'sessions');
   mkdirSync(root);
@@ -25,7 +25,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     writeFileSync(file, text); originals.set(file, text);
     return { file, id: sessionKey(file) };
   };
-  const saved = seed('Untitled session', 0), pinned = seed('Pinned task', 1), running = seed('Running task', 2);
+  const saved = seed('Untitled session', 0), pinned = seed('Pinned task with a long session title that should wrap without stretching the confirmation', 1), running = seed('Running task', 2);
   for (let i = 3; i < 27; i++) seed('Recent task ' + i, i);
   writeFileSync(join(dir, 'pinned-sessions.json'), JSON.stringify([pinned.id]));
   const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345' };
@@ -64,16 +64,24 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await other.goto(url + '/#token=' + config.clientToken);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
 
-    const cdp = await page.context().newCDPSession(page);
-    const drag = async (row, dx, dy = 0) => {
-      await row.click({ trial: true });
-      const box = await row.boundingBox(), x = box.x + box.width * (dx < 0 ? .75 : .25), y = box.y + box.height / 2;
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-      for (const fraction of [.2, .6, 1]) await cdp.send('Input.dispatchTouchEvent', {
-        type: 'touchMove', touchPoints: [{ x: x + dx * fraction, y: y + dy * fraction }]
-      });
+    const cdp = browserName === 'chromium' ? await page.context().newCDPSession(page) : undefined;
+    let touchTarget;
+    const touch = async (type, points) => {
+      if (cdp) await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+      else await touchTarget.evaluate((row, { type, points }) => {
+        // WebKit automation has no constructible Touch, so simulate only the input the gesture reads.
+        row.dispatchEvent(Object.assign(new Event(type.toLowerCase(), { bubbles: true, cancelable: true }), {
+          touches: points.map(({ x, y }) => ({ clientX: x, clientY: y }))
+        }));
+      }, { type, points });
     };
-    const release = type => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [] });
+    const drag = async (row, dx, dy = 0) => {
+      await row.click({ trial: true }); touchTarget = row;
+      const box = await row.boundingBox(), x = box.x + box.width * (dx < 0 ? .75 : .25), y = box.y + box.height / 2;
+      await touch('touchStart', [{ x, y }]);
+      for (const fraction of [.2, .6, 1]) await touch('touchMove', [{ x: x + dx * fraction, y: y + dy * fraction }]);
+    };
+    const release = type => touch(type, []);
     const confirmation = page.getByRole('dialog', { name: 'Close session?', exact: true });
     const confirmClose = async () => {
       await expect(confirmation).toBeVisible();
@@ -99,10 +107,30 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(savedRow).toHaveClass(/closing.*swipe-ready|swipe-ready.*closing/);
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
     await page.screenshot({ path: testInfo.outputPath('swipe-close-phone.png') });
+    // Final-state screenshots miss focus-induced jumps during the opening animation.
+    const openingFrames = page.evaluate(() => new Promise(resolve => {
+      const dialog = document.getElementById('session-close-confirm'), frames = [];
+      const sample = () => {
+        if (dialog.open) {
+          const rect = dialog.querySelector('form').getBoundingClientRect();
+          frames.push({ top: rect.top, bottom: rect.bottom, scrollTop: dialog.scrollTop });
+          if (frames.length === 20) { resolve(frames); return; }
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    }));
     await release('touchEnd');
     await expect(confirmation).toBeVisible();
+    const opening = await openingFrames;
+    const openingPath = testInfo.outputPath('confirmation-opening.json');
+    writeFileSync(openingPath, JSON.stringify(opening));
+    await testInfo.attach('confirmation-opening-frames', { path: openingPath, contentType: 'application/json' });
+    const tops = opening.map(frame => frame.top);
+    expect(Math.max(...tops) - Math.min(...tops), 'confirmation must stay still from its first frame').toBeLessThan(1);
+    expect(opening.every(frame => frame.scrollTop === 0)).toBe(true);
     await expect(confirmation).toContainText('Untitled session');
-    await expect(confirmation).toContainText('History is kept and active work continues.');
+    await expect(confirmation).toContainText('History is kept. Running work continues.');
     await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
     await expect(savedRow).toHaveCount(1);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
@@ -143,6 +171,8 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await drag(collection.locator('.session'), -110); await release('touchEnd');
     await expect(confirmation).toContainText('Pinned task');
+    expect((await confirmation.boundingBox()).height).toBeLessThan(320);
+    await page.screenshot({ path: testInfo.outputPath('confirm-close-long-title.png') });
     await confirmation.getByRole('button', { name: 'Cancel', exact: true }).tap();
     await expect(confirmation).toBeHidden();
     await expect(collection).toBeVisible();
