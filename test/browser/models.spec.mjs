@@ -39,26 +39,28 @@ test('/model switches only the selected session without sending a prompt', async
   await page.getByRole('option', { name: /\/model/ }).tap();
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(picker.getByRole('button', { pressed: true })).toContainText('Claude Sonnet');
-  expect(await page.locator('dialog[open]').count()).toBe(0);
-  const menuBounds = await picker.boundingBox(), composerBounds = await page.locator('#composer').boundingBox();
-  expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
-  expect(menuBounds.width).toBeLessThanOrEqual(Math.min(composerBounds.width, 320) + 2);
-  expect(menuBounds.y + menuBounds.height).toBeLessThan(composerBounds.y);
+  const dialog = page.getByRole('dialog', { name: 'Model settings' });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(node => node.matches(':modal'))).toBe(true);
+  const menuBounds = await picker.boundingBox();
+  expect(menuBounds.x).toBe(0);
+  expect(menuBounds.width).toBe(page.viewportSize().width);
+  expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(page.viewportSize().height);
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
-  await expect(picker.locator('.picker-option')).toHaveCount(1);
-  await expect(picker.locator('.picker-option')).toContainText('GPT-5.4');
+  await expect(picker.locator('#picker-options .picker-option')).toHaveCount(1);
+  await expect(picker.locator('#picker-options .picker-option')).toContainText('GPT-5.4');
   await page.getByRole('searchbox', { name: 'Search models' }).fill('not-a-model');
   await expect(page.locator('#picker-help')).toContainText('No matching models');
   await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#model')).toHaveText('Opus 4.6');
+  await expect(page.locator('#model-name')).toHaveText('Opus 4.6');
   expect(commands.map(p => ({ sessionId: p.sessionId, command: p.command }))).toEqual([
     { sessionId: 'Alpha', command: { type: 'setModel', provider: 'test', modelId: 'org/second' } }
   ]);
   await prompt.fill('/model test/first');
   await page.locator('#send').click();
-  await expect(page.locator('#model')).toHaveText('Sonnet 4.6');
+  await expect(page.locator('#model-name')).toHaveText('Sonnet 4.6');
   await expect(prompt).toHaveValue('');
   fail = true;
   await prompt.fill('Keep this draft');
@@ -69,7 +71,7 @@ test('/model switches only the selected session without sending a prompt', async
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#picker-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
-  await expect(page.locator('#model')).toHaveText('Sonnet 4.6');
+  await expect(page.locator('#model-name')).toHaveText('Sonnet 4.6');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
@@ -79,7 +81,7 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(picker).toBeVisible();
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#model')).toHaveText('first');
+  await expect(page.locator('#model-name')).toHaveText('first');
   expect(commands.every(p => p.command.type === 'setModel' && p.sessionId === 'Alpha')).toBe(true);
 });
 
@@ -116,7 +118,7 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   await open(2);
   client.send(JSON.stringify({ type: 'response', id: requests[1].id, ok: true, value: { models: [] } }));
   await expect(page.locator('#picker-help')).toContainText('No models available');
-  await expect(page.locator('.picker-option')).toHaveCount(0);
+  await expect(page.locator('#picker-options .picker-option')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
   await open(3);
   client.send(JSON.stringify({ type: 'response', id: requests[2].id, ok: false, error: 'Pi disconnected' }));
@@ -127,7 +129,7 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
     { provider: 'test', id: 'current', name: 'Current model' },
     ...Array.from({ length: 40 }, (_, i) => ({ provider: 'test', id: `model-${i}`, name: `Model ${i}` }))
   ] } }));
-  await expect(page.locator('.picker-option')).toHaveCount(41);
+  await expect(page.locator('#picker-options .picker-option')).toHaveCount(41);
   await page.setViewportSize({ width: 390, height: 350 });
   await expect.poll(async () => {
     const bounds = await page.locator('#settings-picker').boundingBox();
@@ -138,6 +140,6 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   await page.getByRole('button', { name: /Current model/ }).click();
   await expect(page.locator('#settings-picker')).toBeHidden();
   await open(5);
-  await expect(page.locator('.picker-option')).toHaveCount(41);
+  await expect(page.locator('#picker-options .picker-option')).toHaveCount(41);
   await expect(page.locator('#picker-help')).toHaveText('');
 });

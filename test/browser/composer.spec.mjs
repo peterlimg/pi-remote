@@ -42,12 +42,13 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Review changes/ }).click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
-  await expect(page.locator('#reasoning-value')).toHaveText('Medium');
+  await expect(page.locator('#model-effort')).toHaveText('Medium');
+  await expect(page.locator('#reasoning-control')).toBeHidden();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
   await expect(page.locator('#abort')).toBeHidden();
   await expect(page.locator('#commands')).toBeEnabled();
   const rowFits = async () => {
-    const controls = await page.locator('#attach, #model, #reasoning-control, #usage-meter, #commands, #abort:not([hidden]), #send:not([hidden])')
+    const controls = await page.locator('#attach, #model, #usage-meter, #commands, #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
       }).sort((a, b) => a.y - b.y || a.x - b.x));
@@ -69,6 +70,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   state.fastMode = true; snapshot();
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeVisible();
   await rowFits();
+  expect(await page.locator('#model-name').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('composer-mobile.png') });
   state.status = 'working'; snapshot();
   await expect(page.locator('#abort')).toBeVisible();
@@ -99,7 +101,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
   await expect(page.locator('#send')).toBeDisabled();
   await expect(page.locator('#commands')).toBeDisabled();
-  await expect(page.locator('#reasoning-control')).toBeDisabled();
+  await expect(page.locator('#model')).toBeDisabled();
   await expect(page.locator('#composer-hint')).toBeVisible();
   await page.setViewportSize({ width: 320, height: 568 });
   expect((await page.locator('#send').boundingBox()).x + 44).toBeLessThanOrEqual(312);

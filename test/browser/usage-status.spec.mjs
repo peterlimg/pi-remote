@@ -56,7 +56,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
     await expect(pane).toBeHidden();
     await page.locator('#model').click();
     await page.getByRole('button', { name: 'Second', exact: true }).click();
-    await expect(page.locator('#model')).toHaveText('Second');
+    await expect(page.locator('#model-name')).toHaveText('Second');
     expect(host.service.read(id).model).toBe('test/org/second');
     await meter.click();
     await expect(pane.getByRole('progressbar', { name: 'Weekly limit', exact: true })).toHaveAttribute('value', '9');

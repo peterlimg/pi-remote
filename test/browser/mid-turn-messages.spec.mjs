@@ -63,7 +63,7 @@ test('mid-turn text appears and sends immediately without queue or steering cont
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme: scheme });
     await expect(page.locator('#send')).toBeInViewport();
-    const send = await page.locator('#send').boundingBox(), reasoning = await page.locator('#reasoning-control').boundingBox();
+    const send = await page.locator('#send').boundingBox(), reasoning = await page.locator('#model').boundingBox();
     const actions = await page.locator('.composer-actions').boundingBox();
     expect(send.height).toBeGreaterThanOrEqual(44);
     if (Math.abs(reasoning.y - actions.y) < 1) expect(reasoning.x + reasoning.width).toBeLessThanOrEqual(actions.x + 1);

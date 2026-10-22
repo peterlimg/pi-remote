@@ -87,8 +87,6 @@ window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
 window.addEventListener('pageshow', fitViewport);
-// iOS Safari ignores user-scalable=no; its pinch arrives as gesture events.
-for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, event => event.preventDefault(), { passive: false });
 fitViewport();
 const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
@@ -175,6 +173,20 @@ window.addEventListener('hashchange', () => {
 });
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
 const COPIED_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
+function copyButton(text, label, className) {
+  const button = el('button', undefined, 'quiet ' + className); button.type = 'button';
+  button.setAttribute('aria-label', label); button.title = label; button.innerHTML = COPY_ICON;
+  button.addEventListener('click', async () => {
+    const sessionId = selected;
+    haptic(); $('copy-status').textContent = '';
+    try { await navigator.clipboard.writeText(text); }
+    catch { notice('Could not copy. Select the text and copy it manually.', sessionId); return; }
+    button.innerHTML = COPIED_ICON; button.setAttribute('aria-label', 'Copied'); button.title = 'Copied';
+    $('copy-status').textContent = label === 'Copy code' ? 'Code copied.' : 'Message copied.';
+    setTimeout(() => { button.innerHTML = COPY_ICON; button.setAttribute('aria-label', label); button.title = label; }, 1500);
+  });
+  return button;
+}
 // iOS Safari has no navigator.vibrate; toggling a hidden switch input (iOS 18+) plays a system haptic.
 function haptic() {
   if (navigator.vibrate?.(10)) return;
@@ -671,8 +683,12 @@ $('session-collection').addEventListener('close', () => {
 });
 const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4h5l-.75 4.5L17 11.5V13h-4v5l-1 1-1-1v-5H7v-1.5l3.25-3L9.5 4Z"/></svg>';
 async function togglePin(id) {
-  try { await request('pin', { sessionId: id, pinned: !sessions.find(item => item.id === id)?.pinned }); }
-  catch (e) { notice(e.message, id); }
+  const item = sessions.find(item => item.id === id) || (selected === id ? selectedSummary : undefined);
+  try {
+    const { pinned } = await request('pin', { sessionId: id, pinned: !item?.pinned });
+    // Pinning can move the selected row outside the overview window.
+    if (selected === id && selectedSummary) { selectedSummary.pinned = pinned; updateControls(); }
+  } catch (e) { notice(e.message, id); }
 }
 let sessionFeedbackTimer;
 function sessionFeedback(text, undoId) {
@@ -719,17 +735,21 @@ async function closeSession(id, closed = true) {
   } catch (e) { sessionFeedback(e.message); if (selected === id) notice(e.message, id); }
 }
 $('session-close').addEventListener('click', () => confirmCloseSession(selected));
+$('session-pin').addEventListener('click', () => {
+  document.querySelector('.session-info').open = false;
+  togglePin(selected);
+});
 // Swipe right to pin or unpin, left to close. Vertical drags still scroll the list.
 const rowSwipeDistance = 72;
 let rowSwipe, swipedAt = 0;
 for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchstart', event => {
   endRowSwipe(false);
   const row = event.target.closest('.session'), touch = event.touches[0];
-  rowSwipe = row && event.touches.length === 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
+  rowSwipe = row && event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 ? { row, x: touch.clientX, y: touch.clientY, dx: 0 } : undefined;
 }, { passive: true });
 for (const list of [$('sessions'), $('collection-sessions')]) list.addEventListener('touchmove', event => {
   if (!rowSwipe) return;
-  if (event.touches.length !== 1) { endRowSwipe(false); return; }
+  if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) { endRowSwipe(false); return; }
   const touch = event.touches[0], dx = touch.clientX - rowSwipe.x, dy = touch.clientY - rowSwipe.y;
   if (!rowSwipe.active) {
     if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { endRowSwipe(false); return; }
@@ -1287,6 +1307,16 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
         body.innerHTML = markdown.render(splitVideoMessage(message.text || '', message.role).text);
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+        for (const pre of body.querySelectorAll('pre')) {
+          const code = pre.querySelector('code');
+          if (!code) continue;
+          const block = el('div', undefined, 'code-block'), header = el('div', undefined, 'code-header');
+          const language = [...code.classList].find(name => name.startsWith('language-'))?.slice(9);
+          if (language) header.append(el('span', language));
+          header.append(copyButton(code.textContent, 'Copy code', 'copy-code'));
+          pre.tabIndex = 0; pre.setAttribute('aria-label', language ? language + ' code' : 'Code');
+          pre.before(block); block.append(header, pre);
+        }
       }
       if (message.role === 'user') {
         appendThreadImages(article, message, localImages.get(message.id));
@@ -1295,18 +1325,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (body.textContent) article.append(body);
       if (message.role !== 'user') appendThreadImages(article, message);
       if (message.role === 'assistant') appendThreadVideos(article, message, undefined, keepVideos);
-      if (message.role === 'assistant' && message.text) {
-        const copy = el('button', undefined, 'quiet copy-message'); copy.type = 'button';
-        copy.setAttribute('aria-label', 'Copy message'); copy.title = 'Copy message';
-        copy.innerHTML = COPY_ICON;
-        copy.addEventListener('click', async () => {
-          haptic();
-          try { await navigator.clipboard.writeText(message.text); } catch { return; }
-          copy.innerHTML = COPIED_ICON; copy.setAttribute('aria-label', 'Copied');
-          setTimeout(() => { copy.innerHTML = COPY_ICON; copy.setAttribute('aria-label', 'Copy message'); }, 1500);
-        });
-        article.append(copy);
-      }
+      if (message.role === 'assistant' && message.text) article.append(copyButton(message.text, 'Copy message', 'copy-message'));
       if (failed) {
         const error = el('p', 'Reply failed. Try again.', 'message-error');
         error.setAttribute('role', 'alert'); article.append(error);
@@ -1343,11 +1362,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       return `${index ? verb[0].toLowerCase() + verb.slice(1) : verb} ${count} ${count === 1 ? noun : plural || noun + 's'}`;
     });
     const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
-    if (group.tools.some(tool => ['working', 'pending'].includes(tool.status))
-      || (state.status === 'working' && group === activityGroups.at(-1))) {
-      // Negative delay keeps the breathing phase continuous when the row re-renders.
-      label.classList.add('tool-activity-live'); label.style.animationDelay = `-${Date.now() % 2400}ms`;
-    }
     const running = group.tools.findLast(tool => tool.status === 'working' && tool.preview) || group.tools.findLast(tool => tool.status === 'working');
     const recent = running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
       ? group.tools.findLast(tool => ['done', 'error'].includes(tool.status)) : undefined);
@@ -1397,26 +1411,15 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   updateControls();
   updateScrollButton();
 }
-let activityLabelAt = 0;
 function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
   const active = connected && !historyWindow && state?.status === 'working', compacting = state?.compacting === true;
   const retrying = state ? replyAttempts(state).retrying : false;
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
-    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
-      'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
-      'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
-      'Contemplating…', 'Deliberating…', 'Musing…', 'Ruminating…', 'Turning the gears…', 'Untangling it…',
-      'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
-      'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
-      .filter(text => text !== label.textContent);
-    label.textContent = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : labels[Math.floor(Math.random() * labels.length)];
-    const announcement = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : 'Working…', status = activity.querySelector('.sr-only');
-    if (status.textContent !== announcement) status.textContent = announcement;
-    activityLabelAt = now + 8000;
-    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting); activity.dataset.retrying = String(retrying);
-  }
+  const announcement = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : 'Working…';
+  if (label.textContent !== announcement) label.textContent = announcement;
+  const status = activity.querySelector('.sr-only');
+  if (status.textContent !== announcement) status.textContent = announcement;
   activity.hidden = !active;
   if (!active) return;
   const message = state.messages?.findLast(message => message.role === 'assistant');
@@ -1431,6 +1434,10 @@ function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
   $('session-close').disabled = !connected;
   const state = cache.get(selected);
+  const summary = sessions.find(item => item.id === selected) || selectedSummary;
+  $('session-pin').hidden = !selected || !!state?.creation;
+  $('session-pin').disabled = !connected;
+  $('session-pin').textContent = summary?.pinned ? 'Unpin session' : 'Pin session';
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const working = state && ['working', 'waiting'].includes(state.status);
   const hasDraft = !!$('prompt').value.trim() || !!imageDrafts.get(selected)?.length;
@@ -1452,17 +1459,20 @@ function updateControls() {
   const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
   // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,
   // where claude-opus-5-5[-20260101] → Opus 5.5 and other ids only lose a trailing date.
-  $('model').textContent = state?.modelName
+  $('model-name').textContent = state?.modelName
     ? state.modelName.replace(/^[^:]+:\s*/, '').replace(/^Claude (SDK )?/, '').replace(/\s*\([^)]*\)$/, '')
     : modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
       (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
-  $('model').title = modelName ? `Switch model: ${modelName}` : '';
-  $('model').setAttribute('aria-label', modelName ? `Switch model: ${modelName}` : 'Choose a model');
-  $('model').disabled = !live;
-  $('model').hidden = !state?.model;
-  $('reasoning-control').disabled = !live || changingReasoning.has(selected);
-  $('reasoning-value').textContent = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
-  $('reasoning-control').hidden = !state?.thinkingLevel;
+  const effort = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
+  $('model-name').textContent ||= 'Model';
+  $('model').title = modelName ? `Switch model: ${modelName}` : 'Choose a model';
+  $('model').setAttribute('aria-label', $('model').title + (state?.thinkingLevel ? `, ${effort} reasoning` : ''));
+  $('model').disabled = !live || changingReasoning.has(selected);
+  $('model').hidden = !state?.model && !state?.thinkingLevel;
+  $('model-effort').textContent = effort; $('model-effort').hidden = !state?.thinkingLevel;
+  $('reasoning-control').disabled = !live || changingReasoning.has(selected) || !!settingsPicker?.busy;
+  $('reasoning-value').textContent = effort;
+  $('reasoning-control').hidden = !state?.thinkingLevel || settingsPicker?.kind !== 'model';
   if (settingsPicker && !live && settingsPicker.kind !== 'usage') closePicker();
   renderUsageMeter();
   if (settingsPicker?.kind === 'usage') renderUsagePanel();
@@ -1541,33 +1551,47 @@ function completeCommand(index = commandIndex) {
 function closePicker(restoreFocus = false) {
   const opener = settingsPicker?.opener;
   settingsPicker = undefined;
+  $('settings-dialog').close();
   $('settings-picker').hidden = true;
+  $('reasoning-control').hidden = true;
   $('model').setAttribute('aria-expanded', 'false');
-  $('reasoning-control').setAttribute('aria-expanded', 'false');
   $('usage-meter').setAttribute('aria-expanded', 'false');
   if (restoreFocus) opener?.focus();
 }
 function fitPickerMenu() {
-  if (settingsPicker) $('settings-picker').style.setProperty('--picker-menu-height', Math.max(0,
-    $('composer').getBoundingClientRect().top - document.querySelector('.conversation-header').getBoundingClientRect().bottom - 16) + 'px');
+  if (!settingsPicker) return;
+  const dialog = $('settings-dialog'), sheet = settingsPicker.kind !== 'usage' && matchMedia('(max-width: 700px)').matches;
+  if (!dialog.open || sheet !== dialog.hasAttribute('data-sheet')) {
+    dialog.close(); dialog.toggleAttribute('data-sheet', sheet);
+    if (sheet) dialog.showModal(); else dialog.show();
+  }
+  const height = sheet ? (window.visualViewport?.height ?? innerHeight) * .8
+    : $('composer').getBoundingClientRect().top - document.querySelector('.conversation-header').getBoundingClientRect().bottom - 16;
+  $('settings-picker').style.setProperty('--picker-menu-height', Math.max(0, height) + 'px');
 }
+matchMedia('(max-width: 700px)').addEventListener('change', fitPickerMenu);
 const pickerMenuObserver = new ResizeObserver(fitPickerMenu);
 pickerMenuObserver.observe($('composer')); pickerMenuObserver.observe($('app'));
 function openPicker(id, kind, opener = document.activeElement) {
-  if (settingsPicker?.kind === kind) opener = settingsPicker.opener;
-  closePicker();
+  if (settingsPicker?.id === id && settingsPicker.kind !== 'usage' && kind !== 'usage') opener = settingsPicker.opener;
+  else closePicker();
   const picker = { id, kind, opener }; settingsPicker = picker;
   const reasoning = kind === 'reasoning', usage = kind === 'usage';
   commandDismissed = true; renderCommands();
   $('picker-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
   $('model-search').hidden = reasoning || usage; $('picker-title').hidden = !reasoning && !usage;
   $('picker-title').textContent = usage ? 'Usage' : 'Reasoning effort';
+  $('picker-models').hidden = !reasoning; $('picker-models').disabled = false;
+  $('reasoning-control').hidden = kind !== 'model' || !cache.get(id)?.thinkingLevel;
+  $('reasoning-control').disabled = changingReasoning.has(id);
   $('model-retry').hidden = true; $('picker-help').classList.remove('picker-error');
   $('settings-picker').setAttribute('aria-label', usage ? 'Usage' : reasoning ? 'Choose reasoning effort' : 'Choose a model');
+  $('settings-dialog').setAttribute('aria-label', usage ? 'Usage' : 'Model settings');
   $('picker-cancel').setAttribute('aria-label', usage ? 'Close usage' : reasoning ? 'Close reasoning picker' : 'Close model picker');
   $('settings-picker').hidden = false;
-  $(usage ? 'usage-meter' : reasoning ? 'reasoning-control' : 'model').setAttribute('aria-expanded', 'true');
+  $(usage ? 'usage-meter' : 'model').setAttribute('aria-expanded', 'true');
   fitPickerMenu();
+  if ($('settings-dialog').hasAttribute('data-sheet')) $('settings-dialog').focus({ preventScroll: true });
   return picker;
 }
 const usageNumbers = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
@@ -1712,6 +1736,7 @@ async function switchModel(id, key) {
 }
 function pickerBusy(picker, busy, message) {
   picker.busy = busy; $('model-search').disabled = busy;
+  $('reasoning-control').disabled = busy; $('picker-models').disabled = busy;
   for (const button of $('picker-options').querySelectorAll('button')) button.disabled = busy;
   $('picker-help').classList.toggle('picker-error', !busy);
   $('picker-help').textContent = message;
@@ -1729,7 +1754,7 @@ async function chooseModel(picker, key, keyboard) {
   }
 }
 function openReasoning(id) {
-  const picker = openPicker(id, 'reasoning', $('reasoning-control'));
+  const picker = openPicker(id, 'reasoning', $('model'));
   for (const [level, name] of Object.entries(reasoningLevels)) {
     const current = level === cache.get(id)?.thinkingLevel;
     const button = el('button', undefined, 'command-option picker-option'); button.type = 'button';
@@ -1761,8 +1786,10 @@ async function chooseReasoning(picker, level, keyboard) {
     if (applied && settingsPicker === picker) closePicker(keyboard);
   }
 }
-$('model').addEventListener('click', () => settingsPicker?.kind === 'model' ? closePicker() : openModels(selected, $('model')));
-$('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 'reasoning' ? closePicker() : openReasoning(selected));
+$('model').addEventListener('click', () => settingsPicker && settingsPicker.kind !== 'usage' ? closePicker() : openModels(selected, $('model')));
+$('reasoning-control').addEventListener('click', () => openReasoning(selected));
+$('picker-models').addEventListener('click', () => openModels(selected, settingsPicker?.opener));
+$('settings-dialog').addEventListener('cancel', event => { event.preventDefault(); closePicker(true); });
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
 $('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
@@ -1848,10 +1875,11 @@ function dragToClose(sheet, dialog = sheet, list) {
   let startY, fromList, dy = 0;
   sheet.addEventListener('touchstart', event => {
     fromList = !!list?.contains(event.target);
-    startY = event.touches.length === 1 && !(fromList && list.scrollTop > 0) ? event.touches[0].clientY : undefined; dy = 0;
+    startY = event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 && !(fromList && list.scrollTop > 0) ? event.touches[0].clientY : undefined; dy = 0;
   }, { passive: true });
   sheet.addEventListener('touchmove', event => {
     if (startY === undefined) return;
+    if (event.touches.length !== 1) { startY = undefined; dy = 0; sheet.style.transform = ''; return; }
     const delta = event.touches[0].clientY - startY;
     if (fromList && delta < 0 && !dy) { startY = undefined; return; }
     event.preventDefault();
@@ -1885,7 +1913,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   const info = document.querySelector('.session-info');
   if (info.open && !info.contains(event.target)) info.open = false;
-  const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
+  const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : $('model');
   if (settingsPicker && !$('settings-picker').contains(event.target) && !trigger.contains(event.target)) closePicker();
 });
 function isUsageDialog(dialog) {
@@ -2171,13 +2199,14 @@ window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app'
   main.addEventListener('touchstart', event => {
     resetSwipe();
     const touch = event.touches[0];
-    trackingSwipe = event.touches.length === 1 && touch.clientX < 24 && app.classList.contains('viewing') &&
+    trackingSwipe = event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 && touch.clientX < 24 && app.classList.contains('viewing') &&
       matchMedia('(max-width: 700px)').matches && !event.target.closest('button, a, input, textarea, summary, dialog');
     if (trackingSwipe) event.preventDefault();
     startX = touch.clientX; startY = touch.clientY; dx = 0;
   }, { passive: false });
   main.addEventListener('touchmove', event => {
     if (!trackingSwipe) return;
+    if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) { resetSwipe(); return; }
     const touch = event.touches[0];
     dx = Math.max(0, touch.clientX - startX);
     if (!app.classList.contains('swiping')) {

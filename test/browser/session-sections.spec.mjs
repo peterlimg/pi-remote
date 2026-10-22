@@ -152,6 +152,17 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await collection.getByRole('button', { name: /Pinned task 28/ }).click();
     await expect(collection).toBeHidden();
     await expect(page.locator('#title')).toHaveText('Pinned task 28');
+    const selectedPin = sessionKey(pinned[28]);
+    await expect(page.locator(`#sessions .session[data-id="${selectedPin}"]`)).toHaveCount(0);
+    await page.locator('.session-info summary').press('Enter');
+    await page.getByRole('button', { name: 'Unpin session', exact: true }).press('Enter');
+    await expect.poll(() => JSON.parse(readFileSync(join(dir, 'pinned-sessions.json'), 'utf8')).includes(selectedPin)).toBe(false);
+    await page.locator('.session-info summary').press('Enter');
+    await page.getByRole('button', { name: 'Pin session', exact: true }).press('Enter');
+    await expect.poll(() => JSON.parse(readFileSync(join(dir, 'pinned-sessions.json'), 'utf8')).includes(selectedPin)).toBe(true);
+    await expect(page.locator(`#sessions .session[data-id="${selectedPin}"]`)).toHaveCount(0);
+    await page.locator('.session-info summary').press('Enter');
+    await expect(page.getByRole('button', { name: 'Unpin session', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
     await expect(nowGroup.locator('.badge')).toHaveText('7');
     await page.reload();
