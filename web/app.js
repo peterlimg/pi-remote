@@ -87,6 +87,8 @@ window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
 window.addEventListener('resize', fitViewport);
 window.addEventListener('pageshow', fitViewport);
+// iOS Safari ignores user-scalable=no; its pinch arrives as gesture events.
+for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, event => event.preventDefault(), { passive: false });
 fitViewport();
 const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
@@ -704,9 +706,23 @@ function sessionFeedback(text, undoId) {
   dismiss.addEventListener('click', () => sessionFeedback('')); box.append(dismiss);
   sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 8000);
 }
-function confirmCloseSession(id) {
-  if (window.confirm('Close this session?\n\nHistory is kept. Running work continues.')) closeSession(id);
+function confirmCloseSession(id, keyboard = false) {
+  const dialog = $('session-close-confirm');
+  if (dialog.open) return;
+  const item = sessions.find(item => item.id === id) || (selected === id ? selectedSummary : undefined);
+  dialog.dataset.sessionId = id;
+  $('session-close-name').textContent = sessionTitle(item?.title, cache.get(id)?.messages);
+  dialog.showModal();
+  $(keyboard ? 'session-close-cancel' : 'session-close-confirm').focus({ preventScroll: true });
 }
+$('session-close-cancel').addEventListener('click', () => $('session-close-confirm').close());
+$('session-close-confirm').addEventListener('click', event => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
+$('session-close-confirm-button').addEventListener('click', () => {
+  const dialog = $('session-close-confirm'), id = dialog.dataset.sessionId;
+  dialog.close(); closeSession(id);
+});
 async function closeSession(id, closed = true) {
   try {
     await request('closeSession', { sessionId: id, closed });
@@ -725,7 +741,7 @@ async function closeSession(id, closed = true) {
     sessionFeedback(closed ? 'Session closed. History is kept; active work continues.' : 'Session reopened.', closed ? id : undefined);
   } catch (e) { sessionFeedback(e.message); if (selected === id) notice(e.message, id); }
 }
-$('session-close').addEventListener('click', () => confirmCloseSession(selected));
+$('session-close').addEventListener('click', event => confirmCloseSession(selected, event.detail === 0));
 $('session-pin').addEventListener('click', () => {
   document.querySelector('.session-info').open = false;
   togglePin(selected);
@@ -1890,7 +1906,7 @@ function dragToClose(sheet, dialog = sheet, list) {
 }
 dragToClose($('project-picker').querySelector('.project-sheet'), $('project-picker'), $('project-options'));
 document.addEventListener('keydown', event => {
-  if (event.isComposing) return;
+  if (event.isComposing || $('session-close-confirm').open) return;
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {
     event.preventDefault(); $('dialog-close').click(); return;
   }

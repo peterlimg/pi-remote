@@ -31,6 +31,8 @@ test('closing requires confirmation, syncs across phones and keeps history, with
   const config = { ...loadConfig(dir), clientToken: 'browser-test-token-only-123456789012345' };
   const commands = [], frames = [], errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('dialog', dialog => { errors.push('Unexpected browser confirmation'); void dialog.dismiss(); });
+  const phoneViewport = page.viewportSize();
   page.on('websocket', ws => ws.on('framesent', frame => frames.push(JSON.parse(frame.payload))));
   let host, agent, lock, secondContext, peer;
   const launch = async () => {
@@ -63,6 +65,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     const other = await secondContext.newPage();
     await other.goto(url + '/#token=' + config.clientToken);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
+    await page.bringToFront();
 
     const cdp = browserName === 'chromium' ? await page.context().newCDPSession(page) : undefined;
     let touchTarget;
@@ -82,18 +85,16 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       for (const fraction of [.2, .6, 1]) await touch('touchMove', [{ x: x + dx * fraction, y: y + dy * fraction }]);
     };
     const release = type => touch(type, []);
-    const confirmations = [];
+    const confirmation = page.getByRole('dialog', { name: 'Close session?', exact: true });
     const confirmClose = async (trigger, accepted = true) => {
       const count = frames.filter(frame => frame.op === 'closeSession').length;
-      const next = page.waitForEvent('dialog', { timeout: 3000 });
-      const activation = trigger();
-      const dialog = await next;
-      expect(dialog.type()).toBe('confirm');
-      expect(dialog.message()).toBe('Close this session?\n\nHistory is kept. Running work continues.');
+      await trigger();
+      await expect(confirmation).toBeVisible();
+      await expect(confirmation).toContainText('History is kept. Running work continues.');
+      expect(await confirmation.evaluate(node => node.matches(':modal'))).toBe(true);
       expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(count);
-      confirmations.push({ type: dialog.type(), message: dialog.message(), accepted });
-      if (accepted) await dialog.accept(); else await dialog.dismiss();
-      await activation;
+      await confirmation.getByRole('button', { name: accepted ? 'Close session' : 'Cancel', exact: true }).click();
+      await expect(confirmation).toBeHidden();
     };
     for (const [dx, dy, end] of [[-35, 0, 'touchEnd'], [-110, 0, 'touchCancel'], [0, -90, 'touchEnd']]) {
       await drag(savedRow, dx, dy); await release(end);
@@ -114,16 +115,38 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(savedRow).toHaveClass(/closing.*swipe-ready|swipe-ready.*closing/);
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
     await page.screenshot({ path: testInfo.outputPath('swipe-close-phone.png') });
-    await confirmClose(() => release('touchEnd'), false);
-    await expect(page.locator('#session-close-confirm')).toHaveCount(0);
+    await confirmClose(async () => {
+      await release('touchEnd');
+      await expect(confirmation).toBeFocused();
+      const card = confirmation.locator('.session-close-card');
+      await expect(card).toHaveCSS('animation-name', 'none');
+      const tops = await card.evaluate(node => new Promise(resolve => {
+        const frames = [];
+        const sample = () => {
+          frames.push(node.getBoundingClientRect().top);
+          if (frames.length === 6) resolve(frames); else requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      }));
+      expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
+      await expect(confirmation.locator('#session-close-name')).toHaveText('Untitled session');
+      await page.screenshot({ path: testInfo.outputPath('confirm-close-phone-light.png') });
+      await testInfo.attach('close-confirmation', { body: await confirmation.ariaSnapshot(), contentType: 'text/plain' });
+    }, false);
     await expect(savedRow).toHaveCount(1);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
     // The first action after Cancel must work without a stuck form or modal overlay.
     await page.getByRole('button', { name: 'Search sessions', exact: true }).tap({ timeout: 1000 });
     await expect(page.getByRole('searchbox', { name: 'Search sessions', exact: true })).toBeFocused({ timeout: 1000 });
     await page.getByRole('button', { name: 'Close search', exact: true }).tap();
-    await drag(savedRow, -110);
-    await confirmClose(() => release('touchEnd'), false);
+    await drag(savedRow, -110); await release('touchEnd');
+    await expect(confirmation).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toBeHidden();
+    await drag(savedRow, -110); await release('touchEnd');
+    await expect(confirmation).toBeVisible();
+    await confirmation.click({ position: { x: 4, y: 4 } });
+    await expect(confirmation).toBeHidden();
     await expect(savedRow).toHaveCount(1);
     expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(0);
     await drag(savedRow, -110);
@@ -150,8 +173,23 @@ test('closing requires confirmation, syncs across phones and keeps history, with
 
     await page.getByRole('button', { name: 'View all pinned sessions' }).tap();
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.emulateMedia({ colorScheme: 'dark' });
     await drag(collection.locator('.session'), -110);
-    await confirmClose(() => release('touchEnd'), false);
+    await confirmClose(async () => {
+      await release('touchEnd');
+      await expect(confirmation).toBeVisible();
+      await expect(confirmation.locator('#session-close-name')).toContainText('Pinned task');
+      expect((await confirmation.locator('.session-close-card').boundingBox()).height).toBeLessThan(300);
+      for (const action of await confirmation.getByRole('button').all()) {
+        expect((await action.boundingBox()).height).toBe(48);
+        expect(await action.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath('confirm-close-narrow-dark.png') });
+    }, false);
+    await page.setViewportSize(phoneViewport);
+    await page.emulateMedia({ colorScheme: 'light' });
     await expect(collection).toBeVisible();
     await expect(collection.locator('.session')).toHaveCount(1);
     await drag(collection.locator('.session'), -110);
@@ -206,8 +244,18 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await savedRow.click();
     await page.getByLabel('Session details', { exact: true }).click();
-    await page.getByRole('button', { name: 'Close session', exact: true }).focus();
-    await confirmClose(() => page.keyboard.press('Enter'));
+    const closeAction = page.getByRole('button', { name: 'Close session', exact: true });
+    await closeAction.focus();
+    await page.keyboard.press('Enter');
+    await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toBeHidden();
+    await expect(closeAction).toBeFocused();
+    await confirmClose(async () => {
+      await page.keyboard.press('Enter');
+      await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath('confirm-close-desktop-dark.png') });
+    });
     await expect(savedRow).toHaveCount(0);
     await expect(page.locator('#empty')).toBeVisible();
     await expect(page.locator('#composer')).toBeHidden();
@@ -228,9 +276,6 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     rmSync(closedFile + '.tmp', { recursive: true });
     for (const [file, text] of originals) expect(readFileSync(file, 'utf8')).toBe(text);
     expect(errors).toEqual([]);
-    const confirmationPath = testInfo.outputPath('native-confirmations.json');
-    writeFileSync(confirmationPath, JSON.stringify(confirmations));
-    await testInfo.attach('native-confirmations', { path: confirmationPath, contentType: 'application/json' });
     await testInfo.attach('session-close', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
     await testInfo.attach('session-close-frames', { body: JSON.stringify(frames), contentType: 'application/json' });
   } finally {

@@ -251,37 +251,28 @@ test('the composer grows with text, caps overflow, and shrinks with edits and re
   await expect.poll(height).toBe(compact);
 });
 
-test('browser zoom stays available and keeps the draft and controls reachable at 200%', async ({ page, browserName }, testInfo) => {
+test('browser zoom stays locked while the message field remains usable', async ({ page, browserName }) => {
   await page.goto(login);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
-  await expect(page.locator('html')).toHaveCSS('touch-action', 'manipulation');
-  expect(await page.locator('meta[name=viewport]').getAttribute('content')).not.toMatch(/maximum-scale|user-scalable/);
+  await expect(page.locator('html')).toHaveCSS('touch-action', 'pan-x pan-y');
+  const viewport = await page.locator('meta[name=viewport]').getAttribute('content');
+  expect(viewport).toContain('maximum-scale=1');
+  expect(viewport).toContain('user-scalable=no');
   expect(await page.evaluate(() => ['gesturestart', 'gesturechange'].map(type => {
     const event = new Event(type, { bubbles: true, cancelable: true });
     document.dispatchEvent(event);
     return event.defaultPrevented;
-  }))).toEqual([false, false]);
-  // CDP proves real page magnification; WebKit only covers the unblocked Safari events above.
-  if (browserName !== 'chromium') return;
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
-  await expect.poll(() => page.evaluate(() => visualViewport.scale)).toBe(2);
-  await page.locator('#prompt').fill('Keep this draft while zoomed');
-  await expect.poll(async () => (await page.locator('#app').boundingBox()).width).toBe(page.viewportSize().width / 2);
-  const viewport = await page.evaluate(() => ({ x: visualViewport.offsetLeft, y: visualViewport.offsetTop, width: visualViewport.width, height: visualViewport.height }));
-  const send = await page.locator('#send').boundingBox();
-  expect(send.x).toBeGreaterThanOrEqual(viewport.x);
-  expect(send.x + send.width).toBeLessThanOrEqual(viewport.x + viewport.width);
-  expect(send.y + send.height).toBeLessThanOrEqual(viewport.y + viewport.height);
-  // Panning a zoomed thread must not trigger our one-finger back gesture.
-  expect(await page.locator('main').evaluate(main => !main.dispatchEvent(Object.assign(new Event('touchstart', { bubbles: true, cancelable: true }), {
-    touches: [{ clientX: 5, clientY: 300 }]
-  })))).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath('browser-zoom-200.png') });
-  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
-  await expect(page.locator('#prompt')).toHaveValue('Keep this draft while zoomed');
-  await expect.poll(async () => (await page.locator('#app').boundingBox()).width).toBe(page.viewportSize().width);
+  }))).toEqual([true, true]);
+  // CDP attempts real page magnification; WebKit covers Safari's gesture cancellation above.
+  if (browserName === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+    await expect.poll(() => page.evaluate(() => visualViewport.scale)).toBe(1);
+  }
+  await page.locator('#prompt').fill('Keep the app at its normal size');
+  await expect(page.locator('#prompt')).toHaveValue('Keep the app at its normal size');
+  await expect(page.locator('#send')).toBeInViewport();
 });
 
 test('the app follows keyboard viewport changes without resizing the document', async ({ page }) => {

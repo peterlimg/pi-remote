@@ -41,7 +41,7 @@
 }
 * { box-sizing: border-box; scrollbar-color: var(--line) var(--bg); scrollbar-width: thin; }
 ::selection { background: var(--selection); color: var(--text); }
-html { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 /* iOS shows its keyboard for any focused text field; viewport sizes differ between Safari and home-screen apps. */
 :root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; --shell-height: var(--viewport-height, 100dvh); }
@@ -181,6 +181,18 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session.dragging.closing::before { content: 'Close'; right: auto; left: calc(100% + 4px); }
 .session.swipe-ready::before { background: var(--accent); color: var(--bg); }
 .session.closing.swipe-ready::before { background: var(--error); }
+.session-close-dialog { position: fixed; inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 20px; border: 0; overflow: hidden; background: transparent; color: var(--text); }
+.session-close-dialog[open] { display: grid; place-items: center; }
+.session-close-dialog:focus-visible { outline: none; }
+.session-close-dialog::backdrop { background: rgb(0 0 0 / .4); }
+.session-close-card { width: min(344px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; padding: 20px; border-radius: 16px; background: var(--composer-bg); box-shadow: 0 12px 32px rgb(0 0 0 / .2); }
+.session-close-card h2 { margin: 0; font-size: 18px; line-height: 1.4; font-weight: 600; }
+#session-close-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin: 8px 0 0; font-size: 15px; line-height: 1.5; }
+#session-close-description { margin: 12px 0 20px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.session-close-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.session-close-actions button { min-height: 48px; padding: 10px 8px; border-radius: 10px; font-size: 15px; font-weight: 500; white-space: nowrap; }
+#session-close-cancel { background: var(--panel); color: var(--text); }
+#session-close-confirm-button { background: var(--error); }
 .session-feedback { position: sticky; bottom: 70px; z-index: 1; display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--muted); box-shadow: 0 2px 8px rgb(0 0 0 / .12); font-size: 13px; }
 .session-feedback span { flex: 1; min-width: 0; }
 .session-feedback button { flex-shrink: 0; }
