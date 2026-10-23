@@ -2,8 +2,6 @@
 
 <!-- description: Most of what I typed while building Pi Remote was a complaint. That turned out to be the whole method. -->
 
-![A Pi Remote chat on a dark background. My message "users messages are too close to left, should be closer to right" is circled in red, next to a cream panel with the title.](building-pi-remote/hero.jpg)
-
 Most of what I typed while building Pi Remote was a complaint. "The send button is too big." "This copy button is a bit blur." "Ugly and it flash."
 
 That turned out to be the whole method.
