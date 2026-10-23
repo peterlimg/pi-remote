@@ -1,0 +1,12 @@
+:root{--fg:#1d1d1b;--muted:#6b6a64;--bg:#faf9f6;--accent:#2f6b55;--rule:#e6e3db}
+@media (prefers-color-scheme:dark){:root{--fg:#ecebe6;--muted:#a3a19a;--bg:#161615;--accent:#7fc4a5;--rule:#2c2b28}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.65 ui-serif,Georgia,"Iowan Old Style",serif}
+main{max-width:680px;margin:0 auto;padding:48px 22px 96px}
+h1{font:700 2.1rem/1.15 ui-sans-serif,-apple-system,system-ui,sans-serif;letter-spacing:-.02em;margin:0 0 8px}
+.meta{color:var(--muted);font:14px ui-sans-serif,-apple-system,system-ui,sans-serif;margin-bottom:36px}
+a{color:var(--accent)}
+p:has(>img){margin:32px 0 6px;text-align:center}
+img{max-width:min(100%,340px);height:auto;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.12)}
+img.wide{max-width:100%}
+p:has(>img)+p>em:only-child{display:block;text-align:center;color:var(--muted);font-size:15px;margin-bottom:24px}
