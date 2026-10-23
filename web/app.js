@@ -477,7 +477,7 @@ window.addEventListener('storage', event => {
 });
 function logout() {
   resetSwipe();
-  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close(); $('session-close-confirm').close();
+  manualClose = true; disconnect(); $('project-picker').close(); $('qr-scanner').close(); $('session-collection').close();
   videoCache?.clear(); videoCache = undefined;
   clearTimeout(homeScreenTimer); homeScreenLogin = false;
   $('home-screen-hint').hidden = true; $('access-warning').hidden = true;
@@ -705,17 +705,8 @@ function sessionFeedback(text, undoId) {
   sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 8000);
 }
 function confirmCloseSession(id) {
-  const item = sessions.find(item => item.id === id) || (selected === id ? selectedSummary : undefined);
-  const dialog = $('session-close-confirm');
-  dialog.dataset.sessionId = id; dialog.returnValue = '';
-  $('session-close-name').textContent = sessionTitle(item?.title, cache.get(id)?.messages);
-  dialog.showModal();
+  if (window.confirm('Close this session?\n\nHistory is kept. Running work continues.')) closeSession(id);
 }
-$('session-close-confirm').addEventListener('click', event => { if (event.target === $('session-close-confirm')) $('session-close-confirm').close(); });
-$('session-close-confirm').addEventListener('close', () => {
-  const dialog = $('session-close-confirm');
-  if (dialog.returnValue === 'close') closeSession(dialog.dataset.sessionId);
-});
 async function closeSession(id, closed = true) {
   try {
     await request('closeSession', { sessionId: id, closed });

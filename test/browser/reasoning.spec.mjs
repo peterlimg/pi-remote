@@ -104,11 +104,11 @@ test('one model trigger opens a phone sheet for model and effort without losing 
   await openEffort();
   await page.setViewportSize({ width: 320, height: 350 });
   await expect.poll(async () => (await picker.boundingBox()).y).toBeGreaterThanOrEqual(0);
-  expect(await page.locator('#picker-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await expect.poll(() => page.locator('#picker-options').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(dialog).toBeVisible();
-  expect(await dialog.evaluate(node => node.matches(':modal'))).toBe(false);
+  await expect.poll(() => dialog.evaluate(node => node.matches(':modal'))).toBe(false);
   const menuBounds = await picker.boundingBox(), composerBounds = await page.locator('#composer').boundingBox();
   expect(Math.abs(menuBounds.x - composerBounds.x)).toBeLessThanOrEqual(1);
   expect(menuBounds.width).toBeLessThanOrEqual(320);
