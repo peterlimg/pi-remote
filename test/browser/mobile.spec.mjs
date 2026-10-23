@@ -219,7 +219,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   await page.getByRole('button', { name: /Streaming tools/ }).click();
   await expect(page.locator('.tool')).toHaveCount(4);
   await expect(page.locator('#model-name')).toHaveText('o3');
-  await expect(page.locator('#model-effort')).toHaveText('High');
+  await expect(page.locator('#reasoning-value')).toHaveText('High');
   await expect(page.locator('[data-tool-id="safe"] .tool-context')).toHaveText('<img onerror=window.injected=true>:1-3');
   await expect(page.locator('#transcript img')).toHaveCount(0);
   const shell = page.locator('[data-tool-id="shell"]');
@@ -232,7 +232,7 @@ test('streaming tool input, errors and shortened output stay readable and safe',
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
   await expect(shell.locator('.tool-status')).toHaveText('error');
   await expect(page.locator('#model-name')).toHaveText('Sonnet 4.5');
-  await expect(page.locator('#model-effort')).toHaveText('Off');
+  await expect(page.locator('#reasoning-value')).toHaveText('Off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(group.locator('.tool-activity-error')).toHaveCount(0);
   await expect(shell).toBeHidden();

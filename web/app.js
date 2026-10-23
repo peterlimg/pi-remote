@@ -1473,13 +1473,12 @@ function updateControls() {
   const effort = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
   $('model-name').textContent ||= 'Model';
   $('model').title = modelName ? `Switch model: ${modelName}` : 'Choose a model';
-  $('model').setAttribute('aria-label', $('model').title + (state?.thinkingLevel ? `, ${effort} reasoning` : ''));
+  $('model').setAttribute('aria-label', $('model').title);
   $('model').disabled = !live || changingReasoning.has(selected);
-  $('model').hidden = !state?.model && !state?.thinkingLevel;
-  $('model-effort').textContent = effort; $('model-effort').hidden = !state?.thinkingLevel;
-  $('reasoning-control').disabled = !live || changingReasoning.has(selected) || !!settingsPicker?.busy;
+  $('model').hidden = !state?.model;
+  $('reasoning-control').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = effort;
-  $('reasoning-control').hidden = !state?.thinkingLevel || settingsPicker?.kind !== 'model';
+  $('reasoning-control').hidden = !state?.thinkingLevel;
   if (settingsPicker && !live && settingsPicker.kind !== 'usage') closePicker();
   renderUsageMeter();
   if (settingsPicker?.kind === 'usage') renderUsagePanel();
@@ -1560,7 +1559,7 @@ function closePicker(restoreFocus = false) {
   settingsPicker = undefined;
   $('settings-dialog').close();
   $('settings-picker').hidden = true;
-  $('reasoning-control').hidden = true;
+  $('reasoning-control').setAttribute('aria-expanded', 'false');
   $('model').setAttribute('aria-expanded', 'false');
   $('usage-meter').setAttribute('aria-expanded', 'false');
   if (restoreFocus) opener?.focus();
@@ -1580,23 +1579,20 @@ matchMedia('(max-width: 700px)').addEventListener('change', fitPickerMenu);
 const pickerMenuObserver = new ResizeObserver(fitPickerMenu);
 pickerMenuObserver.observe($('composer')); pickerMenuObserver.observe($('app'));
 function openPicker(id, kind, opener = document.activeElement) {
-  if (settingsPicker?.id === id && settingsPicker.kind !== 'usage' && kind !== 'usage') opener = settingsPicker.opener;
-  else closePicker();
+  if (settingsPicker?.kind === kind) opener = settingsPicker.opener;
+  closePicker();
   const picker = { id, kind, opener }; settingsPicker = picker;
   const reasoning = kind === 'reasoning', usage = kind === 'usage';
   commandDismissed = true; renderCommands();
   $('picker-options').replaceChildren(); $('model-search').value = ''; $('model-search').disabled = false;
   $('model-search').hidden = reasoning || usage; $('picker-title').hidden = !reasoning && !usage;
   $('picker-title').textContent = usage ? 'Usage' : 'Reasoning effort';
-  $('picker-models').hidden = !reasoning; $('picker-models').disabled = false;
-  $('reasoning-control').hidden = kind !== 'model' || !cache.get(id)?.thinkingLevel;
-  $('reasoning-control').disabled = changingReasoning.has(id);
   $('model-retry').hidden = true; $('picker-help').classList.remove('picker-error');
   $('settings-picker').setAttribute('aria-label', usage ? 'Usage' : reasoning ? 'Choose reasoning effort' : 'Choose a model');
   $('settings-dialog').setAttribute('aria-label', usage ? 'Usage' : 'Model settings');
   $('picker-cancel').setAttribute('aria-label', usage ? 'Close usage' : reasoning ? 'Close reasoning picker' : 'Close model picker');
   $('settings-picker').hidden = false;
-  $(usage ? 'usage-meter' : 'model').setAttribute('aria-expanded', 'true');
+  $(usage ? 'usage-meter' : reasoning ? 'reasoning-control' : 'model').setAttribute('aria-expanded', 'true');
   fitPickerMenu();
   if ($('settings-dialog').hasAttribute('data-sheet')) $('settings-dialog').focus({ preventScroll: true });
   return picker;
@@ -1743,7 +1739,6 @@ async function switchModel(id, key) {
 }
 function pickerBusy(picker, busy, message) {
   picker.busy = busy; $('model-search').disabled = busy;
-  $('reasoning-control').disabled = busy; $('picker-models').disabled = busy;
   for (const button of $('picker-options').querySelectorAll('button')) button.disabled = busy;
   $('picker-help').classList.toggle('picker-error', !busy);
   $('picker-help').textContent = message;
@@ -1761,7 +1756,7 @@ async function chooseModel(picker, key, keyboard) {
   }
 }
 function openReasoning(id) {
-  const picker = openPicker(id, 'reasoning', $('model'));
+  const picker = openPicker(id, 'reasoning', $('reasoning-control'));
   for (const [level, name] of Object.entries(reasoningLevels)) {
     const current = level === cache.get(id)?.thinkingLevel;
     const button = el('button', undefined, 'command-option picker-option'); button.type = 'button';
@@ -1793,9 +1788,8 @@ async function chooseReasoning(picker, level, keyboard) {
     if (applied && settingsPicker === picker) closePicker(keyboard);
   }
 }
-$('model').addEventListener('click', () => settingsPicker && settingsPicker.kind !== 'usage' ? closePicker() : openModels(selected, $('model')));
-$('reasoning-control').addEventListener('click', () => openReasoning(selected));
-$('picker-models').addEventListener('click', () => openModels(selected, settingsPicker?.opener));
+$('model').addEventListener('click', () => settingsPicker?.kind === 'model' ? closePicker() : openModels(selected, $('model')));
+$('reasoning-control').addEventListener('click', () => settingsPicker?.kind === 'reasoning' ? closePicker() : openReasoning(selected));
 $('settings-dialog').addEventListener('cancel', event => { event.preventDefault(); closePicker(true); });
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
@@ -1920,7 +1914,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   const info = document.querySelector('.session-info');
   if (info.open && !info.contains(event.target)) info.open = false;
-  const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : $('model');
+  const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
   if (settingsPicker && !$('settings-picker').contains(event.target) && !trigger.contains(event.target)) closePicker();
 });
 function isUsageDialog(dialog) {
