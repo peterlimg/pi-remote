@@ -365,13 +365,14 @@ pre.message-text { white-space: pre-wrap; }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #fast-mode { flex-shrink: 0; color: var(--accent); }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
-@container (max-width: 420px) { #model-effort { display: none; } }
-/* Narrow phones and pinch zoom need a separate settings row to preserve tap targets. */
-@container (max-width: 350px) {
+/* Give model and effort their own row instead of hiding the effort on phones. */
+@container (max-width: 420px) {
   .composer-toolbar { flex-wrap: wrap; }
   .composer-settings { order: -1; width: 100%; }
-  .composer textarea { max-height: 44px; }
+  #model { width: 100%; }
+  #model-name { flex: 1; }
 }
+@container (max-width: 350px) { .composer textarea { max-height: 44px; } }
 .composer-actions button { font-size: 12px; }
 #usage-meter { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--accent); background: transparent; }
 .composer-actions #usage-meter svg { width: 24px; height: 24px; }

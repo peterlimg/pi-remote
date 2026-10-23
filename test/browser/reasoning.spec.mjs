@@ -39,6 +39,7 @@ test('one model trigger opens a phone sheet for model and effort without losing 
   const openEffort = async () => { await model.click(); await effort.click(); };
   await page.locator('#prompt').fill('Keep this draft');
   await expect(page.locator('#model-effort')).toHaveText('High');
+  await expect(page.locator('#model-effort')).toBeVisible();
   await expect(model).toHaveAccessibleName('Switch model: claude-sonnet-4-6, High reasoning');
   await expect(effort).toBeHidden();
   await model.tap();

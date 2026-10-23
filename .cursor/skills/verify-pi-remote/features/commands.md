@@ -17,7 +17,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 - Open a session and tap `Open slash commands` in the composer, or type `/` at the start of Message. The shortcut is disabled while a message or command with arguments is drafted so it cannot overwrite it.
 - Tap a suggestion; on desktop use arrows and Tab to complete, or Enter to run the selected command.
 - Send `/new`, `/model`, or `/model provider/model-id`.
-- Choose the model-and-effort button in the composer. On phones it opens a bottom sheet; on desktop it opens an anchored menu. Choose `Reasoning effort` inside it, then `Back to models` to return.
+- Choose the model-and-effort button in the composer. Both values stay visible on phones in a separate settings row. On phones it opens a bottom sheet; on desktop it opens an anchored menu. Choose `Reasoning effort` inside it, then `Back to models` to return.
 
 ## Driving it with Playwright
 
