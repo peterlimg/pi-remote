@@ -26,7 +26,7 @@ npx vercel deploy --cwd "$publish/red-circle-spec" \
   --scope peterlimgs-projects --dry --json --yes
 ```
 
-The dry run should list six files: `index.html`, `style.css`, the three images the post uses and `vercel.json`. Then deploy with `--prod` instead of `--dry --json`.
+The dry run should list twelve files: `index.html`, `style.css`, the three images the post uses, the three self-hosted fonts with their SIL Open Font License files in `fonts/`, and `vercel.json`. Then deploy with `--prod` instead of `--dry --json`.
 
 ## X preview
 

@@ -1,6 +1,7 @@
 # A red circle is a good enough spec
 
 <!-- description: Most of what I typed while building Pi Remote was a complaint. That turned out to be the whole method. -->
+<!-- date: 2026-10-24 -->
 
 Most of what I typed while building Pi Remote was a complaint. "The send button is too big." "This copy button is a bit blur." "Ugly and it flash."
 
