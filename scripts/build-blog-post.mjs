@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds a static blog post from docs/blog/<name>.md and its <name>/ asset folder.
 // Usage: node scripts/build-blog-post.mjs docs/blog/building-pi-remote.md <out-dir> <https-base-url>
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import markdownIt from 'markdown-it';
 
@@ -33,6 +33,12 @@ mkdirSync(out, { recursive: true });
 for (const file of [...images, 'style.css']) copyFileSync(join(assets, file), join(out, file));
 cpSync(join(assets, 'fonts'), join(out, 'fonts'), { recursive: true });
 
+// An optional 2400x1260 card.jpg becomes the X large card; the version query gives X a fresh cache key.
+const hasCard = existsSync(join(assets, 'card.jpg'));
+if (hasCard) copyFileSync(join(assets, 'card.jpg'), join(out, 'card.jpg'));
+const card = `${base}/card.jpg?v=${Date.now().toString(36)}`;
+const cardAlt = escape(`Card with the title "${title}" on sage paper, signed BySepStudio`);
+
 const [t, d] = [title, description].map(escape);
 writeFileSync(join(out, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -41,8 +47,9 @@ writeFileSync(join(out, 'index.html'), `<!doctype html><html lang="en"><head><me
 <meta property="og:type" content="article"><meta property="og:url" content="${base}/"><meta property="article:published_time" content="${date}">
 <link rel="preload" href="fonts/BodoniModa.ttf" as="font" type="font/ttf" crossorigin>
 <meta property="og:title" content="${t}"><meta property="og:description" content="${d}">
-<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${t}">
-<meta name="twitter:description" content="${d}">
+${hasCard ? `<meta property="og:image" content="${card}"><meta property="og:image:width" content="2400"><meta property="og:image:height" content="1260"><meta property="og:image:alt" content="${cardAlt}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${card}"><meta name="twitter:image:alt" content="${cardAlt}">` : '<meta name="twitter:card" content="summary">'}
+<meta name="twitter:title" content="${t}"><meta name="twitter:description" content="${d}">
 </head><body><div class="page">
 <header class="bar"><a class="mark" href="./">BySepStudio</a><span class="tag">Build notes <i>on</i> Pi Remote</span></header>
 <main><h1>${t}</h1>
@@ -51,4 +58,4 @@ writeFileSync(join(out, 'index.html'), `<!doctype html><html lang="en"><head><me
 <footer><span>Also by BySepStudio: <a href="https://claude-sdk-in-pi.vercel.app">Claude SDK in Pi</a></span><span>Set in <a href="fonts/BodoniModa-OFL.txt">Bodoni Moda</a>, <a href="fonts/Geist-OFL.txt">Geist</a> &amp; <a href="fonts/GeistMono-OFL.txt">Geist Mono</a></span></footer>
 </div></body></html>
 `);
-console.log([...images, 'style.css', 'fonts/', 'index.html'].join('\n'));
+console.log([...images, 'style.css', 'fonts/', ...(hasCard ? ['card.jpg'] : []), 'index.html'].join('\n'));
