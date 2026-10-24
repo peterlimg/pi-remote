@@ -156,10 +156,10 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(workingIcon.locator('svg')).toHaveCSS('width', '16px');
   await expect(workingIcon.locator('svg')).toHaveCSS('height', '16px');
   await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
-  await expect(bricks.first()).toHaveCSS('animation-duration', '1.2s');
+  await expect(bricks.first()).toHaveCSS('animation-duration', '0.6s');
   await expect.poll(() => bricks.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).opacity).sort())).toEqual(['0.35', '0.35', '0.35', '0.35', '0.35', '1']);
   await expect(bricks.first()).toHaveCSS('opacity', '0.35');
-  await expect(bricks.first()).toHaveCSS('opacity', '1');
+  await expect.poll(() => bricks.first().evaluate(node => getComputedStyle(node).opacity), { intervals: [25] }).toBe('1');
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
@@ -181,7 +181,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   for (const brick of await bricks.all()) await expect(brick).toHaveCSS('fill', 'rgb(10, 132, 255)');
   const phaseDelay = await workingIcon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--block-delay')));
   expect(phaseDelay).toBeLessThanOrEqual(0);
-  expect(phaseDelay).toBeGreaterThan(-1200);
+  expect(phaseDelay).toBeGreaterThan(-600);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const brick of await bricks.all()) {
     await expect(brick).toHaveCSS('animation-name', 'none');

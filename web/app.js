@@ -848,7 +848,7 @@ function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
   icon.dataset.status = status;
   // The list rebuilds on every update; the clock keeps the bricks in phase across replacements.
-  if (status === 'working') icon.style.setProperty('--block-delay', `-${Date.now() % 1200}ms`);
+  if (status === 'working') icon.style.setProperty('--block-delay', `-${Date.now() % 600}ms`);
   icon.setAttribute('aria-hidden', 'true');
   icon.innerHTML = status === 'working'
     ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><rect x="3" y="0" width="4" height="4"/><rect x="9" y="0" width="4" height="4"/><rect x="9" y="6" width="4" height="4"/><rect x="9" y="12" width="4" height="4"/><rect x="3" y="12" width="4" height="4"/><rect x="3" y="6" width="4" height="4"/></svg>'
