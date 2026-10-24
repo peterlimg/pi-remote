@@ -146,9 +146,19 @@ test('same-project sessions show their tasks, previews, status and activity with
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
-  await expect(login.locator('.session-icon svg')).toHaveCSS('animation-name', 'connection-spin');
-  await expect(login.locator('.session-icon svg')).toHaveCSS('width', '18px');
-  await expect(login.locator('.session-icon svg')).toHaveCSS('height', '18px');
+  const workingIcon = login.locator('.session-icon'), bricks = workingIcon.locator('path');
+  await expect(bricks).toHaveCount(3);
+  await expect(workingIcon.locator('circle')).toHaveCount(0);
+  await expect(workingIcon.locator('svg')).toHaveCSS('animation-name', 'none');
+  await expect(workingIcon.locator('svg')).toHaveCSS('width', '18px');
+  await expect(workingIcon.locator('svg')).toHaveCSS('height', '18px');
+  for (const brick of await bricks.all()) {
+    await expect(brick).toHaveCSS('animation-name', 'session-bricks');
+    await expect(brick).toHaveCSS('animation-duration', '1.2s');
+  }
+  await expect.poll(() => bricks.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).opacity).sort())).toEqual(['0.45', '0.45', '1']);
+  await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.first().locator('.session-preview')).toHaveCount(0);
@@ -157,11 +167,26 @@ test('same-project sessions show their tasks, previews, status and activity with
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
   })).toBe(true);
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-ring-mobile.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-bricks-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-ring-desktop-dark.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-bricks-desktop-dark.png') });
+  states[0].updatedAt = now + 1000;
+  publish(); // Unread replies still turn the bricks blue after a list replacement.
+  await expect(workingIcon).toHaveAttribute('data-unread', '');
+  for (const brick of await bricks.all()) await expect(brick).toHaveCSS('fill', 'rgb(10, 132, 255)');
+  const phaseDelay = await workingIcon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--brick-delay')));
+  expect(phaseDelay).toBeLessThanOrEqual(0);
+  expect(phaseDelay).toBeGreaterThan(-1200);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const brick of await bricks.all()) {
+    await expect(brick).toHaveCSS('animation-name', 'none');
+    await expect(brick).toHaveCSS('opacity', '1');
+  }
+  await page.screenshot({ path: testInfo.outputPath('working-bricks-unread-reduced-motion.png') });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(bricks.first()).toHaveCSS('animation-name', 'session-bricks');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.locator('.session').last().scrollIntoViewIfNeeded();
@@ -198,6 +223,8 @@ test('same-project sessions show their tasks, previews, status and activity with
   await page.locator('#back').click();
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
+  await expect(login.locator('.session-icon path')).toHaveCount(0);
+  await expect(login.locator('.session-icon circle')).toHaveCount(1);
   await expect(login.locator('.session-preview')).toHaveText('You: Now check logout');
 });
 
