@@ -146,18 +146,20 @@ test('same-project sessions show their tasks, previews, status and activity with
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
-  const workingIcon = login.locator('.session-icon'), block = workingIcon.locator('rect');
-  await expect(block).toHaveCount(1);
-  await expect(block).toHaveAttribute('width', '8');
-  await expect(block).toHaveAttribute('height', '12');
+  const workingIcon = login.locator('.session-icon'), bricks = workingIcon.locator('rect');
+  await expect(bricks).toHaveCount(6);
+  expect(await bricks.evaluateAll(nodes => nodes.map(node => ['x', 'y', 'width', 'height'].map(name => Number(node.getAttribute(name)))))).toEqual([
+    [3, 0, 4, 4], [9, 0, 4, 4], [9, 6, 4, 4], [9, 12, 4, 4], [3, 12, 4, 4], [3, 6, 4, 4]
+  ]);
   await expect(workingIcon.locator('path, circle')).toHaveCount(0);
   await expect(workingIcon.locator('svg')).toHaveCSS('animation-name', 'none');
   await expect(workingIcon.locator('svg')).toHaveCSS('width', '16px');
   await expect(workingIcon.locator('svg')).toHaveCSS('height', '16px');
-  await expect(block).toHaveCSS('animation-name', 'session-block-blink');
-  await expect(block).toHaveCSS('animation-duration', '1.2s');
-  await expect(block).toHaveCSS('opacity', '0.35');
-  await expect(block).toHaveCSS('opacity', '1');
+  await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
+  await expect(bricks.first()).toHaveCSS('animation-duration', '1.2s');
+  await expect.poll(() => bricks.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).opacity).sort())).toEqual(['0.35', '0.35', '0.35', '0.35', '0.35', '1']);
+  await expect(bricks.first()).toHaveCSS('opacity', '0.35');
+  await expect(bricks.first()).toHaveCSS('opacity', '1');
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
@@ -168,24 +170,26 @@ test('same-project sessions show their tasks, previews, status and activity with
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
   })).toBe(true);
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-block-mobile.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-block-desktop-dark.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
-  publish(); // Unread replies still turn the block blue after a list replacement.
+  publish(); // Unread replies still turn the bricks blue after a list replacement.
   await expect(workingIcon).toHaveAttribute('data-unread', '');
-  await expect(block).toHaveCSS('fill', 'rgb(10, 132, 255)');
+  for (const brick of await bricks.all()) await expect(brick).toHaveCSS('fill', 'rgb(10, 132, 255)');
   const phaseDelay = await workingIcon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--block-delay')));
   expect(phaseDelay).toBeLessThanOrEqual(0);
   expect(phaseDelay).toBeGreaterThan(-1200);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(block).toHaveCSS('animation-name', 'none');
-  await expect(block).toHaveCSS('opacity', '1');
-  await page.screenshot({ path: testInfo.outputPath('working-block-unread-reduced-motion.png') });
+  for (const brick of await bricks.all()) {
+    await expect(brick).toHaveCSS('animation-name', 'none');
+    await expect(brick).toHaveCSS('opacity', '1');
+  }
+  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-unread-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect(block).toHaveCSS('animation-name', 'session-block-blink');
+  await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.locator('.session').last().scrollIntoViewIfNeeded();
