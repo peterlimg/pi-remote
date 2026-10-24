@@ -7,6 +7,7 @@
   --shell-height: calc(100dvh / var(--viewport-scale, 1));
   --bg: #fafaf8;
   --panel: #f2f3f0;
+  --sidebar-bg: var(--panel);
   --composer-bg: #fff;
   --text: #141816;
   --muted: #626c66;
@@ -26,17 +27,18 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #272b33;
-    --panel: #22262d;
-    --composer-bg: #272b33;
-    --text: #e5e8e6;
-    --muted: #a7afa9;
-    --line: #444a51;
-    --accent: #9cc8bd;
-    --user: #343840;
+    --bg: #100d10;
+    --panel: #1b181b;
+    --sidebar-bg: var(--bg);
+    --composer-bg: #232023;
+    --text: #efedef;
+    --muted: #aaa7aa;
+    --line: #3b383b;
+    --accent: #efedef;
+    --user: #221f22;
     --error: #ffa4a4;
     --warning: #e4c078;
-    --selection: #3d5955;
+    --selection: #3b383b;
   }
 }
 * { box-sizing: border-box; scrollbar-color: var(--line) var(--bg); scrollbar-width: thin; }
@@ -101,7 +103,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #login-cancel, #login-logout { width: 100%; }
 /* iOS can retain a keyboard offset after returning; never shift the shell past the screen edge. */
 .shell { position: fixed; top: clamp(0px, var(--viewport-top, 0px), calc(100dvh - var(--shell-height))); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
-.shell aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
+.shell aside { background: var(--sidebar-bg); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { margin-left: auto; font-size: 12px; }
