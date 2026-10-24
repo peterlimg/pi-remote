@@ -6,13 +6,16 @@ const out = value => process.stdout.write(JSON.stringify(value) + '\n');
 const dir = process.argv[process.argv.indexOf('--session-dir') + 1];
 const fresh = process.argv.includes('--session-dir');
 const sessionId = randomUUID(), sessionFile = fresh && join(dir, sessionId + '.jsonl');
+const startupFile = process.argv.includes('--startup-file') ? process.argv[process.argv.indexOf('--startup-file') + 1] : undefined;
 // Like Pi, create a new session's folder at startup and its file on the first prompt.
 if (fresh) mkdirSync(dir, { recursive: true });
+if (fresh && process.argv.includes('--persist-at-startup')) writeFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: sessionId, cwd: process.cwd() }) + '\n');
 if (process.argv.includes('--startup-pid')) writeFileSync(process.argv[process.argv.indexOf('--startup-pid') + 1], String(process.pid));
 const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp, retryTimer;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
-let usageRefreshes = 0;
+let usageRefreshes = 0, inspected = false;
+const startupDelay = process.argv.includes('--startup-delay') ? Number(process.argv[process.argv.indexOf('--startup-delay') + 1]) : 0;
 const showUsage = () => out({ type: 'extension_ui_request', id: `usage-${++usageId}`, method: 'select',
   title: 'Provider usage\n' + (process.argv.includes('--usage-fails-until-refresh') && usageRefreshes < 2 ? 'Query failed: fetch failed' :
     `${model === models[0] ? '5-hour limit: [████░] 75% left (resets in 2h)\n' : ''}Weekly limit: [████░] ${100 - usageId}% left (resets tomorrow)`), options: ['Refresh current usage', 'Close'] });
@@ -39,7 +42,7 @@ const parser = new JsonLines(command => {
       return;
     }
   }
-  if (command.type === 'get_state') data = { isStreaming: false, model, thinkingLevel, ...(fresh ? { sessionId, sessionFile } : {}) };
+  if (command.type === 'get_state') data = { isStreaming: false, model, thinkingLevel, ...(fresh ? { sessionId, sessionFile: startupFile || sessionFile } : {}) };
   if (command.type === 'get_available_models') data = { models };
   if (command.type === 'get_session_stats') data = { contextUsage, tokens: { total: 9000000 } };
   if (command.type === 'set_model') {
@@ -63,6 +66,9 @@ const parser = new JsonLines(command => {
       if (!existsSync(join(process.cwd(), 'startup-ready'))) return;
       clearInterval(timer); out({ id: command.id, type: 'response', success: true, data });
     }, 20);
+  } else if (command.type === 'get_state' && startupDelay && !inspected) {
+    inspected = true;
+    setTimeout(() => out({ id: command.id, type: 'response', success: true, data }), startupDelay);
   } else out({ id: command.id, type: 'response', success: true, data });
   if (command.type === 'abort' && retryTimer) {
     clearInterval(retryTimer); retryTimer = undefined;

@@ -80,10 +80,10 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
       await page.getByRole('button', { name: /Original session/ }).click();
       await expect(page.locator('#prompt')).toHaveValue('Keep the original draft');
     }
-    await expect.poll(() => host.service.starting.size).toBe(1);
+    await expect.poll(() => [...host.service.starting].filter(item => !item.prepared).length).toBe(1);
     const cwd = projectless ? join(dir, 'projects', readdirSync(join(dir, 'projects'))[0]) : project;
     writeFileSync(join(cwd, 'startup-ready'), 'ready');
-    await expect.poll(() => host.service.starting.size).toBe(0);
+    await expect.poll(() => [...host.service.starting].filter(item => !item.prepared).length).toBe(0);
     const fresh = [...host.service.live.keys()].find(id => id !== sourceId);
     expect(fresh).toBeTruthy();
     if (projectless) {

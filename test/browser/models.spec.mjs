@@ -151,3 +151,57 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   await expect(page.locator('#picker-options .picker-option')).toHaveCount(41);
   await expect(page.locator('#picker-help')).toHaveText('');
 });
+
+test('new sessions reuse prepared model lists without sharing the selected model or another project', async ({ page }) => {
+  const models = [{ provider: 'test', id: 'first', name: 'First' }, { provider: 'test', id: 'second', name: 'Second' }];
+  const states = ['a', 'b'].map(id => ({ id, cwd: '/' + id, title: id, status: 'idle', messages: [], model: 'test/first', modelCacheKey: id }));
+  const commands = [], discovered = [], prepared = new Set();
+  let count = 0;
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw), source = states.find(item => item.id === packet.sessionId);
+    const reply = value => ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value }));
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready', supportsNewPreparation: true }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+    } else if (packet.op === 'projects') reply(states.slice(0, 2).map(({ cwd, id }) => ({ cwd, sessionId: id })));
+    else if (packet.op === 'prepareNew') {
+      prepared.add(source.cwd);
+      reply({ model: source.cwd === '/a' ? 'test/first' : 'other/third', modelName: source.cwd === '/a' ? 'First' : 'Third',
+        modelCacheKey: source.cwd, models: source.cwd === '/a' ? models : [{ provider: 'other', id: 'third', name: 'Third' }] });
+    } else if (packet.op === 'new') {
+      const state = { ...source, id: 'fresh-' + ++count, title: 'Untitled session', modelCacheKey: source.cwd,
+        model: source.cwd === '/a' ? 'test/first' : 'other/third', modelName: source.cwd === '/a' ? 'First' : 'Third' };
+      states.push(state);
+      ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+      reply({ sessionId: state.id, state });
+    } else if (packet.op === 'watch') {
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: source.id, version: 0, state: source })); reply({});
+    } else if (packet.op === 'commands') reply([]);
+    else if (packet.op === 'models') discovered.push(packet); // No reply: the picker must already have its catalog.
+    else if (packet.op === 'command') {
+      commands.push(packet);
+      source.model = 'test/second'; source.modelName = 'Second';
+      ws.send(JSON.stringify({ type: 'snapshot', sessionId: source.id, version: 1, state: source })); reply({});
+    }
+  }));
+  await page.goto(url);
+  await expect.poll(() => prepared.has('/a')).toBe(true);
+  for (const [index, project] of ['/a', '/a', '/b'].entries()) {
+    await page.getByRole('button', { name: 'New session', exact: true }).tap();
+    await page.locator(`#project-picker .project-option[title="${project}"]`).tap();
+    await expect(page.locator('#send')).toBeEnabled();
+    await page.locator('#model').tap();
+    const options = page.locator('#picker-options');
+    await expect(options.locator('.picker-option')).toHaveCount(project === '/a' ? 2 : 1, { timeout: 500 });
+    await expect(options.getByRole('button', { pressed: true })).toContainText(project === '/a' ? 'First' : 'Third');
+    if (index === 0) {
+      await options.getByRole('button', { name: 'Second', exact: true }).tap();
+      await expect(page.locator('#model-name')).toHaveText('Second');
+    } else await page.getByRole('button', { name: 'Close model picker', exact: true }).click();
+    await page.getByRole('button', { name: 'Show sessions' }).click();
+  }
+  expect(discovered).toHaveLength(3);
+  expect(commands.map(({ sessionId, command }) => ({ sessionId, command }))).toEqual([
+    { sessionId: 'fresh-1', command: { type: 'setModel', provider: 'test', modelId: 'second' } }
+  ]);
+});

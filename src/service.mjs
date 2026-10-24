@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, renameSync, mkdirSync, rmdirSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname, relative, isAbsolute, sep } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { tmpdir } from 'node:os';
+import { randomUUID, createHash } from 'node:crypto';
+import { tmpdir, homedir } from 'node:os';
 import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
 import { summary } from './state.mjs';
 import { unnamed, sessionGroup, activityOrder } from '../web/protocol.js';
@@ -44,6 +44,7 @@ export class SessionService extends EventEmitter {
   }
   scan() {
     const previous = this.catalog, { sessions, warnings } = discover(this.roots);
+    if (this.prepared?.item?.prepared) sessions.delete(this.prepared.item.state.id);
     this.catalog = sessions; this.warnings = [...this.restoreWarnings, ...warnings].slice(0, 20);
     for (const [id, saved] of sessions) {
       if (!saved.historyPending || saved.lastPromptAt !== undefined) continue;
@@ -260,50 +261,145 @@ export class SessionService extends EventEmitter {
   }
   workerSession(meta, options, discardEmpty = false) {
     return new WorkerSession(meta, {
-      dir: this.dir, workerOptions: options, changed: id => this.changed(id), started: item => this.live.set(item.state.id, item),
+      dir: this.dir, workerOptions: options, changed: id => { if (this.live.has(id)) this.changed(id); },
+      started: item => { if (!item.prepared) this.live.set(item.state.id, item); },
       lifecycle: event => this.emit('lifecycle', event),
       exited: item => {
+        if (item.prepared) return;
         const { id } = item.state;
         this.scan();
         if (discardEmpty && this.live.get(id) === item && !this.catalog.has(id)) this.live.delete(id);
       },
     });
   }
-  async newSession(id, requestId) {
-    requestKey(requestId);
-    return this.journal.execute(id, requestId, { type: 'new' }, async () => {
-      if (this.stopping) throw new Error('Pi Remote is stopping');
-      const source = this.read(id);
-      if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
-      // A saved source starts a host-owned worker, the same as resuming it would.
-      if (this.live.get(id)?.resumable ?? true) {
-        if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
-        if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory no longer exists');
-      }
-      return this.startFresh(source.cwd, dirname(source.file));
-    });
-  }
-  // A blank session: a fresh folder under the data dir, named by local time (`2026-10-11-1432`, then `-2`…).
-  async newProject(requestId) {
-    requestKey(requestId);
-    return this.journal.execute('new-project', requestId, { type: 'newProject' }, async () => {
-      if (this.stopping) throw new Error('Pi Remote is stopping');
+  freshSource(id) {
+    if (this.stopping) throw new Error('Pi Remote is stopping');
+    if (id === undefined) {
       if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
       if (!this.roots.length) throw new Error('No session directory is configured');
-      const parent = this.blankDir, now = new Date(), pad = n => String(n).padStart(2, '0');
-      const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-      let cwd;
-      for (let n = 1; !cwd; n++) {
-        const candidate = join(parent, n === 1 ? name : `${name}-${n}`);
-        try { mkdirSync(candidate); cwd = candidate; } catch (e) { if (e.code !== 'EEXIST') throw e; }
-      }
-      // Pi's own naming for a working directory's session folder.
-      return this.startFresh(cwd, join(this.roots[0], '--' + cwd.replace(/^[\\/]/, '').replace(/[\\/:]/g, '-') + '--'));
+      return {};
+    }
+    const source = this.read(id);
+    if (!this.roots.some(root => inside(source.file, root))) throw new Error('Session is outside configured roots');
+    // A saved source starts a host-owned worker, the same as resuming it would.
+    if (this.live.get(id)?.resumable ?? true) {
+      if (!this.allowResume) throw new Error('Saved-session resume is disabled locally. Start serve without --no-allow-resume to enable it.');
+    }
+    if (!statSync(source.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Project directory no longer exists');
+    return { cwd: source.cwd, sessionDir: dirname(source.file) };
+  }
+  freshKey(cwd, sessionDir) {
+    if (cwd) cwd = canonical(cwd);
+    if (sessionDir) sessionDir = canonical(sessionDir);
+    const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent');
+    const hash = createHash('sha256').update(JSON.stringify([cwd || this.blankDir, sessionDir || this.roots[0], this.workerOptions]));
+    const files = ['settings.json', 'models.json', 'auth.json', 'mcp.json', 'trust.json'].map(name => join(agentDir, name));
+    if (cwd) files.push(...['settings.json', 'models.json', 'mcp.json', 'SYSTEM.md', 'APPEND_SYSTEM.md'].map(name => join(cwd, '.pi', name)));
+    const bases = [agentDir];
+    for (let dir = cwd || this.blankDir; dir; dir = dirname(dir) === dir ? undefined : dirname(dir)) bases.push(dir);
+    for (const dir of bases) for (const name of ['AGENTS.override.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD', 'SYSTEM.md', 'APPEND_SYSTEM.md']) files.push(join(dir, name));
+    for (const file of files) {
+      hash.update(file);
+      try { hash.update(readFileSync(file)); }
+      catch (error) { if (!['ENOENT', 'EISDIR'].includes(error.code)) throw error; }
+    }
+    return hash.digest('hex');
+  }
+  // A blank session owns a fresh dated folder, even when it was prepared in advance.
+  blankTarget() {
+    const now = new Date(), pad = n => String(n).padStart(2, '0');
+    const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    let cwd;
+    for (let n = 1; !cwd; n++) {
+      const candidate = join(this.blankDir, n === 1 ? name : `${name}-${n}`);
+      try { mkdirSync(candidate); cwd = candidate; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    }
+    return { cwd, sessionDir: join(this.roots[0], '--' + cwd.replace(/^[\\/]/, '').replace(/[\\/:]/g, '-') + '--') };
+  }
+  async discardPreparation(entry) {
+    await entry?.item?.close();
+    if (!entry || entry.claimed) return;
+    if (entry.item?.state.file) {
+      try { rmSync(entry.item.state.file, { force: true }); }
+      catch (error) { console.warn('Could not remove an unused prepared session:', error.message); }
+      if (this.catalog.delete(entry.item.state.id)) this.emit('list');
+    }
+    if (!entry.blank || !entry.target) return;
+    for (const dir of [entry.target.sessionDir, entry.target.cwd]) {
+      try { rmdirSync(dir); }
+      catch (error) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) console.warn('Could not remove an unused preparation folder:', error.message); }
+    }
+  }
+  async prepareNew(id) {
+    const source = this.freshSource(id), key = this.freshKey(source.cwd, source.sessionDir);
+    let entry = this.prepared;
+    if (!entry || entry.key !== key || entry.item && !entry.item.worker) {
+      const previous = entry;
+      entry = { key, blank: id === undefined };
+      this.prepared = entry;
+      // At most one unclaimed worker is retained; it is never listed or restored as a conversation.
+      entry.promise = (async () => {
+        await this.discardPreparation(previous);
+        if (this.stopping || this.prepared !== entry && !entry.claimed) throw new Error('Session preparation was superseded');
+        const target = entry.target = source.cwd ? source : this.blankTarget();
+        const item = entry.item = this.workerSession({ cwd: target.cwd, modelCacheKey: key }, { ...this.workerOptions, sessionDir: target.sessionDir }, true);
+        item.prepared = !entry.claimed;
+        await this.initializeFresh(item, target.sessionDir);
+        if (item.state.status !== 'idle' || item.state.messages.length) throw new Error('Prepared session is not empty and idle');
+        const result = await item.command({ type: 'getModels' });
+        entry.models = modelList(result.models);
+        return item;
+      })().catch(async error => {
+        if (this.prepared === entry) this.prepared = undefined;
+        if (!entry.claimed) await this.discardPreparation(entry);
+        throw error;
+      });
+    }
+    const item = await entry.promise;
+    const { model, modelName, thinkingLevel, modelCacheKey } = item.state;
+    return { model, modelName, thinkingLevel, modelCacheKey, models: entry.models };
+  }
+  async newSession(id, requestId) {
+    requestKey(requestId);
+    if (typeof id !== 'string') throw new Error('Session not found');
+    return this.journal.execute(id, requestId, { type: 'new' }, () => {
+      const source = this.freshSource(id);
+      return this.startFresh(source.cwd, source.sessionDir);
+    });
+  }
+  async newProject(requestId) {
+    requestKey(requestId);
+    return this.journal.execute('new-project', requestId, { type: 'newProject' }, () => {
+      this.freshSource();
+      return this.startFresh();
     });
   }
   async startFresh(cwd, sessionDir) {
     if (this.stopping) throw new Error('Pi Remote is stopping');
-    const item = this.workerSession({ cwd }, { ...this.workerOptions, sessionDir }, true);
+    const key = this.freshKey(cwd, sessionDir), entry = this.prepared;
+    let item;
+    if (entry?.key === key) {
+      entry.claimed = true; this.prepared = undefined;
+      if (entry.item) entry.item.prepared = false;
+      try {
+        item = await entry.promise;
+        if (!item.worker || item.state.status !== 'idle' || item.state.messages.length) { await item.close(); item = undefined; }
+      } catch { await this.discardPreparation(entry); }
+    }
+    if (!item) {
+      if (!cwd) ({ cwd, sessionDir } = this.blankTarget());
+      item = this.workerSession({ cwd, modelCacheKey: key }, { ...this.workerOptions, sessionDir }, true);
+      await this.initializeFresh(item, sessionDir);
+    } else {
+      item.prepared = false;
+      this.live.set(item.state.id, item); item.notify();
+    }
+    return { sessionId: item.state.id, state: structuredClone(item.read()) };
+  }
+  async initializeFresh(item, sessionDir) {
+    const { cwd } = item.state, directory = canonical(sessionDir), existing = new Set();
+    try { for (const name of readdirSync(directory)) existing.add(name); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
     this.starting.add(item);
     try {
       const info = await item.start(info => {
@@ -311,10 +407,10 @@ export class SessionService extends EventEmitter {
         if (typeof info?.sessionFile !== 'string' || typeof info.sessionId !== 'string') throw new Error('Pi did not provide a new session');
         const file = canonical(info.sessionFile);
         if (!inside(file, sessionDir)) throw new Error('New session is outside configured roots');
+        if (existing.has(relative(directory, file).split(sep)[0])) throw new Error('Pi did not provide a fresh session');
         return { id: sessionKey(file), file, cwd, piSessionId: info.sessionId };
       });
       item.restore(info);
-      return { sessionId: item.state.id, state: structuredClone(item.read()) };
     } catch (e) { await item.close(); throw e; }
     finally { this.starting.delete(item); }
   }
@@ -375,7 +471,10 @@ export class SessionService extends EventEmitter {
     }
     this.stopping = true;
     await this.historyReader.close();
-    const sessions = new Set([...this.live.values(), ...this.starting]);
+    const prepared = this.prepared; this.prepared = undefined;
+    const sessions = new Set([...this.live.values(), ...this.starting, prepared?.item].filter(Boolean));
     await Promise.all([...sessions].map(item => item.close()));
+    await prepared?.promise.catch(() => {});
+    await this.discardPreparation(prepared);
   }
 }

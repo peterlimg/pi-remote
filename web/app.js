@@ -94,6 +94,7 @@ const versions = new Map();
 let seen = JSON.parse(localStorage.getItem('pi-remote-seen') || '{}');
 const sessionIcons = new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons') || '[]'));
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
+const modelLists = new Map(), newSessionProfiles = new Map();
 const threadImages = new Map(), threadVideos = new Map(), usageSummaries = new Map();
 const usageDetails = new Map(), usageLoading = new Set();
 let supportsUsage = false;
@@ -122,7 +123,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsSessionSections = false, supportsSessionClosing = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+let supportsSessionSections = false, supportsSessionClosing = false, supportsNewPreparation = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -145,7 +146,7 @@ function parseLogin(input) {
 function rememberLogin(nextToken, nextKey) {
   // Older shortcuts may contain only a token; reuse a key only for that same token.
   const resolvedKey = nextKey ?? (nextToken === token ? key : '');
-  if (nextToken !== token || resolvedKey !== key) { videoCache?.clear(); videoCache = undefined; }
+  if (nextToken !== token || resolvedKey !== key) { videoCache?.clear(); videoCache = undefined; modelLists.clear(); newSessionProfiles.clear(); }
   key = resolvedKey; token = nextToken;
   if (token && !videoCache) videoCache = new VideoCache(JSON.stringify([token, key]));
   if (token) localStorage.setItem('pi-remote-token', token);
@@ -334,7 +335,7 @@ function connection(text, compact = text) {
 }
 function disconnect() {
   closePicker(); supportsUsage = false;
-  listRequest++; legacyList = undefined; projectRequest = undefined;
+  listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
   const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
@@ -397,6 +398,7 @@ function connect() {
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
       supportsSessionClosing = packet.supportsSessionClosing === true;
+      supportsNewPreparation = packet.supportsNewPreparation === true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -494,7 +496,7 @@ function logout() {
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
-  drafts.clear(); cache.clear(); commandCatalog.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20;
   sessionFeedback(''); renderList();
@@ -1715,16 +1717,16 @@ function renderModels() {
   $('picker-help').textContent = !picker.models.length ? 'No models available. Configure a provider in the Pi terminal.'
     : !matches.length ? 'No matching models. Try a model name or provider.' : '';
 }
-const modelLists = new Map();
 async function openModels(id, opener) {
-  const picker = openPicker(id, 'model', opener), cached = modelLists.get(id);
+  const key = cache.get(id)?.modelCacheKey || id;
+  const picker = openPicker(id, 'model', opener), cached = modelLists.get(key);
   if (cached) { Object.assign(picker, cached, { current: cache.get(id)?.model || cached.current }); renderModels(); }
   else $('picker-help').textContent = 'Loading available models…';
   if (matchMedia('(pointer: fine)').matches) $('model-search').focus();
   try {
     const result = await request('models', { sessionId: id });
     if (settingsPicker !== picker || selected !== id) return;
-    if (result.models?.length) modelLists.set(id, result);
+    if (result.models?.length) modelLists.set(key, result);
     if (cached && JSON.stringify(cached.models) === JSON.stringify(result.models) && picker.current === result.current) return;
     Object.assign(picker, result); renderModels();
   } catch (e) {
@@ -2099,7 +2101,25 @@ $('search').addEventListener('blur', event => { if (!$('search').value && event.
 $('search').addEventListener('keydown', event => { if (event.key === 'Escape') { closeSearch(); $('search-open').focus(); } });
 $('list-retry').addEventListener('click', loadList);
 // Pinned projects stay on top, then the rest most recent first (the host's order). The sheet fits about five; scroll or search for more.
-let projectList, projectRequest, pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
+let projectList, projectRequest, preparation, pinnedProjects = JSON.parse(localStorage.getItem('pi-remote-pins') || '[]');
+function prepareProject(project) {
+  if (!supportsNewPreparation) return;
+  const key = project?.cwd || '', ws = socket;
+  if (preparation?.key === key && preparation.pending) return;
+  const entry = preparation = { key, pending: true };
+  request('prepareNew', project ? { sessionId: project.sessionId } : {}).then(profile => {
+    if (socket !== ws) return;
+    newSessionProfiles.set(key, profile);
+    modelLists.set(profile.modelCacheKey, { models: profile.models, current: profile.model });
+  }).catch(() => { if (preparation === entry) preparation = undefined; })
+    .finally(() => { entry.pending = false; });
+}
+function prepareNextSession() {
+  if (!projectList) return;
+  const cwd = cache.get(selected)?.cwd || selectedSummary?.cwd;
+  const project = projectList.find(item => item.cwd === cwd) || projectList.find(item => pinnedProjects.includes(item.cwd)) || projectList.find(item => !isBlank(item.cwd));
+  prepareProject(isBlank(cwd) ? undefined : project);
+}
 function renderProjects(focusPin) {
   const query = $('project-search').value.trim().toLowerCase();
   const matches = (projectList || []).filter(project => !isBlank(project.cwd) && displayPaths(project.cwd).toLowerCase().includes(query));
@@ -2134,6 +2154,7 @@ async function loadProjects() {
     const projects = await current;
     if (socket !== ws) return;
     projectList = projects;
+    prepareNextSession();
     // Do not replace controls during session creation or keyboard navigation.
     if ($('project-picker').open && !$('new-project').disabled && !$('project-options').contains(document.activeElement)) renderProjects();
   } catch (e) {
@@ -2148,19 +2169,22 @@ function openProjects() {
   if (!projectList) $('project-status').textContent = 'Loading projects…';
   // Focus the sheet, not its close button, so Safari draws no focus ring on open.
   dialog.showModal(); dialog.focus();
-  loadProjects();
+  prepareNextSession(); loadProjects();
 }
 // Without a project, the host starts the session in a new folder it creates.
 async function startInProject(project, id = 'new-' + crypto.randomUUID()) {
   if (cache.get(id)?.creation?.pending) return;
-  const creation = { project, pending: true };
-  cache.set(id, { id, title: 'Untitled session', cwd: project?.cwd || '', status: 'starting', messages: [], tools: [], creation });
+  const creation = { project, pending: true }, profile = supportsNewPreparation ? newSessionProfiles.get(project?.cwd || '') : undefined;
+  preparation = undefined;
+  cache.set(id, { id, title: 'Untitled session', cwd: project?.cwd || '', status: 'starting', messages: [], tools: [], creation,
+    model: profile?.model, modelName: profile?.modelName, thinkingLevel: profile?.thinkingLevel, modelCacheKey: profile?.modelCacheKey });
   $('project-picker').close();
   void selectSession(id);
   $('prompt').focus({ preventScroll: true });
   try {
     const created = project ? await request('new', { sessionId: project.sessionId }) : await request('newProject');
     if (cache.get(id)?.creation !== creation) return;
+    prepareProject(project);
     // Startup already has the ready state; watch keeps it current without another loading screen.
     if (created.state && !cache.has(created.sessionId)) cache.set(created.sessionId, created.state);
     drafts.set(created.sessionId, selected === id ? $('prompt').value : drafts.get(id) || '');
