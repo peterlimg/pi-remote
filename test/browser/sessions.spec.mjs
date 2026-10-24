@@ -156,10 +156,20 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(workingIcon.locator('svg')).toHaveCSS('width', '16px');
   await expect(workingIcon.locator('svg')).toHaveCSS('height', '16px');
   await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
-  await expect(bricks.first()).toHaveCSS('animation-duration', '0.6s');
+  await expect(bricks.first()).toHaveCSS('animation-duration', '0.9s');
   await expect.poll(() => bricks.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).opacity).sort())).toEqual(['0.35', '0.35', '0.35', '0.35', '0.35', '1']);
-  await expect(bricks.first()).toHaveCSS('opacity', '0.35');
-  await expect.poll(() => bricks.first().evaluate(node => getComputedStyle(node).opacity), { intervals: [25] }).toBe('1');
+  const clockwiseSteps = await bricks.evaluateAll(nodes => new Promise(resolve => {
+    const steps = [], deadline = performance.now() + 2000;
+    function sample() {
+      const active = nodes.findIndex(node => getComputedStyle(node).opacity === '1');
+      if (active >= 0 && active !== steps.at(-1)) steps.push(active);
+      if (steps.length === 7 || performance.now() >= deadline) resolve(steps);
+      else requestAnimationFrame(sample);
+    }
+    sample();
+  }));
+  expect(clockwiseSteps).toHaveLength(7);
+  expect(clockwiseSteps.slice(1)).toEqual(clockwiseSteps.slice(0, -1).map(index => (index + 1) % 6));
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
@@ -181,7 +191,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   for (const brick of await bricks.all()) await expect(brick).toHaveCSS('fill', 'rgb(10, 132, 255)');
   const phaseDelay = await workingIcon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--block-delay')));
   expect(phaseDelay).toBeLessThanOrEqual(0);
-  expect(phaseDelay).toBeGreaterThan(-600);
+  expect(phaseDelay).toBeGreaterThan(-900);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const brick of await bricks.all()) {
     await expect(brick).toHaveCSS('animation-name', 'none');
