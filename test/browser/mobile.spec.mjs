@@ -61,31 +61,46 @@ test('mobile navigation preserves drafts and sends to the selected session', asy
   expect(errors).toEqual([]);
 });
 
-test('conversation header centers and truncates long titles without crowding its controls', async ({ page }) => {
+test('conversation header floats above scrolling messages without crowding its controls', async ({ page }, testInfo) => {
   const state = { id: 'header', title: 'Rill conversation scoring data review with a very long session title',
-    cwd: '/projects/rill-conversation-scoring-with-a-long-project-name/', status: 'idle', messages: [] };
-  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
-    const packet = JSON.parse(raw);
-    if (packet.type === 'auth') {
-      ws.send(JSON.stringify({ type: 'ready' }));
-      ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
-    } else if (packet.op === 'watch') {
-      ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
-    }
-    if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
-  }));
+    cwd: '/projects/rill-conversation-scoring-with-a-long-project-name/', status: 'idle', messages: [
+      { id: 'reply', role: 'assistant', text: 'Review the conversation scores and compare the results.\n\n'.repeat(30) }
+    ] };
+  let client;
+  await page.routeWebSocket('**/ws', ws => {
+    client = ws;
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.type === 'auth') {
+        ws.send(JSON.stringify({ type: 'ready' }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+      } else if (packet.op === 'watch') {
+        ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
+      }
+      if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
+    });
+  });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.locator('.session').click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await expect(page.locator('#project-name')).toHaveText('rill-conversation-scoring-with-a-long-project-name');
-  for (const [width, colorScheme] of [[390, 'light'], [320, 'dark'], [1280, 'dark']]) {
+  for (const [width, colorScheme] of [[390, 'dark'], [390, 'light'], [320, 'dark'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme });
     await expect(page.locator('#title')).toHaveCSS('font-size', '14px');
     await expect(page.locator('#title')).toHaveCSS('font-weight', '500');
     await expect(page.locator('#project-name')).toHaveCSS('font-size', '12px');
+    const transcript = page.locator('#transcript');
+    await transcript.evaluate(node => { node.scrollTop = 0; });
     const header = await page.locator('.conversation-header').boundingBox();
     const title = await page.locator('#title').boundingBox();
+    const firstMessage = await page.locator('.message').first().boundingBox();
+    expect(firstMessage.y).toBeGreaterThanOrEqual(header.y + header.height + 16);
+    expect((await transcript.boundingBox()).y).toBeLessThan(header.y + header.height);
+    await expect(page.locator('.conversation-header')).toHaveCSS('border-bottom-width', '0px');
+    for (const selector of ['.conversation-heading', '.session-info summary', ...(width < 700 ? ['#back'] : [])]) {
+      await expect(page.locator(selector)).toHaveCSS('border-radius', '999px');
+    }
     const details = page.locator('.session-info summary');
     const control = await details.boundingBox();
     expect(Math.abs(title.x + title.width / 2 - header.x - header.width / 2)).toBeLessThan(1);
@@ -100,7 +115,13 @@ test('conversation header centers and truncates long titles without crowding its
       expect(back.x + back.width).toBeLessThan(title.x);
       expect(await page.locator('#title').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
     } else await expect(page.locator('#back')).toBeHidden();
-    await details.click();
+    await transcript.evaluate(node => { node.scrollTop = 120; });
+    expect((await page.locator('.message').first().boundingBox()).y).toBeLessThan(header.y + header.height);
+    expect((await page.locator('.conversation-header').boundingBox()).y).toBe(header.y);
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x + 1, y + 24)?.closest('#transcript')?.id, header)).toBe('transcript');
+    await page.screenshot({ path: testInfo.outputPath(`floating-header-${width}-${colorScheme}.png`) });
+    await details.focus();
+    await page.keyboard.press('Enter');
     await expect(page.locator('#project')).toHaveText(state.cwd);
     await expect(page.locator('#project')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -110,6 +131,20 @@ test('conversation header centers and truncates long titles without crowding its
     await expect(page.locator('#project')).toBeVisible();
     await details.click();
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  state.title = 'Video edit'; state.cwd = '';
+  client.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
+  await expect(page.locator('#title')).toHaveText('Video edit');
+  await expect(page.locator('#project-name')).toBeHidden();
+  expect((await page.locator('.conversation-heading').boundingBox()).width).toBeLessThan(160);
+  await page.screenshot({ path: testInfo.outputPath('floating-header-short-title.png') });
+  client.send(JSON.stringify({ type: 'notice', error: 'Connection needs attention' }));
+  await expect(page.locator('#notice')).toHaveText('Connection needs attention');
+  const header = await page.locator('.conversation-header').boundingBox();
+  const notice = await page.locator('#notice').boundingBox();
+  expect(notice.y).toBeGreaterThanOrEqual(header.y + header.height);
+  await expect(page.locator('#transcript')).toHaveCSS('scroll-padding-top', '0px');
 });
 
 test('conversation renders safe Markdown and keeps tool output collapsed across updates', async ({ page }) => {
