@@ -3,7 +3,7 @@
 Pi Remote loads the Claude SDK provider from Pi's package settings, not from its own extension. The maintained adapter is [peterlimg/pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for the integration pin; the underlying Agent SDK stays at 0.3.296.
 
 ```sh
-pi install git:github.com/peterlimg/pi-claude-sdk@049ee444e2fac89e497dbd73696e3ac0b56aeff5
+pi install git:github.com/peterlimg/pi-claude-sdk@5547648c9f155086b81849d8521b996a892d392f
 ```
 
 Do not keep a second declaration for the old local `pi-remote/experiments/claude-sdk-provider` package. Provider IDs and checkpoint entry formats stay unchanged. The default provider/model, unrelated packages, filters, permissions and authentication do not need to change.
@@ -16,7 +16,7 @@ Package settings are read by each Pi worker. New sessions use the new package; a
 
 An existing checkpoint's prefix and configuration must still match. A failed turn with complete Pi tool results can rebuild its native SDK context automatically, including after retry exhaustion or a worker restart. New chats do not need a previous successful turn to recover. Pi's existing bounded retry policy handles transient failures; usage/entitlement denials pause, and another message can continue after access returns. Missing new tool results still need explicit `/sdk-recover` confirmation. Moving the code does not approve changed instructions, unknown effects or missing results.
 
-The standalone `test/retry.mjs` reproduces dropped connections, server errors, exhausted retries, repeated usage denials, restarts and older guard errors through real Pi RPC and MCP with only the external SDK peer replayed. It also checks missing-result and changed-prefix refusals before SDK startup. This is not a live outage or quota-reset test.
+The standalone `test/retry.mjs` reproduces dropped connections, server errors, exhausted retries, repeated usage denials, restarts, older guard errors and reordered tool guidance during recovery through real Pi RPC and MCP with only the external SDK peer replayed. It also checks missing-result and changed-prefix refusals before SDK startup. These replay cases do not test live outages or quota-reset timing. A separate local-host check verified that an existing failed Opus conversation with order-only tool-guidance changes returned a tool-free acknowledgement, preserved its original audit prefix byte-for-byte, and saved a new native checkpoint.
 
 ## Integration ownership
 
