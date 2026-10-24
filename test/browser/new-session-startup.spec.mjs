@@ -21,7 +21,16 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url)), '--startup-gate']
   } });
   host.service.tempDirs = []; // The disposable project must appear in the real project picker.
-  const sourceId = sessionKey(file);
+  const sourceId = sessionKey(file), watches = [];
+  // Hold the follow-up subscription to prove startup needs no second round trip.
+  await page.routeWebSocket('**/ws', ws => {
+    const server = ws.connectToServer();
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (!watches.length && packet.op === 'watch' && packet.sessionId !== sourceId) watches.push(() => server.send(raw));
+      else server.send(raw);
+    });
+  });
   try {
     await page.goto('http://127.0.0.1:' + host.http.address().port + '/#token=' + config.clientToken);
     await expect(page.locator('#connection')).toHaveText('Computer connected');
@@ -40,7 +49,16 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     await expect(page.locator('#prompt')).toHaveValue('');
     await expect(page.locator('#send')).toBeDisabled();
     await expect(page.locator('#composer-hint')).toContainText('Starting session');
+    await expect(page.locator('#prompt')).toBeFocused({ timeout: 1000 });
     await expect(page.locator('#image-files')).toBeDisabled();
+    await page.evaluate(() => {
+      window.startupLoadingScreens = [];
+      new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE && node.matches('.conversation-loading')) window.startupLoadingScreens.push(node.textContent);
+        }
+      }).observe(document.getElementById('transcript'), { childList: true });
+    });
     if (projectless) await expect(page.locator('#project-name')).toBeHidden();
     else await expect(page.locator('#project-name')).toHaveText('project');
     await page.locator('#prompt').fill('Draft written during startup');
@@ -68,9 +86,16 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
       await page.getByRole('button', { name: 'Show sessions' }).click();
       await page.locator(`#sessions .session[data-id="${fresh}"]`).click();
     }
+    await expect.poll(() => watches.length).toBe(1);
     await expect(page.locator('#send')).toBeEnabled();
+    expect(await page.evaluate(() => window.startupLoadingScreens)).toEqual([]);
+    if (!projectless) await expect(page.locator('#prompt')).toBeFocused();
+    await expect(page.locator('#model-name')).toHaveText('First');
+    await expect(page.locator('#reasoning-value')).toHaveText('Medium');
     await expect(page.locator('#prompt')).toHaveValue('Draft written during startup');
     await expect(page.locator('#composer-hint')).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath('ready-before-watch.png') });
+    watches.forEach(release => release());
     await page.getByRole('button', { name: 'Send message' }).click();
     await expect(page.locator('#transcript')).toContainText('reply: Draft written during startup');
     expect(host.service.read(sourceId).messages.map(message => message.text)).toEqual(['Original conversation']);

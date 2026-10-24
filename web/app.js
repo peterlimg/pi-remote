@@ -2155,9 +2155,12 @@ async function startInProject(project, id = 'new-' + crypto.randomUUID()) {
   cache.set(id, { id, title: 'Untitled session', cwd: project?.cwd || '', status: 'starting', messages: [], tools: [], creation });
   $('project-picker').close();
   void selectSession(id);
+  $('prompt').focus({ preventScroll: true });
   try {
     const created = project ? await request('new', { sessionId: project.sessionId }) : await request('newProject');
     if (cache.get(id)?.creation !== creation) return;
+    // Startup already has the ready state; watch keeps it current without another loading screen.
+    if (created.state && !cache.has(created.sessionId)) cache.set(created.sessionId, created.state);
     drafts.set(created.sessionId, selected === id ? $('prompt').value : drafts.get(id) || '');
     // Finishing startup must not reopen a conversation the user has already left.
     if (selected === id) {

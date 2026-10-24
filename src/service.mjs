@@ -314,7 +314,7 @@ export class SessionService extends EventEmitter {
         return { id: sessionKey(file), file, cwd, piSessionId: info.sessionId };
       });
       item.restore(info);
-      return { sessionId: item.state.id };
+      return { sessionId: item.state.id, state: structuredClone(item.read()) };
     } catch (e) { await item.close(); throw e; }
     finally { this.starting.delete(item); }
   }
