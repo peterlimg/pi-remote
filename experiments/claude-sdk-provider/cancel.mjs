@@ -81,14 +81,15 @@ try {
     const queriesBefore = records().filter(row => row.type === 'query').length;
     const effectsBefore = records().slice(offset).filter(row => row.type === 'execution').map(row => row.label);
     const response = await send('Continue with the corrected location. Do not repeat any earlier tool.');
-    const blocked = ['missing-result', 'unknown-error'].includes(mode);
+    const blocked = mode === 'missing-result';
     assert.equal(response.stopReason, blocked ? 'error' : 'stop', response.errorMessage);
     assert.deepEqual(records().slice(offset).filter(row => row.type === 'execution').map(row => row.label), effectsBefore);
     if (blocked) assert.equal(records().filter(row => row.type === 'query').length, queriesBefore);
     else {
       const query = records().filter(row => row.type === 'query').at(-1), prompt = records().filter(row => row.type === 'prompt').at(-1);
       assert.equal(query.resumed, false); assert.equal(query.resumedAt, false);
-      assert.equal(prompt.cancelled, true);
+      assert.equal(prompt.cancelled, mode !== 'unknown-error');
+      assert.equal(prompt.failed, mode === 'unknown-error');
       if (mode !== 'text' && mode !== 'during-tool') assert.equal(prompt.marker, true);
       assert.equal(response.usage.input, 100, 'New native context must reset the SDK usage baseline.');
       if (['first', 'checkpoint', 'text', 'during-tool', 'restart'].includes(mode)) assert(readFileSync(file, 'utf8').startsWith(cancelledHistory));

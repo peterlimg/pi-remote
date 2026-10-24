@@ -65,6 +65,7 @@ function replayQuery(args) {
       if (continuation || tools.includes('mcp__pi__extra') && ((text.includes('Pi tool-set update.') && text.includes('"text":"dynamic-tools"')) ||
         (text.includes('Pi-authorized context compaction.') && text.includes('"label":"dynamic-tools"')))) request = 'dynamic-tools';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
+        failed: text.includes('Failed SDK continuation.'),
         foreign: text.includes('FOREIGN_DONE'), localRejection: text.includes('SDK history changed after recovery approval. Request recovery again.'),
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,

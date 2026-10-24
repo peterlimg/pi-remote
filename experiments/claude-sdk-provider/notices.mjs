@@ -69,20 +69,17 @@ try {
       await worker.request('prompt', { message: '/sdk-recover' });
     }
     const response = await send(['old-guard', 'unknown-error', 'recovery'].includes(mode) ? 'Acknowledge the recorded child results without restarting work.' : '/sdk-notify');
-    assert.equal(response.stopReason, mode === 'unknown-error' ? 'error' : 'stop', response.errorMessage);
+    assert.equal(response.stopReason, 'stop', response.errorMessage);
     assert.deepEqual(current().filter(row => row.type === 'execution').map(row => row.label), mode === 'first' ? [] : mode === 'foreign' ? ['seed', 'foreign'] : ['seed']);
-    const queryCount = ['live', 'first', 'unknown-error'].includes(mode) ? 1 : 2;
+    const queryCount = ['live', 'first'].includes(mode) ? 1 : 2;
     assert.equal(current().filter(row => row.type === 'query').length, queryCount);
-    if (mode === 'unknown-error') assert.match(response.errorMessage, /uncheckpointed SDK responses/);
-    else {
-      const prompt = current().filter(row => row.type === 'prompt').at(-1);
-      assert.deepEqual(prompt.notices, ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']);
-      assert(prompt.noticeOrder.every((value, index, all) => index === 0 || value > all[index - 1]));
-      assert.equal(entries().filter(row => row.type === 'custom_message' && row.customType === 'synthetic-child-notify').length, 3);
-      assert.equal((await send('Follow up without tools.')).stopReason, 'stop');
-      assert.equal(current().filter(row => row.type === 'query').length, queryCount);
-    }
-    result.cases.push({ mode, pass: true, noToolReplay: true, noticesInOrder: mode !== 'unknown-error', blocked: mode === 'unknown-error' });
+    const prompt = current().filter(row => row.type === 'prompt').at(-1);
+    assert.deepEqual(prompt.notices, ['NOTICE_A', 'NOTICE_B', 'NOTICE_C']);
+    assert(prompt.noticeOrder.every((value, index, all) => index === 0 || value > all[index - 1]));
+    assert.equal(entries().filter(row => row.type === 'custom_message' && row.customType === 'synthetic-child-notify').length, 3);
+    assert.equal((await send('Follow up without tools.')).stopReason, 'stop');
+    assert.equal(current().filter(row => row.type === 'query').length, queryCount);
+    result.cases.push({ mode, pass: true, noToolReplay: true, noticesInOrder: true, blocked: false });
     await worker.close(); worker = undefined;
   }
   result.pass = true;

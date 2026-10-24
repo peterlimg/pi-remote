@@ -3,7 +3,7 @@
 Pi Remote loads the Claude SDK provider from Pi's package settings, not from its own extension. The maintained adapter is [peterlimg/pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for the integration pin; the underlying Agent SDK stays at 0.3.296.
 
 ```sh
-pi install git:github.com/peterlimg/pi-claude-sdk@bd9e41b2ba5ca2061099aaab56c496c2b454ea8e
+pi install git:github.com/peterlimg/pi-claude-sdk@049ee444e2fac89e497dbd73696e3ac0b56aeff5
 ```
 
 Do not keep a second declaration for the old local `pi-remote/experiments/claude-sdk-provider` package. Provider IDs and checkpoint entry formats stay unchanged. The default provider/model, unrelated packages, filters, permissions and authentication do not need to change.
@@ -14,7 +14,9 @@ Stage and verify the pinned package before replacing the old package declaration
 
 Package settings are read by each Pi worker. New sessions use the new package; already-running workers keep their loaded code until an idle reload or replacement. A phone-browser refresh alone does not replace that worker. Do not interrupt an active SDK turn, restart unrelated workers or request recovery merely to change a package path. The Pi Remote host does not need a restart for this source-only change.
 
-An existing chat still needs its valid completed checkpoint and matching configuration. Moving the code does not approve changed instructions, unknown effects or missing results.
+An existing checkpoint's prefix and configuration must still match. A failed turn with complete Pi tool results can rebuild its native SDK context automatically, including after retry exhaustion or a worker restart. New chats do not need a previous successful turn to recover. Pi's existing bounded retry policy handles transient failures; usage/entitlement denials pause, and another message can continue after access returns. Missing new tool results still need explicit `/sdk-recover` confirmation. Moving the code does not approve changed instructions, unknown effects or missing results.
+
+The standalone `test/retry.mjs` reproduces dropped connections, server errors, exhausted retries, repeated usage denials, restarts and older guard errors through real Pi RPC and MCP with only the external SDK peer replayed. It also checks missing-result and changed-prefix refusals before SDK startup. This is not a live outage or quota-reset test.
 
 ## Integration ownership
 

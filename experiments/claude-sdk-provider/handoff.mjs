@@ -207,7 +207,7 @@ try {
   const goodHistory = entries();
   await worker.close();
   await expect.poll(() => host.service.live.get(id)?.worker).toBe(undefined);
-  const rejectHistory = async (name, history, expected) => {
+  const checkHistory = async (name, history, expected) => {
     let parentId = null;
     const linked = structuredClone(history).map(entry => {
       if (entry.type !== 'session') { entry.parentId = parentId; parentId = entry.id; }
@@ -222,25 +222,28 @@ try {
     await worker.request('set_model', { provider: sdk.provider, modelId: sdk.id });
     const settled = events.filter(e => e.type === 'agent_settled').length;
     const nativeStarts = rows().filter(r => r.phase === 'sdk-init').length;
+    const effects = rows().filter(r => r.phase === 'execution');
     await worker.request('prompt', { message: 'Do not call tools. Reply SAFE.' });
     await expect.poll(() => events.filter(e => e.type === 'agent_settled').length).toBe(settled + 1);
     const last = events.findLast(e => e.type === 'message_end' && e.message.role === 'assistant').message;
-    assert.equal(last.stopReason, 'error'); assert.match(last.errorMessage, expected);
-    assert.equal(rows().filter(r => r.phase === 'sdk-init').length, nativeStarts);
+    assert.equal(last.stopReason, expected ? 'error' : 'stop', last.errorMessage);
+    if (expected) assert.match(last.errorMessage, expected);
+    assert.equal(rows().filter(r => r.phase === 'sdk-init').length, nativeStarts + (expected ? 0 : 1));
+    assert.deepEqual(rows().filter(r => r.phase === 'execution'), effects);
     await worker.close();
   };
   const tampered = structuredClone(goodHistory);
   tampered.find(e => e.message?.role === 'toolResult').message.content[0].text = 'CORRUPTED';
-  await rejectHistory('tampered-prefix', tampered, /SDK history changed/);
+  await checkHistory('tampered-prefix', tampered, /SDK history changed/);
   result.changedPrefixRejectedBeforeSdkStart = true;
   const gptCall = foreignHistory.filter(e => e.message?.role === 'assistant' && e.message.provider === 'openai-codex')
     .flatMap(e => e.message.content.filter(b => b.type === 'toolCall'))[0].id;
-  await rejectHistory('missing-tool-result', foreignHistory.filter(e => e.message?.toolCallId !== gptCall), /Incomplete cross-provider history|unresolved Pi tool calls/);
+  await checkHistory('missing-tool-result', foreignHistory.filter(e => e.message?.toolCallId !== gptCall), /Incomplete cross-provider history|unresolved Pi tool calls/);
   result.missingForeignToolResultRejectedBeforeSdkStart = true;
   const uncertain = rejected.map(message => ({ type: 'message', id: randomUUID().slice(0, 8), timestamp: new Date().toISOString(),
     message: message.role === 'assistant' ? { ...message, errorMessage: 'Uncertain SDK failure.', content: [{ type: 'text', text: 'Uncertain SDK failure.' }] } : message }));
-  await rejectHistory('unknown-sdk-error', [...goodHistory, ...uncertain], /Cannot recover uncheckpointed SDK responses/);
-  result.unknownSdkFailureRejectedBeforeSdkStart = true;
+  await checkHistory('unknown-sdk-error', [...goodHistory, ...uncertain]);
+  result.unknownSdkFailureRebuiltWithoutToolReplay = true;
   assert.equal(settingsHash(), settingsBefore);
   result.personalSettingsUnchanged = true;
   result.pass = true;

@@ -56,6 +56,6 @@ The baseline full matrix exercised Haiku and Codex. New compaction and branching
 
 ## Safety boundaries to keep
 
-Unknown SDK failures, missing tool results and altered approved history must remain blocked or require explicit recovery. Do not invent successful results, replay historical commands or silently approve unknown outcomes to make a parity test pass. These protections are not gaps to remove.
+Failed SDK turns can rebuild a native context automatically when their Pi tool results are complete and the saved prefix/configuration still match. Pi owns bounded transient retries; usage denials pause without poisoning the conversation. Rebuilding imports recorded results as data rather than replaying calls. Missing new tool results and altered approved history must remain blocked or require explicit recovery. Previously approved unknown effects stay unknown. Do not invent successful results, replay historical commands or silently approve unknown outcomes to make a parity test pass. These protections are not gaps to remove.
 
 Close an item with evidence for its actual user flow and affected providers/models. Keep real-model results separate from external-SDK replay, and retain failed/unsupported cases rather than hiding them as skips.

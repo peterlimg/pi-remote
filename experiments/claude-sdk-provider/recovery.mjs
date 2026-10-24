@@ -102,7 +102,7 @@ try {
   const queriesBefore = records().filter(row => row.type === 'query').length;
   const failed = await send('verify blocked');
   assert.equal(failed.stopReason, 'error');
-  assert.match(failed.errorMessage, /uncheckpointed SDK responses|interrupted SDK tools/);
+  assert.match(failed.errorMessage, /uncheckpointed SDK responses|interrupted SDK tools|unresolved Pi tool calls/);
   assert.equal(records().filter(row => row.type === 'query').length, queriesBefore);
   result.originalFailureReproduced = true;
   const beforeRecovery = readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8');
@@ -259,8 +259,10 @@ try {
   writeFileSync(unknownFile, unknown.map(entry => JSON.stringify(entry)).join('\n') + '\n');
   await worker.close(); await start(unknownFile);
   const beforeUnknown = records().filter(row => row.type === 'query').length;
-  assert.equal((await send('must remain blocked')).stopReason, 'error');
-  assert.equal(records().filter(row => row.type === 'query').length, beforeUnknown);
+  assert.equal((await send('continue after the failed request')).stopReason, 'stop');
+  assert.equal(records().filter(row => row.type === 'query').length, beforeUnknown + 1);
+  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, false);
+  assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
   await worker.close(); await start(billingFile);
   assert.equal((await send('billing-rejection')).stopReason, 'error');
   await worker.command({ type: 'setModel', provider: 'recovery-control', modelId: 'plain' });
@@ -274,10 +276,10 @@ try {
   assert.equal(dialogs.length, 0);
   assert.equal((await send('billing-rejection')).stopReason, 'error');
   assert.equal((await send('recall')).stopReason, 'stop', 'A rejected request must not poison the bridge in the same worker.');
-  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, true);
+  assert.equal(records().filter(row => row.type === 'query').at(-1).resumed, false);
   assert.deepEqual(effects(), ['seed', 'orphan', 'foreign', 'allowed', 'after-restart']);
   result.knownNoWorkRejectionsRetryWithoutRecoveryOrHistoryLoss = true;
-  result.unknownSdkFailuresRemainBlocked = true;
+  result.unknownSdkFailuresRecoverWithoutToolReplay = true;
   result.stage = 'legacy-prompt-checkpoint';
   await worker.close();
   const legacy = entries(), legacyMessages = legacy.map(entry => entry.message).filter(Boolean);
