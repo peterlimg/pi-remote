@@ -847,11 +847,11 @@ $('session-emoji-form').addEventListener('submit', event => {
 function statusIcon(status) {
   const icon = el('span', undefined, 'session-icon');
   icon.dataset.status = status;
-  // The list rebuilds on every update; the clock keeps the bricks in phase across replacements.
-  if (status === 'working') icon.style.setProperty('--brick-delay', `-${Date.now() % 1200}ms`);
+  // The list rebuilds on every update; the clock keeps the blink in phase across replacements.
+  if (status === 'working') icon.style.setProperty('--block-delay', `-${Date.now() % 1200}ms`);
   icon.setAttribute('aria-hidden', 'true');
   icon.innerHTML = status === 'working'
-    ? '<svg viewBox="0 0 16 16" width="18" height="18"><path fill="#F09082" d="M0 0h12v8H8V4H0Z"/><path fill="#4D9ABF" d="M0 4h4v4h4v4H4v4H0Z"/><path fill="#F1BE58" d="M12 8h4v8h-4Z"/></svg>'
+    ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><rect x="4" y="2" width="8" height="12"/></svg>'
     : status === 'waiting'
     ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
     : '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>';
