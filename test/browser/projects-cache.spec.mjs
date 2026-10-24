@@ -68,7 +68,9 @@ test('cached projects stay usable while the picker refreshes', async ({ page }, 
   await expect.poll(() => requests.length).toBe(5);
   await picker.locator('.project-option').first().click();
   await expect(picker).toBeHidden();
-  await expect(page.locator('#composer-hint')).toContainText('Starting session');
+  await expect(page.locator('#composer-hint')).toBeHidden();
+  await expect(page.locator('#model')).toHaveText('Model');
+  await expect(page.locator('#model')).toBeDisabled();
   await page.locator('#prompt').fill('Keep this draft if startup fails');
   // A late project refresh must not interrupt the new conversation.
   reply(requests.at(-1), projects);
@@ -78,9 +80,12 @@ test('cached projects stay usable while the picker refreshes', async ({ page }, 
   expect(starts[0].packet.sessionId).toBe('beta');
   reply(starts[0], undefined, 'Session start failed');
   await expect(page.locator('#notice')).toHaveText('Session start failed');
+  await expect(page.locator('#composer-hint')).toHaveText('Session did not start. Your draft is kept here.');
   await expect(page.locator('#prompt')).toHaveValue('Keep this draft if startup fails');
   await page.getByRole('button', { name: 'Try starting again' }).click();
   await expect.poll(() => starts.length).toBe(2);
+  await expect(page.locator('#composer-hint')).toBeHidden();
+  await expect(page.locator('#model')).toHaveText('Model');
   expect(starts[1].packet.sessionId).toBe('beta');
   reply(starts[1], { sessionId: 'fresh' });
   await expect(page.locator('#send')).toBeEnabled();

@@ -48,9 +48,9 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     await expect(page.locator('#prompt')).toBeEditable();
     await expect(page.locator('#prompt')).toHaveValue('');
     await expect(page.locator('#send')).toBeDisabled();
-    await expect(page.locator('#composer-hint')).toContainText('Starting session');
+    await expect(page.locator('#composer-hint')).toBeHidden({ timeout: 1000 });
     await expect(page.locator('#model')).toBeVisible({ timeout: 1000 });
-    await expect(page.locator('#model-name')).toHaveText('Loading model…');
+    await expect(page.locator('#model-name')).toHaveText('Model');
     await expect(page.locator('#model')).toBeDisabled();
     await expect(page.locator('#reasoning-control')).toBeHidden();
     await expect(page.locator('#prompt')).toBeFocused({ timeout: 1000 });

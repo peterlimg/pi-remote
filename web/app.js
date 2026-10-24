@@ -1465,7 +1465,7 @@ function updateControls() {
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity();
   const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
-  const loadingModel = !!selected && (!state || state.status === 'starting') && !state?.model;
+  const pendingModel = !!selected && (!state || state.status === 'starting') && !state?.model;
   // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,
   // where claude-opus-5-5[-20260101] → Opus 5.5 and other ids only lose a trailing date.
   $('model-name').textContent = state?.modelName
@@ -1473,11 +1473,11 @@ function updateControls() {
     : modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
       (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
   const effort = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
-  $('model-name').textContent ||= loadingModel ? 'Loading model…' : 'Model';
-  $('model').title = loadingModel ? 'Loading model…' : modelName ? `Switch model: ${modelName}` : 'Choose a model';
+  $('model-name').textContent ||= 'Model';
+  $('model').title = modelName ? `Switch model: ${modelName}` : 'Choose a model';
   $('model').setAttribute('aria-label', $('model').title);
   $('model').disabled = !live || changingReasoning.has(selected);
-  $('model').hidden = !state?.model && !loadingModel;
+  $('model').hidden = !state?.model && !pendingModel;
   $('reasoning-control').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = effort;
   $('reasoning-control').hidden = !state?.thinkingLevel;
@@ -1490,7 +1490,7 @@ function updateControls() {
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
   $('resume').disabled = !connected || (state?.creation ? state.creation.pending : !resumable);
   $('composer-hint').textContent = !connected ? '' :
-    state?.creation ? (state.creation.pending ? 'Starting session… You can write your message now.' : 'Session did not start. Your draft is kept here.') :
+    state?.creation ? (state.creation.pending ? '' : 'Session did not start. Your draft is kept here.') :
     live && state.compacting ? 'Summarizing earlier messages. New messages will wait.' :
     state?.status === 'waiting' && !state.dialog ? 'Pi is waiting for input in its terminal.' :
     state && ['saved', 'disconnected'].includes(state.status) ? (resumable ? 'Resume to continue.' : 'Read-only. Enable --allow-resume on your computer after loading the extension in every Pi terminal.') : '';

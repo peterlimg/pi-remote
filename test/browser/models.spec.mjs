@@ -107,7 +107,8 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   });
   await page.goto(url);
   await page.getByRole('button', { name: /One/ }).click();
-  await expect(page.getByRole('button', { name: 'Loading model…', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Choose a model', exact: true })).toBeVisible();
+  await expect(page.locator('#model')).toHaveText('Model');
   await expect(page.locator('#model')).toBeDisabled();
   await expect.poll(() => !!finishWatch).toBe(true);
   finishWatch();
