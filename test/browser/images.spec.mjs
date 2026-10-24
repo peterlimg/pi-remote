@@ -101,8 +101,8 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   expect(errors).toEqual([]);
 });
 
-test('image picker waits for keyboard dismissal before Safari captures its anchor', async ({ page }) => {
-  // Native repro: in iOS Safari, focus Message, type a draft, then tap +.
+test('new-session image picker waits for keyboard dismissal before Safari captures its anchor', async ({ page }, info) => {
+  // Native repro: in iOS Safari, start a new session, then tap + without typing.
   // The source menu must stay beside + after the keyboard closes, including on reopening.
   await page.addInitScript(() => {
     const viewport = new EventTarget();
@@ -112,20 +112,43 @@ test('image picker waits for keyboard dismissal before Safari captures its ancho
       viewport.height = height; viewport.dispatchEvent(new Event('resize'));
     };
   });
+  const states = ['Alpha', 'Beta', 'fresh'].map(id => ({ id, title: id === 'fresh' ? 'Untitled session' : 'Project ' + id,
+    cwd: '/projects/Alpha', status: 'idle', messages: [] }));
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    const reply = value => ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value }));
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: states.slice(0, 2) }));
+    } else if (packet.op === 'projects') reply([{ cwd: states[0].cwd, sessionId: 'Alpha' }]);
+    else if (packet.op === 'new') reply({ sessionId: 'fresh', state: states[2] });
+    else {
+      if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0,
+        state: states.find(state => state.id === packet.sessionId) }));
+      reply([]);
+    }
+  }));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#token=browser-test-token-only-123456789012345');
-  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.evaluate(() => window.keyboardHeight(844));
+  await page.getByRole('button', { name: 'New session', exact: true }).tap();
+  await page.locator('.project-option').click();
+  await expect(page.locator('#title')).toHaveText('Untitled session');
   const prompt = page.locator('#prompt'), input = page.getByLabel('Attach images and videos', { exact: true });
+  await expect(input).toBeEnabled();
+  await expect(prompt).toBeFocused();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
   const pickers = [];
   page.on('filechooser', picker => pickers.push(picker));
-  await prompt.fill('Keep this draft');
   await page.evaluate(() => window.keyboardHeight(460));
   await page.clock.install();
   await page.clock.pauseAt(new Date());
   await input.tap();
   await expect(prompt).not.toBeFocused();
   expect(pickers).toHaveLength(0);
-  await page.clock.runFor(300);
+  // iOS may not send its first closing-keyboard resize until after the old 350ms timeout.
+  await page.clock.runFor(500);
+  expect(pickers).toHaveLength(0);
   await page.evaluate(() => window.keyboardHeight(700));
   await input.tap(); // Repeated taps must not bypass the keyboard wait.
   await page.clock.runFor(50);
@@ -135,8 +158,10 @@ test('image picker waits for keyboard dismissal before Safari captures its ancho
   await expect.poll(() => pickers.length).toBe(1);
   expect(pickers[0].isMultiple()).toBe(true);
   expect(await input.boundingBox()).toEqual(await page.locator('#attach').boundingBox());
+  await page.screenshot({ path: info.outputPath('new-session-picker-anchor.png') });
+  await info.attach('new-session-picker-anchor', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
   await input.dispatchEvent('cancel');
-  await expect(prompt).toHaveValue('Keep this draft');
+  await expect(prompt).toHaveValue('');
   await input.tap(); // No keyboard: reopen immediately, with no duplicate source sheet.
   await expect.poll(() => pickers.length).toBe(2);
   await input.dispatchEvent('cancel');
@@ -145,12 +170,32 @@ test('image picker waits for keyboard dismissal before Safari captures its ancho
   await page.clock.runFor(350);
   await expect.poll(() => pickers.length).toBe(3);
   await input.dispatchEvent('cancel');
+  await prompt.fill('Keep this draft');
+  await page.evaluate(() => window.keyboardHeight(460));
+  await input.focus(); // Safari can move focus before delivering the file input's click.
+  await input.tap();
+  await page.clock.runFor(350);
+  expect(pickers).toHaveLength(3);
+  await page.evaluate(() => window.keyboardHeight(844));
+  await page.clock.runFor(100);
+  await expect.poll(() => pickers.length).toBe(4);
+  await input.dispatchEvent('cancel');
+  await expect(prompt).toHaveValue('Keep this draft');
+  await prompt.focus();
+  await page.evaluate(() => window.keyboardHeight(460));
+  await input.tap();
+  await page.clock.runFor(1000);
+  expect(pickers).toHaveLength(4); // A stalled keyboard must not force a misplaced picker open.
+  await page.evaluate(() => window.keyboardHeight(844));
+  await input.tap();
+  await expect.poll(() => pickers.length).toBe(5);
+  await input.dispatchEvent('cancel');
   await prompt.focus();
   await input.tap();
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
   await page.clock.runFor(1000);
-  expect(pickers).toHaveLength(3); // Never open a delayed picker for a different session.
+  expect(pickers).toHaveLength(5); // Never open a delayed picker for a different session.
 });
 
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {

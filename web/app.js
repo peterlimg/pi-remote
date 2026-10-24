@@ -2411,23 +2411,24 @@ let openingImages = false;
 $('image-files').addEventListener('mousedown', event => event.preventDefault());
 $('image-files').addEventListener('click', event => {
   if (openingImages) { event.preventDefault(); return; }
-  const active = document.activeElement;
-  if (!active?.matches('textarea, input:not([type=file])')) return;
+  const active = document.activeElement, input = event.currentTarget, viewport = window.visualViewport;
+  const keyboardOpen = () => viewport && viewport.height * viewport.scale < innerHeight - 1;
+  if (!active?.matches('textarea, input:not([type=file])') && !keyboardOpen()) return;
   event.preventDefault();
   openingImages = true;
-  const input = event.currentTarget, id = selected, viewport = window.visualViewport;
+  const id = selected;
   const started = performance.now();
   let changed = started;
   const resized = () => { changed = performance.now(); };
   const open = () => {
-    // Bound the wait to Safari's short-lived file-picker gesture permission.
-    if (performance.now() - changed < 100 && performance.now() - started < 900) {
+    // iOS can pause keyboard resize events; wait for recovery within its file-picker gesture timeout.
+    if ((keyboardOpen() || performance.now() - changed < 100) && performance.now() - started < 900) {
       setTimeout(open, 50); return;
     }
     viewport?.removeEventListener('resize', resized);
     viewport?.removeEventListener('scroll', resized);
     openingImages = false;
-    if (selected !== id || input.disabled || !input.getClientRects().length ||
+    if (selected !== id || input.disabled || !input.getClientRects().length || keyboardOpen() ||
       document.activeElement?.matches('textarea, input:not([type=file])')) return;
     input.click();
   };
