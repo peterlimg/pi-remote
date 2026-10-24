@@ -87,7 +87,7 @@ test('/model switches only the selected session without sending a prompt', async
 
 test('model discovery handles loading, cancellation, stale results, empty lists and errors', async ({ page }) => {
   const state = { id: 'one', title: 'One', cwd: '/project', status: 'idle', messages: [] };
-  let client;
+  let client, finishWatch;
   const requests = [];
   await page.routeWebSocket('**/ws', ws => {
     client = ws;
@@ -97,14 +97,21 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
         ws.send(JSON.stringify({ type: 'ready' }));
         ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
       } else if (p.op === 'watch') {
-        ws.send(JSON.stringify({ type: 'snapshot', sessionId: 'one', version: 0, state }));
-        ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true }));
+        finishWatch = () => {
+          ws.send(JSON.stringify({ type: 'snapshot', sessionId: 'one', version: 0, state }));
+          ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true }));
+        };
       } else if (p.op === 'commands') ws.send(JSON.stringify({ type: 'response', id: p.id, ok: true, value: [] }));
       else if (p.op === 'models') requests.push(p);
     });
   });
   await page.goto(url);
   await page.getByRole('button', { name: /One/ }).click();
+  await expect(page.getByRole('button', { name: 'Loading model…', exact: true })).toBeVisible();
+  await expect(page.locator('#model')).toBeDisabled();
+  await expect.poll(() => !!finishWatch).toBe(true);
+  finishWatch();
+  await expect(page.locator('#model')).toBeHidden();
   const open = async count => {
     await page.locator('#prompt').fill('/model');
     await page.locator('#send').click();

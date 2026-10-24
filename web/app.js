@@ -1465,6 +1465,7 @@ function updateControls() {
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity();
   const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
+  const loadingModel = !!selected && (!state || state.status === 'starting') && !state?.model;
   // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,
   // where claude-opus-5-5[-20260101] → Opus 5.5 and other ids only lose a trailing date.
   $('model-name').textContent = state?.modelName
@@ -1472,11 +1473,11 @@ function updateControls() {
     : modelName.replace(/-\d{8}$/, '').replace(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/,
       (_, family, major, minor) => `${family[0].toUpperCase()}${family.slice(1)} ${major}${minor ? '.' + minor : ''}`);
   const effort = changingReasoning.has(selected) ? 'Changing…' : reasoningLevels[state?.thinkingLevel] || state?.thinkingLevel || 'Off';
-  $('model-name').textContent ||= 'Model';
-  $('model').title = modelName ? `Switch model: ${modelName}` : 'Choose a model';
+  $('model-name').textContent ||= loadingModel ? 'Loading model…' : 'Model';
+  $('model').title = loadingModel ? 'Loading model…' : modelName ? `Switch model: ${modelName}` : 'Choose a model';
   $('model').setAttribute('aria-label', $('model').title);
   $('model').disabled = !live || changingReasoning.has(selected);
-  $('model').hidden = !state?.model;
+  $('model').hidden = !state?.model && !loadingModel;
   $('reasoning-control').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = effort;
   $('reasoning-control').hidden = !state?.thinkingLevel;

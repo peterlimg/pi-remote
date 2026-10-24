@@ -49,6 +49,10 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     await expect(page.locator('#prompt')).toHaveValue('');
     await expect(page.locator('#send')).toBeDisabled();
     await expect(page.locator('#composer-hint')).toContainText('Starting session');
+    await expect(page.locator('#model')).toBeVisible({ timeout: 1000 });
+    await expect(page.locator('#model-name')).toHaveText('Loading model…');
+    await expect(page.locator('#model')).toBeDisabled();
+    await expect(page.locator('#reasoning-control')).toBeHidden();
     await expect(page.locator('#prompt')).toBeFocused({ timeout: 1000 });
     await expect(page.locator('#image-files')).toBeDisabled();
     await page.evaluate(() => {
@@ -62,6 +66,7 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     if (projectless) await expect(page.locator('#project-name')).toBeHidden();
     else await expect(page.locator('#project-name')).toHaveText('project');
     await page.locator('#prompt').fill('Draft written during startup');
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
     await page.screenshot({ path: testInfo.outputPath('draft-during-startup.png') });
     if (!projectless) {
       await page.evaluate(() => window.dispatchEvent(new Event('online')));
@@ -91,6 +96,8 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     expect(await page.evaluate(() => window.startupLoadingScreens)).toEqual([]);
     if (!projectless) await expect(page.locator('#prompt')).toBeFocused();
     await expect(page.locator('#model-name')).toHaveText('First');
+    await expect(page.locator('#model')).toBeEnabled();
+    await expect(page.locator('#reasoning-control')).toBeVisible();
     await expect(page.locator('#reasoning-value')).toHaveText('Medium');
     await expect(page.locator('#prompt')).toHaveValue('Draft written during startup');
     await expect(page.locator('#composer-hint')).toBeHidden();
