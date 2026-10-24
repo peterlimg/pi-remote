@@ -250,7 +250,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .icon-sheet .hint { margin: 8px 0 0; text-align: center; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
-#transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; overscroll-behavior: contain; }
+#transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; overscroll-behavior: contain; -webkit-mask-image: linear-gradient(#000 calc(100% - 32px), transparent); mask-image: linear-gradient(#000 calc(100% - 32px), transparent); }
 #transcript:focus-visible { outline: none; }
 .conversation-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 24px 0; color: var(--muted); }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */

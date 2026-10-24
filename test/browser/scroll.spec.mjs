@@ -29,6 +29,8 @@ test('the bottom button returns to the latest message and resumes following repl
   const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
   await expect(transcript).toContainText('A short reply.');
   await expect(button).toBeHidden();
+  await expect(transcript).toHaveCSS('mask-image', 'linear-gradient(rgb(0, 0, 0) calc(100% - 32px), rgba(0, 0, 0, 0))');
+  await expect(page.locator('#composer')).toHaveCSS('mask-image', 'none');
   state.messages[0].text = 'Thread history\n\n'.repeat(60);
   snapshot();
   await expect(transcript).toContainText('Thread history');
@@ -39,8 +41,10 @@ test('the bottom button returns to the latest message and resumes following repl
   await expect(activity).toBeVisible();
   await expect.poll(gap).toBeLessThan(1);
   for (const [size, theme, name] of [
-    [{ width: 390, height: 844 }, 'light', 'mobile'],
-    [{ width: 1280, height: 900 }, 'dark', 'desktop']
+    [{ width: 390, height: 844 }, 'light', 'mobile-light'],
+    [{ width: 390, height: 844 }, 'dark', 'mobile-dark'],
+    [{ width: 1280, height: 900 }, 'light', 'desktop-light'],
+    [{ width: 1280, height: 900 }, 'dark', 'desktop-dark']
   ]) {
     await page.setViewportSize(size);
     await page.emulateMedia({ colorScheme: theme });
@@ -50,6 +54,7 @@ test('the bottom button returns to the latest message and resumes following repl
     state.messages.push({ id: name, role: 'assistant', text: `New ${name} reply` }); snapshot();
     await expect(transcript).toContainText(`New ${name} reply`);
     expect(await transcript.evaluate(node => node.scrollTop)).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath(`composer-fade-${name}.png`) });
     const target = await button.boundingBox(), composer = await page.locator('#composer').boundingBox();
     expect(target.width).toBe(44);
     expect(target.height).toBe(44);
@@ -63,6 +68,8 @@ test('the bottom button returns to the latest message and resumes following repl
     await expect(transcript.locator(':scope > #agent-activity:last-child')).toBeInViewport();
     const message = await transcript.locator('.message').last().boundingBox(), row = await activity.boundingBox();
     expect(message.y + message.height).toBeLessThanOrEqual(row.y);
+    const activityText = await activity.locator('.activity-text').boundingBox(), pane = await transcript.boundingBox();
+    expect(activityText.y + activityText.height).toBeLessThanOrEqual(pane.y + pane.height - 32);
     await page.screenshot({ path: testInfo.outputPath(`inline-thinking-${name}.png`) });
     state.messages.push({ id: `${name}-next`, role: 'assistant', text: `Following ${name} reply` }); snapshot();
     await expect(transcript).toContainText(`Following ${name} reply`);
@@ -71,6 +78,12 @@ test('the bottom button returns to the latest message and resumes following repl
   }
   state.status = 'idle'; snapshot();
   await expect(activity).toBeHidden();
+  await expect.poll(gap).toBeLessThan(1);
+  const pane = await transcript.boundingBox();
+  for (const selector of ['.message-text', '.copy-message svg']) {
+    const content = await transcript.locator('.message').last().locator(selector).boundingBox();
+    expect(content.y + content.height).toBeLessThanOrEqual(pane.y + pane.height - 32);
+  }
 });
 
 test('resizing and returning through loaded history keep the live bottom visible', async ({ page }, testInfo) => {
