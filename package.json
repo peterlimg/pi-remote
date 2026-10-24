@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node bin/pi-remote.mjs serve",
+    "prototype:ui": "node scripts/ui-style-prototype.mjs",
     "relay": "node bin/pi-remote.mjs relay",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "check": "tsc --noEmit && node scripts/check.mjs",
