@@ -45,7 +45,7 @@ writeFileSync(join(out, 'index.html'), `<!doctype html><html lang="en"><head><me
 <title>${t}</title><meta name="description" content="${d}">
 <link rel="canonical" href="${base}/"><link rel="stylesheet" href="style.css">
 <meta property="og:type" content="article"><meta property="og:url" content="${base}/"><meta property="article:published_time" content="${date}">
-<link rel="preload" href="fonts/BodoniModa.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/SourceSerif4.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="${t}"><meta property="og:description" content="${d}">
 ${hasCard ? `<meta property="og:image" content="${card}"><meta property="og:image:width" content="2400"><meta property="og:image:height" content="1260"><meta property="og:image:alt" content="${cardAlt}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${card}"><meta name="twitter:image:alt" content="${cardAlt}">` : '<meta name="twitter:card" content="summary">'}
@@ -55,7 +55,7 @@ ${hasCard ? `<meta property="og:image" content="${card}"><meta property="og:imag
 <main><h1>${t}</h1>
 <div class="meta"><span>BySepStudio</span><time datetime="${date}">${shown}</time><span>${minutes} min read</span></div>
 <article>${body}</article></main>
-<footer><span>Also by BySepStudio: <a href="https://claude-sdk-in-pi.vercel.app">Claude SDK in Pi</a></span><span>Set in <a href="fonts/BodoniModa-OFL.txt">Bodoni Moda</a>, <a href="fonts/Geist-OFL.txt">Geist</a> &amp; <a href="fonts/GeistMono-OFL.txt">Geist Mono</a></span></footer>
+<footer><span>Also by BySepStudio: <a href="https://claude-sdk-in-pi.vercel.app">Claude SDK in Pi</a></span><span>Set in <a href="fonts/SourceSerif4-OFL.txt">Source Serif 4</a>, <a href="fonts/Geist-OFL.txt">Geist</a> &amp; <a href="fonts/GeistMono-OFL.txt">Geist Mono</a></span></footer>
 </div></body></html>
 `);
 console.log([...images, 'style.css', 'fonts/', ...(hasCard ? ['card.jpg'] : []), 'index.html'].join('\n'));
