@@ -2,6 +2,8 @@
 
 Source-checked 2026-10-20 UTC against first-party documentation, specifications, and upstream source. Repository integration was inspected at `953953b`. This is research and a proposed design, not an implemented feature or a device/performance test.
 
+The [follow-up model survey](voice-models.md), checked 2026-10-25, broadens the candidate list beyond Whisper base/small. Its new model claims are provisional because direct original-source retrieval was blocked in that pass.
+
 ## Recommendation
 
 Keep speech-to-text separate from the selected chat model and its subscription. Dictation produces a draft; sending that draft uses the existing text-message path.
@@ -11,7 +13,7 @@ Phone microphone → foreground recording → encrypted Pi Remote connection
     → host transcription → editable composer draft → explicit Send → selected chat model
 ```
 
-For this Apple Silicon installation, evaluate native-arm64 whisper.cpp first. Start with multilingual `base` and `small`, then choose using representative speech rather than upstream speed claims. Make the model download explicit. Keep ordinary phone keyboard dictation available when no host engine is configured. A dedicated cloud transcription API is a reasonable alternative if avoiding a local model matters more than keeping audio on the host.
+For this Apple Silicon installation, use the [follow-up model survey](voice-models.md) to choose native-arm64 evaluation candidates rather than preselecting Whisper `base`/`small`. Compare multilingual Whisper large-v3-turbo with Qwen3-ASR, and include Parakeet where the user's spoken languages are supported. These are candidates, not measured winners; reopen original model/runtime/license sources before installing. Make any model download explicit. Keep ordinary phone keyboard dictation available when no host engine is configured. A dedicated cloud transcription API is a reasonable alternative if avoiding a local model matters more than keeping audio on the host.
 
 Do not build a speech backend for every chat provider, silently fall back to a paid service, or extract subscription tokens for private speech endpoints. One configured transcription backend can feed Claude, Codex, Gemini, or any text-capable model. An app-controlled microphone button should not depend solely on Web Speech recognition.
 
