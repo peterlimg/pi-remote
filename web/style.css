@@ -184,7 +184,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-top { align-items: flex-start; }
 /* The action fills in once releasing the row would commit the swipe. */
 .session { position: relative; }
-.session.dragging::before { content: attr(data-swipe); position: absolute; top: 0; bottom: 0; right: calc(100% + 4px); display: grid; place-items: center; width: 100px; border-radius: 8px; background: var(--user); color: var(--muted); font-size: 14px; font-weight: 600; }
+.session.dragging::before { content: attr(data-swipe); position: absolute; top: 0; bottom: 0; right: calc(100% + 4px); display: grid; place-items: center; width: 100px; background: var(--user); color: var(--muted); font-size: 14px; font-weight: 600; }
 .session.dragging.closing::before { content: 'Close'; right: auto; left: calc(100% + 4px); }
 .session.swipe-ready::before { background: var(--accent); color: var(--bg); }
 .session-close-dialog { position: fixed; inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 20px; border: 0; overflow: hidden; background: transparent; color: var(--text); }

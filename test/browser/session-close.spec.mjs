@@ -83,6 +83,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       const box = await row.boundingBox(), x = box.x + box.width * (dx < 0 ? .75 : .25), y = box.y + box.height / 2;
       await touch('touchStart', [{ x, y }]);
       for (const fraction of [.2, .6, 1]) await touch('touchMove', [{ x: x + dx * fraction, y: y + dy * fraction }]);
+      expect(await row.evaluate(node => getComputedStyle(node, '::before').borderRadius)).toBe('0px');
     };
     const release = type => touch(type, []);
     const confirmation = page.getByRole('dialog', { name: 'Close session?', exact: true });
@@ -113,7 +114,9 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       await expect(savedRow).toHaveCount(1);
     }
     // A right swipe still pins, and a canceled right swipe cannot unpin.
-    await drag(savedRow, 110); await release('touchEnd');
+    await drag(savedRow, 110);
+    await page.screenshot({ path: testInfo.outputPath('swipe-pin-phone.png') });
+    await release('touchEnd');
     await expect(savedRow.getByRole('img', { name: 'Pinned', exact: true })).toBeVisible();
     await drag(savedRow, 110); await release('touchCancel');
     await expect(page.locator('.session.dragging')).toHaveCount(0);
@@ -126,6 +129,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
     for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme });
+      expect(await savedRow.evaluate(node => getComputedStyle(node, '::before').borderRadius)).toBe('0px');
       for (const property of ['background-color', 'color']) {
         const expected = await page.locator('#session-close-confirm-button').evaluate((node, property) => getComputedStyle(node).getPropertyValue(property), property);
         expect(await savedRow.evaluate((node, property) => getComputedStyle(node, '::before').getPropertyValue(property), property), `${colorScheme} close swipe ${property}`).toBe(expected);
