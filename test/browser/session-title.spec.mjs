@@ -53,6 +53,7 @@ test('a large session keeps its creation title through scans and host restarts',
     await expect(page.locator('#title')).toHaveText(title);
     await expect(page.locator('#transcript')).toContainText('Saved reply');
 
+    await expect.poll(() => host.service.busyWorkers).toBe(0);
     const restarted = await restartAndResume(config, dir);
     expect(restarted.pid).not.toBe(process.pid);
     await expect.poll(async () => (await hostStatus(config, 'GET', dir, { idleOnly: true }))?.managedSessions.some(session => session.id === id)).toBe(true);

@@ -11,7 +11,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 - `sessions-close`: swipe left and confirm to hide a session, Undo, or search and select it to reopen.
 - `sessions-pages`: move through saved and online session pages.
 - `sessions-resume`: resume a saved session when available.
-- `sessions-title`: preserve the saved creation title through scans, large-history indexing and host restarts.
+- `sessions-title`: name the first request in the background with an available small model on the same provider, preserve manual names, and retain saved titles through scans, large-history indexing and host restarts.
 
 ## How to get to it (user POV)
 
@@ -39,7 +39,9 @@ Preconditions: authenticated baseline with two projects. Pagination and saved-se
 - **Pages.** Run `npm run test:browser -- test/browser/session-pages.spec.mjs test/browser/sessions.spec.mjs --trace on`. Scroll the last row into view, require 20 then 40 rows in the paged list, then search and clear. These specs route the browser WebSocket and cover the legacy list contract, not a real host.
 - **Resume boundary.** The baseline has no saved resumable session. Report `sessions-resume` blocked here. A real proof needs a disposable saved Pi session, a working Pi installation, and a separate isolated host; click `page.getByRole('button', { name: 'Resume session' })`, then require an online session and an acknowledged prompt. Do not create a worker in the user's live host to fill this gap.
 
-## Title stability
+## Title generation and stability
+
+Run `node test/pi-smoke.mjs` with the configured Pi installation. The real Pi extension uses a simulated provider to verify that naming starts before the first reply, uses only the first request without skill instructions, chooses a small model without switching the main model, isolates the naming conversation, persists the title, and leaves manual names unchanged after follow-ups. No external model calls are made. Older Pi versions without `modelRegistry.streamSimple` explicitly skip the title-generation check. If no small model is available on the current provider, naming uses the current model.
 
 Run `npm run test:browser -- test/browser/session-title.spec.mjs`. It uses a real host, session file over 32 MiB, background history index, fresh host process and mobile browser, with Pi RPC replayed instead of model calls. The name is deliberately beyond the catalog's preview window. It checks that scans and restart/reconnect retain the header and list title without changing the session file. An explicit Pi rename must still take effect.
 

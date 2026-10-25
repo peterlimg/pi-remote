@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -27,7 +28,9 @@ for (const name of ['agent', 'worker-agent']) {
 const trust = join(dir, 'trust-test.ts');
 const receivedImage = join(dir, 'received-image.json'), progressRequest = join(dir, 'progress-request.json');
 const usageFailure = join(dir, 'usage-failure');
-writeFileSync(trust, `import { writeFileSync, existsSync } from 'node:fs';
+const titleCalls = join(dir, 'title-calls.jsonl'), titleRelease = join(dir, 'title-release'), titleSupported = join(dir, 'title-supported');
+writeFileSync(trust, `import { appendFileSync, writeFileSync, existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 export function adapterForProvider(provider) { return { id: provider }; }
 export async function resolveUsageAuth(ctx, adapter) {
   if (adapter.id !== ctx.model.provider) throw new Error('Usage must follow the selected provider');
@@ -45,6 +48,7 @@ export function formatUsageReport(report, displayState) {
 }
 export default function(pi) {
   pi.on('project_trust', () => ({ trusted: 'yes' }));
+  pi.on('session_start', (_event, ctx) => { if (ctx.modelRegistry.streamSimple) writeFileSync(${JSON.stringify(titleSupported)}, 'supported'); });
   pi.on('session_before_compact', event => ({ compaction: {
     summary: 'Fixture summary: ' + (event.customInstructions || 'default'),
     firstKeptEntryId: event.preparation.firstKeptEntryId,
@@ -57,6 +61,26 @@ export default function(pi) {
     streamSimple: (_model, context) => {
       writeFileSync(${JSON.stringify(progressRequest)}, JSON.stringify(context));
       throw new Error('Fixture stopped at the provider boundary. No external model calls.');
+    }
+  });
+  pi.registerProvider('remote-title-fixture', {
+    api: 'remote-title-fixture', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:1',
+    models: ['main', 'gpt-5.6-luna', 'gpt-6-luna'].map((id, index) => ({ id, name: id, reasoning: false, input: ['text'],
+      cost: { input: 3 - index, output: 3 - index, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200000, maxTokens: 1000 })),
+    streamSimple: (model, context, options) => {
+      const title = JSON.stringify(context).includes('Name this coding session');
+      appendFileSync(${JSON.stringify(titleCalls)}, JSON.stringify({ title, model: model.id, context, sessionId: options?.sessionId }) + '\\n');
+      const result = (async () => {
+        while (!title && !existsSync(${JSON.stringify(titleRelease)})) { options?.signal?.throwIfAborted(); await delay(20); }
+        return { role: 'assistant', api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
+          content: [{ type: 'text', text: title ? 'Fix mobile session navigation' : 'The main task is complete.' }], stopReason: 'stop',
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+      })();
+      return { result: () => result, async *[Symbol.asyncIterator]() {
+        const message = await result;
+        yield { type: 'start', partial: message }; yield { type: 'done', reason: 'stop', message };
+      } };
     }
   });
   for (const name of ['smoke-usage', 'usage']) pi.registerCommand(name, { handler: async (_args, ctx) => {
@@ -177,6 +201,44 @@ try {
     assert.equal(usage.providerUsage, undefined);
     assert.match(usage.providerMessage, /No provider usage extension/);
   } finally { await bare.close(); }
+  if (existsSync(titleSupported)) {
+    const namedFile = join(dir, 'title-session.jsonl');
+    writeFileSync(namedFile, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n');
+    const named = new RpcWorker(namedFile, dir, { bin: '/usr/bin/env', prefix: [
+      'PI_CODING_AGENT_DIR=' + join(dir, 'worker-agent'), process.execPath, entry,
+      '--no-extensions', '-e', resolve('extension/index.ts'), '-e', trust,
+      '--provider', 'remote-title-fixture', '--model', 'main'
+    ] });
+    try {
+      const events = []; named.on('event', event => events.push(event));
+      const prompt = '<skill name="debug" location="/private/debug/SKILL.md">\nPrivate skill instructions\n</skill>\n\nPlease fix the mobile session navigation, especially going back to the session list.';
+      await named.command({ type: 'prompt', text: prompt });
+      await until(() => existsSync(titleCalls) && readFileSync(titleCalls, 'utf8').trim().split('\n').length === 2, 25000);
+      let state;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        state = await named.request('get_state');
+        if (state.sessionName) break;
+        await delay(20);
+      }
+      assert.equal(state.sessionName, 'Fix mobile session navigation');
+      assert.equal(state.model.id, 'main', 'Naming must not change the conversation model');
+      assert.equal(events.some(event => event.type === 'agent_end'), false, 'Naming must finish before the first main reply');
+      const calls = readFileSync(titleCalls, 'utf8').trim().split('\n').map(JSON.parse), title = calls.find(call => call.title);
+      assert.equal(title.model, 'gpt-6-luna', 'Use the lowest-cost small model on the same provider');
+      assert.deepEqual(JSON.parse(title.context.messages[1].content), [{ role: 'user', text: prompt.split('</skill>')[1].trim() }]);
+      assert.ok(title.sessionId && title.sessionId !== calls.find(call => !call.title).sessionId, 'Nested naming needs an isolated provider conversation');
+      writeFileSync(titleRelease, 'release');
+      await until(() => events.some(event => event.type === 'agent_settled'), 25000);
+      assert.ok(readFileSync(namedFile, 'utf8').includes('"name":"Fix mobile session navigation"'));
+      await named.request('set_session_name', { name: 'My manual task title' });
+      events.length = 0;
+      await named.command({ type: 'prompt', text: 'Now review the billing system instead.' });
+      await until(() => events.some(event => event.type === 'agent_settled'), 25000);
+      assert.equal((await named.request('get_state')).sessionName, 'My manual task title');
+      assert.equal(readFileSync(titleCalls, 'utf8').trim().split('\n').map(JSON.parse).filter(call => call.title).length, 1);
+      console.log('First-request small-model title E2E passed: early naming, isolated provider context, persistence and manual-name protection.');
+    } finally { await named.close(); }
+  } else console.log('SKIP title generation: this Pi version has no modelRegistry.streamSimple API.');
   console.log('Real Pi smoke passed: extension load, registration, remote commands, bridge/worker compaction with simulated summaries, image delivery, remote off/on, dialogs, usage and mobile progress guidance at the real provider boundary. No external model calls.');
 } catch (e) {
   console.error(stderr.slice(-6000)); console.error(JSON.stringify(messages.slice(-10)));
