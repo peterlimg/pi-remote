@@ -2433,38 +2433,20 @@ function renderImages() {
   }));
   updateControls();
 }
-let openingImages = false;
 // Keep the editor focused until click so we can dismiss its keyboard first.
 $('image-files').addEventListener('mousedown', event => event.preventDefault());
 $('image-files').addEventListener('click', event => {
-  if (openingImages) { event.preventDefault(); return; }
-  const active = document.activeElement, input = event.currentTarget, viewport = window.visualViewport;
-  const keyboardOpen = () => viewport && viewport.height * viewport.scale < innerHeight - 1;
-  if (!active?.matches('textarea, input:not([type=file])') && !keyboardOpen()) return;
-  event.preventDefault();
-  openingImages = true;
-  const id = selected;
-  const started = performance.now();
-  let changed = started;
-  const resized = () => { changed = performance.now(); };
-  const open = () => {
-    // iOS can pause keyboard resize events; wait for recovery within its file-picker gesture timeout.
-    if ((keyboardOpen() || performance.now() - changed < 100) && performance.now() - started < 900) {
-      setTimeout(open, 50); return;
-    }
-    viewport?.removeEventListener('resize', resized);
-    viewport?.removeEventListener('scroll', resized);
-    openingImages = false;
-    if (selected !== id || input.disabled || !input.getClientRects().length || keyboardOpen() ||
-      document.activeElement?.matches('textarea, input:not([type=file])')) return;
-    input.click();
-  };
-  viewport?.addEventListener('resize', resized);
-  viewport?.addEventListener('scroll', resized);
-  active.blur();
-  // Safari anchors once, before closing the keyboard. Keep the timer chain rooted
-  // in this tap; opening from a resize callback loses its file-picker permission.
-  setTimeout(open, 350);
+  const active = document.activeElement;
+  if (active?.matches('textarea, input:not([type=file])')) active.blur();
+  const box = event.currentTarget.getBoundingClientRect(), viewport = window.visualViewport;
+  const moved = event.detail > 0 && (event.clientX < box.left || event.clientX > box.right ||
+    event.clientY < box.top || event.clientY > box.bottom);
+  const keyboardOpen = viewport && viewport.height < $('app').getBoundingClientRect().height - 1;
+  // iOS anchors to the original touch; a delayed click cannot move that native anchor.
+  if (moved || keyboardOpen) {
+    event.preventDefault();
+    notice('Keyboard closed. Tap + again to attach photos or videos.');
+  } else notice('');
 });
 $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
