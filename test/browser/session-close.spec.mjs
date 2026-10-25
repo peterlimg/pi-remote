@@ -94,9 +94,8 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       await expect(confirmation).toContainText('History is kept. Running work continues.');
       expect(await confirmation.evaluate(node => node.matches(':modal'))).toBe(true);
       const closeButton = confirmation.getByRole('button', { name: 'Close session', exact: true });
-      for (const property of ['background-color', 'color']) {
-        await expect(closeButton).toHaveCSS(property, await page.locator('#pair-submit').evaluate((node, property) => getComputedStyle(node).getPropertyValue(property), property));
-      }
+      await expect(closeButton).toHaveCSS('background-color', await page.locator('#notice').evaluate(node => getComputedStyle(node).color));
+      await expect(closeButton).toHaveCSS('color', await page.locator('#pair-submit').evaluate(node => getComputedStyle(node).color));
       for (const action of await confirmation.getByRole('button').all()) {
         const box = await action.boundingBox();
         expect(box.height).toBe(44);
@@ -115,6 +114,10 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     }
     // A right swipe still pins, and a canceled right swipe cannot unpin.
     await drag(savedRow, 110);
+    for (const property of ['background-color', 'color']) {
+      const expected = await page.locator('#pair-submit').evaluate((node, property) => getComputedStyle(node).getPropertyValue(property), property);
+      expect(await savedRow.evaluate((node, property) => getComputedStyle(node, '::before').getPropertyValue(property), property)).toBe(expected);
+    }
     await page.screenshot({ path: testInfo.outputPath('swipe-pin-phone.png') });
     await release('touchEnd');
     await expect(savedRow.getByRole('img', { name: 'Pinned', exact: true })).toBeVisible();
@@ -263,7 +266,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await savedRow.click();
     await page.getByLabel('Session details', { exact: true }).click();
     const closeAction = page.getByRole('button', { name: 'Close session', exact: true });
-    await expect(closeAction).toHaveCSS('color', await page.locator('#session-pin').evaluate(node => getComputedStyle(node).color));
+    await expect(closeAction).toHaveCSS('color', await page.locator('#notice').evaluate(node => getComputedStyle(node).color));
     await closeAction.focus();
     await page.keyboard.press('Enter');
     await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
