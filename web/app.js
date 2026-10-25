@@ -1535,8 +1535,7 @@ function renderCommands() {
   const input = $('prompt'), token = commandToken(), query = token?.query || '';
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
-  const commandDraft = /^\/[^\s]*$/.test(input.value);
-  $('commands').disabled = !live || (!!input.value && !commandDraft);
+  $('commands').disabled = !live;
   const open = live && !commandDismissed && !!token;
   $('command-menu').hidden = !open;
   input.setAttribute('aria-expanded', String(!!open));
@@ -2301,8 +2300,15 @@ $('prompt').addEventListener('input', () => {
 });
 $('commands').addEventListener('click', () => {
   const input = $('prompt');
-  input.value = '/';
-  input.focus(); input.setSelectionRange(1, 1);
+  if (!commandToken()) {
+    const cursor = input.selectionStart;
+    const before = /\S$/.test(input.value.slice(0, cursor)) ? ' ' : '';
+    const after = /^\S/.test(input.value.slice(cursor)) ? ' ' : '';
+    input.setRangeText(before + '/' + after, cursor, cursor, 'end');
+    const position = cursor + before.length + 1;
+    input.setSelectionRange(position, position);
+  }
+  input.focus();
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
 $('prompt').addEventListener('click', renderCommands);

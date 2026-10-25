@@ -28,12 +28,20 @@ test('slash completion works mid-sentence without replacing the surrounding text
   await page.goto(url);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
+  const shortcut = page.getByRole('button', { name: 'Open slash commands' });
+  await page.emulateMedia({ colorScheme: 'dark' });
   await prompt.fill('Please ');
   await prompt.pressSequentially('/');
   await expect(menu.getByRole('option')).toHaveCount(6);
   await prompt.pressSequentially('rvw');
   await expect(menu.getByRole('option', { name: /\/review/ })).toBeVisible({ timeout: 2000 });
-  await expect(page.getByRole('button', { name: 'Open slash commands' })).toBeDisabled();
+  await expect(shortcut).toBeEnabled();
+  await prompt.press('Escape');
+  await expect(menu).toBeHidden();
+  await shortcut.tap();
+  await expect(prompt).toBeFocused();
+  await expect(prompt).toHaveValue('Please /rvw');
+  await expect(menu.getByRole('option')).toHaveCount(1);
   await page.screenshot({ path: testInfo.outputPath('inline-commands-mobile.png') });
   await menu.getByRole('option', { name: /\/review/ }).tap();
   await expect(prompt).toHaveValue('Please /review ');
@@ -108,9 +116,24 @@ test('slash shortcut opens and reopens commands without sending or replacing a m
   await expect(menu).toBeVisible();
   await menu.getByRole('option', { name: /\/review/ }).tap();
   await expect(prompt).toHaveValue('/review ');
-  await expect(shortcut).toBeDisabled();
+  await expect(shortcut).toBeEnabled();
+  for (const [draft, moveLeft, completed] of [
+    ['Keep this message', 0, 'Keep this message /review '],
+    ['Keep this message', 7, 'Keep this /review message'],
+    ['Keepthis', 4, 'Keep /review this'],
+    ['Keep\nthis', 4, 'Keep\n/review this'],
+    ['Keep', 4, '/review Keep']
+  ]) {
+    await prompt.fill(draft);
+    for (let i = 0; i < moveLeft; i++) await prompt.press('ArrowLeft');
+    await expect(shortcut).toBeEnabled();
+    await shortcut.tap();
+    await expect(prompt).toBeFocused();
+    await expect(menu.getByRole('option')).toHaveCount(6);
+    await menu.getByRole('option', { name: /\/review/ }).tap();
+    await expect(prompt).toHaveValue(completed);
+  }
   await prompt.fill('Keep this message');
-  await expect(shortcut).toBeDisabled();
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
   await shortcut.tap();

@@ -14,7 +14,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 
 ## How to get to it (user POV)
 
-- Open a session and tap `Open slash commands` in the composer, or type `/` at the start of Message or after whitespace anywhere in the draft. Suggestions follow the command at the cursor, not slashes inside paths or URLs. The shortcut is disabled while a message or command with arguments is drafted so it cannot overwrite it.
+- Open a session and tap `Open slash commands` in the composer, or type `/` at the start of Message or after whitespace anywhere in the draft. Suggestions follow the command at the cursor, not slashes inside paths or URLs. The shortcut stays enabled for live sessions. It reopens a command already at the cursor, or inserts `/` there with separating whitespace as needed, without replacing the draft.
 - Tap a suggestion; on desktop use arrows and Tab to complete. Enter runs a command at the start of the draft, but only completes a mid-sentence command without sending the message.
 - Send `/new`, `/model`, or `/model provider/model-id`.
 - Choose the model button or the adjacent `Reasoning effort` button in the compact composer toolbar. Each opens its picker directly, as a bottom sheet on phones or an anchored menu on desktop. Both controls stay visible; only very narrow screens wrap them to preserve touch targets.
@@ -23,7 +23,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 
 Preconditions: authenticated baseline. Alpha exposes `/review`, Beta exposes `/deploy`; both expose `/summarize` and `/skill:debug`. Model and reasoning controls need a capable session and are not seeded in the baseline.
 
-- **Discover.** Open Alpha; `await page.getByRole('button', { name: 'Open slash commands' }).tap()`. Require Message focused with value `/`. Escape closes the menu; tapping the shortcut reopens it without sending. Set `const menu = page.getByRole('listbox', { name: 'Pi commands' })`; require six options and `#prompt` attribute `aria-expanded="true"`.
+- **Discover.** Open Alpha; `await page.getByRole('button', { name: 'Open slash commands' }).tap()`. Require Message focused with value `/`. Escape closes the menu; tapping the shortcut reopens it without sending. With `Please /rvw`, require the shortcut enabled; Escape then tap it and require the same draft and filtered `/review` option. With `Keep this message`, tap the shortcut at the end and require `Keep this message /` without sending. Set `const menu = page.getByRole('listbox', { name: 'Pi commands' })`; require six options and `#prompt` attribute `aria-expanded="true"`.
 - **Touch complete.** `await page.locator('#prompt').fill('/rvw'); await menu.getByRole('option', { name: /\/review/ }).tap()`. Require `#prompt` value `/review ` and the menu hidden. Completion must not emit a prompt command.
 - **Arguments.** `await page.locator('#prompt').pressSequentially('src/app.js'); await page.getByRole('button', { name: 'Send message' }).click()`. Require transcript text `/review src/app.js` and a successful command result. This proves transport, not that a code review actually ran.
 - **Inline completion.** In Alpha, type `Please /rvw`, tap `/review`, and require `Please /review ` without a prompt command. Run `npm run test:browser -- test/browser/slash-commands.spec.mjs --trace on` to also check completion with text after the cursor, multiline drafts, inline Enter without sending, and paths or URLs staying hidden.
