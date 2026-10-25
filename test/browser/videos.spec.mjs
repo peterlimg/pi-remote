@@ -68,6 +68,7 @@ for (const [orientation, buffer, width] of [
   await expect(sentVideo).toHaveCount(1);
   await expect(sentVideo).toHaveAttribute('poster', /^blob:/);
   await expect(sentVideo).not.toHaveAttribute('poster', draftPoster);
+  await expect(page.locator('.message.user .thread-video a')).toHaveCount(0);
   const sentSize = await sentVideo.boundingBox();
   expect(sentSize.width).toBeLessThanOrEqual(160);
   expect(sentSize.height).toBeLessThanOrEqual(160);
@@ -88,6 +89,7 @@ for (const [orientation, buffer, width] of [
   const player = page.locator('.thread-video video');
   await expect(player).toBeVisible();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(width);
+  await expect(page.locator('.message.user .thread-video a')).toHaveCount(0);
   const playerSize = await player.boundingBox();
   expect(playerSize.width).toBeLessThanOrEqual(160);
   expect(playerSize.height).toBeLessThanOrEqual(160);

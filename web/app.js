@@ -1086,7 +1086,8 @@ function showThreadVideo(video, file, poster) {
     if (threadVideos.get(video.path) !== video) return;
     video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);
   });
-  video.node.replaceChildren(player, download);
+  video.node.replaceChildren(player);
+  if (video.role === 'assistant') video.node.append(download);
 }
 async function loadVideoPreview(video) {
   if (!video || video.loading || video.info || video.url) return;
@@ -1154,7 +1155,7 @@ function appendThreadVideos(parent, message, attachments, keep) {
     if (!video) {
       const node = el('div', undefined, 'thread-video'), button = el('button', 'Loading video preview…', 'secondary');
       button.type = 'button'; node.dataset.videoPath = path; node.append(button);
-      video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected, messageId: message.id };
+      video = { path, name: file?.name || path.split('/').at(-1), node, button, sessionId: selected, messageId: message.id, role: message.role };
       threadVideos.set(path, video);
       button.addEventListener('click', () => playThreadVideo(video));
       if (file) showThreadVideo(video, file, poster);
