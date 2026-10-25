@@ -190,7 +190,8 @@ function copyButton(text, label, className) {
   });
   return button;
 }
-// iOS Safari has no navigator.vibrate; toggling a hidden switch input (iOS 18+) plays a system haptic.
+// iOS Safari lacks navigator.vibrate; a switch input supplies click-triggered feedback.
+// shortcut: iOS may block this after drags; use a native gesture control for reliable swipe haptics.
 function haptic() {
   if (navigator.vibrate?.(10)) return;
   const label = document.createElement('label'); label.hidden = true;
@@ -2241,7 +2242,7 @@ function resetSwipe() {
   $('app').classList.remove('swiping', 'opening'); $('sidebar').inert = false;
 }
 $('back').addEventListener('click', () => {
-  resetSwipe();
+  haptic(); resetSwipe();
   if (history.state?.session) history.back();
   else $('app').classList.remove('viewing');
 });

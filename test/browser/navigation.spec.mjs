@@ -41,7 +41,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(page.locator('#app')).not.toHaveClass(/opening/);
     await expect(page.locator('#sidebar')).toHaveJSProperty('inert', false);
     await page.getByRole('button', { name: /Task Beta/ }).tap();
-    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10]);
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10]);
     await expect.poll(() => watches.length).toBe(2);
     deliver(0); // A late Alpha response must not clear Beta's loading state.
     await expect(page.locator('#title')).toHaveText('Task Beta');
@@ -51,17 +51,17 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(page.locator('#transcript')).toContainText('Reply for Beta');
     await expect(page.locator('#transcript')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByText('Loading conversation…', { exact: true })).toBeHidden();
-    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10]);
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10]);
     await page.locator('#prompt').fill('Draft for Beta');
     await page.getByRole('button', { name: 'Show sessions' }).click();
     await page.getByRole('button', { name: /Task Beta/ }).tap();
-    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10]);
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10, 10]);
     await expect(page.locator('#transcript')).toContainText('Reply for Beta');
     await expect(page.getByText('Loading conversation…', { exact: true })).toBeHidden();
     await expect(page.locator('#prompt')).toHaveValue('Draft for Beta');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('button', { name: /Task Alpha/ }).click();
-    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10]);
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10, 10, 10]);
     await expect(page.locator('#sidebar')).toBeVisible();
     await expect(page.locator('#transcript')).toContainText('Reply for Alpha');
     await expect(page.locator('main')).toHaveCSS('transform', 'none');
