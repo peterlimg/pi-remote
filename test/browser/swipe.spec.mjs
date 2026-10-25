@@ -3,6 +3,13 @@ import { SessionService } from '../../src/service.mjs';
 import { BridgeSession } from '../../src/live-session.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.vibrations = [];
+    navigator.vibrate = duration => { window.vibrations.push(duration); return true; };
+  });
+});
+
 for (const standalone of [false, true]) {
   test(`returning to sessions keeps the list still in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page, browserName }, testInfo) => {
     if (standalone) await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
@@ -40,6 +47,7 @@ for (const standalone of [false, true]) {
       })), { type, x });
     await page.evaluate(() => addEventListener('touchstart', event => { window.nativeSwipePrevented = event.defaultPrevented; }));
     for (const id of [2, 18]) {
+      const initialHaptics = await page.evaluate(() => window.vibrations.length);
       const row = page.locator(`#sessions .session[data-id="${id}"]`);
       await row.scrollIntoViewIfNeeded();
       const initialTop = await sidebar.evaluate(node => node.scrollTop);
@@ -67,7 +75,9 @@ for (const standalone of [false, true]) {
       await expect(now).toContainText(`Working during swipe from task ${id}`);
       await touch('touchMove', 180);
       await page.screenshot({ path: testInfo.outputPath(`swiping-sessions-${id}.png`) });
+      expect(await page.evaluate(start => window.vibrations.slice(start), initialHaptics)).toEqual([10]);
       await touch('touchEnd', 180);
+      expect(await page.evaluate(start => window.vibrations.slice(start), initialHaptics)).toEqual([10, 10]);
       await expect(page.locator('#app')).not.toHaveClass(/viewing/);
       await expect.poll(() => page.evaluate(() => history.state)).toBeNull();
       await expect(sidebar).toHaveJSProperty('scrollTop', initialTop);
@@ -122,6 +132,7 @@ test(`${standalone ? 'home-screen' : 'browser'} swipe recovers from ${interrupti
     await page.clock.runFor(250);
     await expect(page.locator('#prompt')).toBeVisible();
   }
+  expect(await page.evaluate(() => window.vibrations)).toEqual(interruption === 'navigation during settling' ? [10, 10] : [10]);
   state.messages[0].text = 'Work continues';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
   // Dispatch the button click before the 200ms settle timer can run.
