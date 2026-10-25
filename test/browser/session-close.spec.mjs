@@ -170,16 +170,16 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await page.screenshot({ path: testInfo.outputPath('closed-session-phone.png') });
     expect(JSON.parse(readFileSync(closedFile, 'utf8'))).toEqual([saved.id]);
     expect(statSync(closedFile).mode & 0o777).toBe(0o600);
-    await page.clock.fastForward(4000);
+    await page.clock.fastForward(1500);
     await page.getByRole('button', { name: 'Undo', exact: true }).tap();
     await expect(savedRow).toHaveCount(1);
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
     const feedback = page.locator('#session-feedback');
     await expect(feedback).toContainText('Session reopened.');
-    await page.clock.fastForward(4001);
+    await page.clock.fastForward(1501);
     await expect(feedback).toBeVisible(); // Replacing a toast resets its expiry.
-    await page.clock.fastForward(4000);
-    await expect(feedback).toBeHidden();
+    await page.clock.fastForward(1500);
+    await expect(feedback).toBeHidden({ timeout: 1000 });
 
     await page.getByRole('button', { name: 'View all pinned sessions' }).tap();
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
@@ -220,8 +220,8 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await confirmClose(() => release('touchEnd'));
     await expect(savedRow).toHaveCount(0);
     await expect(feedback.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
-    await page.clock.fastForward(8001);
-    await expect(feedback).toBeHidden();
+    await page.clock.fastForward(3001);
+    await expect(feedback).toBeHidden({ timeout: 1000 });
     host.service.scan();
     await page.reload();
     await expect(savedRow).toHaveCount(0);

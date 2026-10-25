@@ -22,7 +22,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 - Use `View all active sessions` or `View all pinned sessions` for the complete collection; `Close sessions` returns to the overview.
 - Open a conversation, choose `Session details`, then `Pin session` or `Unpin session`. Right swipes remain a shortcut.
 - Swipe a row left past the Close threshold and release, then choose `Close session` in the in-app confirmation. The dialog names the session and explains that history is kept and running work continues. `Cancel`, Escape or tapping outside the card keeps the session in the list. Swipe right still pins or unpins.
-- Use `Undo` to restore the last closed session, or search for a closed conversation and select it to reopen. Feedback expires after eight seconds or when `Dismiss` is tapped. `Session details` also offers `Close session` with the same confirmation for keyboard and assistive-technology users.
+- Use `Undo` to restore the last closed session, or search for a closed conversation and select it to reopen. Feedback expires after three seconds or when `Dismiss` is tapped. `Session details` also offers `Close session` with the same confirmation for keyboard and assistive-technology users.
 - Closing syncs across devices and survives host restarts. It does not delete history, discard drafts, or stop running work.
 - Open a saved conversation and choose `Resume session` when offered.
 
