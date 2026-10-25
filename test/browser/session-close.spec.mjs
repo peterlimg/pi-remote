@@ -124,7 +124,15 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await drag(savedRow, -110);
     await expect(savedRow).toHaveClass(/closing.*swipe-ready|swipe-ready.*closing/);
     await expect(savedRow).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -108, 0)');
-    await page.screenshot({ path: testInfo.outputPath('swipe-close-phone.png') });
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      for (const property of ['background-color', 'color']) {
+        const expected = await page.locator('#session-close-confirm-button').evaluate((node, property) => getComputedStyle(node).getPropertyValue(property), property);
+        expect(await savedRow.evaluate((node, property) => getComputedStyle(node, '::before').getPropertyValue(property), property), `${colorScheme} close swipe ${property}`).toBe(expected);
+      }
+      await page.screenshot({ path: testInfo.outputPath(`swipe-close-phone-${colorScheme}.png`) });
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
     await confirmClose(async () => {
       await release('touchEnd');
       await expect(confirmation).toBeFocused();
@@ -251,6 +259,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await savedRow.click();
     await page.getByLabel('Session details', { exact: true }).click();
     const closeAction = page.getByRole('button', { name: 'Close session', exact: true });
+    await expect(closeAction).toHaveCSS('color', await page.locator('#session-pin').evaluate(node => getComputedStyle(node).color));
     await closeAction.focus();
     await page.keyboard.press('Enter');
     await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
