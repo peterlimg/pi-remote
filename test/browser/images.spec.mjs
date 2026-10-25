@@ -101,7 +101,7 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   expect(errors).toEqual([]);
 });
 
-test('new-session image picker opens on the first tap without moving its native anchor', async ({ page }, info) => {
+test('new-session image picker opens on the first tap with room below the composer', async ({ page }, info) => {
   // iOS anchors the native menu to its last real touch, not the input's current DOM bounds.
   await page.addInitScript(() => {
     const viewport = new EventTarget();
@@ -146,19 +146,25 @@ test('new-session image picker opens on the first tap without moving its native 
   await page.evaluate(() => window.keyboardHeight(460));
   await page.clock.install();
   await page.clock.pauseAt(new Date());
+  const before = await input.boundingBox(), composerBefore = await page.locator('#composer').boundingBox();
   await input.tap();
   await expect.poll(() => pickers.length).toBe(1);
   expect(pickers[0].isMultiple()).toBe(true);
   const box = await input.boundingBox(), anchor = await page.evaluate(() => window.nativePickerAnchor);
-  expect(anchor.x).toBeGreaterThanOrEqual(box.x);
-  expect(anchor.x).toBeLessThanOrEqual(box.x + box.width);
-  expect(anchor.y).toBeGreaterThanOrEqual(box.y);
-  expect(anchor.y).toBeLessThanOrEqual(box.y + box.height);
+  expect(anchor.x).toBeGreaterThanOrEqual(before.x);
+  expect(anchor.x).toBeLessThanOrEqual(before.x + before.width);
+  expect(anchor.y).toBeGreaterThanOrEqual(before.y);
+  expect(anchor.y).toBeLessThanOrEqual(before.y + before.height);
   expect(box).toEqual(await page.locator('#attach').boundingBox());
+  expect(box).toEqual(before);
+  const composer = await page.locator('#composer').boundingBox();
+  expect(composerBefore.y + composerBefore.height - composer.y - composer.height).toBeGreaterThanOrEqual(144);
   await expect(page.locator('#notice')).toBeHidden();
   await page.screenshot({ path: info.outputPath('new-session-picker-anchor.png') });
   await info.attach('new-session-picker-anchor', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
   await input.dispatchEvent('cancel');
+  await expect(page.locator('#composer')).not.toHaveAttribute('data-attaching', '');
+  expect(await input.boundingBox()).toEqual(before);
   await expect(prompt).toHaveValue('');
   await prompt.blur();
   await page.evaluate(() => window.keyboardHeight(844));
@@ -169,24 +175,35 @@ test('new-session image picker opens on the first tap without moving its native 
   await input.tap(); // A hardware keyboard does not move the control, so one tap still opens.
   await expect.poll(() => pickers.length).toBe(3);
   await input.dispatchEvent('cancel');
-  await prompt.focus();
+  await input.setInputFiles(file);
+  await expect(page.locator('#attachments img')).toBeVisible();
+  const draft = 'Keep this draft\n'.repeat(8).trimEnd();
+  await prompt.fill(draft);
   await page.evaluate(() => window.keyboardHeight(460));
-  await input.tap(); // A typed draft with the keyboard open still needs only one tap.
+  const expanded = await prompt.boundingBox();
+  await input.tap(); // A long draft still leaves room for the native menu on the first tap.
   await expect.poll(() => pickers.length).toBe(4);
   expect(await input.boundingBox()).toEqual(box);
+  expect((await prompt.boundingBox()).height).toBe(44);
+  await expect(page.locator('#attachments')).toBeHidden();
   await input.dispatchEvent('cancel');
-  await expect(prompt).toHaveValue('Keep this draft');
+  await expect(page.locator('#attachments img')).toBeVisible();
+  await expect(prompt).toHaveValue(draft);
+  expect((await prompt.boundingBox()).height).toBe(expanded.height);
   await page.evaluate(() => Object.defineProperty(window, 'innerHeight', { get: () => visualViewport.height }));
   await input.focus(); // Focus and innerHeight can change before the input's click arrives.
   await input.tap();
   await expect.poll(() => pickers.length).toBe(5);
   await input.dispatchEvent('cancel');
-  await expect(prompt).toHaveValue('Keep this draft');
+  await expect(prompt).toHaveValue(draft);
+  await input.tap();
+  await expect.poll(() => pickers.length).toBe(6);
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
+  await expect(page.locator('#composer')).not.toHaveAttribute('data-attaching', '');
   await page.evaluate(() => window.keyboardHeight(844));
   await page.clock.runFor(1000);
-  expect(pickers).toHaveLength(5); // No delayed picker can follow the user into a different session.
+  expect(pickers).toHaveLength(6); // No delayed picker or reserved space can follow the user into a different session.
 });
 
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {

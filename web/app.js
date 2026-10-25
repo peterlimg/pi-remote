@@ -888,6 +888,7 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
+  $('composer').removeAttribute('data-attaching');
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   resetScrollback();
   resetSwipe();
@@ -2465,10 +2466,14 @@ function renderImages() {
   }));
   updateControls();
 }
-// Keep the editor focused so the composer stays at the tap's native picker anchor.
+// Keep the keyboard open; iOS anchors its menu to the original tap.
 $('image-files').addEventListener('mousedown', event => event.preventDefault());
-$('image-files').addEventListener('click', () => notice(''));
+$('image-files').addEventListener('click', () => {
+  notice(''); $('composer').setAttribute('data-attaching', '');
+});
+$('image-files').addEventListener('cancel', () => $('composer').removeAttribute('data-attaching'));
 $('image-files').addEventListener('change', () => {
+  $('composer').removeAttribute('data-attaching');
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';
   if (!selected || sending.has(selected) || !files.length) return;
