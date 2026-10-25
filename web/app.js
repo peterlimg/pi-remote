@@ -630,7 +630,7 @@ function sessionRow(item) {
   // The finger lifting after a swipe must not also open the session.
   button.addEventListener('click', () => {
     if (Date.now() - swipedAt <= 400) return;
-    selectSession(item.id); $('session-collection').close();
+    haptic(); selectSession(item.id); $('session-collection').close();
   });
   return button;
 }

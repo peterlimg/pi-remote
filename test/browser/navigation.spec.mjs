@@ -4,6 +4,10 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
   test(`opening a session responds before its conversation arrives with motion ${reducedMotion}`, async ({ page }, testInfo) => {
     const errors = [], watches = [];
     page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.vibrations = [];
+      navigator.vibrate = duration => { window.vibrations.push(duration); return true; };
+    });
     await page.emulateMedia({ reducedMotion });
     const states = ['Alpha', 'Beta'].map(name => ({ id: name, title: `Task ${name}`, cwd: '/projects/app',
       status: 'idle', updatedAt: Date.now(), messages: [{ id: name, role: 'assistant', text: `Reply for ${name}` }] }));
@@ -22,7 +26,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true }));
     };
     await page.goto('/#token=browser-test-token-only-123456789012345');
+    expect(await page.evaluate(() => window.vibrations)).toEqual([]);
     await page.getByRole('button', { name: /Task Alpha/ }).tap();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10]);
     const moving = await page.locator('main').evaluate(main => main.getAnimations().some(animation =>
       animation.effect.getKeyframes().some(frame => frame.transform && frame.transform !== 'none')));
     expect(moving).toBe(reducedMotion === 'no-preference');
@@ -35,6 +41,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(page.locator('#app')).not.toHaveClass(/opening/);
     await expect(page.locator('#sidebar')).toHaveJSProperty('inert', false);
     await page.getByRole('button', { name: /Task Beta/ }).tap();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10]);
     await expect.poll(() => watches.length).toBe(2);
     deliver(0); // A late Alpha response must not clear Beta's loading state.
     await expect(page.locator('#title')).toHaveText('Task Beta');
@@ -44,14 +51,17 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(page.locator('#transcript')).toContainText('Reply for Beta');
     await expect(page.locator('#transcript')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByText('Loading conversation…', { exact: true })).toBeHidden();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10]);
     await page.locator('#prompt').fill('Draft for Beta');
     await page.getByRole('button', { name: 'Show sessions' }).click();
     await page.getByRole('button', { name: /Task Beta/ }).tap();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10]);
     await expect(page.locator('#transcript')).toContainText('Reply for Beta');
     await expect(page.getByText('Loading conversation…', { exact: true })).toBeHidden();
     await expect(page.locator('#prompt')).toHaveValue('Draft for Beta');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('button', { name: /Task Alpha/ }).click();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10]);
     await expect(page.locator('#sidebar')).toBeVisible();
     await expect(page.locator('#transcript')).toContainText('Reply for Alpha');
     await expect(page.locator('main')).toHaveCSS('transform', 'none');
