@@ -196,10 +196,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-close-card h2 { margin: 0; font-size: 18px; line-height: 1.4; font-weight: 600; }
 #session-close-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin: 8px 0 0; font-size: 15px; line-height: 1.5; }
 #session-close-description { margin: 12px 0 20px; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.session-close-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.session-close-actions button { min-height: 48px; padding: 10px 8px; border-radius: 10px; font-size: 15px; font-weight: 500; white-space: nowrap; }
-#session-close-cancel { background: var(--panel); color: var(--text); }
-#session-close-confirm-button { background: var(--error); }
+.session-close-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.session-close-actions button { min-height: 44px; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; white-space: nowrap; }
 .session-feedback { position: sticky; bottom: 70px; z-index: 1; display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--muted); box-shadow: 0 2px 8px rgb(0 0 0 / .12); font-size: 13px; }
 .session-feedback span { flex: 1; min-width: 0; }
 .session-feedback button { flex-shrink: 0; }

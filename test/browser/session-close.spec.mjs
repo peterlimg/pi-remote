@@ -92,6 +92,16 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       await expect(confirmation).toBeVisible();
       await expect(confirmation).toContainText('History is kept. Running work continues.');
       expect(await confirmation.evaluate(node => node.matches(':modal'))).toBe(true);
+      const closeButton = confirmation.getByRole('button', { name: 'Close session', exact: true });
+      for (const property of ['background-color', 'color']) {
+        await expect(closeButton).toHaveCSS(property, await page.locator('#pair-submit').evaluate((node, property) => getComputedStyle(node).getPropertyValue(property), property));
+      }
+      for (const action of await confirmation.getByRole('button').all()) {
+        const box = await action.boundingBox();
+        expect(box.height).toBe(44);
+        expect(box.width).toBeLessThan(130);
+        expect(await action.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      }
       expect(frames.filter(frame => frame.op === 'closeSession')).toHaveLength(count);
       await confirmation.getByRole('button', { name: accepted ? 'Close session' : 'Cancel', exact: true }).click();
       await expect(confirmation).toBeHidden();
@@ -181,10 +191,6 @@ test('closing requires confirmation, syncs across phones and keeps history, with
       await expect(confirmation).toBeVisible();
       await expect(confirmation.locator('#session-close-name')).toContainText('Pinned task');
       expect((await confirmation.locator('.session-close-card').boundingBox()).height).toBeLessThan(300);
-      for (const action of await confirmation.getByRole('button').all()) {
-        expect((await action.boundingBox()).height).toBe(48);
-        expect(await action.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath('confirm-close-narrow-dark.png') });
     }, false);
