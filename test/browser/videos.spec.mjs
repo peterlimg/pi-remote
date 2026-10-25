@@ -12,6 +12,16 @@ for (const [orientation, buffer, width] of [
 ]) test(`video picker ${orientation} previews, removes and sends original bytes through the real host`, async ({ page }, info) => {
   const upload = { ...file, name: `${orientation} recording.webm`, buffer };
   const packets = [], responses = [], errors = [];
+  let releaseDownload;
+  await page.routeWebSocket('**/ws', ws => {
+    const server = ws.connectToServer();
+    ws.onMessage(raw => {
+      const packet = JSON.parse(raw);
+      if (packet.op === 'videoRead' && packet.offset !== undefined && !releaseDownload) {
+        releaseDownload = () => server.send(raw);
+      } else server.send(raw);
+    });
+  });
   page.on('pageerror', error => errors.push(error.message));
   page.on('websocket', ws => {
     ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload))));
@@ -85,14 +95,26 @@ for (const [orientation, buffer, width] of [
   const previewSize = await play.boundingBox();
   expect(previewSize.width).toBeLessThanOrEqual(160);
   expect(previewSize.height).toBeLessThanOrEqual(160);
+  const poster = await play.locator('img').getAttribute('src');
   await play.click();
+  await expect.poll(() => !!releaseDownload).toBe(true);
+  const downloading = page.locator('.thread-video button:disabled');
+  const loadingSize = await downloading.boundingBox();
+  expect(loadingSize.width).toBeCloseTo(previewSize.width, 1);
+  expect(loadingSize.height).toBeCloseTo(previewSize.height, 1);
+  expect(loadingSize.y).toBeCloseTo(previewSize.y, 1);
+  await expect(downloading.locator('img')).toHaveAttribute('src', poster);
+  await expect(downloading.locator('.connection-spinner')).toBeVisible();
+  await expect(downloading).toHaveAttribute('aria-label', `Downloading ${orientation}_recording.webm 0%`);
+  await page.screenshot({ path: info.outputPath('video-downloading-mobile.png'), fullPage: true });
+  releaseDownload();
   const player = page.locator('.thread-video video');
   await expect(player).toBeVisible();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(width);
   await expect(page.locator('.message.user .thread-video a')).toHaveCount(0);
   const playerSize = await player.boundingBox();
-  expect(playerSize.width).toBeLessThanOrEqual(160);
-  expect(playerSize.height).toBeLessThanOrEqual(160);
+  expect(playerSize.width).toBeCloseTo(previewSize.width, 1);
+  expect(playerSize.height).toBeCloseTo(previewSize.height, 1);
   await page.screenshot({ path: info.outputPath('video-playing-mobile.png'), fullPage: true });
   const videoURL = await player.getAttribute('src');
   await page.locator('#prompt').fill('Keep the preview during conversation updates');

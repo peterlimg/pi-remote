@@ -1065,6 +1065,7 @@ function showThreadVideo(video, file, poster) {
   if (poster) video.posterURL = URL.createObjectURL(poster);
   const player = el('video'); video.player = player;
   player.controls = true; player.playsInline = true; player.preload = 'none';
+  player.style.height = video.button.style.height;
   player.setAttribute('aria-label', video.name);
   if (video.posterURL) player.poster = video.posterURL;
   player.src = video.url;
@@ -1120,6 +1121,12 @@ async function playThreadVideo(video) {
     if (socket !== ws || threadVideos.get(video.path) !== video) throw new Error('Video loading interrupted');
   };
   video.loading = true; video.button.disabled = true;
+  video.button.style.height = `${video.button.offsetHeight}px`;
+  video.button.setAttribute('aria-busy', 'true');
+  const progress = el('span', undefined, 'video-play-icon'); progress.setAttribute('aria-hidden', 'true');
+  progress.innerHTML = '<span class="video-loading-icon"><span class="connection-spinner"></span></span>';
+  video.button.querySelector('.video-play-icon')?.remove();
+  video.button.append(progress);
   try {
     let file = await storage?.get(cacheId, video.info);
     check();
@@ -1127,7 +1134,7 @@ async function playThreadVideo(video) {
       const chunks = [];
       for (let offset = 0; offset < video.info.size;) {
         check();
-        video.button.textContent = `Loading video ${Math.round(offset / video.info.size * 100)}%`;
+        video.button.setAttribute('aria-label', `Downloading ${video.name} ${Math.round(offset / video.info.size * 100)}%`);
         const result = await request('videoRead', { sessionId: video.sessionId, path: video.path, offset, messageId: video.messageId });
         check();
         if (result.size !== video.info.size || result.revision !== video.info.revision || typeof result.data !== 'string' || result.data.length > Math.ceil(VIDEO_CHUNK_BYTES / 3) * 4) throw new Error('Invalid video data');
@@ -1144,7 +1151,11 @@ async function playThreadVideo(video) {
   } catch (error) {
     video.info = undefined;
     video.button.textContent = 'Could not load video. Retry'; video.button.title = error.message;
-  } finally { video.loading = false; video.button.disabled = false; }
+    video.button.removeAttribute('aria-label');
+  } finally {
+    video.loading = false; video.button.disabled = false;
+    video.button.removeAttribute('aria-busy'); progress.remove();
+  }
 }
 function appendThreadVideos(parent, message, attachments, keep) {
   const sources = attachments?.length ? attachments.map(item => ({ path: item.staged?.path || item.url, file: item.file, poster: item.posterBlob }))
