@@ -19,6 +19,32 @@ test('/compact is discoverable and completes without sending a prompt', async ({
   expect(sent).toHaveLength(0);
 });
 
+test('slash completion works mid-sentence without replacing the surrounding text or sending', async ({ page }, testInfo) => {
+  const sent = [];
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
+    const packet = JSON.parse(payload.toString());
+    if (packet.op === 'command') sent.push(packet.command);
+  }));
+  await page.goto(url);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const prompt = page.locator('#prompt'), menu = page.getByRole('listbox', { name: 'Pi commands' });
+  await prompt.fill('Please ');
+  await prompt.pressSequentially('/');
+  await expect(menu.getByRole('option')).toHaveCount(6);
+  await prompt.pressSequentially('rvw');
+  await expect(menu.getByRole('option', { name: /\/review/ })).toBeVisible({ timeout: 2000 });
+  await expect(page.getByRole('button', { name: 'Open slash commands' })).toBeDisabled();
+  await page.screenshot({ path: testInfo.outputPath('inline-commands-mobile.png') });
+  await menu.getByRole('option', { name: /\/review/ }).tap();
+  await expect(prompt).toHaveValue('Please /review ');
+  await expect(menu).toBeHidden();
+  for (const draft of ['Explain src/review', 'Visit https://example.test/review', 'Use /tmp/review', 'Use //review']) {
+    await prompt.fill(draft);
+    await expect(menu).toBeHidden();
+  }
+  expect(sent).toHaveLength(0);
+});
+
 test('slash menu filters session commands, completes on touch and keeps arguments', async ({ page }) => {
   const sent = [];
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
@@ -53,7 +79,7 @@ test('slash menu filters session commands, completes on touch and keeps argument
   await expect(menu.getByRole('option', { name: /\/review/ })).toHaveCount(0);
   await prompt.fill('/does-not-exist');
   await expect(page.locator('#command-help')).toContainText('No matching commands');
-  await prompt.fill('Explain /review');
+  await prompt.fill('Explain src/review');
   await expect(menu).toBeHidden();
   await prompt.fill('/settings');
   await page.locator('#send').click();
@@ -96,9 +122,13 @@ test('slash shortcut opens and reopens commands without sending or replacing a m
   expect(sent).toHaveLength(0);
 });
 
-test('arrows navigate, Tab completes, Enter runs the selected command, and IME does not submit', async ({ browser }) => {
+test('arrows navigate, Tab completes, Enter runs the selected command, and IME does not submit', async ({ browser }, testInfo) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, hasTouch: false });
-  const page = await context.newPage();
+  const page = await context.newPage(), sent = [];
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
+    const packet = JSON.parse(payload.toString());
+    if (packet.op === 'command') sent.push(packet.command);
+  }));
   try {
     await page.goto(browserOrigin + url);
     await page.getByRole('button', { name: /Project Alpha/ }).click();
@@ -111,6 +141,26 @@ test('arrows navigate, Tab completes, Enter runs the selected command, and IME d
     await expect(prompt).toHaveValue('/summarize ');
     await expect(prompt).toBeFocused();
     await expect(menu).toBeHidden();
+    await prompt.fill('Please /rvw this change');
+    await expect(menu).toBeHidden();
+    for (let i = 0; i < 'w this change'.length; i++) await prompt.press('ArrowLeft');
+    await expect(menu.getByRole('option', { name: /\/review/ })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('inline-commands-desktop.png') });
+    await prompt.press('Tab');
+    await expect(prompt).toHaveValue('Please /review this change');
+    await prompt.pressSequentially('only ');
+    await expect(prompt).toHaveValue('Please /review only this change');
+    await prompt.fill('Please\n/skill:deb');
+    await expect(menu.getByRole('option', { name: /\/skill:debug/ })).toBeVisible();
+    await expect(page.locator('#command-help')).toContainText('Enter to complete');
+    await prompt.press('Shift+ArrowLeft');
+    await expect(menu).toBeHidden();
+    await prompt.press('ArrowRight');
+    await expect(menu).toBeVisible();
+    await prompt.press('Enter');
+    await expect(prompt).toHaveValue('Please\n/skill:debug ');
+    await expect(menu).toBeHidden();
+    expect(sent).toHaveLength(0);
     await prompt.fill('/');
     await expect(menu.getByRole('option')).toHaveCount(6);
     await prompt.press('ArrowUp');

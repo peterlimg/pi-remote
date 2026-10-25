@@ -1522,13 +1522,22 @@ async function loadCommands(id) {
   catch (e) { entry.error = e.message; }
   if (selected === id && commandCatalog.get(id) === entry) renderCommands();
 }
+function commandToken() {
+  const input = $('prompt'), cursor = input.selectionStart;
+  if (cursor !== input.selectionEnd) return;
+  const match = /(?:^|\s)\/([^\s/]*)$/.exec(input.value.slice(0, cursor));
+  if (!match) return;
+  const suffix = /^[^\s]*/.exec(input.value.slice(cursor))[0];
+  if (suffix.includes('/')) return;
+  return { start: cursor - match[1].length - 1, end: cursor + suffix.length, query: match[1].toLowerCase() };
+}
 function renderCommands() {
-  const input = $('prompt'), query = input.value.slice(1).toLowerCase();
+  const input = $('prompt'), token = commandToken(), query = token?.query || '';
   const state = cache.get(selected);
   const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const commandDraft = /^\/[^\s]*$/.test(input.value);
   $('commands').disabled = !live || (!!input.value && !commandDraft);
-  const open = live && !commandDismissed && commandDraft && input.selectionStart === input.value.length;
+  const open = live && !commandDismissed && !!token;
   $('command-menu').hidden = !open;
   input.setAttribute('aria-expanded', String(!!open));
   $('commands').setAttribute('aria-expanded', String(!!open));
@@ -1539,7 +1548,7 @@ function renderCommands() {
   }
   const entry = commandCatalog.get(selected);
   // Streaming transcript updates must not replace an option during a tap.
-  const rendering = [selected, query, commandIndex, entry?.commands, entry?.error];
+  const rendering = [selected, token.start, query, commandIndex, entry?.commands, entry?.error];
   if (commandRender?.every((value, index) => value === rendering[index])) return;
   commandRender = rendering;
   input.removeAttribute('aria-activedescendant');
@@ -1561,13 +1570,14 @@ function renderCommands() {
   }));
   if (commandOptions.length) input.setAttribute('aria-activedescendant', `command-option-${commandIndex}`);
   $('command-help').textContent = entry?.error || (!entry?.commands ? 'Loading commands…' : !commandOptions.length ? 'No matching commands. Built-in menus are available in the Pi terminal.' :
-    'Tap or Tab to complete. Enter to run. Esc to close.');
+    `Tap or Tab to complete. Enter to ${token.start === 0 ? 'run' : 'complete'}. Esc to close.`);
 }
 function completeCommand(index = commandIndex) {
-  const command = commandOptions[index];
-  if (!command) return false;
-  $('prompt').value = '/' + command.name + ' ';
-  drafts.set(selected, $('prompt').value);
+  const command = commandOptions[index], token = commandToken(), input = $('prompt');
+  if (!command || !token) return false;
+  const separator = /^\s/.exec(input.value.slice(token.end))?.[0] || '';
+  input.setRangeText('/' + command.name + (separator || ' '), token.start, token.end + separator.length, 'end');
+  drafts.set(selected, input.value);
   commandDismissed = true;
   resizePrompt();
   $('prompt').focus(); renderCommands();
@@ -2286,7 +2296,7 @@ $('prompt').addEventListener('input', () => {
   closePicker(); resizePrompt();
   if (selected) drafts.set(selected, $('prompt').value);
   commandDismissed = false; commandIndex = 0;
-  if ($('prompt').value === '/' && selected) loadCommands(selected);
+  if (commandToken()?.query === '' && selected) loadCommands(selected);
   updateControls();
 });
 $('commands').addEventListener('click', () => {
@@ -2296,6 +2306,9 @@ $('commands').addEventListener('click', () => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
 $('prompt').addEventListener('click', renderCommands);
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement === $('prompt')) renderCommands();
+});
 $('composer').addEventListener('focusout', event => {
   if (!$('composer').contains(event.relatedTarget)) { commandDismissed = true; renderCommands(); }
 });
@@ -2313,7 +2326,8 @@ $('prompt').addEventListener('keydown', event => {
     if (event.key === 'Tab' && completeCommand()) { event.preventDefault(); return; }
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (completeCommand()) sendMessage();
+      const run = commandToken()?.start === 0;
+      if (completeCommand() && run) sendMessage();
       return;
     }
   }
