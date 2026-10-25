@@ -29,7 +29,7 @@ test('the bottom button returns to the latest message and resumes following repl
   const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
   await expect(transcript).toContainText('A short reply.');
   await expect(button).toBeHidden();
-  await expect(transcript).toHaveCSS('mask-image', 'linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 60px, rgb(0, 0, 0) calc(100% - 32px), rgba(0, 0, 0, 0))');
+  await expect(transcript).toHaveCSS('mask-image', 'linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 72px, rgb(0, 0, 0) calc(100% - 32px), rgba(0, 0, 0, 0))');
   await expect(page.locator('#composer')).toHaveCSS('mask-image', 'none');
   state.messages[0].text = 'Thread history\n\n'.repeat(60);
   snapshot();

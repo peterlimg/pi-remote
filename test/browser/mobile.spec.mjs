@@ -107,19 +107,20 @@ test('conversation header floats above scrolling messages without crowding its c
     expect(Math.abs(header.x - composer.x)).toBeLessThan(1);
     expect(Math.abs(header.width - composer.width)).toBeLessThan(1);
     expect(Math.abs(control.x + control.width / 2 - send.x - send.width / 2)).toBeLessThan(1);
-    await expect(details).toHaveCSS('border-left-width', '0px');
-    await expect(details).toHaveCSS('background-color', await page.locator('#commands').evaluate(node => getComputedStyle(node).backgroundColor));
-    await expect(details.locator('svg')).toHaveCSS('width', '24px');
+    await expect(details).toHaveCSS('border-left-width', '1px');
+    await expect(details).toHaveCSS('background-color', await page.locator('.conversation-heading').evaluate(node => getComputedStyle(node).backgroundColor));
+    await expect(details.locator('svg')).toHaveCSS('width', '28px');
     expect(Math.abs(title.x + title.width / 2 - header.x - header.width / 2)).toBeLessThan(1);
     expect(title.x + title.width).toBeLessThan(control.x);
-    expect(control.width).toBeGreaterThanOrEqual(44);
-    expect(control.height).toBeGreaterThanOrEqual(44);
+    expect(control.width).toBe(56);
+    expect(control.height).toBe(56);
     expect(header.height).toBeLessThan(80);
     if (width < 700) {
       const back = await page.locator('#back').boundingBox();
-      await expect(page.locator('#back')).toHaveCSS('border-left-width', '0px');
-      await expect(page.locator('#back svg')).toHaveCSS('width', '24px');
-      expect(back.width).toBeGreaterThanOrEqual(44);
+      await expect(page.locator('#back')).toHaveCSS('border-left-width', '1px');
+      await expect(page.locator('#back svg')).toHaveCSS('width', '28px');
+      expect(back.width).toBe(56);
+      expect(back.height).toBe(56);
       expect(back.x + back.width).toBeLessThan(title.x);
       const pill = await page.locator('.conversation-heading').boundingBox();
       expect(pill.width).toBeLessThanOrEqual(220);
