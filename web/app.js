@@ -706,7 +706,7 @@ function sessionFeedback(text, undoId) {
   }
   const dismiss = el('button', 'Dismiss', 'quiet'); dismiss.type = 'button';
   dismiss.addEventListener('click', () => sessionFeedback('')); box.append(dismiss);
-  sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 8000);
+  sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 3000);
 }
 function confirmCloseSession(id, keyboard = false) {
   const dialog = $('session-close-confirm');
@@ -2459,21 +2459,9 @@ function renderImages() {
   }));
   updateControls();
 }
-// Keep the editor focused until click so we can dismiss its keyboard first.
+// Keep the editor focused so the composer stays at the tap's native picker anchor.
 $('image-files').addEventListener('mousedown', event => event.preventDefault());
-$('image-files').addEventListener('click', event => {
-  const active = document.activeElement;
-  if (active?.matches('textarea, input:not([type=file])')) active.blur();
-  const box = event.currentTarget.getBoundingClientRect(), viewport = window.visualViewport;
-  const moved = event.detail > 0 && (event.clientX < box.left || event.clientX > box.right ||
-    event.clientY < box.top || event.clientY > box.bottom);
-  const keyboardOpen = viewport && viewport.height < $('app').getBoundingClientRect().height - 1;
-  // iOS anchors to the original touch; a delayed click cannot move that native anchor.
-  if (moved || keyboardOpen) {
-    event.preventDefault();
-    notice('Keyboard closed. Tap + again to attach photos or videos.');
-  } else notice('');
-});
+$('image-files').addEventListener('click', () => notice(''));
 $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';

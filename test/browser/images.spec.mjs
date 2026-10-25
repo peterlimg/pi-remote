@@ -101,7 +101,7 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   expect(errors).toEqual([]);
 });
 
-test('new-session image picker uses a fresh tap after the keyboard moves its native anchor', async ({ page }, info) => {
+test('new-session image picker opens on the first tap without moving its native anchor', async ({ page }, info) => {
   // iOS anchors the native menu to its last real touch, not the input's current DOM bounds.
   await page.addInitScript(() => {
     const viewport = new EventTarget();
@@ -147,19 +147,6 @@ test('new-session image picker uses a fresh tap after the keyboard moves its nat
   await page.clock.install();
   await page.clock.pauseAt(new Date());
   await input.tap();
-  await expect(prompt).not.toBeFocused();
-  expect(pickers).toHaveLength(0);
-  const oldTap = await page.evaluate(() => window.nativePickerAnchor);
-  expect(oldTap.y).toBeLessThan((await input.boundingBox()).y);
-  await page.clock.runFor(500);
-  expect(pickers).toHaveLength(0);
-  const stalePicker = page.waitForEvent('filechooser', { timeout: 500 }).then(() => true, () => false);
-  await page.evaluate(() => window.keyboardHeight(844));
-  await page.clock.runFor(1000);
-  expect(await stalePicker).toBe(false); // A delayed click would reuse the old, mid-screen native anchor.
-  expect(pickers).toHaveLength(0);
-  await expect(page.locator('#notice')).toContainText('Tap + again');
-  await input.tap();
   await expect.poll(() => pickers.length).toBe(1);
   expect(pickers[0].isMultiple()).toBe(true);
   const box = await input.boundingBox(), anchor = await page.evaluate(() => window.nativePickerAnchor);
@@ -173,6 +160,8 @@ test('new-session image picker uses a fresh tap after the keyboard moves its nat
   await info.attach('new-session-picker-anchor', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
   await input.dispatchEvent('cancel');
   await expect(prompt).toHaveValue('');
+  await prompt.blur();
+  await page.evaluate(() => window.keyboardHeight(844));
   await input.tap(); // No keyboard: reopen immediately.
   await expect.poll(() => pickers.length).toBe(2);
   await input.dispatchEvent('cancel');
@@ -181,29 +170,23 @@ test('new-session image picker uses a fresh tap after the keyboard moves its nat
   await expect.poll(() => pickers.length).toBe(3);
   await input.dispatchEvent('cancel');
   await prompt.focus();
-  await page.evaluate(() => {
-    window.keyboardHeight(460);
-    Object.defineProperty(window, 'innerHeight', { get: () => visualViewport.height });
-  });
-  await input.focus(); // Focus and innerHeight can change before the input's click arrives.
-  await input.tap();
-  await page.clock.runFor(1000);
-  expect(pickers).toHaveLength(3);
-  await page.evaluate(() => window.keyboardHeight(844));
-  await page.clock.runFor(1000);
-  expect(pickers).toHaveLength(3);
-  await input.tap();
+  await page.evaluate(() => window.keyboardHeight(460));
+  await input.tap(); // A typed draft with the keyboard open still needs only one tap.
   await expect.poll(() => pickers.length).toBe(4);
+  expect(await input.boundingBox()).toEqual(box);
   await input.dispatchEvent('cancel');
   await expect(prompt).toHaveValue('Keep this draft');
-  await prompt.focus();
-  await page.evaluate(() => window.keyboardHeight(460));
+  await page.evaluate(() => Object.defineProperty(window, 'innerHeight', { get: () => visualViewport.height }));
+  await input.focus(); // Focus and innerHeight can change before the input's click arrives.
   await input.tap();
+  await expect.poll(() => pickers.length).toBe(5);
+  await input.dispatchEvent('cancel');
+  await expect(prompt).toHaveValue('Keep this draft');
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
   await page.evaluate(() => window.keyboardHeight(844));
   await page.clock.runFor(1000);
-  expect(pickers).toHaveLength(4); // No delayed picker can follow the user into a different session.
+  expect(pickers).toHaveLength(5); // No delayed picker can follow the user into a different session.
 });
 
 test('image picker previews, removes and preserves session drafts until acknowledgement', async ({ page }) => {
