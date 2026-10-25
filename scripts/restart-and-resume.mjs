@@ -91,7 +91,8 @@ async function legacyIdle(config, dir, pid) {
 export async function updateWorkers(config = loadConfig(), dir = dataDir()) {
   const before = await hostStatus(config, 'GET', dir, { idleOnly: true });
   if (!before || before.closing || !Array.isArray(before.managedSessions)) throw new Error('A running lifecycle-aware host is required to update workers.');
-  const pending = new Map(ownedSessions(dir, before.pid).filter(item => before.managedSessions.some(session => session.id === item.id))
+  const pending = new Map(ownedSessions(dir, before.pid).filter(item => before.managedSessions.some(session => session.id === item.id) &&
+    statSync(item.file, { throwIfNoEntry: false })?.isFile())
     .map(item => [item.id, item.nonce]));
   let updated = 0;
   if (!pending.size) return { updated };

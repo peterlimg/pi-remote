@@ -62,7 +62,7 @@ A working session, open dialog, pending command or unfinished checkpoint refuses
 
 ## Worker-only updates
 
-For extension-only changes, run `node scripts/restart-and-resume.mjs --workers` from the updated installed checkout. The detached job snapshots the host's existing managed workers and updates each independently through the existing authenticated handoff and resume APIs. An idle worker can load new extension code while another session is still working. Terminal bridges and workers created after the snapshot are left alone.
+For extension-only changes, run `node scripts/restart-and-resume.mjs --workers` from the updated installed checkout. The detached job snapshots the host's existing managed workers and updates each independently through the existing authenticated handoff and resume APIs. An idle worker can load new extension code while another session is still working. Terminal bridges, empty sessions whose files have not been saved, and workers created after the snapshot are left alone.
 
 Each handoff checks that session's lifecycle and outstanding requests atomically. A tool, permission dialog, pending command or unfinished SDK checkpoint keeps that worker running. Ownership nonces prevent later passes from updating a replacement owner. History files and manual names are preserved; resumption does not submit another prompt or replay tools. Commands arriving during the brief handoff/startup window can be refused and must be retried, rather than being acknowledged and lost.
 
@@ -101,7 +101,7 @@ npm run test:lifecycle
 
 This is an E2E test of the real host, WebSocket authentication, mobile Chromium, restart CLI, detached jobs, filesystem persistence, and replacement-host restoration. The Pi/SDK peer is a deterministic RPC replay fixture, so no login, provider credits, or model calls are required. It does not claim live SDK inference or physical Safari coverage.
 
-`npm run test:browser -- test/browser/worker-update.spec.mjs` verifies the worker-only path with two real host-managed sessions, the detached CLI job and phone UI. A simulated Pi/SDK peer gates permission, tool completion, checkpoint saving and settlement. The idle worker must update first, the busy worker must stay alive until every gate clears, and the host must remain running. It also checks authentication refusal, unchanged idle history and continued phone input without tool replay.
+`npm run test:browser -- test/browser/worker-update.spec.mjs` verifies the worker-only path with two real host-managed sessions, the detached CLI job and phone UI. A simulated Pi/SDK peer gates permission, tool completion, checkpoint saving and settlement. The idle worker must update first, the busy worker must stay alive until every gate clears, and the host must remain running. It also checks authentication refusal, untouched unsaved workers, unchanged idle history and continued phone input without tool replay.
 
 The replay gates permission, tool completion, checkpoint saving, and final settlement independently. It delays one real HTTP status response beyond the ten-second client timeout and requires both queued restart jobs to survive, remain blocked by permission, and later complete. It also checks both receipt orders, in-flight input, generic-provider settlement, rejected requests, concurrent restart jobs, authentication refusal, two complete host restarts, unchanged history, no completed-tool replay, and fail-closed recovery after a forced interruption. Its artifact includes the observed lifecycle transition trace. CI runs it once in the browser job.
 

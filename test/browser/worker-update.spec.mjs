@@ -21,7 +21,7 @@ test('worker updates wait for each session independently without interrupting to
     PI_LIFECYCLE_REPLAY_LOG: logFile };
   const previous = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
   Object.assign(process.env, environment);
-  const files = ['Busy session', 'Idle session'].map(title => {
+  const files = ['Busy session', 'Idle session', 'Unsaved session'].map(title => {
     const file = join(sessions, title + '.jsonl');
     writeFileSync(file, [
       { type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: project },
@@ -45,6 +45,8 @@ test('worker updates wait for each session independently without interrupting to
   try {
     for (const id of ids) expect((await host.service.resume(id, randomUUID())).ok).toBe(true);
     const originalPids = ids.map(pid), originalIdleHistory = digest(files[1]);
+    // Pi allocates an empty session's filename before its first message is saved.
+    rmSync(files[2]); host.service.scan();
     await assert.rejects(updateWorkers({ ...config, bridgeToken: 'wrong-fixture-token' }, dir), { code: 'EHOSTAUTH' });
     expect(ids.map(pid)).toEqual(originalPids);
     await page.goto(config.publicUrl + '/#token=' + config.clientToken);
@@ -65,6 +67,8 @@ test('worker updates wait for each session independently without interrupting to
     expect(host.status().pid).toBe(process.pid);
     expect(host.status().closing).toBe(false);
     expect(digest(files[1])).toBe(originalIdleHistory);
+    expect(pid(ids[2])).toBe(originalPids[2]);
+    expect(existsSync(files[2])).toBe(false);
     await expect(page.locator('#dialog')).toContainText('Allow replay probe?');
 
     await page.locator('#dialog').getByRole('button', { name: 'Allow', exact: true }).click();
@@ -81,6 +85,7 @@ test('worker updates wait for each session independently without interrupting to
     await expect.poll(() => existsSync(join(dir, 'restart.log')) && readFileSync(join(dir, 'restart.log'), 'utf8')
       .includes(`worker update finished (job ${queuedPid}): 2 updated`)).toBe(true);
     expect(host.status().pid).toBe(process.pid);
+    expect(pid(ids[2])).toBe(originalPids[2]);
     expect(rows().filter(row => row.phase === 'execution').map(row => row.label)).toEqual(['pending']);
 
     // Reselect and reload through the phone, then use the replacement worker without replaying the tool.

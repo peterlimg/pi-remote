@@ -45,7 +45,7 @@ Run `node test/pi-smoke.mjs` with the configured Pi installation. The real Pi ex
 
 Run `npm run test:browser -- test/browser/session-title.spec.mjs`. It uses a real host, session file over 32 MiB, background history index, fresh host process and mobile browser, with Pi RPC replayed instead of model calls. The name is deliberately beyond the catalog's preview window. It checks that scans and restart/reconnect retain the header and list title without changing the session file. An explicit Pi rename must still take effect.
 
-For worker-only rollout, run `node scripts/restart-and-resume.mjs --workers` from the updated installed checkout. It queues each existing managed worker for a safe handoff and resume when that session settles, without waiting for all sessions or restarting the host. Run `npm run test:browser -- test/browser/worker-update.spec.mjs` for the real-host, detached-job and phone proof with a simulated Pi/SDK peer. Host code changes still need the full safe restart in `docs/session-lifecycle.md`.
+For worker-only rollout, run `node scripts/restart-and-resume.mjs --workers` from the updated installed checkout. It queues each existing saved, managed worker for a safe handoff and resume when that session settles, without waiting for all sessions or restarting the host. Empty workers whose files have not yet been saved are left untouched. Run `npm run test:browser -- test/browser/worker-update.spec.mjs` for the real-host, detached-job and phone proof with a simulated Pi/SDK peer. Host code changes still need the full safe restart in `docs/session-lifecycle.md`.
 
 ## Gotchas
 
