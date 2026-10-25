@@ -106,7 +106,9 @@ export async function handoffSession(id, config = loadConfig()) {
   if (response.status === 404 || response.status === 405) throw new Error('Update and restart Pi Remote on this computer before resuming a phone session here.');
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
-    throw new Error(result.error || 'Pi Remote could not release this session. Check /pi-remote status, then /reload.');
+    const error = new Error(result.error || 'Pi Remote could not release this session. Check /pi-remote status, then /reload.');
+    if (response.status === 409) error.code = 'EHANDOFF';
+    throw error;
   }
 }
 

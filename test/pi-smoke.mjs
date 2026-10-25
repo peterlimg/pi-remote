@@ -65,12 +65,14 @@ export default function(pi) {
   });
   pi.registerProvider('remote-title-fixture', {
     api: 'remote-title-fixture', apiKey: 'fixture-only', baseUrl: 'http://127.0.0.1:1',
-    models: ['main', 'gpt-5.6-luna', 'gpt-6-luna'].map((id, index) => ({ id, name: id, reasoning: false, input: ['text'],
+    models: (process.env.PI_TITLE_CASE === 'no-small' ? ['main'] : ['main', 'gpt-5.6-luna', 'gpt-6-luna']).map((id, index) => ({ id, name: id, reasoning: false, input: ['text'],
       cost: { input: 3 - index, output: 3 - index, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200000, maxTokens: 1000 })),
     streamSimple: (model, context, options) => {
-      const title = JSON.stringify(context).includes('Name this coding session');
-      appendFileSync(${JSON.stringify(titleCalls)}, JSON.stringify({ title, model: model.id, context, sessionId: options?.sessionId }) + '\\n');
+      const title = JSON.stringify(context).includes('Name this coding session'), mode = process.env.PI_TITLE_CASE || 'normal';
+      appendFileSync(${JSON.stringify(titleCalls)}, JSON.stringify({ title, mode, model: model.id, context, sessionId: options?.sessionId }) + '\\n');
       const result = (async () => {
+        if (title && mode === 'timeout' && model.id !== 'main') await new Promise(() => {});
+        if (title && (mode === 'both-fail' || mode === 'rejected' && model.id !== 'main')) throw new Error('Private fixture provider rejection');
         while (!title && !existsSync(${JSON.stringify(titleRelease)})) { options?.signal?.throwIfAborted(); await delay(20); }
         return { role: 'assistant', api: model.api, provider: model.provider, model: model.id, timestamp: Date.now(),
           content: [{ type: 'text', text: title ? 'Fix mobile session navigation' : 'The main task is complete.' }], stopReason: 'stop',
@@ -238,6 +240,41 @@ try {
       assert.equal(readFileSync(titleCalls, 'utf8').trim().split('\n').map(JSON.parse).filter(call => call.title).length, 1);
       console.log('First-request small-model title E2E passed: early naming, isolated provider context, persistence and manual-name protection.');
     } finally { await named.close(); }
+    for (const mode of ['rejected', 'timeout', 'both-fail', 'no-small']) {
+      const file = join(dir, 'title-' + mode + '.jsonl');
+      writeFileSync(file, JSON.stringify({ type: 'session', version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd: dir }) + '\n');
+      const worker = new RpcWorker(file, dir, { bin: '/usr/bin/env', prefix: [
+        'PI_TITLE_CASE=' + mode, 'PI_CODING_AGENT_DIR=' + join(dir, 'worker-agent'), process.execPath, entry,
+        '--no-extensions', '-e', resolve('extension/index.ts'), '-e', trust,
+        '--provider', 'remote-title-fixture', '--model', 'main'
+      ] });
+      try {
+        const events = []; let settledAt;
+        worker.on('event', event => { events.push(event); if (event.type === 'agent_settled') settledAt ??= Date.now(); });
+        const started = Date.now();
+        await worker.command({ type: 'prompt', text: 'Fix mobile session navigation' });
+        let state;
+        do {
+          state = await worker.request('get_state');
+          if (state.sessionName || events.some(event => event.method === 'notify' && /Could not generate a task title/.test(event.message))) break;
+          await delay(50);
+        } while (Date.now() - started < 15000);
+        assert.equal(state.sessionName, mode === 'both-fail' ? undefined : 'Fix mobile session navigation', mode);
+        assert.equal(state.model.id, 'main');
+        await until(() => events.some(event => event.type === 'agent_settled'));
+        const namingCalls = () => readFileSync(titleCalls, 'utf8').trim().split('\n').map(JSON.parse).filter(call => call.mode === mode && call.title);
+        assert.deepEqual(namingCalls().map(call => call.model), mode === 'no-small' ? ['main'] : ['gpt-6-luna', 'main']);
+        assert.ok(!JSON.stringify(events).includes('Private fixture provider rejection'));
+        if (mode === 'timeout') {
+          assert.ok(settledAt - started < 7000, 'The main task must finish without waiting for the naming timeout');
+          assert.ok(Date.now() - started < 15000, 'A provider ignoring abort must still fall back within the total budget');
+        }
+        await worker.command({ type: 'prompt', text: 'A follow-up must not keep retrying the title' });
+        await until(() => events.filter(event => event.type === 'agent_settled').length === 2);
+        assert.equal(namingCalls().length, mode === 'no-small' ? 1 : 2, 'Only one bounded naming attempt per session runtime');
+      } finally { await worker.close(); }
+    }
+    console.log('Title fallback E2E passed: unsupported small model, ignored cancellation, both providers failing, and no small model.');
   } else console.log('SKIP title generation: this Pi version has no modelRegistry.streamSimple API.');
   console.log('Real Pi smoke passed: extension load, registration, remote commands, bridge/worker compaction with simulated summaries, image delivery, remote off/on, dialogs, usage and mobile progress guidance at the real provider boundary. No external model calls.');
 } catch (e) {
