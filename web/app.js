@@ -82,6 +82,7 @@ function fitViewport() {
   document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
   document.documentElement.style.setProperty('--viewport-left', `${viewport?.offsetLeft ?? 0}px`);
   document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
+  fitAttachmentMenu();
 }
 window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);
@@ -121,7 +122,7 @@ let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
 let swipeTimer, trackingSwipe = false, openingAnimation;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
-let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
+let lastDialog, blankDir, settingsPicker, attachmentAnchor, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
 let supportsSessionSections = false, supportsSessionClosing = false, supportsNewPreparation = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
@@ -889,7 +890,6 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
-  $('composer').removeAttribute('data-attaching');
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   resetScrollback();
   resetSwipe();
@@ -1475,7 +1475,8 @@ function updateControls() {
   $('send').disabled = !live || sending.has(selected);
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
-  $('image-files').disabled = !selected || !!state?.creation || sending.has(selected);
+  $('attach').disabled = !selected || !!state?.creation || sending.has(selected);
+  for (const input of $('attachment-menu').querySelectorAll('input')) input.disabled = $('attach').disabled;
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
   $('abort').hidden = !working;
@@ -1585,6 +1586,7 @@ function completeCommand(index = commandIndex) {
   return true;
 }
 function closePicker(restoreFocus = false) {
+  closeAttachmentMenu();
   const opener = settingsPicker?.opener;
   settingsPicker = undefined;
   $('settings-dialog').close();
@@ -1606,7 +1608,7 @@ function fitPickerMenu() {
   $('settings-picker').style.setProperty('--picker-menu-height', Math.max(0, height) + 'px');
 }
 matchMedia('(max-width: 700px)').addEventListener('change', fitPickerMenu);
-const pickerMenuObserver = new ResizeObserver(fitPickerMenu);
+const pickerMenuObserver = new ResizeObserver(() => { fitPickerMenu(); fitAttachmentMenu(); });
 pickerMenuObserver.observe($('composer')); pickerMenuObserver.observe($('app'));
 function openPicker(id, kind, opener = document.activeElement) {
   if (settingsPicker?.kind === kind) opener = settingsPicker.opener;
@@ -1934,6 +1936,9 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !$('dialog').hidden && $('dialog').getClientRects().length) {
     event.preventDefault(); $('dialog-close').click(); return;
   }
+  if (event.key === 'Escape' && !$('attachment-menu').hidden) {
+    event.preventDefault(); closeAttachmentMenu(true); return;
+  }
   if (!settingsPicker) return;
   if (event.key === 'Escape') { event.preventDefault(); closePicker(true); }
   // The picker shares the composer form. Search must never submit its draft.
@@ -1944,6 +1949,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   const info = document.querySelector('.session-info');
   if (info.open && !info.contains(event.target)) info.open = false;
+  if (!$('attachment-menu').hidden && !$('attachment-menu').contains(event.target) && !$('attach').contains(event.target)) closeAttachmentMenu();
   const trigger = settingsPicker?.kind === 'usage' ? $('usage-meter') : settingsPicker?.kind === 'reasoning' ? $('reasoning-control') : $('model');
   if (settingsPicker && !$('settings-picker').contains(event.target) && !trigger.contains(event.target)) closePicker();
 });
@@ -2442,7 +2448,7 @@ function renderImages() {
     remove.addEventListener('click', event => {
       releaseImages([image]);
       // WebKit rings every scripted focus; only keyboard removal (detail 0) should show it.
-      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('image-files').focus({ focusVisible: !event.detail });
+      imageDrafts.set(selected, images.filter(other => other !== image)); renderImages(); $('attach').focus({ focusVisible: !event.detail });
     });
     item.classList.toggle('uploading', !!image.uploading);
     if (image.video) {
@@ -2467,31 +2473,68 @@ function renderImages() {
   }));
   updateControls();
 }
-// Keep the keyboard open; iOS anchors its menu to the original tap.
-$('image-files').addEventListener('mousedown', event => event.preventDefault());
-$('image-files').addEventListener('click', () => {
-  notice(''); $('composer').setAttribute('data-attaching', '');
-});
-$('image-files').addEventListener('cancel', () => $('composer').removeAttribute('data-attaching'));
-$('image-files').addEventListener('change', () => {
-  $('composer').removeAttribute('data-attaching');
-  const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
-  $('image-files').value = '';
-  if (!selected || sending.has(selected) || !files.length) return;
-  const allFiles = [...images.map(image => image.file), ...files];
-  if (allFiles.length > MAX_IMAGES || files.some(file => !file.size || (isVideo(file) ? file.size > MAX_VIDEO_BYTES : !IMAGE_TYPES.includes(file.type))) ||
-    allFiles.filter(file => !isVideo(file)).reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
-    notice(allFiles.some(isVideo) ? VIDEO_LIMIT : IMAGE_LIMIT); return;
+function closeAttachmentMenu(restoreFocus = false) {
+  const menu = $('attachment-menu');
+  const keyboard = menu.dataset.keyboard === 'true';
+  menu.hidden = true; menu.style.transform = ''; attachmentAnchor = undefined;
+  $('attach').setAttribute('aria-expanded', 'false');
+  if (restoreFocus && document.activeElement !== $('prompt')) $('attach').focus({ preventScroll: true, focusVisible: keyboard });
+}
+function fitAttachmentMenu() {
+  const menu = $('attachment-menu');
+  if (menu.hidden) return;
+  if (attachmentAnchor) {
+    menu.style.transform = '';
+    const box = menu.getBoundingClientRect();
+    menu.style.transform = `translate(${attachmentAnchor.left - box.left}px, ${attachmentAnchor.top - box.top}px)`;
+    return;
   }
-  if (files.some(isVideo) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
-  const added = files.map(file => ({ file, video: isVideo(file), url: URL.createObjectURL(file) }));
-  for (const image of added) {
-    if (image.video) image.upload = uploadQueue = uploadQueue.then(() => stageVideo(image)).catch(() => {});
-    else uploadImage(image);
-  }
-  imageDrafts.set(selected, [...images, ...added]);
-  notice(''); renderImages();
+  const box = $('composer').getBoundingClientRect();
+  const top = document.querySelector('.conversation-header').getBoundingClientRect().top;
+  menu.style.maxHeight = Math.max(56, box.top - top - 8) + 'px';
+}
+$('attach').addEventListener('click', event => {
+  const menu = $('attachment-menu'), opening = menu.hidden;
+  closePicker(); commandDismissed = true; renderCommands();
+  if (!opening) return;
+  menu.dataset.keyboard = String(!event.detail);
+  if (matchMedia('(pointer: fine)').matches) { $('image-files').click(); return; }
+  menu.hidden = false; menu.scrollTop = 0; fitAttachmentMenu();
+  $('attach').setAttribute('aria-expanded', 'true');
+  if (!event.detail) $('image-files').focus({ preventScroll: true });
 });
+for (const input of $('attachment-menu').querySelectorAll('input')) {
+  input.addEventListener('mousedown', event => event.preventDefault());
+  input.addEventListener('click', () => {
+    notice('');
+    if (!$('attachment-menu').hidden) {
+      // Keep the source row stationary while iOS takes over and dismisses the keyboard.
+      attachmentAnchor = $('attachment-menu').getBoundingClientRect();
+      const active = document.activeElement;
+      if (active?.matches('textarea, input:not([type=file])')) active.blur();
+      fitAttachmentMenu();
+    }
+  });
+  input.addEventListener('cancel', () => closeAttachmentMenu(true));
+  input.addEventListener('change', () => {
+    const files = [...input.files], images = imageDrafts.get(selected) || [];
+    input.value = ''; closeAttachmentMenu(true);
+    if (!selected || sending.has(selected) || !files.length) return;
+    const allFiles = [...images.map(image => image.file), ...files];
+    if (allFiles.length > MAX_IMAGES || files.some(file => !file.size || (isVideo(file) ? file.size > MAX_VIDEO_BYTES : !IMAGE_TYPES.includes(file.type))) ||
+      allFiles.filter(file => !isVideo(file)).reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
+      notice(allFiles.some(isVideo) ? VIDEO_LIMIT : IMAGE_LIMIT); return;
+    }
+    if (files.some(isVideo) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
+    const added = files.map(file => ({ file, video: isVideo(file), url: URL.createObjectURL(file) }));
+    for (const image of added) {
+      if (image.video) image.upload = uploadQueue = uploadQueue.then(() => stageVideo(image)).catch(() => {});
+      else uploadImage(image);
+    }
+    imageDrafts.set(selected, [...images, ...added]);
+    notice(''); renderImages();
+  });
+}
 // Composer buttons never take focus from the editor. On iOS a blur starts closing the keyboard and the
 // shell fills the screen at once, so the composer drops away before the tap lands and the tap is lost.
 $('composer').addEventListener('mousedown', event => { if (event.target.closest('button')) event.preventDefault(); });

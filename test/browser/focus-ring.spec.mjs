@@ -44,15 +44,15 @@ test('removing an attachment by tap leaves no focus ring on the attach button', 
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Alpha/ }).click();
-  const ring = () => page.locator('#attach').evaluate(attach => attach.matches(':has(:focus-visible)'));
+  const ring = () => page.locator('#attach').evaluate(attach => attach.matches(':focus-visible'));
   const remove = page.getByRole('button', { name: `Remove ${file.name}` });
   await page.locator('#image-files').setInputFiles(file);
   await remove.tap();
-  await expect(page.locator('#image-files')).toBeFocused();
+  await expect(page.locator('#attach')).toBeFocused();
   expect(await ring()).toBe(false);
   await page.locator('#image-files').setInputFiles(file);
   await remove.focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#image-files')).toBeFocused();
+  await expect(page.locator('#attach')).toBeFocused();
   expect(await ring()).toBe(true); // Keyboard users still see where focus went.
 });

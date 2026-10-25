@@ -169,6 +169,12 @@
           <footer><p id="picker-help" class="hint" role="status"></p><button id="model-retry" type="button" class="secondary" hidden>Try again</button></footer>
         </section>
         </dialog>
+        <section id="attachment-menu" class="command-menu attachment-menu" role="dialog" aria-label="Attachment options" hidden>
+          <label class="attachment-option"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>Photos and videos…<input id="image-files" type="file" aria-label="Attach images and videos" aria-describedby="attachment-help" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple></label>
+          <label class="attachment-option"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h-4L8 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4Z"/><circle cx="12" cy="13" r="4"/></svg>Take photo or video<input id="camera-files" type="file" aria-label="Take photo or video" aria-describedby="attachment-help" accept="image/jpeg,image/png,image/gif,image/webp,video/*" capture="environment"></label>
+          <label class="attachment-option"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 9h18"/></svg>Choose files…<input id="device-files" type="file" aria-label="Choose image or video files" aria-describedby="attachment-help" accept="application/octet-stream" multiple></label>
+          <p id="attachment-help" class="hint">Up to 4 attachments.<br>Images: 2 MB total.<br>Videos: 200 MB each.<br>Original videos are uploaded to your computer.</p>
+        </section>
         <label class="sr-only" for="prompt">Message</label>
         <div id="command-menu" class="command-menu" hidden>
           <div id="command-options" role="listbox" aria-label="Pi commands"></div>
@@ -178,7 +184,7 @@
         <div id="attachments" class="attachments" aria-label="Attached images and videos" hidden></div>
         <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
         <div class="composer-toolbar">
-          <label id="attach" class="quiet" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input id="image-files" type="file" aria-label="Attach images and videos" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple></label>
+          <button id="attach" type="button" class="quiet" aria-label="Add attachments" aria-haspopup="dialog" aria-expanded="false" aria-controls="attachment-menu" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span id="composer-connection-text">Connecting</span></div>
           <div class="composer-settings">
             <button id="model" class="setting-control" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-dialog" hidden><span id="model-name"></span></button>
