@@ -157,7 +157,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-group-heading button { margin-left: auto; padding-inline: 0; font-size: 13px; font-weight: 500; }
 .session-group-now h3 { color: var(--accent); }
 :is(.session-group-now, .session-group-pinned) .session-preview { display: none; }
-.session-group .session + .session { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); border-radius: 0; }
+.session-group .session { border-radius: 0; }
+.session-group .session + .session { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 #list-empty { padding: 8px; }
 .list-pagination { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; margin-top: 8px; }
 .list-pagination button { padding-inline: 8px; font-size: 12px; }

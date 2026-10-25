@@ -66,12 +66,17 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await expect(pinsGroup.locator('time').first()).toBeVisible();
     const bounds = await nowGroup.boundingBox();
     expect(bounds.y + bounds.height).toBeLessThan(page.viewportSize().height - 70);
+    await recentGroup.locator('.session').first().click();
+    await expect(page.locator('#title')).toHaveText('Recent task 0');
+    await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+    await expect(recentGroup.locator('.session').first()).toHaveAttribute('aria-current', 'true');
     const checkLayout = async () => {
       expect(await page.evaluate(() => {
         const sidebar = document.getElementById('sidebar');
         return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
       })).toBe(true);
-      for (const group of [pinsGroup, recentGroup]) {
+      for (const group of [recentGroup, pinsGroup]) {
+        await expect(group.locator('.session').first()).toHaveCSS('border-radius', '0px');
         await expect(group.locator('strong').first()).toHaveCSS('font-size', '17px');
         await expect(group.locator('strong').first()).toHaveCSS('-webkit-line-clamp', '2');
         await expect(group.locator('.session-meta').first()).toHaveCSS('font-size', '14px');
