@@ -706,7 +706,7 @@ function sessionFeedback(text, undoId) {
   }
   const dismiss = el('button', 'Dismiss', 'quiet'); dismiss.type = 'button';
   dismiss.addEventListener('click', () => sessionFeedback('')); box.append(dismiss);
-  sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 8000);
+  sessionFeedbackTimer = setTimeout(() => sessionFeedback(''), 3000);
 }
 function confirmCloseSession(id, keyboard = false) {
   const dialog = $('session-close-confirm');
