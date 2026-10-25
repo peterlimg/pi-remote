@@ -31,11 +31,20 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
   await expect(activity).toHaveAttribute('role', 'status');
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'connection-spin');
+  const spinStart = () => activity.locator('svg').evaluate(async svg => {
+    const animation = svg.getAnimations()[0];
+    await animation.ready;
+    return animation.startTime;
+  });
+  const started = await spinStart();
   state.messages[1].text += ' The first run took longer.'; snapshot();
+  await expect(page.locator('#transcript')).toContainText('The first run took longer.');
+  expect(await spinStart(), 'Streaming replies must not restart the working animation').toBe(started);
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
-  await expect(page.locator('.tool')).toBeHidden();
+  expect(await spinStart(), 'Tool updates must not restart the working animation').toBe(started);
+  await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await expect(toolLabel).toHaveCSS('animation-name', 'none');
   await page.locator('#prompt').fill('Keep checking');
@@ -59,7 +68,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
-  await expect(activity).toHaveCSS('color', 'rgb(156, 200, 189)');
+  await expect(activity).toHaveCSS('color', 'rgb(239, 237, 239)');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await checkPosition();
   for (const status of ['waiting', 'idle', 'saved', 'disconnected']) {

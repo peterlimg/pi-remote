@@ -1402,7 +1402,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     }
   }
   updateActivity();
-  box.replaceChildren(fragment, activityIndicator);
+  // Keep the indicator connected so streaming updates do not restart its CSS animation.
+  if (activityIndicator.parentNode !== box) box.append(activityIndicator);
+  for (const child of [...box.childNodes]) if (child !== activityIndicator) child.remove();
+  box.insertBefore(fragment, activityIndicator);
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
   for (const { outgoing, messageId } of matched) {
