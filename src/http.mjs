@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/todo.html', ['todo.html', 'text/html; charset=utf-8']],
+  ['/todo.css', ['todo.css', 'text/css; charset=utf-8']],
+  ['/todo.js', ['todo.js', 'text/javascript; charset=utf-8']],
   ['/sdk-guide.html', ['sdk-guide.html', 'text/html; charset=utf-8']],
   ['/sdk-guide.css', ['sdk-guide.css', 'text/css; charset=utf-8']],
   ['/sdk-guide.js', ['sdk-guide.js', 'text/javascript; charset=utf-8']],
