@@ -4,6 +4,8 @@ Source-checked 2026-10-20 UTC against first-party documentation, specifications,
 
 The [follow-up model survey](voice-models.md), checked 2026-10-25, broadens the candidate list beyond Whisper base/small. Its new model claims are provisional because direct original-source retrieval was blocked in that pass.
 
+The [OpenClaw implementation research](openclaw-voice.md), checked directly against pinned source on 2026-10-28, corrects an overbroad assumption: OpenClaw implements ChatGPT/Codex OAuth realtime voice and accepts compatible OAuth profiles for file transcription. Those adapters do not establish this account's access, quota, billing, or vendor approval; a separately purchased API key is not an architectural prerequisite.
+
 ## Recommendation
 
 Keep speech-to-text separate from the selected chat model and its subscription. Dictation produces a draft; sending that draft uses the existing text-message path.
@@ -15,7 +17,7 @@ Phone microphone → foreground recording → encrypted Pi Remote connection
 
 For this Apple Silicon installation, use the [follow-up model survey](voice-models.md) to choose native-arm64 evaluation candidates rather than preselecting Whisper `base`/`small`. Compare multilingual Whisper large-v3-turbo with Qwen3-ASR, and include Parakeet where the user's spoken languages are supported. These are candidates, not measured winners; reopen original model/runtime/license sources before installing. Make any model download explicit. Keep ordinary phone keyboard dictation available when no host engine is configured. A dedicated cloud transcription API is a reasonable alternative if avoiding a local model matters more than keeping audio on the host.
 
-Do not build a speech backend for every chat provider, silently fall back to a paid service, or extract subscription tokens for private speech endpoints. One configured transcription backend can feed Claude, Codex, Gemini, or any text-capable model. An app-controlled microphone button should not depend solely on Web Speech recognition.
+Do not build a speech backend for every chat provider, silently fall back to a paid service, or assume a text login authorizes every speech operation. A subscription-backed adapter needs explicit compatible credential selection, verified service access, and host-owned credentials. One configured transcription backend can feed Claude, Codex, Gemini, or any text-capable model. An app-controlled microphone button should not depend solely on Web Speech recognition.
 
 ## What subscriptions actually cover
 
@@ -37,8 +39,8 @@ USD rates below were checked on the source date. Hourly OpenAI estimates are min
 | Browser Web Speech | No API key managed by Pi Remote | Recognition events and interim text, but service availability, local processing, and Home Screen behavior need runtime/device checks. [Spec][speech-spec], [WebKit IDL][webkit-idl] |
 | Local whisper.cpp | Engine/model installation and host compute; no hosted speech bill | Portable CPU support plus Apple acceleration. Predictable ownership of audio handling, but local speed/quality is unmeasured. [Upstream][whisper-cpp] |
 | Local WhisperKit | Apple-specific engine/model installation | Core ML-based alternative with an existing OpenAI Audio API-compatible local server. Its serving support may save integration work; no performance advantage was measured. [Upstream][whisperkit] |
-| OpenAI `gpt-transcribe` | Separate API key; $0.0045/min, about $0.27/hour | Current file-transcription recommendation. Supports context, keyword/language hints, and code-switching. Audio leaves the host. [Guide][openai-stt], [model][openai-model], [pricing][openai-pricing] |
-| OpenAI `gpt-4o-mini-transcribe` | Separate API key; estimated $0.003/min, about $0.18/hour | Lower published estimated cost; quality for this user's clips is untested. [Pricing][openai-pricing] |
+| OpenAI `gpt-transcribe` | Platform API-key route: $0.0045/min, about $0.27/hour | Current file-transcription recommendation. Supports context, keyword/language hints, and code-switching. Audio leaves the host. [Guide][openai-stt], [model][openai-model], [pricing][openai-pricing] |
+| OpenAI `gpt-4o-mini-transcribe` | Platform API-key route: estimated $0.003/min, about $0.18/hour | Lower published estimated cost; quality for this user's clips is untested. [Pricing][openai-pricing] |
 | Groq `whisper-large-v3-turbo` | Separate API key; $0.04/hour, minimum 10 seconds billed per request | Multilingual hosted transcription. Full `whisper-large-v3` is $0.111/hour. Published benchmark figures are not phone-to-host latency estimates. [STT docs][groq-stt] |
 
 Cloud privacy must be stated per endpoint. OpenAI says API data is not used for training unless opted in; its retention table lists no abuse-monitoring or application-state retention for `/v1/audio/transcriptions`. Groq says inference content is not retained by default, with reliability/abuse exceptions up to 30 days and configurable zero data retention. Neither is equivalent to audio never leaving the host. [OpenAI controls][openai-data], [Groq controls][groq-data].

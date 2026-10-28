@@ -110,7 +110,7 @@ First confirm the user's spoken languages; Chinese is a conditional comparison c
 - Score exact important terms as well as prose errors. English word-error rate and Chinese character-error rate are different measures; casing, punctuation, and identifier normalization should be reported separately rather than hidden in one aggregate score.
 - Measure stop-to-editable-draft latency, upload/decode time, cold and warm inference, and peak unified memory while normal chat runs. For live output, separately measure first partial, stable/final text, and revisions; streamed tokens from a finished recording are not live microphone recognition.
 - Record exact model/runtime/conversion revisions and quantization. A parameter count, weight download, GPU benchmark, or ability to fit in RAM does not establish usable Mac performance.
-- For hosted tests, inspect actual billed duration/minimums, network delay, retention, and credential handling. No silent paid fallback or model-subscription token reuse.
+- For hosted tests, inspect actual billed duration/minimums, network delay, retention, and credential handling. No silent paid fallback. A subscription-backed speech adapter needs explicit compatible credential selection and service/account verification; the [October 28 OpenClaw research](openclaw-voice.md) identifies implemented OAuth paths without proving this user's entitlement.
 
 Only add Voxtral/Moonshine to that experiment if partial-text UX or footprint is a real requirement. Preserve the prior note's encrypted transport, editable draft, and explicit-Send behavior. No benchmark or implementation is authorized by this research note itself.
 
