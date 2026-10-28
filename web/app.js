@@ -124,7 +124,9 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, attachmentAnchor, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsSessionSections = false, supportsSessionClosing = false, supportsNewPreparation = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+let supportsSessionSections = false, supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, renders: 0, renderAt: 0,
+  last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
@@ -339,6 +341,7 @@ function disconnect() {
   closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
   const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
+  debugActivity('disconnect'); supportsActivityDebug = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
   old?.close();
@@ -401,6 +404,7 @@ function connect() {
       supportsSessionSections = packet.supportsSessionSections === true;
       supportsSessionClosing = packet.supportsSessionClosing === true;
       supportsNewPreparation = packet.supportsNewPreparation === true;
+      supportsActivityDebug = packet.supportsActivityDebug === true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -474,6 +478,7 @@ window.addEventListener('online', reconnectNow);
 // so returning to the list doesn't flash Connecting….
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
+  debugActivity('visibility');
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
   fitViewport();
   if (connected && Date.now() - hiddenAt < 5000) probe(); else reconnectNow();
@@ -488,6 +493,7 @@ function logout() {
   clearTimeout(homeScreenTimer); homeScreenLogin = false;
   $('home-screen-hint').hidden = true; $('access-warning').hidden = true;
   token = ''; key = ''; localStorage.removeItem('pi-remote-token'); localStorage.removeItem('pi-remote-key'); sessionStorage.removeItem('pi-remote-token');
+  activityDebug.queue = []; activityDebug.last = undefined;
   for (const images of imageDrafts.values()) releaseImages(images);
   for (const draft of sending.values()) releaseImages(draft.attachments);
   for (const draft of submissions.values()) releaseImages(draft.attachments);
@@ -1183,6 +1189,7 @@ function formatToolDuration(durationMs) {
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
+  activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
@@ -1456,7 +1463,52 @@ function updateActivity() {
   time.hidden = !showTime;
   time.textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
 }
-setInterval(() => { if (!document.hidden) updateActivity(); }, 1000);
+function flushActivityDebug() {
+  if (!connected || !supportsActivityDebug || activityDebug.sending || !activityDebug.queue.length) return;
+  const records = activityDebug.queue.splice(0, 20), login = token;
+  activityDebug.sending = true;
+  request('activityDebug', { records }).catch(() => {
+    if (token === login) activityDebug.queue = [...records, ...activityDebug.queue].slice(-30);
+  }).finally(() => { activityDebug.sending = false; });
+}
+function debugActivity(reason = 'sample') {
+  flushActivityDebug();
+  const state = cache.get(selected), viewing = $('app').classList.contains('viewing');
+  const working = viewing && state?.status === 'working';
+  if (!working && !activityDebug.last?.working) return;
+  const now = performance.now(), reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const key = [selected, state?.status, connected, viewing, document.visibilityState, reducedMotion].join(':');
+  if (reason === 'sample' && key === activityDebug.last?.key && now - activityDebug.last.at < 5000) return;
+  try {
+    const svg = activityIndicator.querySelector('svg'), style = getComputedStyle(svg), rect = svg.getBoundingClientRect();
+    const animations = svg.getAnimations?.() || [], animation = animations[0];
+    const ms = value => Number.isFinite(value) ? Math.round(value) : null;
+    activityDebug.queue.push({ page: activityDebug.page, session: /^[a-f0-9]{64}$/.test(selected || '') ? selected : null, reason, at: Date.now(), elapsedMs: ms(now),
+      sampleGapMs: activityDebug.last ? ms(now - activityDebug.last.at) : null,
+      status: state?.status || 'none', connected, visible: !document.hidden, viewing, reducedMotion, standalone,
+      revision: versions.get(selected) ?? null, renders: activityDebug.renders, updateAgeMs: activityDebug.renderAt ? ms(now - activityDebug.renderAt) : null,
+      rendered: svg.isConnected && rect.width > 0 && rect.height > 0,
+      inViewport: rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth,
+      width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight,
+      animationCount: animations.length, animationName: ['connection-spin', 'none'].includes(style.animationName) ? style.animationName : 'other',
+      currentTime: ms(animation?.currentTime), startTime: ms(animation?.startTime), playState: animation?.playState || 'none', animationPending: animation?.pending === true,
+      cssPlayState: style.animationPlayState || 'none', durationMs: ms(parseFloat(style.animationDuration) * 1000), transform: style.transform || 'none',
+      framePending: activityDebug.framePending, frameDelayMs: activityDebug.frameDelay,
+      frameAgeMs: activityDebug.frameAt ? ms(now - activityDebug.frameAt) : null, userAgent: navigator.userAgent.slice(0, 256) });
+    activityDebug.queue = activityDebug.queue.slice(-30);
+    activityDebug.last = { key, working, at: now };
+    // One frame probe per sample, not a continuous animation loop that could hide the bug.
+    if (!document.hidden && !activityDebug.framePending) {
+      activityDebug.framePending = true;
+      requestAnimationFrame(() => {
+        activityDebug.frameAt = performance.now(); activityDebug.frameDelay = ms(activityDebug.frameAt - now); activityDebug.framePending = false;
+      });
+    }
+    flushActivityDebug();
+  } catch { /* Diagnostics must never interrupt the conversation. */ }
+}
+window.addEventListener('pagehide', () => debugActivity('pagehide'));
+setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); } }, 1000);
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
   $('session-close').disabled = !connected;
@@ -1483,7 +1535,7 @@ function updateControls() {
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
-  updateActivity();
+  updateActivity(); debugActivity();
   const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
   const pendingModel = !!selected && (!state || state.status === 'starting') && !state?.model;
   // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,

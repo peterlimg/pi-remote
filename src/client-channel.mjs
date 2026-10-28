@@ -4,6 +4,7 @@ import { validateImages, MAX_IMAGES, MAX_IMAGE_BYTES } from '../web/images.js';
 import { parseObject, send, protectSocket } from './config.mjs';
 import { VideoUploads, readVideo } from './videos.mjs';
 import { splitVideoMessage } from '../web/videos.js';
+import { writeActivityDebug } from './activity-debug.mjs';
 
 // Scrolling phones keep the top `limit` rows. They get only rows that changed since the
 // last send, so a live update costs one row however far the list was scrolled.
@@ -49,6 +50,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   const scroll = sessionWindow(service);
   let busy = 0, closed = false, listTimer, stateTimer;
+  let debugBudget = 40, debugBudgetAt = Date.now();
   // Images staged before send live only as long as this socket; the phone falls back to inline data.
   const uploads = new Map(), videos = new VideoUploads(service.dir);
   let uploadBytes = 0;
@@ -76,7 +78,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsSessionClosing: true, supportsNewPreparation: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -86,7 +88,13 @@ export function attachClient(socket, service, { pairing } = {}) {
       try {
         let value;
         if (message.op === 'ping') value = { pong: true };
-        else if (message.op === 'pairingCode' && pairing) value = pairing.issue();
+        else if (message.op === 'activityDebug') {
+          if (!Array.isArray(message.records) || !message.records.length || message.records.length > 20) throw new Error('Invalid activity diagnostics');
+          const now = Date.now(), budget = Math.min(40, debugBudget + (now - debugBudgetAt) / 1000);
+          if (message.records.length > budget) throw new Error('Activity diagnostics are rate limited');
+          value = writeActivityDebug(service.dir, message.records);
+          debugBudget = budget - message.records.length; debugBudgetAt = now;
+        } else if (message.op === 'pairingCode' && pairing) value = pairing.issue();
         else if (message.op === 'projects') value = service.projects();
         else if (message.op === 'prepareNew') value = await service.prepareNew(message.sessionId);
         else if (message.op === 'pin') value = service.pin(message.sessionId, message.pinned);
