@@ -2258,6 +2258,7 @@ window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app'
 {
   const app = $('app'), main = document.querySelector('main');
   // Safari permits native switch-drag feedback even when a swipe has no click activation.
+  // shortcut: iOS arms switch dragging after 200 ms; reliable fast-swipe feedback needs a native haptics bridge.
   const nativeInput = document.createElement('input');
   if (!navigator.vibrate && matchMedia('(pointer: coarse)').matches && 'switch' in nativeInput) {
     const edge = el('div', undefined, 'swipe-haptic-edge'); edge.id = 'swipe-haptic-edge';
