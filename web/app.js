@@ -2257,6 +2257,45 @@ window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app'
 // Drag the thread off the live list in both browser and home-screen mode instead.
 {
   const app = $('app'), main = document.querySelector('main');
+  // Safari permits native switch-drag feedback even when a swipe has no click activation.
+  const nativeInput = document.createElement('input');
+  if (!navigator.vibrate && matchMedia('(pointer: coarse)').matches && 'switch' in nativeInput) {
+    const edge = el('div', undefined, 'swipe-haptic-edge'); edge.id = 'swipe-haptic-edge';
+    edge.setAttribute('aria-hidden', 'true');
+    nativeInput.type = 'checkbox'; nativeInput.setAttribute('switch', ''); nativeInput.tabIndex = -1;
+    nativeInput.id = 'swipe-haptic-input';
+    edge.append(nativeInput); app.append(edge);
+    const fitEdge = () => {
+      const transcript = $('transcript').getBoundingClientRect();
+      const top = Math.max(transcript.top, document.querySelector('.conversation-header').getBoundingClientRect().bottom);
+      const height = Math.max(0, transcript.bottom - top);
+      edge.style.left = app.getBoundingClientRect().left + 'px'; edge.style.top = top + 'px'; edge.style.height = height + 'px';
+      nativeInput.style.width = main.clientWidth * 2 / 3 + 'px'; nativeInput.style.transform = `scaleY(${height / 32})`;
+    };
+    new ResizeObserver(fitEdge).observe($('transcript'));
+    window.visualViewport?.addEventListener('scroll', fitEdge);
+    let origin, x, y;
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) nativeInput.addEventListener(type, event => {
+      if (type === 'touchstart' && event.touches.length === 1) {
+        const touch = event.touches[0]; x = touch.clientX; y = touch.clientY;
+        edge.style.pointerEvents = 'none'; origin = document.elementFromPoint(x, y)?.closest('button, a, summary'); edge.style.pointerEvents = '';
+        nativeInput.checked = false; nativeInput.style.left = x - edge.getBoundingClientRect().left + 'px';
+      }
+      const completes = type === 'touchend' && trackingSwipe && main.classList.contains('swiping') && dx > main.offsetWidth / 3;
+      const forwarded = Object.assign(new Event(type, { bubbles: true, cancelable: true }), { touches: event.touches, nativeSwipeHaptic: true });
+      (origin || main).dispatchEvent(forwarded);
+      if (type === 'touchend' || type === 'touchcancel') {
+        // Let Safari finish a committed native gesture, but never turn a canceled swipe into a switch tap.
+        if (!completes) { event.preventDefault(); nativeInput.disabled = true; }
+        if (type === 'touchend' && origin && event.changedTouches?.length === 1) {
+          const touch = event.changedTouches[0];
+          if (Math.hypot(touch.clientX - x, touch.clientY - y) < 8 && origin.isConnected) origin.click();
+        }
+        origin = undefined;
+        requestAnimationFrame(() => { nativeInput.checked = false; nativeInput.disabled = false; nativeInput.style.left = ''; });
+      } else if (!trackingSwipe) event.preventDefault();
+    }, { passive: false });
+  }
   let startX, startY, dx;
   main.addEventListener('touchstart', event => {
     resetSwipe();
@@ -2278,13 +2317,13 @@ window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app'
     event.preventDefault();
     main.style.transform = `translateX(${dx}px)`;
   }, { passive: false });
-  const release = () => {
+  const release = event => {
     if (!trackingSwipe) return;
     trackingSwipe = false;
     if (!app.classList.contains('swiping')) return;
     // ponytail: distance-only threshold; add flick velocity if short fast swipes feel ignored.
     const back = dx > main.offsetWidth / 3;
-    if (back) haptic();
+    if (back && !event.nativeSwipeHaptic) haptic();
     main.style.transition = 'transform .2s ease-out';
     main.style.transform = back ? 'translateX(100%)' : '';
     swipeTimer = setTimeout(() => {

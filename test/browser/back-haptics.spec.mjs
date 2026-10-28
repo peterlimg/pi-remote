@@ -17,6 +17,7 @@ for (const standalone of [false, true]) {
     await page.getByRole('button', { name: 'Show sessions' }).tap();
     await expect(page.locator('#app')).not.toHaveClass(/viewing/);
     expect(await page.evaluate(() => window.hapticSwitches)).toBe(2);
-    await expect(page.locator('input[switch]')).toHaveCount(0);
+    await expect(page.locator('body > label input[switch]')).toHaveCount(0);
+    await expect(page.locator('#swipe-haptic-edge')).toBeHidden();
   });
 }
