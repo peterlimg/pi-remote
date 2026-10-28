@@ -33,7 +33,7 @@ for (const [orientation, buffer, width] of [
   await expect(input).toHaveAttribute('accept', /video\/\*/);
   await expect(page.locator('#attach')).toHaveAttribute('title', /200 MB each/);
   const picker = page.waitForEvent('filechooser');
-  await input.click(); await (await picker).setFiles(upload);
+  await page.locator('#attach').click(); await (await picker).setFiles(upload);
   const video = page.locator('#attachments video');
   await expect(video).toBeVisible();
   await expect(video).toHaveAttribute('preload', 'none');

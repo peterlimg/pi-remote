@@ -401,19 +401,6 @@ pre.message-text { white-space: pre-wrap; }
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
-#attach[aria-expanded=true] { background-color: var(--selection); }
-/* Absolute positioning keeps the menu above the composer without reflowing its controls. */
-.composer:has(#attachment-menu:not([hidden])) { z-index: 4; }
-.attachment-menu { z-index: 5; overflow-y: auto; overscroll-behavior: contain; }
-.attachment-option { position: relative; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border-radius: 14px; font-size: 16px; cursor: pointer; }
-.attachment-option svg { flex-shrink: 0; width: 20px; height: 20px; }
-.attachment-menu .hint { margin: 8px 12px 4px; }
-.attachment-option:active { background: var(--selection); }
-.attachment-option input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; font-size: 16px; cursor: pointer; }
-.attachment-option input::file-selector-button { width: 100%; height: 100%; padding: 0; border: 0; }
-.attachment-option:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
-.attachment-option:has(:disabled) { opacity: .45; }
-.attachment-option input:disabled { cursor: default; }
 .composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 22px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; }

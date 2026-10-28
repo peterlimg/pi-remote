@@ -101,8 +101,7 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   expect(errors).toEqual([]);
 });
 
-test('attachment menu opens above an unchanged composer and preserves upload sources', async ({ page }, info) => {
-  // Opening + is app-controlled; native pickers start only after choosing a source.
+test('phone attachment button opens the native chooser directly without moving the composer', async ({ page }, info) => {
   await page.addInitScript(() => {
     const viewport = new EventTarget();
     Object.assign(viewport, { height: innerHeight, offsetTop: 0, offsetLeft: 0, scale: 1 });
@@ -128,105 +127,30 @@ test('attachment menu opens above an unchanged composer and preserves upload sou
     }
   }));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.evaluate(() => window.keyboardHeight(844));
   await page.getByRole('button', { name: 'New session', exact: true }).tap();
   await page.locator('.project-option').click();
   await expect(page.locator('#title')).toHaveText('Untitled session');
-  const prompt = page.locator('#prompt'), input = page.getByLabel('Attach images and videos', { exact: true });
-  await expect(input).toBeEnabled();
+  const prompt = page.locator('#prompt');
   await expect(prompt).toBeFocused();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
-  const attach = page.getByRole('button', { name: 'Add attachments', exact: true }), menu = page.locator('#attachment-menu');
   const layout = () => page.locator('#composer, #prompt, #attach, #model, #reasoning-control, #send, #commands, #attachments')
     .evaluateAll(nodes => nodes.map(node => ({ id: node.id, ...node.getBoundingClientRect().toJSON() })));
-  const pickers = [];
-  page.on('filechooser', picker => pickers.push(picker));
   await page.evaluate(() => window.keyboardHeight(460, 280));
   await page.locator('#app').evaluate(app => { app.style.top = '0px'; }); // Safari's client rectangles already use the panned viewport's origin.
-  const before = await layout();
-  await attach.tap();
-  await expect(menu).toBeVisible();
-  await expect(attach).toHaveAttribute('aria-expanded', 'true');
-  await expect(prompt).toBeFocused();
-  expect(await layout()).toEqual(before);
-  const panel = await menu.boundingBox(), composer = await page.locator('#composer').boundingBox();
-  expect(panel.y + panel.height).toBeLessThanOrEqual(composer.y - 4);
-  expect(panel.x).toBeGreaterThanOrEqual(composer.x);
-  expect(panel.x + panel.width).toBeLessThanOrEqual(composer.x + composer.width);
-  expect(panel.width).toBeGreaterThanOrEqual(composer.width - 4);
-  expect(panel.y).toBeGreaterThanOrEqual(0);
-  expect(pickers).toHaveLength(0);
-  for (const option of await menu.locator('.attachment-option').all()) {
-    const box = await option.boundingBox();
-    expect(box.y).toBeGreaterThanOrEqual(panel.y);
-    expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height);
-  }
-  await expect(page.locator('#camera-files')).toHaveAttribute('capture', 'environment');
-  await expect(page.locator('#device-files')).toHaveAttribute('accept', 'application/octet-stream');
-  await page.screenshot({ path: info.outputPath('attachment-menu-mobile.png') });
-  await info.attach('attachment-menu', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
-  await page.keyboard.press('Escape');
-  await expect(menu).toBeHidden();
-  await expect(prompt).toBeFocused();
-  expect(await layout()).toEqual(before);
-
-  await input.setInputFiles(file);
   const draft = 'Keep this draft\n'.repeat(8).trimEnd();
   await prompt.fill(draft);
-  const expanded = await layout();
-  await attach.tap();
-  await expect(menu).toBeVisible();
-  expect(await layout()).toEqual(expanded);
+  const before = await layout();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add attachments', exact: true }).tap();
+  const picker = await chooser;
+  expect(picker.isMultiple()).toBe(true);
+  await expect(prompt).toBeFocused();
+  expect(await layout()).toEqual(before);
+  await picker.setFiles(file);
   await expect(page.locator('#attachments img')).toBeVisible();
   await expect(prompt).toHaveValue(draft);
-  const compactPanel = await menu.boundingBox();
-  expect(compactPanel.y + compactPanel.height).toBeLessThanOrEqual((await page.locator('#composer').boundingBox()).y - 4);
-
-  const media = page.waitForEvent('filechooser');
-  await input.click();
-  const mediaPicker = await media;
-  expect(mediaPicker.isMultiple()).toBe(true);
-  await page.evaluate(() => window.keyboardHeight(844));
-  expect(await menu.boundingBox()).toEqual(compactPanel); // The source row stays put while iOS dismisses the keyboard.
-  await mediaPicker.setFiles(file);
-  await expect(menu).toBeHidden();
-  await expect(page.locator('#attachments img')).toHaveCount(2);
-  await expect(prompt).toHaveValue(draft);
-
-  await attach.tap();
-  const camera = page.waitForEvent('filechooser');
-  await page.getByLabel('Take photo or video', { exact: true }).click();
-  const cameraPicker = await camera;
-  expect(cameraPicker.isMultiple()).toBe(false);
-  await cameraPicker.setFiles(file);
-  await expect(menu).toBeHidden();
-  await expect(page.locator('#attachments img')).toHaveCount(3);
-
-  await attach.tap();
-  const files = page.waitForEvent('filechooser');
-  await page.getByLabel('Choose image or video files', { exact: true }).click();
-  await (await files).setFiles({ name: 'document.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not an image') });
-  await expect(menu).toBeHidden();
-  await expect(page.locator('#notice')).toContainText('Attach up to 4 images, 2 MB total');
-  await expect(page.locator('#attachments img')).toHaveCount(3);
-  await expect(prompt).toHaveValue(draft);
-
-  await attach.tap();
-  const cancel = page.waitForEvent('filechooser');
-  const deviceFiles = page.getByLabel('Choose image or video files', { exact: true });
-  await deviceFiles.click(); await cancel;
-  await deviceFiles.dispatchEvent('cancel');
-  await expect(menu).toBeHidden();
-  await expect(prompt).toHaveValue(draft);
-  await attach.tap();
-  await page.getByRole('button', { name: 'Show sessions' }).click();
-  await page.getByRole('button', { name: /Project Beta/ }).click();
-  await expect(menu).toBeHidden();
-  await expect(attach).toHaveAttribute('aria-expanded', 'false');
-  await expect(prompt).toHaveValue('');
-  expect(pickers).toHaveLength(4);
 });
 
 test('desktop attachment button opens the device chooser directly', async ({ browser, baseURL }) => {
@@ -240,7 +164,6 @@ test('desktop attachment button opens the device chooser directly', async ({ bro
     await page.getByRole('button', { name: 'Add attachments', exact: true }).click();
     const picker = await chooser;
     expect(picker.isMultiple()).toBe(true);
-    await expect(page.locator('#attachment-menu')).toBeHidden();
     await picker.setFiles(file);
     await expect(page.locator('#attachments img')).toBeVisible();
     await expect(page.locator('#prompt')).toHaveValue('Keep the desktop draft');
@@ -269,7 +192,7 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await page.getByRole('button', { name: 'Add attachments', exact: true }).click();
   const picker = page.waitForEvent('filechooser');
-  await page.getByLabel('Attach images and videos', { exact: true }).click();
+  await page.locator('#attach').click();
   await (await picker).setFiles(file);
   await expect(page.getByRole('img', { name: file.name })).toBeVisible();
   await expect.poll(() => page.locator('#attachments img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
