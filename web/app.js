@@ -2606,6 +2606,10 @@ $('image-files').addEventListener('change', () => {
 // Composer buttons never take focus from the editor. On iOS a blur starts closing the keyboard and the
 // shell fills the screen at once, so the composer drops away before the tap lands and the tap is lost.
 $('composer').addEventListener('mousedown', event => { if (event.target.closest('button')) event.preventDefault(); });
+// Give feedback before handlers disable controls or open a native picker.
+document.querySelector('.composer-toolbar').addEventListener('click', event => {
+  if (event.target.closest('button:not(:disabled)')) haptic();
+}, { capture: true });
 $('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
