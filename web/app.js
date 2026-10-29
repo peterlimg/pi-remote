@@ -121,6 +121,7 @@ let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefine
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
 let swipeTimer, trackingSwipe = false, openingAnimation;
+let switchOrder, headingGesture, headingSwitching = false, headingNudged = false;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -727,6 +728,7 @@ function renderList() {
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
   if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
+  renderHeading();
 }
 function openCollection(section) {
   overviewLimit = listLimit; listSection = section; listLimit = 20;
@@ -950,6 +952,7 @@ function markSeen() {
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id) {
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
+  switchOrder = undefined; $('nearby-sessions').hidePopover();
   resetScrollback();
   resetSwipe();
   closePicker();
@@ -981,7 +984,7 @@ async function selectSession(id) {
       $('app').classList.remove('opening'); $('sidebar').inert = false;
     };
   }
-  markSeen(); renderList(); notice(''); sessionFeedback('');
+  markSeen(); renderList(); notice(''); sessionFeedback(''); nudgeHeading();
   const state = cache.get(id);
   if (state) renderConversation(state);
   else {
@@ -2435,7 +2438,111 @@ $('back').addEventListener('click', () => {
   if (history.state?.session) history.back();
   else $('app').classList.remove('viewing');
 });
-window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('app').classList.remove('viewing'); });
+window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('nearby-sessions').hidePopover(); $('app').classList.remove('viewing'); });
+// Swiping the title steps through the session list's order. The order freezes while switching this way,
+// since a prompt would otherwise move the session to the top and swiping back would skip past it.
+function switchIds() {
+  const ids = switchOrder?.includes(selected) ? switchOrder : [...$('sessions').querySelectorAll('.session')].map(row => row.dataset.id);
+  return ids.filter(id => sessions.some(item => item.id === id));
+}
+const neighbour = step => { const ids = switchIds(), at = ids.indexOf(selected); return at < 0 ? undefined : ids[at + step]; };
+function renderHeading() {
+  const ids = switchIds(), at = ids.indexOf(selected);
+  for (const [side, step] of [['prev', -1], ['next', 1]]) {
+    const item = at < 0 ? undefined : sessions.find(row => row.id === ids[at + step]);
+    $('heading-' + side).replaceChildren(...item ? [el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), el('span', projectName(item.cwd))] : []);
+  }
+  // Like the iOS page control: at most 7 dots, with smaller end dots when more sessions lie beyond.
+  const size = Math.min(ids.length, 7), start = Math.min(Math.max(at - 3, 0), ids.length - size);
+  $('session-dots').replaceChildren(...at < 0 || size < 2 ? [] : Array.from({ length: size }, (_, k) => {
+    const i = start + k, dot = el('i');
+    if (i === at) dot.className = 'current';
+    else if (i === start && i > 0 || i === start + size - 1 && i < ids.length - 1) dot.className = 'edge';
+    return dot;
+  }));
+}
+function offsetHeading(dx, animate) {
+  $('heading-strip').style.transition = animate ? 'transform .22s cubic-bezier(.2, .8, .2, 1)' : '';
+  $('heading-strip').style.transform = dx ? `translateX(${dx}px)` : '';
+}
+function switchTo(id, ids) {
+  haptic(); selectSession(id);
+  switchOrder = ids; renderHeading();
+}
+function stepSession(direction) {
+  const ids = switchIds(), id = neighbour(direction);
+  if (headingSwitching || !id) return offsetHeading(0, true);
+  headingSwitching = true; localStorage.setItem('pi-remote-title-swipe-learned', '1');
+  offsetHeading(-direction * $('heading-strip').offsetWidth, true);
+  setTimeout(() => { headingSwitching = false; offsetHeading(0); switchTo(id, ids); }, 220);
+}
+// Until the first title swipe, opening a session briefly slides the next title into view, once per visit.
+function nudgeHeading() {
+  if (headingNudged || localStorage.getItem('pi-remote-title-swipe-learned') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const direction = neighbour(1) ? 1 : neighbour(-1) ? -1 : 0, id = selected;
+  if (!direction) return;
+  headingNudged = true;
+  setTimeout(() => {
+    if (headingGesture || headingSwitching || selected !== id) return;
+    offsetHeading(-direction * 20, true);
+    setTimeout(() => headingGesture || headingSwitching || offsetHeading(0, true), 280);
+  }, 700);
+}
+function openNearby() {
+  const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions');
+  if (at < 0) return;
+  menu.replaceChildren(...ids.slice(Math.max(0, at - 4), at + 5).map(id => {
+    const item = sessions.find(row => row.id === id), text = el('span');
+    const button = el('button'); button.type = 'button';
+    if (id === selected) button.setAttribute('aria-current', 'true');
+    text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)),
+      el('small', [projectName(item.cwd), ['idle', 'saved'].includes(item.status) ? age(new Date(item.updatedAt)) : statusLabels[item.status]].filter(Boolean).join(' · ')));
+    button.append(statusIcon(item.status), text);
+    button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) switchTo(id, ids); });
+    return button;
+  }));
+  menu.style.top = $('heading').getBoundingClientRect().bottom + 8 + 'px';
+  menu.showPopover();
+  menu.querySelector('[aria-current]').scrollIntoView({ block: 'nearest' });
+}
+// A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
+document.addEventListener('pointerdown', event => {
+  if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
+}, true);
+document.addEventListener('keydown', event => { if (event.key === 'Escape') $('nearby-sessions').hidePopover(); });
+$('heading').addEventListener('pointerdown', event => {
+  if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
+  $('heading').setPointerCapture(event.pointerId);
+  headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: setTimeout(() => {
+    if (!headingGesture) return;
+    headingGesture.mode = 'held'; haptic(); openNearby();
+  }, 450) };
+});
+$('heading').addEventListener('pointermove', event => {
+  const gesture = headingGesture;
+  if (event.pointerId !== gesture?.id || gesture.mode === 'held' || gesture.mode === 'ignored') return;
+  const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+  if (!gesture.mode) {
+    if (Math.hypot(dx, dy) < 8) return;
+    clearTimeout(gesture.timer);
+    gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
+    if (gesture.mode === 'ignored') return;
+  }
+  gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
+  gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
+  offsetHeading(gesture.dx);
+});
+for (const type of ['pointerup', 'pointercancel']) $('heading').addEventListener(type, event => {
+  const gesture = headingGesture;
+  if (event.pointerId !== gesture?.id) return;
+  clearTimeout(gesture.timer); headingGesture = undefined;
+  if (gesture.mode !== 'swiping') return;
+  const direction = gesture.dx < 0 ? 1 : -1, [first, last] = [gesture.samples[0], gesture.samples.at(-1)];
+  const velocity = first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+  if (type === 'pointerup' && (Math.abs(gesture.dx) > $('heading-strip').offsetWidth * .35 || -velocity * direction > .3)) stepSession(direction);
+  else offsetHeading(0, true);
+});
+$('heading').addEventListener('contextmenu', event => { if (selected) { event.preventDefault(); openNearby(); } });
 // Browser edge-swipes reveal an old history screenshot, so rows and scroll can jump when the swipe lands.
 // Drag the thread off the live list in both browser and home-screen mode instead.
 {
