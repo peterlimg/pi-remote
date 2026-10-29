@@ -2517,10 +2517,12 @@ function nudgeHeading() {
     setTimeout(() => headingGesture || headingSwitching || offsetHeading(0, true), 280);
   }, 700);
 }
-function openNearby() {
+function openNearby(nearDots = false) {
   const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions');
   if (at < 0) return;
-  menu.replaceChildren(...ids.slice(Math.max(0, at - 4), at + 5).map(id => {
+  // The same sessions the five dots stand for.
+  const size = Math.min(ids.length, 5), first = Math.min(Math.max(at - 2, 0), ids.length - size);
+  menu.replaceChildren(...ids.slice(first, first + size).map(id => {
     const item = sessions.find(row => row.id === id), text = el('span');
     const button = el('button'); button.type = 'button';
     if (id === selected) button.setAttribute('aria-current', 'true');
@@ -2530,10 +2532,15 @@ function openNearby() {
     button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));
-  menu.style.top = $('heading').getBoundingClientRect().bottom + 8 + 'px';
+  // Open next to whatever was held: just above the dots, or under the title.
+  const anchor = $(nearDots ? 'session-swipe' : 'heading').getBoundingClientRect();
+  menu.dataset.anchor = nearDots ? 'dots' : 'title';
+  menu.style.top = nearDots ? '' : anchor.bottom + 8 + 'px';
+  menu.style.bottom = nearDots ? document.documentElement.clientHeight - anchor.top + 'px' : '';
+  $('session-swipe').classList.add('held');
   menu.showPopover();
-  menu.querySelector('[aria-current]').scrollIntoView({ block: 'nearest' });
 }
+$('nearby-sessions').addEventListener('toggle', event => { if (event.newState === 'closed') $('session-swipe').classList.remove('held'); });
 // A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
 document.addEventListener('pointerdown', event => {
   if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
@@ -2543,9 +2550,12 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   surface.addEventListener('pointerdown', event => {
     if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
     surface.setPointerCapture(event.pointerId);
+    // Held dots swell while the press builds, then pop as the nearby sessions open.
+    if (surface === $('session-swipe')) surface.classList.add('pressing');
     headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: setTimeout(() => {
       if (!headingGesture) return;
-      headingGesture.mode = 'held'; haptic(); openNearby();
+      $('session-swipe').classList.remove('pressing');
+      headingGesture.mode = 'held'; haptic(); openNearby(surface === $('session-swipe'));
     }, 450) };
   });
   surface.addEventListener('pointermove', event => {
@@ -2554,7 +2564,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
     if (!gesture.mode) {
       if (Math.hypot(dx, dy) < 8) return;
-      clearTimeout(gesture.timer);
+      clearTimeout(gesture.timer); $('session-swipe').classList.remove('pressing');
       gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
       if (gesture.mode === 'ignored') return;
       $('session-swipe').classList.add('dragging');
@@ -2567,7 +2577,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   for (const type of ['pointerup', 'pointercancel']) surface.addEventListener(type, event => {
     const gesture = headingGesture;
     if (event.pointerId !== gesture?.id) return;
-    clearTimeout(gesture.timer); headingGesture = undefined;
+    clearTimeout(gesture.timer); headingGesture = undefined; $('session-swipe').classList.remove('pressing');
     if (!gesture.mode && type === 'pointerup') {
       if (event.timeStamp - lastHeadingTap < 350) { lastHeadingTap = 0; returnToOrigin(); } else lastHeadingTap = event.timeStamp;
     }

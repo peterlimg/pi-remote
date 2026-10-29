@@ -87,12 +87,27 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#title')).toHaveText('Task 2');
   expect(await dot()).toBe('translateX(24px)');
 
+  // Holding the title opens the five sessions the dots stand for, under the title.
   await page.mouse.move(box.x + box.width / 2, y); await page.mouse.down();
   await expect(page.locator('#nearby-sessions')).toBeVisible();
   await page.mouse.up();
+  await expect(page.locator('#nearby-sessions button')).toHaveCount(5);
+  expect((await page.locator('#nearby-sessions').boundingBox()).y).toBeGreaterThan(box.y + box.height);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#nearby-sessions')).toBeHidden();
+  await expect(page.locator('#session-swipe')).not.toHaveClass(/held/);
+
+  // Holding the dots enlarges them and opens the same list just above them.
+  await page.mouse.move(strip.x + strip.width / 2, stripY); await page.mouse.down();
+  await expect(page.locator('#session-swipe')).toHaveClass(/pressing/);
+  await expect(page.locator('#nearby-sessions')).toBeVisible();
+  await expect(page.locator('#session-swipe')).toHaveClass(/held/);
+  await page.mouse.up();
   // Lifting the finger after the hold leaves the list open.
   await expect(page.locator('#nearby-sessions')).toBeVisible();
-  await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
+  const pane = await page.locator('#nearby-sessions').boundingBox();
+  expect(pane.y + pane.height).toBeLessThanOrEqual(strip.y + 1);
+  expect(pane.y + pane.height).toBeGreaterThan(strip.y - 12);
   await expect(page.locator('#nearby-sessions [aria-current=true]')).toContainText('Task 2');
   await page.screenshot({ path: testInfo.outputPath('nearby-sessions.png') });
   await page.locator('#nearby-sessions button', { hasText: 'Task 1' }).tap();

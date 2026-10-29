@@ -249,7 +249,9 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .heading-slot > span + span { color: var(--muted); font-size: 12px; }
 /* Page dots like the home screen's: the bright dot slides with the finger, a ring marks where switching started,
    and past 5 sessions the row scrolls and its end dots shrink. */
-.session-dots { height: 6px; overflow: hidden; }
+.session-dots { height: 6px; overflow: hidden; transition: transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+.session-swipe.pressing .session-dots { transform: scale(1.25); transition: transform .45s ease-out; }
+.session-swipe.held .session-dots { transform: scale(1.7); }
 .session-dots-track { position: relative; display: flex; gap: 6px; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .session-dots i { flex: 0 0 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 55%, transparent); transition: transform .22s; }
 .session-dots i.origin { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
@@ -257,6 +259,9 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .session-dots b { position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .dragging .session-dots :is(.session-dots-track, b) { transition: none; }
 .nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); max-height: 60dvh; margin: 0 auto; padding: 6px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
+.nearby-sessions:popover-open { animation: nearby-in .2s cubic-bezier(.2, .8, .2, 1); transform-origin: top center; }
+.nearby-sessions[data-anchor=dots] { transform-origin: bottom center; }
+@keyframes nearby-in { from { opacity: 0; transform: scale(.92); } }
 .nearby-sessions button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
 .nearby-sessions button[aria-current=true] { background: var(--selection); }
 .nearby-sessions strong, .nearby-sessions small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
