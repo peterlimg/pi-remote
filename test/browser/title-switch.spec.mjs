@@ -61,6 +61,11 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#transcript')).toContainText('Reply for task 2');
   // The strip above the composer switches too, and a double tap returns to where switching started.
   const strip = await page.locator('#session-swipe').boundingBox(), stripY = strip.y + strip.height / 2;
+  // The go-to-bottom button rises above the strip instead of covering its handle.
+  expect(await page.locator('#scroll-bottom').evaluate(button => {
+    button.hidden = false; const bottom = button.getBoundingClientRect().bottom; button.hidden = true;
+    return bottom;
+  })).toBeLessThanOrEqual(strip.y);
   for (const title of ['Task 3', 'Task 4']) {
     await drag(strip.x + strip.width - 10, strip.x + 10, undefined, stripY);
     await expect(page.locator('#title')).toHaveText(title);
