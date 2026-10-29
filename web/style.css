@@ -457,6 +457,7 @@ pre.message-text { white-space: pre-wrap; }
 .image-viewer button { min-width: 44px; min-height: 44px; font-size: 16px; }
 #image-zoom-reset { min-width: 64px; font-variant-numeric: tabular-nums; }
 #image-close { margin-left: auto; }
+#image-position { margin-left: auto; color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
 .image-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: zoom-in; user-select: none; -webkit-user-select: none; }
 .image-stage.zoomed { cursor: grab; }
 .image-stage.zoomed:active { cursor: grabbing; }

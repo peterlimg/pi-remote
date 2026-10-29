@@ -1028,8 +1028,16 @@ function zoomImage(zoom, x = 0, y = 0) {
   const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
   positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
 }
+// Unloaded thread images count too, so the position reflects the whole conversation.
+const galleryItems = () => [...(imageGallery?.querySelectorAll('[data-image-key], #attachments a') ?? [])];
+const galleryHref = item => item?.href ?? item?.querySelector('a')?.href;
 function showImage(href) {
   resetImagePull(); imagePointers.clear(); fullImage.src = href; positionImage(1, 0, 0);
+  const items = galleryItems(), index = items.findIndex(item => galleryHref(item) === href);
+  $('image-position').textContent = `${index + 1} / ${items.length}`;
+  $('image-position').hidden = index < 0 || items.length < 2;
+  // Preload neighbours so a swipe can land on them.
+  if (index >= 0) for (const item of [items[index - 1], items[index + 1]]) if (item?.dataset.imageKey) loadThreadImage(threadImages.get(item.dataset.imageKey));
 }
 function openImage(event) {
   event.preventDefault();
@@ -1037,10 +1045,9 @@ function openImage(event) {
   imageViewer.showModal(); showImage(event.currentTarget.href); imageViewer.focus();
 }
 function stepImage(step) {
-  // Query on each step so images that loaded after opening are included.
-  const links = [...(imageGallery?.querySelectorAll('[data-image-key] > a, #attachments a') ?? [])];
-  const index = links.findIndex(link => link.href === fullImage.src);
-  if (index >= 0 && links[index + step]) showImage(links[index + step].href);
+  const items = galleryItems(), index = items.findIndex(item => galleryHref(item) === fullImage.src);
+  const href = index >= 0 && galleryHref(items[index + step]);
+  if (href) showImage(href);
 }
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);

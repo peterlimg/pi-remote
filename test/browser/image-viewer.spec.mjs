@@ -85,11 +85,14 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await test.step('swipe between images', async () => {
     const src = () => image.getAttribute('src');
     const landscapeSrc = await src(), portraitSrc = await page.getByRole('link', { name: 'Open portrait.png' }).getAttribute('href');
-    for (const [dx, expected] of [[-120, portraitSrc], [-120, portraitSrc], [120, landscapeSrc], [120, landscapeSrc]]) {
+    const position = viewer.locator('#image-position');
+    await expect(position).toHaveText('1 / 2');
+    for (const [dx, expected, label] of [[-120, portraitSrc, '2 / 2'], [-120, portraitSrc, '2 / 2'], [120, landscapeSrc, '1 / 2'], [120, landscapeSrc, '1 / 2']]) {
       await touch('touchStart', [[center.x, center.y]]);
       await touch('touchMove', [[center.x + dx, center.y + 10]]);
       await touch('touchEnd', []);
       await expect.poll(src).toBe(expected);
+      await expect(position).toHaveText(label);
       await expect.poll(() => image.evaluate(img => img.complete)).toBe(true);
       await expect(viewer).toBeVisible();
     }
@@ -177,6 +180,7 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   const viewer = page.getByRole('dialog', { name: 'Image', exact: true });
   const image = viewer.getByRole('img'), zoom = viewer.getByRole('button', { name: 'Reset image zoom' });
   await expect(image).toHaveCSS('object-fit', 'contain');
+  await expect(viewer.locator('#image-position')).toBeHidden();
   const frame = await viewer.locator('.image-stage').boundingBox();
   // Measure the actual image pixels, not the full-size img element's letterboxing.
   const imageBounds = () => image.evaluate(img => {
