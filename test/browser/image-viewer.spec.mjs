@@ -82,6 +82,18 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
     await expect(viewer).toBeVisible();
     await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
   });
+  await test.step('swipe between images', async () => {
+    const src = () => image.getAttribute('src');
+    const landscapeSrc = await src(), portraitSrc = await page.getByRole('link', { name: 'Open portrait.png' }).getAttribute('href');
+    for (const [dx, expected] of [[-120, portraitSrc], [-120, portraitSrc], [120, landscapeSrc], [120, landscapeSrc]]) {
+      await touch('touchStart', [[center.x, center.y]]);
+      await touch('touchMove', [[center.x + dx, center.y + 10]]);
+      await touch('touchEnd', []);
+      await expect.poll(src).toBe(expected);
+      await expect.poll(() => image.evaluate(img => img.complete)).toBe(true);
+      await expect(viewer).toBeVisible();
+    }
+  });
   await touch('touchStart', [[center.x - 40, center.y]]);
   await touch('touchMove', [[center.x - 40, center.y + 100]]);
   await touch('touchStart', [[center.x - 40, center.y + 100], [center.x + 40, center.y + 100]]);
