@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
-import { branchMessages, lastPromptTime, omittedMessages, EXTENSION_INPUT } from '../src/catalog.mjs';
+import { branchMessages, lastPromptTime, omittedMessages, usageTotals, EXTENSION_INPUT } from '../src/catalog.mjs';
 import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
@@ -140,7 +140,7 @@ export default function remoteExtension(pi: any) {
               provider.providerMessage = 'Provider usage is temporarily unavailable. Try again.';
             }
           }
-          send(ws, { type: 'result', id: message.id, ok: true, value: { contextUsage, ...provider } });
+          send(ws, { type: 'result', id: message.id, ok: true, value: { contextUsage, totals: usageTotals(ctx.sessionManager.getEntries()), ...provider } });
           return;
         }
         if (message.command?.type === 'getModels') {

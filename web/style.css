@@ -404,7 +404,12 @@ pre.message-text { white-space: pre-wrap; }
 .composer-actions #usage-meter svg { width: 24px; height: 24px; }
 .usage-track { stroke: var(--line); }
 #usage-meter[data-unknown] .usage-track { stroke: var(--muted); stroke-dasharray: 2 3; }
-#usage-meter[data-level=warning] { color: var(--warning); }
+#usage-meter[data-level=warning], #status-line [data-level=warning] { color: var(--warning); }
+#status-line [data-level=error] { color: var(--error); }
+/* Pi's terminal footer stats, under the composer. */
+#status-line { display: flex; justify-content: center; gap: 8px; width: 100%; max-width: var(--content-width); min-height: 0; margin: 0 auto; padding: 0 16px max(6px, var(--safe-bottom)); overflow-x: auto; scrollbar-width: none; background: transparent; color: var(--muted); font: 11px/20px var(--mono); white-space: nowrap; border-radius: 0; flex-shrink: 0; }
+#status-line[hidden], #composer[hidden] + #status-line { display: none; }
+.composer:has(+ #status-line:not([hidden])) { margin-bottom: 4px; }
 #usage-meter[data-level=error] { color: var(--error); }
 #usage-meter[aria-expanded=true] { background: var(--selection); }
 /* Keep 44px tap targets around the smaller 32px circles. */

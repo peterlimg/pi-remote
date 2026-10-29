@@ -96,7 +96,7 @@ const sessionIcons = new Map(JSON.parse(localStorage.getItem('pi-remote-session-
 const cache = new Map(), drafts = new Map(), imageDrafts = new Map(), pending = new Map();
 const modelLists = new Map(), newSessionProfiles = new Map();
 const threadImages = new Map(), threadVideos = new Map(), usageSummaries = new Map();
-const usageDetails = new Map(), usageLoading = new Set();
+const usageDetails = new Map(), usageLoading = new Set(), usageTotals = new Map(), usageTurns = new Map();
 let supportsUsage = false;
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
 const imageObserver = new IntersectionObserver(entries => {
@@ -504,7 +504,7 @@ function logout() {
   $('session-icon-picker').close();
   localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
-  drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
+  drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); usageTotals.clear(); usageTurns.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20; recentAvailability = 'online';
   $('recent-filter-menu').hidePopover(); $('recent-online').checked = true; $('recent-offline').checked = false;
@@ -1744,6 +1744,30 @@ function renderUsageMeter() {
   button.title = known ? `${usageNumbers.format(percent)}% of context used` : 'Context usage unavailable';
   button.setAttribute('aria-label', 'Usage: ' + button.title);
   $('usage-arc').setAttribute('stroke-dasharray', `${known ? Math.min(100, percent) : 0} 100`);
+  renderStatusLine();
+}
+// Pi's terminal footer: ↑input ↓output Rcache-read Wcache-write CH(latest cache hit) $cost context%/window.
+const footerTokens = count => count < 1000 ? `${count}` : count < 10000 ? `${(count / 1000).toFixed(1)}k` :
+  count < 1e6 ? `${Math.round(count / 1000)}k` : count < 1e7 ? `${(count / 1e6).toFixed(1)}M` : `${Math.round(count / 1e6)}M`;
+function renderStatusLine() {
+  const state = cache.get(selected), totals = usageTotals.get(selected), usage = state?.contextUsage, line = $('status-line');
+  if (state) {
+    // Totals change once per reply; refresh when a reply arrives or the turn settles.
+    const turn = `${state.messages.findLast(message => message.role === 'assistant')?.id}:${state.status}`;
+    if (usageTurns.get(selected) !== turn) { usageTurns.set(selected, turn); loadUsage(selected); }
+  }
+  const parts = totals ? [['↑', 'input'], ['↓', 'output'], ['R', 'cacheRead'], ['W', 'cacheWrite']]
+    .filter(([, key]) => totals[key] > 0).map(([label, key]) => el('span', label + footerTokens(totals[key]))) : [];
+  const hit = state?.messages.findLast(message => message.role === 'assistant')?.cacheHit;
+  if ((totals?.cacheRead > 0 || totals?.cacheWrite > 0) && Number.isFinite(hit)) parts.push(el('span', `CH${hit.toFixed(1)}%`));
+  if (totals?.cost > 0) parts.push(el('span', `$${totals.cost.toFixed(3)}`));
+  if (usage?.contextWindow > 0) {
+    const percent = contextPercent(usage), context = el('span', `${percent === undefined ? '?' : percent.toFixed(1) + '%'}/${footerTokens(usage.contextWindow)}`);
+    context.dataset.level = percent > 90 ? 'error' : percent > 70 ? 'warning' : 'normal';
+    parts.push(context);
+  }
+  line.replaceChildren(...parts);
+  line.hidden = !state || !parts.length;
 }
 function renderUsagePanel() {
   const state = cache.get(selected), usage = state?.contextUsage, percent = contextPercent(usage);
@@ -1789,6 +1813,7 @@ async function loadUsage(id, includeProvider = false) {
     const current = cache.get(id);
     if (!current || current.model !== model || result.model !== model) return;
     current.contextUsage = result.contextUsage;
+    if (result.totals) usageTotals.set(id, result.totals);
     if (details && usageDetails.get(id) === details) Object.assign(details, result, { providerUsage: result.providerUsage, capturedAt: Date.now() });
   } catch (error) {
     if (details) details.error = error.message === 'Unsupported command' ? 'Reload this Pi terminal to enable context usage.' : error.message;
@@ -1806,6 +1831,7 @@ function openUsage() {
   renderUsagePanel(); loadUsage(selected, true);
 }
 $('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker() : openUsage());
+$('status-line').addEventListener('click', () => $('usage-meter').click());
 setInterval(() => { if (!document.hidden && selected) loadUsage(selected); }, 15000);
 function renderModels() {
   const picker = settingsPicker;

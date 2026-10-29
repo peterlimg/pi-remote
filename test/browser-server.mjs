@@ -50,7 +50,8 @@ for (const title of ['Project Alpha', 'Project Beta']) {
     const packet = JSON.parse(raw.toString());
     if (packet.type !== 'command') return;
     if (packet.command.type === 'getUsage') {
-      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { contextUsage: state.contextUsage } }));
+      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: { contextUsage: state.contextUsage,
+        totals: { input: 18200, output: 6400, cacheRead: 1420000, cacheWrite: 96000, cost: 1.284 } } }));
       return;
     }
     if (packet.command.type === 'getCommands') {

@@ -132,13 +132,28 @@ export function cleanMessage(message, key) {
     return { id: call.id, name: call.name, text };
   });
   const activityLabel = subagentLabel(message);
+  // Pi's footer reports the latest assistant prompt's cache hit rate.
+  const usage = message.role === 'assistant' ? message.usage : undefined, prompt = usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0;
+  const cacheHit = prompt > 0 ? usage.cacheRead / prompt * 100 : undefined;
   return { id: key, role: message.role, text: raw.slice(0, 24000), toolCalls,
+    ...(Number.isFinite(cacheHit) ? { cacheHit } : {}),
     ...(message.role === 'custom' && typeof message.customType === 'string' ? { customType: message.customType.slice(0, 120) } : {}),
     ...(activityLabel ? { activityLabel } : {}),
     ...(images.size ? { images: [...images.values()] } : {}),
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
     isError: !!message.isError, timestamp: message.timestamp, stopReason: message.stopReason,
     durationMs: Number.isFinite(message.durationMs) && message.durationMs >= 0 ? message.durationMs : undefined };
+}
+// Same totals as Pi's get_session_stats, for terminal sessions that only expose entries.
+export function usageTotals(entries) {
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+  for (const entry of entries) {
+    const usage = entry.type === 'message' ? entry.message.usage : entry.usage;
+    if (!usage || !['usage', 'message', 'branch_summary', 'compaction'].includes(entry.type) || entry.type === 'message' && !['assistant', 'toolResult'].includes(entry.message.role)) continue;
+    for (const key of ['input', 'output', 'cacheRead', 'cacheWrite']) totals[key] += usage[key] || 0;
+    totals.cost += usage.cost?.total || 0;
+  }
+  return totals;
 }
 function readBranch(file) {
   const info = statSync(file);

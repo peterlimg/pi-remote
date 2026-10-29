@@ -114,16 +114,17 @@ export class RpcWorker extends EventEmitter {
   }
   async command(command) {
     if (command.type === 'getUsage') {
-      const { contextUsage } = await this.request('get_session_stats');
-      if (!command.includeProvider) return { contextUsage };
+      const stats = await this.request('get_session_stats');
+      const contextUsage = stats.contextUsage, totals = stats.tokens && { ...stats.tokens, cost: stats.cost };
+      if (!command.includeProvider) return { contextUsage, totals };
       const { commands } = await this.request('get_commands'), { model } = await this.request('get_state');
       const name = model?.provider === 'claude-sdk' ? 'claude-usage' : 'usage';
       // Never submit the command to the model when no extension owns it.
       if (!commands.some(item => item.name === name && item.source === 'extension')) {
-        return { contextUsage, providerMessage: 'No provider usage extension is installed in this session.' };
+        return { contextUsage, totals, providerMessage: 'No provider usage extension is installed in this session.' };
       }
-      try { return { contextUsage, providerUsage: await this.providerUsage(name) }; }
-      catch (error) { return { contextUsage, providerMessage: error.message }; }
+      try { return { contextUsage, totals, providerUsage: await this.providerUsage(name) }; }
+      catch (error) { return { contextUsage, totals, providerMessage: error.message }; }
     }
     if (command.type === 'getCommands') return this.request('get_commands');
     if (command.type === 'getModels') {
