@@ -82,6 +82,8 @@ function fitViewport() {
   document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
   document.documentElement.style.setProperty('--viewport-left', `${viewport?.offsetLeft ?? 0}px`);
   document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
+  // A focused field is no proof of a keyboard: iOS ignores scripted focus outside a tap.
+  document.documentElement.toggleAttribute('data-keyboard', !!viewport && innerHeight - viewport.height * viewport.scale > 150);
 }
 window.visualViewport?.addEventListener('resize', fitViewport);
 window.visualViewport?.addEventListener('scroll', fitViewport);

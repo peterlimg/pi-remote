@@ -354,7 +354,7 @@ test('home-screen edge swipe drags the thread off the live list without a histor
   await expect(page.locator('#prompt')).toBeHidden();
 });
 
-test('a focused text field drops the home-indicator inset so bottom controls sit on the keyboard', async ({ page }) => {
+test('an open keyboard drops the home-indicator inset so bottom controls sit on it', async ({ page }) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('#sessions .session')).toHaveCount(2);
   // Chromium has no home indicator; stand in an iPhone's 34px inset.
@@ -363,15 +363,17 @@ test('a focused text field drops the home-indicator inset so bottom controls sit
   expect(await padding()).toBe('34px');
   await page.locator('#search-open').click();
   await expect(page.locator('#search')).toBeFocused();
-  expect(await padding()).toBe('12px');
-  // A closing keyboard: the shell fills the screen before iOS reports the taller viewport.
+  // iOS may leave the keyboard closed for scripted focus.
+  expect(await padding()).toBe('34px');
   const height = () => page.locator('.shell').evaluate(el => el.getBoundingClientRect().height);
   const full = await page.evaluate(() => innerHeight);
   await page.evaluate(() => {
     Object.defineProperty(visualViewport, 'height', { value: innerHeight - 300, configurable: true });
     visualViewport.dispatchEvent(new Event('resize'));
   });
+  expect(await padding()).toBe('12px');
   expect(await height()).toBe(full - 300);
+  // A closing keyboard: the shell fills the screen before iOS reports the taller viewport.
   await page.locator('#search').blur();
   expect(await padding()).toBe('34px');
   expect(await height()).toBe(full);
