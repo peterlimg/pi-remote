@@ -510,6 +510,7 @@ function logout() {
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20; recentAvailability = 'online';
   $('recent-filter-menu').hidePopover(); $('recent-online').checked = true; $('recent-offline').checked = false;
+  $('recent-online').disabled = true; $('recent-offline').disabled = false;
   sessionFeedback(''); renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -656,7 +657,7 @@ function positionRecentFilter() {
 $('recent-filter-menu').addEventListener('toggle', event => {
   const open = event.newState === 'open';
   $('recent-filter')?.setAttribute('aria-expanded', String(open));
-  if (open) { positionRecentFilter(); $('recent-online').focus({ preventScroll: true }); }
+  if (open) { positionRecentFilter(); $('recent-filter-menu').querySelector('input:not(:disabled)').focus({ preventScroll: true }); }
 });
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || !$('recent-filter-menu').matches(':popover-open')) return;
@@ -664,6 +665,7 @@ document.addEventListener('keydown', event => {
 });
 $('recent-filter-menu').addEventListener('change', () => {
   const checked = [...$('recent-filter-menu').querySelectorAll('input:checked')];
+  for (const input of $('recent-filter-menu').querySelectorAll('input')) input.disabled = checked.length === 1 && input.checked;
   haptic(); recentAvailability = checked.length === 1 ? checked[0].value : checked.length ? 'all' : 'none';
   listLimit = 20; moreObserver.disconnect();
   positionRecentFilter(); loadList();

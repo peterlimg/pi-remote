@@ -161,7 +161,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #recent-filter-menu { position: fixed; inset: auto; width: min(184px, calc(100vw - 16px)); margin: 0; padding: 6px; border: 0; border-radius: 12px; background: var(--composer-bg); color: var(--text); box-shadow: 0 6px 24px rgb(0 0 0 / .2); }
 #recent-filter-menu p { margin: 4px 8px 6px; color: var(--muted); font-size: 12px; }
 #recent-filter-menu label { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-#recent-filter-menu label:is(:hover, :focus-within) { background: var(--user); }
+#recent-filter-menu label:not(:has(input:disabled)):is(:hover, :focus-within) { background: var(--user); }
+#recent-filter-menu label:has(input:disabled) { color: var(--muted); cursor: default; }
 /* Native blue keeps iOS's white checkmark legible in both themes. */
 #recent-filter-menu input { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: #0a84ff; }
 .recent-empty { margin: 0; padding: 12px 10px; font-size: 14px; }

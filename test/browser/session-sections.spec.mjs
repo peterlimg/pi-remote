@@ -75,21 +75,28 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await filter.press('Enter');
     await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).toBeChecked();
     await expect(menu.getByRole('checkbox', { name: 'Offline', exact: true })).not.toBeChecked();
-    // Each checkbox includes its status; clearing both shows no Recent rows.
+    // The final selected status is gray and cannot be unchecked by tapping its label.
+    const onlineChoice = menu.getByRole('checkbox', { name: 'Online', exact: true });
+    const offlineChoice = menu.getByRole('checkbox', { name: 'Offline', exact: true });
+    await expect(onlineChoice).toBeDisabled();
+    await expect(offlineChoice).toBeEnabled();
+    await expect(offlineChoice).toBeFocused();
+    await expect(menu.getByText('Online', { exact: true })).toHaveCSS('color', await menu.locator('p').evaluate(node => getComputedStyle(node).color));
     const filterTop = (await filter.boundingBox()).y;
     const menuTop = (await menu.boundingBox()).y;
-    await menu.getByRole('checkbox', { name: 'Online', exact: true }).press('Space');
-    await expect(recentGroup.locator('.badge')).toHaveText('0');
-    await expect(recentGroup.locator('.session')).toHaveCount(0);
-    await expect(recentGroup.locator('.recent-empty')).toHaveText('No statuses selected. Choose Online or Offline in the filter.');
-    await expect(nowGroup.locator('.session strong')).toHaveText(titles);
-    await expect(pinsGroup.locator('.session strong')).toHaveText(pinnedTitles);
-    await page.screenshot({ path: testInfo.outputPath('recent-no-status-phone.png') });
+    await menu.getByText('Online', { exact: true }).tap({ force: true });
+    await expect(onlineChoice).toBeChecked();
+    await expect(recentGroup.locator('.badge')).toHaveText('1');
+    await page.screenshot({ path: testInfo.outputPath('recent-required-status-phone.png') });
     expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
     expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
-    await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).not.toBeChecked();
-    await menu.getByRole('checkbox', { name: 'Online', exact: true }).press('Space');
+    await offlineChoice.press('Space');
+    await expect(recentGroup.locator('.badge')).toHaveText('46');
+    await expect(onlineChoice).toBeEnabled();
+    await expect(offlineChoice).toBeEnabled();
+    await offlineChoice.press('Space');
     await expect(recentGroup.locator('.badge')).toHaveText('1');
+    await expect(onlineChoice).toBeDisabled();
     expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
     expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
     for (const total of ['46', '1']) {
@@ -125,12 +132,9 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(recentGroup.locator('.session')).toHaveCount(46);
     await expect(recentGroup.locator('.session').last()).toContainText('Older online task');
-    // Clearing a fully loaded page must not leave rows behind or page them back in.
-    await filterRecentSessions(page, 'none');
-    await expect(recentGroup.locator('.session')).toHaveCount(0);
-    await expect(recentGroup.locator('.badge')).toHaveText('0');
-    await expect(page.locator('#sessions .session')).toHaveCount(6);
     await filterRecentSessions(page, 'offline');
+    await expect(page.locator('#recent-offline')).toBeDisabled();
+    await expect(page.locator('#recent-online')).toBeEnabled();
     await expect(recentGroup.locator('.badge')).toHaveText('45');
     await expect(recentGroup.locator('.session')).toHaveCount(20);
     await filterRecentSessions(page, 'online');
