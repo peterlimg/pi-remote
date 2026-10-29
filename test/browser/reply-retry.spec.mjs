@@ -65,6 +65,7 @@ test('automatic retries stay quiet, clear on success and expose only final failu
   };
   try {
     await page.goto(`http://127.0.0.1:${config.port}/#token=${config.clientToken}`);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: /Retry feedback/ }).click(); await page.locator('#resume').click();
     await expect(page.locator('#status')).toHaveText('idle');
     await retry();

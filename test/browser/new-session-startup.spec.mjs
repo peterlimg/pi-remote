@@ -34,6 +34,7 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
   try {
     await page.goto('http://127.0.0.1:' + host.http.address().port + '/#token=' + config.clientToken);
     await expect(page.locator('#connection')).toHaveText('Computer connected');
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
     await page.getByRole('button', { name: /Original session/ }).click();
     await expect(page.locator('#transcript')).toContainText('Original conversation');
     await page.locator('#prompt').fill('Keep the original draft');

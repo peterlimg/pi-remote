@@ -11,7 +11,7 @@ import { writeActivityDebug } from './activity-debug.mjs';
 export function sessionWindow(service) {
   let view;
   const changes = () => {
-    const { sessions: rows, ...page } = service.list({ query: view.query, limit: view.limit, section: view.section });
+    const { sessions: rows, ...page } = service.list({ query: view.query, limit: view.limit, section: view.section, availability: view.availability });
     const changed = [];
     for (const row of rows) {
       const json = JSON.stringify(row);
@@ -26,11 +26,12 @@ export function sessionWindow(service) {
   };
   return {
     get active() { return view !== undefined; },
-    request({ limit, query = '', section }) {
+    request({ limit, query = '', section, availability }) {
       if (!Number.isSafeInteger(limit) || limit < 1 || typeof query !== 'string' || query.length > 500 ||
-        section !== undefined && !['overview', 'now', 'pinned'].includes(section)) throw new Error('Invalid session page');
-      const reset = view?.query !== query || view?.section !== section;
-      if (reset) view = { query, section, sent: new Map() };
+        section !== undefined && !['overview', 'now', 'pinned'].includes(section) ||
+        availability !== undefined && !['online', 'offline', 'all'].includes(availability)) throw new Error('Invalid session page');
+      const reset = view?.query !== query || view?.section !== section || view?.availability !== availability;
+      if (reset) view = { query, section, availability, sent: new Map() };
       view.limit = limit;
       const { unchanged, ...value } = changes();
       return { reset, ...value };
@@ -78,7 +79,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {

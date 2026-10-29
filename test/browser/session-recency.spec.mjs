@@ -41,6 +41,7 @@ test('saved histories and older bridges retain prompt order after output, scans 
     host = await startHost({ ...options, port: 0 });
     const port = host.http.address().port, id = sessionKey(files[0]), instanceId = randomUUID();
     await page.goto(`http://127.0.0.1:${port}/#token=${config.clientToken}`);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
     const rows = page.locator('#sessions .session strong');
     await expect(rows).toHaveText([titles[1], titles[0]]);
     const state = { ...readSession(files[0]), instanceId, status: 'working', tools: [], revision: 0 };
@@ -79,6 +80,7 @@ test('saved histories and older bridges retain prompt order after output, scans 
     host = await startHost({ ...options, port });
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await page.reload();
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
     await expect(rows).toHaveText(titles);
     expect(host.service.catalog.get(id).lastPromptAt).toBe(promptedAt);
     await testInfo.attach('prompt-order-host', { body: await page.locator('#sessions').ariaSnapshot(), contentType: 'text/plain' });
@@ -122,6 +124,7 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     };
     await restored();
     await page.goto(url + '/#token=' + config.clientToken);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
     const rows = page.locator('#sessions .session strong');
     await expect(rows).toHaveText(recent.slice(0, 20));
     await expect(page.locator('#sessions .session').first()).toHaveAccessibleName(/^Saved Recent task 1 /);
@@ -137,6 +140,7 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await expect(rows).toHaveText(titles);
     await page.reload();
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
     await expect(rows).toHaveText(recent.slice(0, 20));
     await page.screenshot({ path: testInfo.outputPath('recent-sessions-mobile.png') });
     await page.setViewportSize({ width: 1280, height: 900 });

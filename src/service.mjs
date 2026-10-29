@@ -89,9 +89,10 @@ export class SessionService extends EventEmitter {
     }
     this.scan();
   }
-  list({ offset = 0, limit = 20, query = '', section } = {}) {
+  list({ offset = 0, limit = 20, query = '', section, availability } = {}) {
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 ||
-      section !== undefined && !['overview', 'now', 'pinned'].includes(section)) throw new Error('Invalid session page');
+      section !== undefined && !['overview', 'now', 'pinned'].includes(section) ||
+      availability !== undefined && !['online', 'offline', 'all'].includes(availability)) throw new Error('Invalid session page');
     const requestOffset = offset;
     let { matches, total } = this.matches(query), groups, highlights = [];
     query = query.trim().toLowerCase();
@@ -101,12 +102,13 @@ export class SessionService extends EventEmitter {
       if (section === 'overview') {
         highlights = [...now.slice(0, 3), ...pins.filter(item => sessionGroup(item) !== 'now').slice(0, 3)];
         matches = matches.filter(item => sessionGroup(item) === 'recent');
+        if (availability && availability !== 'all') matches = matches.filter(item => ['saved', 'disconnected'].includes(item.status) === (availability === 'offline'));
         groups = { now: now.length, pinned: pins.length, recent: matches.length };
       } else matches = section === 'now' ? now : pins;
     }
     offset = Math.min(offset, Math.max(0, Math.ceil(matches.length / limit) - 1) * limit);
     const rows = matches.slice(offset, offset + limit);
-    return { sessions: [...highlights, ...rows], total, matched: matches.length, loaded: rows.length, offset, requestOffset, query, section, groups,
+    return { sessions: [...highlights, ...rows], total, matched: matches.length, loaded: rows.length, offset, requestOffset, query, section, availability, groups,
       warnings: this.warnings, allowResume: this.allowResume };
   }
   // Helpers stay searchable; only the default browsing list hides them.

@@ -105,6 +105,7 @@ test('completed tools show Pi execution times live and from saved history, never
     await host.close();
     host = await startHost({ ...options, port });
     await page.reload();
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: 'Tool timings', exact: false }).click();
     await page.locator('.tool-activity > summary').click();
     await expect(status).toHaveText('1.5s');

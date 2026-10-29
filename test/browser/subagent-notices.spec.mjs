@@ -28,6 +28,7 @@ test('saved subagent notices stay compact after reload and in older history', as
     const config = loadConfig(dir);
     host = await startHost({ dir, config, port: 0, roots: [dir], relayUrl: '' });
     await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: /Subagent history/ }).click();
     const transcript = page.locator('#transcript');
     const recent = transcript.locator('details.tool-activity').filter({ has: page.locator('summary', { hasText: /^reviewer requested guidance$/ }) });
@@ -37,6 +38,7 @@ test('saved subagent notices stay compact after reload and in older history', as
     await expect(transcript.locator('article.message')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('subagent-collapsed-mobile.png') });
     await page.reload();
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: /Subagent history/ }).click();
     await expect(recent).toHaveCount(1);
     await expect(recent).not.toHaveAttribute('open');

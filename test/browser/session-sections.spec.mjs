@@ -50,6 +50,12 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     };
     const active = [];
     for (const [i, file] of activeFiles.entries()) active.push(await connect(file, i === 0 ? 'waiting' : 'working'));
+    const online = await connect(seed('Older online task', 500), 'idle');
+    const peer = await socket(url.replace('http:', 'ws:') + '/ws', config.clientToken, url);
+    try {
+      for (const availability of [null, {}, 'busy']) expect((await peer.request('list', { limit: 20, section: 'overview', availability })).ok).toBe(false);
+      expect((await peer.request('list', { limit: 20, section: 'overview' })).value.matched).toBe(46);
+    } finally { peer.ws.terminate(); }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(url + '/#token=' + config.clientToken);
     const nowGroup = page.getByRole('region', { name: 'Now', exact: true });
@@ -58,12 +64,46 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await expect(nowGroup.locator('.session strong')).toHaveText(titles);
     await expect(pinsGroup.locator('.session strong')).toHaveText(pinnedTitles);
     await expect(pinsGroup.locator('.badge')).toHaveText('31');
+    const filter = page.getByRole('combobox', { name: 'Filter recent sessions' });
+    await expect(filter).toHaveValue('online');
+    await expect(recentGroup.locator('.session strong')).toHaveText(['Older online task']);
+    await expect(recentGroup.locator('.badge')).toHaveText('1');
+    await filter.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('recent-online-phone.png') });
+    // Search still reaches offline histories while browsing Online.
+    await page.getByRole('button', { name: 'Search sessions', exact: true }).click();
+    await page.getByRole('searchbox', { name: 'Search sessions', exact: true }).fill('Recent task 44');
+    await expect(page.locator('#sessions .session strong')).toHaveText(['Recent task 44']);
+    await page.getByRole('button', { name: 'Close search', exact: true }).click();
+    await expect(filter).toHaveValue('online');
+    await expect(recentGroup.locator('.session strong')).toHaveText(['Older online task']);
+    await filter.focus(); await filter.selectOption('all');
+    await expect(filter).toBeFocused();
+    await expect(recentGroup.locator('.badge')).toHaveText('46');
+    await expect(recentGroup.locator('.session')).toHaveCount(20);
+    await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
+    await expect(recentGroup.locator('.session')).toHaveCount(40);
+    await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
+    await expect(recentGroup.locator('.session')).toHaveCount(46);
+    await expect(recentGroup.locator('.session').last()).toContainText('Older online task');
+    await filter.selectOption('offline');
+    await expect(recentGroup.locator('.badge')).toHaveText('45');
+    await expect(recentGroup.locator('.session')).toHaveCount(20);
+    await filter.selectOption('online');
+    await expect(recentGroup.locator('.session strong')).toHaveText(['Older online task']);
+    online.agent.ws.terminate();
+    await expect(recentGroup.locator('.session')).toHaveCount(0);
+    await expect(recentGroup.locator('.recent-empty')).toContainText('No online sessions.');
+    await expect(filter).toHaveValue('online');
+    await filter.selectOption('offline');
+    await expect(recentGroup.locator('.badge')).toHaveText('46');
     await expect(recentGroup.locator('.session')).toHaveCount(20);
     await expect(page.locator('#sessions .session')).toHaveCount(26);
     await expect(nowGroup.locator('.session').last().getByRole('img', { name: 'Pinned', exact: true })).toBeVisible();
     await expect(pinsGroup.locator('.session-preview').first()).toBeHidden();
     await expect(recentGroup.locator('.session-preview').first()).toBeVisible();
     await expect(pinsGroup.locator('time').first()).toBeVisible();
+    await page.locator('#sidebar, #sessions').evaluateAll(nodes => nodes.forEach(node => { node.scrollTop = 0; }));
     const bounds = await nowGroup.boundingBox();
     expect(bounds.y + bounds.height).toBeLessThan(page.viewportSize().height - 70);
     await recentGroup.locator('.session').first().click();
@@ -102,7 +142,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: 'light' });
 
-    await page.getByRole('button', { name: 'View all pinned sessions' }).click();
+    await page.getByRole('button', { name: 'View all pinned sessions' }).press('Enter');
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await expect(collection.locator('.session')).toHaveCount(20);
     await expect(collection.locator('.session-meta .session-type-icon')).toHaveCount(1);
@@ -112,10 +152,11 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     const unpin = collection.locator('.session').filter({ hasText: 'Pinned task 29' });
     await unpin.scrollIntoViewIfNeeded();
     await unpin.evaluate(node => {
-      const touch = x => [new Touch({ identifier: 1, target: node, clientX: x, clientY: 300 })];
-      node.dispatchEvent(new TouchEvent('touchstart', { touches: touch(40), bubbles: true }));
-      node.dispatchEvent(new TouchEvent('touchmove', { touches: touch(150), bubbles: true, cancelable: true }));
-      node.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }));
+      // WebKit cannot construct Touch objects; simulate the same gesture in both engines.
+      const touch = (type, x) => node.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+        touches: x === undefined ? [] : [{ clientX: x, clientY: 300 }]
+      }));
+      touch('touchstart', 40); touch('touchmove', 150); touch('touchend');
     });
     await expect(collection.locator('.session')).toHaveCount(30);
     expect(JSON.parse(readFileSync(join(dir, 'pinned-sessions.json'), 'utf8'))).not.toContain(sessionKey(pinned[29]));
@@ -174,6 +215,18 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await expect(nowGroup.locator('.badge')).toHaveText('7');
     await expect(pinsGroup.locator('.badge')).toHaveText('30');
     await expect(pinsGroup.locator('.session')).toHaveCount(3);
+    await expect(filter).toHaveValue('online');
+    await expect(recentGroup.locator('.session strong')).toHaveText(['Design the sessions page']);
+    await filter.selectOption('offline');
+    await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
+    await expect(recentGroup.locator('.session')).toHaveCount(40);
+    await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
+    await expect(recentGroup.locator('.session')).toHaveCount(47);
+    await expect(recentGroup.locator('.session').last()).toContainText('Older online task');
+    await expect(recentGroup.locator('.session').last()).toContainText('Offline');
+    await filter.selectOption('all');
+    await expect(recentGroup.locator('.session')).toHaveCount(20);
+    await expect(recentGroup.locator('.badge')).toHaveText('48');
     await testInfo.attach('activity-first', { body: await page.locator('#sessions').ariaSnapshot(), contentType: 'text/plain' });
   } finally {
     await page.close();

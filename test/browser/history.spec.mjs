@@ -165,6 +165,7 @@ test('wheel, keyboard and touch can page collapsed history without idle controls
       return history(...args);
     };
     await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: /Collapsed history/ }).click();
     const transcript = page.locator('#transcript'), tools = transcript.locator('details.tool');
     await expect(tools.first()).toHaveAttribute('data-tool-id', 't210');
@@ -228,6 +229,7 @@ test('older attachments keep session boundaries over encryption and pages are by
     expect((await client.request('videoRead', { sessionId: id, path: videoPath, messageId: 'm2', offset: 0 })).ok).toBe(false);
     expect((await client.request('videoRead', { sessionId: id, path: videoPath, messageId: 'm1', offset: 0 })).ok).toBe(true);
     await page.goto(origin + '/#token=' + config.clientToken + '&key=' + key);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await page.getByRole('button', { name: /Older attachments/ }).click();
     const transcript = page.locator('#transcript');
     await expect(page.locator('article.message').first()).toContainText('Message 60');
@@ -281,6 +283,7 @@ test('sessions larger than 32 MiB are browsable without blocking live traffic', 
     client = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin);
     await expect.poll(() => host.service.catalog.get(sessionKey(file)).lastPromptAt).toBe(129);
     await page.goto(origin + '/#token=' + config.clientToken);
+    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
     await expect(page.locator('#sessions .session strong')).toHaveText(['Recent small session', 'Large history']);
     await page.getByRole('button', { name: /Large history/ }).click();
     const started = Date.now();

@@ -123,7 +123,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsSessionSections = false, supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
+let supportsSessionSections = false, supportsRecentAvailability = false, recentAvailability = 'online', supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, renders: 0, renderAt: 0,
   last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
@@ -401,6 +401,7 @@ function connect() {
       supportsVideos = packet.supportsVideos === true;
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
+      supportsRecentAvailability = packet.supportsRecentAvailability === true;
       supportsSessionClosing = packet.supportsSessionClosing === true;
       supportsNewPreparation = packet.supportsNewPreparation === true;
       supportsActivityDebug = packet.supportsActivityDebug === true;
@@ -505,7 +506,7 @@ function logout() {
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
-  listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20;
+  listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20; recentAvailability = 'online';
   sessionFeedback(''); renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -548,7 +549,8 @@ function receiveList(packet) {
     rows = packet.sessions; listLoading = false; listError = '';
   }
   sessions = rows.sort(packet.section === 'now' ? activityOrder : listOrder);
-  if (supportsSessionSections && (packet.section !== listSection || packet.query !== searchQuery)) return;
+  if (supportsSessionSections && (packet.section !== listSection || packet.query !== searchQuery ||
+    supportsRecentAvailability && packet.availability !== recentAvailability)) return;
   allowResume = packet.allowResume === true;
   listMatched = packet.matched ?? sessions.length; listLoaded = packet.loaded ?? sessions.length; listGroups = packet.groups;
   showApp();
@@ -561,7 +563,7 @@ async function loadList() {
   const generation = ++listRequest;
   listLoading = true; listError = ''; renderPagination();
   try {
-    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery, ...(supportsSessionSections ? { section: listSection } : {}) });
+    const page = legacyList || await request('list', { limit: listLimit, query: searchQuery, ...(supportsSessionSections ? { section: listSection } : {}), ...(supportsRecentAvailability ? { availability: recentAvailability } : {}) });
     const current = generation === listRequest;
     if (current) { listLoading = false; listError = ''; }
     if (current && !page.changes) receiveList(page);
@@ -578,7 +580,7 @@ function renderPagination() {
   // Scrolling loads more by itself; the line only speaks up while loading or after a failure.
   $('list-page').textContent = listError ? 'Could not load sessions. Try again.' : listLoading ? 'Loading sessions…' : '';
   $('list-page').parentElement.hidden = !listError && !listLoading;
-  $('list-empty').hidden = listLoading || !!listError || sessions.length > 0;
+  $('list-empty').hidden = listLoading || !!listError || sessions.length > 0 || !!listGroups && listSection === 'overview' && !searchQuery;
 }
 // Reaching the last row asks for the next 20; a short screen keeps filling until it scrolls.
 const moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 400px' });
@@ -645,16 +647,31 @@ function renderList() {
   // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
   if (rowSwipe) { rowSwipe.stale = true; return; }
   const root = listRoot(), scrollTop = root.scrollTop, sidebarTop = $('sidebar').scrollTop;
+  const filterFocused = document.activeElement.id === 'recent-filter';
   $('list-empty').textContent = searchQuery ? 'No matching sessions. Try another task or project.' :
     listSection === 'now' ? 'No sessions running.' : listSection === 'pinned' ? 'No pinned sessions.' : 'No sessions yet. Start Pi with the remote extension loaded.';
   renderPagination();
   const fragment = document.createDocumentFragment();
   if (listGroups && listSection === 'overview' && !searchQuery) {
     for (const [group, label] of [['now', 'Now'], ['pinned', 'Pinned'], ['recent', 'Recent']]) {
-      if (!listGroups[group]) continue;
+      if (!listGroups[group] && (group !== 'recent' || !supportsRecentAvailability)) continue;
       const section = el('section', undefined, 'session-group session-group-' + group); section.setAttribute('aria-label', label);
       const header = el('div', undefined, 'session-group-heading');
       header.append(el('h3', label), el('span', String(listGroups[group]), 'badge'));
+      if (group === 'recent' && supportsRecentAvailability) {
+        const filter = el('select'); filter.id = 'recent-filter'; filter.setAttribute('aria-label', 'Filter recent sessions');
+        for (const [value, name] of [['online', 'Online'], ['offline', 'Offline'], ['all', 'All']]) {
+          const option = el('option', name); option.value = value; filter.append(option);
+        }
+        filter.value = recentAvailability;
+        filter.addEventListener('change', () => {
+          const focus = document.activeElement === filter;
+          haptic(); recentAvailability = filter.value; listLimit = 20; moreObserver.disconnect();
+          section.scrollIntoView({ block: 'start' });
+          loadList().then(() => { if (focus) $('recent-filter')?.focus({ preventScroll: true }); });
+        });
+        header.append(filter);
+      }
       if (group === 'pinned' || group === 'now' && listGroups[group] > 3) {
         const more = el('button', 'View all', 'quiet'); more.type = 'button'; more.dataset.collection = group;
         more.setAttribute('aria-label', 'View all ' + (group === 'now' ? 'active' : 'pinned') + ' sessions');
@@ -663,11 +680,15 @@ function renderList() {
       section.append(header);
       const items = sessions.filter(item => sessionGroup(item) === group);
       if (group === 'now') items.sort(activityOrder);
+      if (group === 'recent' && supportsRecentAvailability && !items.length) {
+        section.append(el('p', recentAvailability === 'online' ? 'No online sessions. Choose Offline or All to see saved sessions.' : recentAvailability === 'offline' ? 'No offline sessions.' : 'No recent sessions.', 'hint recent-empty'));
+      }
       section.append(...items.map(sessionRow)); fragment.append(section);
     }
   } else fragment.append(...sessions.map(sessionRow));
   root.replaceChildren(fragment);
   root.scrollTop = scrollTop; $('sidebar').scrollTop = sidebarTop;
+  if (filterFocused && !listLoading) $('recent-filter')?.focus({ preventScroll: true });
   moreObserver.disconnect();
   const last = [...root.querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
