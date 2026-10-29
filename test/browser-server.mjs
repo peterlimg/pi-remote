@@ -28,7 +28,8 @@ for (const title of ['Project Alpha', 'Project Beta']) {
         { type: 'toolCall', id: 'read-config', name: 'read', arguments: { path: '/projects/' + title + '/render.yaml', offset: 10, limit: 20 } }
       ] }, 'initial'),
       cleanMessage({ role: 'toolResult', toolCallId: 'read-config', toolName: 'read', content: 'Relay configuration output\n' + 'Internal detail\n'.repeat(60) }, 'result'),
-      cleanMessage({ role: 'assistant', content: '**The relay is ready.**\n\nRun the checks before deploying:\n\n```sh\nnpm test\n```\n\n- Restart the host.\n- Refresh your phone.\n\n[Render docs](https://render.com/docs)' + (title === 'Project Alpha' ? '\n\n<script>window.injected=true</script>\n[unsafe](javascript:window.injected=true)\n![remote image](https://example.com/tracker.png)' : '') }, 'reply')
+      cleanMessage({ role: 'assistant', content: '**The relay is ready.**\n\nRun the checks before deploying:\n\n```sh\nnpm test\n```\n\n- Restart the host.\n- Refresh your phone.\n\n[Render docs](https://render.com/docs)' + (title === 'Project Alpha' ? '\n\n<script>window.injected=true</script>\n[unsafe](javascript:window.injected=true)\n![remote image](https://example.com/tracker.png)' : ''),
+        usage: { input: 2000, output: 300, cacheRead: 1000, cacheWrite: 1200 } }, 'reply')
     ], tools: [
       { id: 'read-config', name: 'read', status: 'done', text: 'Relay configuration output' },
       { id: 'older-tool', name: 'bash', status: 'done', text: 'Old output outside the current history' }

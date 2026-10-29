@@ -409,6 +409,7 @@ pre.message-text { white-space: pre-wrap; }
 /* Pi's terminal footer stats, under the composer. */
 #status-line { display: flex; justify-content: center; gap: 8px; width: 100%; max-width: var(--content-width); min-height: 0; margin: 0 auto; padding: 0 16px max(6px, var(--safe-bottom)); overflow-x: auto; scrollbar-width: none; background: transparent; color: var(--muted); font: 11px/20px var(--mono); white-space: nowrap; border-radius: 0; flex-shrink: 0; }
 #status-line[hidden], #composer[hidden] + #status-line { display: none; }
+#status-line span + span::before { content: '·'; margin-right: 8px; color: var(--line); }
 .composer:has(+ #status-line:not([hidden])) { margin-bottom: 4px; }
 #usage-meter[data-level=error] { color: var(--error); }
 #usage-meter[aria-expanded=true] { background: var(--selection); }
@@ -492,6 +493,9 @@ pre.message-text { white-space: pre-wrap; }
 .usage-details section + section { margin-top: 24px; }
 .usage-details h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .usage-limit { margin-top: 16px; }
+.usage-tokens { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 10px 0 0; font-size: 14px; }
+.usage-tokens dt { color: var(--muted); }
+.usage-tokens dd { margin: 0; text-align: right; }
 .usage-limit h4 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .usage-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
 .usage-heading strong { flex-shrink: 0; font-size: 14px; font-weight: 500; }

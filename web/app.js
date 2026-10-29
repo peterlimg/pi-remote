@@ -1746,7 +1746,7 @@ function renderUsageMeter() {
   $('usage-arc').setAttribute('stroke-dasharray', `${known ? Math.min(100, percent) : 0} 100`);
   renderStatusLine();
 }
-// Pi's terminal footer: ↑input ↓output Rcache-read Wcache-write CH(latest cache hit) $cost context%/window.
+// The actionable part of Pi's terminal footer: latest cache hit, session cost, context%/window. Token totals live in the Usage panel.
 const footerTokens = count => count < 1000 ? `${count}` : count < 10000 ? `${(count / 1000).toFixed(1)}k` :
   count < 1e6 ? `${Math.round(count / 1000)}k` : count < 1e7 ? `${(count / 1e6).toFixed(1)}M` : `${Math.round(count / 1e6)}M`;
 function renderStatusLine() {
@@ -1756,13 +1756,16 @@ function renderStatusLine() {
     const turn = `${state.messages.findLast(message => message.role === 'assistant')?.id}:${state.status}`;
     if (usageTurns.get(selected) !== turn) { usageTurns.set(selected, turn); loadUsage(selected); }
   }
-  const parts = totals ? [['↑', 'input'], ['↓', 'output'], ['R', 'cacheRead'], ['W', 'cacheWrite']]
-    .filter(([, key]) => totals[key] > 0).map(([label, key]) => el('span', label + footerTokens(totals[key]))) : [];
-  const hit = state?.messages.findLast(message => message.role === 'assistant')?.cacheHit;
-  if ((totals?.cacheRead > 0 || totals?.cacheWrite > 0) && Number.isFinite(hit)) parts.push(el('span', `CH${hit.toFixed(1)}%`));
-  if (totals?.cost > 0) parts.push(el('span', `$${totals.cost.toFixed(3)}`));
+  const parts = [], hit = state?.messages.findLast(message => message.role === 'assistant')?.cacheHit;
+  if ((totals?.cacheRead > 0 || totals?.cacheWrite > 0) && Number.isFinite(hit)) {
+    const cached = el('span', `CH${Math.round(hit)}%`);
+    // A rebuilt cache (model switch, compaction, idle expiry) is the costly turn worth noticing.
+    cached.dataset.level = hit < 50 ? 'warning' : 'normal';
+    parts.push(cached);
+  }
+  if (totals?.cost > 0) parts.push(el('span', `$${totals.cost.toFixed(2)}`));
   if (usage?.contextWindow > 0) {
-    const percent = contextPercent(usage), context = el('span', `${percent === undefined ? '?' : percent.toFixed(1) + '%'}/${footerTokens(usage.contextWindow)}`);
+    const percent = contextPercent(usage), context = el('span', `${percent === undefined ? '?' : Math.round(percent) + '%'}/${footerTokens(usage.contextWindow)}`);
     context.dataset.level = percent > 90 ? 'error' : percent > 70 ? 'warning' : 'normal';
     parts.push(context);
   }
@@ -1781,6 +1784,14 @@ function renderUsagePanel() {
   } else {
     context.append(el('p', usage?.tokens === null ? 'Waiting for the next model response after compaction.' : 'This session has not reported its context usage.', 'hint'));
   }
+  const tokens = el('section'), totals = usageTotals.get(selected);
+  if (totals) {
+    const list = el('dl', undefined, 'usage-tokens');
+    for (const [label, key] of [['Input', 'input'], ['Output', 'output'], ['Cache read', 'cacheRead'], ['Cache write', 'cacheWrite']]) {
+      list.append(el('dt', label), el('dd', tokenNumbers.format(totals[key])));
+    }
+    tokens.append(el('h3', 'Session tokens'), list);
+  }
   const limits = el('section'); limits.append(el('h3', 'Account limits'));
   const summary = usageSummaries.get(selected);
   const report = current?.providerUsage || (summary && summary.model === state?.model ? summary.dialog : undefined);
@@ -1795,7 +1806,7 @@ function renderUsagePanel() {
     }
     if (current?.capturedAt) limits.append(el('p', 'Checked ' + new Date(current.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), 'hint'));
   } else limits.append(el('p', current?.busy ? 'Checking provider limits…' : current?.providerMessage || 'Five-hour and weekly limits are shown when reported by your provider.', 'hint'));
-  content.append(context, limits); $('picker-options').replaceChildren(content);
+  content.append(context, ...(totals ? [tokens] : []), limits); $('picker-options').replaceChildren(content);
   const online = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   $('picker-help').classList.toggle('picker-error', !!current?.error);
   $('picker-help').textContent = current?.error || (!connected ? 'Offline. Usage may be out of date.' : !online ? 'Resume this session to check current usage.' :
