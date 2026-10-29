@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -45,7 +46,7 @@ test('helper sessions stay out of browsing but remain searchable without changin
     });
     await until(() => host.service.live.has(id));
     await page.goto(url + '/#token=' + config.clientToken);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(page, 'all');
     const rows = page.locator('#sessions .session'), names = rows.locator('strong');
     await expect(names).toHaveText(titles.slice(0, 20)); // Helpers must not consume the first page.
     expect(host.service.list()).toMatchObject({ total: titles.length, matched: titles.length });
@@ -77,7 +78,7 @@ test('helper sessions stay out of browsing but remain searchable without changin
     await page.screenshot({ path: testInfo.outputPath('helpers-hidden-desktop.png') });
     await testInfo.attach('helpers-hidden', { body: await page.locator('#sessions').ariaSnapshot(), contentType: 'text/plain' });
     await page.reload();
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(page, 'all');
     await expect(names).toHaveText(titles.slice(0, 20));
     expect(files.map(file => readFileSync(file, 'utf8'))).toEqual(saved);
   } finally {

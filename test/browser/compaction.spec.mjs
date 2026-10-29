@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,7 +20,7 @@ test('compaction explains the wait and clears on retry, cancellation and failure
   try {
     const url = `http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`;
     await page.goto(url);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
+    await filterRecentSessions(page, 'offline');
     await page.getByRole('button', { name: /Compaction notice/ }).click();
     await page.locator('#resume').click();
     await expect(page.locator('#status')).toHaveText('idle');

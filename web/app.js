@@ -507,6 +507,7 @@ function logout() {
   drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
   listSection = 'overview'; listGroups = undefined; listLoaded = 0; overviewLimit = 20; recentAvailability = 'online';
+  $('recent-filter-menu').hidePopover(); $('recent-online').checked = true; $('recent-offline').checked = false;
   sessionFeedback(''); renderList();
   renderImages();
   $('prompt').value = ''; $('transcript').replaceChildren();
@@ -643,6 +644,33 @@ function sessionRow(item) {
   });
   return button;
 }
+function positionRecentFilter() {
+  const filter = $('recent-filter'), menu = $('recent-filter-menu');
+  if (!filter) return;
+  const anchor = filter.getBoundingClientRect(), bounds = menu.getBoundingClientRect();
+  menu.style.right = Math.max(8, innerWidth - anchor.right) + 'px';
+  menu.style.top = Math.max(8, Math.min(anchor.bottom + 4, innerHeight - bounds.height - 8)) + 'px';
+}
+$('recent-filter-menu').addEventListener('toggle', event => {
+  const open = event.newState === 'open';
+  $('recent-filter')?.setAttribute('aria-expanded', String(open));
+  if (open) { positionRecentFilter(); $('recent-online').focus({ preventScroll: true }); }
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !$('recent-filter-menu').matches(':popover-open')) return;
+  event.preventDefault(); $('recent-filter-menu').hidePopover(); $('recent-filter')?.focus({ preventScroll: true });
+});
+$('recent-filter-menu').addEventListener('change', () => {
+  const checked = [...$('recent-filter-menu').querySelectorAll('input:checked')];
+  haptic(); recentAvailability = checked.length === 1 ? checked[0].value : 'all';
+  listLimit = 20; moreObserver.disconnect();
+  $('recent-filter')?.closest('.session-group').scrollIntoView({ block: 'start' });
+  positionRecentFilter(); loadList();
+});
+window.addEventListener('resize', positionRecentFilter);
+for (const list of [$('sessions'), $('sidebar')]) list.addEventListener('scroll', () => {
+  if ($('recent-filter-menu').matches(':popover-open')) positionRecentFilter();
+}, { passive: true });
 function renderList() {
   // Rebuilding mid-swipe would detach the touched row and strand the gesture; release renders instead.
   if (rowSwipe) { rowSwipe.stale = true; return; }
@@ -659,17 +687,13 @@ function renderList() {
       const header = el('div', undefined, 'session-group-heading');
       header.append(el('h3', label), el('span', String(listGroups[group]), 'badge'));
       if (group === 'recent' && supportsRecentAvailability) {
-        const filter = el('select'); filter.id = 'recent-filter'; filter.setAttribute('aria-label', 'Filter recent sessions');
-        for (const [value, name] of [['online', 'Online'], ['offline', 'Offline'], ['all', 'All']]) {
-          const option = el('option', name); option.value = value; filter.append(option);
-        }
-        filter.value = recentAvailability;
-        filter.addEventListener('change', () => {
-          const focus = document.activeElement === filter;
-          haptic(); recentAvailability = filter.value; listLimit = 20; moreObserver.disconnect();
-          section.scrollIntoView({ block: 'start' });
-          loadList().then(() => { if (focus) $('recent-filter')?.focus({ preventScroll: true }); });
-        });
+        const filter = el('button', undefined, 'quiet'); filter.type = 'button'; filter.id = 'recent-filter';
+        filter.setAttribute('aria-label', 'Filter recent sessions'); filter.title = 'Filter recent sessions';
+        filter.setAttribute('popovertarget', 'recent-filter-menu'); filter.setAttribute('aria-haspopup', 'dialog');
+        filter.setAttribute('aria-controls', 'recent-filter-menu'); filter.setAttribute('aria-expanded', String($('recent-filter-menu').matches(':popover-open')));
+        filter.dataset.active = String(recentAvailability !== 'all');
+        filter.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>';
+        filter.addEventListener('click', positionRecentFilter);
         header.append(filter);
       }
       if (group === 'pinned' || group === 'now' && listGroups[group] > 3) {
@@ -681,12 +705,13 @@ function renderList() {
       const items = sessions.filter(item => sessionGroup(item) === group);
       if (group === 'now') items.sort(activityOrder);
       if (group === 'recent' && supportsRecentAvailability && !items.length) {
-        section.append(el('p', recentAvailability === 'online' ? 'No online sessions. Choose Offline or All to see saved sessions.' : recentAvailability === 'offline' ? 'No offline sessions.' : 'No recent sessions.', 'hint recent-empty'));
+        section.append(el('p', recentAvailability === 'online' ? 'No online sessions. Include Offline in the filter to see saved sessions.' : recentAvailability === 'offline' ? 'No offline sessions.' : 'No recent sessions.', 'hint recent-empty'));
       }
       section.append(...items.map(sessionRow)); fragment.append(section);
     }
   } else fragment.append(...sessions.map(sessionRow));
   root.replaceChildren(fragment);
+  if (!$('recent-filter')) $('recent-filter-menu').hidePopover();
   root.scrollTop = scrollTop; $('sidebar').scrollTop = sidebarTop;
   if (filterFocused && !listLoading) $('recent-filter')?.focus({ preventScroll: true });
   moreObserver.disconnect();

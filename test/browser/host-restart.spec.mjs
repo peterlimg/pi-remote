@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +21,7 @@ test('phone reopens its session after restart and can send, attach and approve',
   try {
     config.port = host.http.address().port;
     await page.goto(`http://127.0.0.1:${config.port}/#token=${config.clientToken}`);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
+    await filterRecentSessions(page, 'offline');
     await page.getByRole('button', { name: /Restart test/ }).click();
     await expect(page.locator('#resume')).toBeEnabled();
     await page.locator('#resume').click();

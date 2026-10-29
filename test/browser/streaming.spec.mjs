@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,7 +20,7 @@ test('RPC text and tool arguments reach the phone before the completed message',
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url))] } });
   try {
     await page.goto(`http://127.0.0.1:${host.http.address().port}/#token=${config.clientToken}`);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('offline');
+    await filterRecentSessions(page, 'offline');
     await page.getByRole('button', { name: /Streaming reply/ }).click();
     await page.locator('#resume').click();
     await expect(page.locator('#status')).toHaveText('idle');

@@ -1,4 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -59,13 +60,13 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     }
     await page.clock.install();
     await page.goto(url + '/#token=' + config.clientToken);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(page, 'all');
     const recent = page.getByRole('region', { name: 'Recent', exact: true });
     await expect(recent.locator('.session')).toHaveCount(20);
     secondContext = await browser.newContext({ ...devices['iPhone 13'] });
     const other = await secondContext.newPage();
     await other.goto(url + '/#token=' + config.clientToken);
-    await other.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(other, 'all');
     await expect(other.locator('#sessions .session[data-id="' + saved.id + '"]')).toHaveCount(1);
     await page.bringToFront();
 
@@ -241,7 +242,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await expect(feedback).toBeHidden({ timeout: 1000 });
     host.service.scan();
     await page.reload();
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(page, 'all');
     await expect(savedRow).toHaveCount(0);
     await expect(rows.filter({ hasText: 'Pinned task' })).toHaveCount(1);
 
@@ -250,7 +251,7 @@ test('closing requires confirmation, syncs across phones and keeps history, with
     await host.close();
     url = await launch();
     await page.goto(url + '/#token=' + config.clientToken);
-    await page.getByRole('combobox', { name: 'Filter recent sessions' }).selectOption('all');
+    await filterRecentSessions(page, 'all');
     await expect(recent.locator('.session')).toHaveCount(20);
     await expect(savedRow).toHaveCount(0);
     await page.getByRole('button', { name: 'Search sessions', exact: true }).tap();
