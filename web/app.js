@@ -2466,17 +2466,21 @@ function renderDots(progress = 0) {
     track.append(...ids.map(() => el('i')), el('b')); dots.replaceChildren(track);
   }
   const size = Math.min(ids.length, 5), position = at + progress, clamp = value => Math.min(Math.max(value - 2, 0), ids.length - size);
-  const first = clamp(Math.round(position));
-  [...track.children].slice(0, -1).forEach((dot, i) => dot.classList.toggle('edge', i === first && i > 0 || i === first + size - 1 && i < ids.length - 1));
-  dots.style.width = size * 8 - 4 + 'px';
-  track.style.transform = `translateX(${-clamp(position) * 8}px)`;
-  track.lastElementChild.style.transform = `translateX(${position * 8}px)`;
+  const first = clamp(Math.round(position)), step = 12, origin = switchOrder && ids.indexOf(switchOrigin);
+  [...track.children].slice(0, -1).forEach((dot, i) => {
+    dot.classList.toggle('edge', i === first && i > 0 || i === first + size - 1 && i < ids.length - 1);
+    dot.classList.toggle('origin', i === origin);
+  });
+  dots.style.width = size * step - 6 + 'px';
+  track.style.transform = `translateX(${-clamp(position) * step}px)`;
+  track.lastElementChild.style.transform = `translateX(${position * step}px)`;
 }
+const switchEase = 'cubic-bezier(.2, .8, .2, 1)', reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function offsetHeading(dx, animate) {
-  // The strip's handle follows at a third of the distance, so a thumb swipe there visibly moves something nearby.
-  for (const [node, scale] of [[$('heading-strip'), 1], [$('session-swipe').firstElementChild, 1 / 3]]) {
-    node.style.transition = animate ? 'transform .22s cubic-bezier(.2, .8, .2, 1)' : '';
-    node.style.transform = dx ? `translateX(${dx * scale}px)` : '';
+  // The conversation follows the finger too, so a switch visibly replaces the whole thread.
+  for (const node of reducedMotion() ? [$('heading-strip')] : [$('heading-strip'), $('transcript')]) {
+    node.style.transition = animate ? `transform .22s ${switchEase}, opacity .22s` : '';
+    node.style.transform = dx ? `translateX(${dx}px)` : '';
   }
 }
 function switchTo(id, ids) {
@@ -2488,16 +2492,22 @@ function stepSession(direction, id = neighbour(direction)) {
   if (headingSwitching || !id) { renderDots(); return offsetHeading(0, true); }
   headingSwitching = true; localStorage.setItem('pi-remote-title-swipe-learned', '1');
   offsetHeading(-direction * $('heading-strip').offsetWidth, true); renderDots(ids.indexOf(id) - ids.indexOf(selected));
-  setTimeout(() => { headingSwitching = false; offsetHeading(0); switchTo(id, ids); }, 220);
+  $('transcript').style.opacity = '0';
+  setTimeout(() => {
+    headingSwitching = false; offsetHeading(0); $('transcript').style.opacity = '';
+    switchTo(id, ids);
+    // The next conversation enters from the side the swipe pulls toward.
+    $('transcript').animate([{ transform: `translateX(${reducedMotion() ? 0 : direction * 40}%)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: switchEase });
+  }, 220);
 }
 // Double-tapping the title or the strip above the composer returns to the session the switching started from.
 function returnToOrigin() {
   const ids = switchIds();
   if (switchOrigin !== selected && ids.includes(switchOrigin)) stepSession(Math.sign(ids.indexOf(switchOrigin) - ids.indexOf(selected)), switchOrigin);
 }
-// Until the first title swipe, opening a session briefly slides the next title into view, once per visit.
+// Until the first swipe, opening a session briefly slides the next title into view, once per visit.
 function nudgeHeading() {
-  if (headingNudged || localStorage.getItem('pi-remote-title-swipe-learned') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (headingNudged || localStorage.getItem('pi-remote-title-swipe-learned') || reducedMotion()) return;
   const direction = neighbour(1) ? 1 : neighbour(-1) ? -1 : 0, id = selected;
   if (!direction) return;
   headingNudged = true;
@@ -2517,7 +2527,7 @@ function openNearby() {
     text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)),
       el('small', [projectName(item.cwd), ['idle', 'saved'].includes(item.status) ? age(new Date(item.updatedAt)) : statusLabels[item.status]].filter(Boolean).join(' · ')));
     button.append(statusIcon(item.status), text);
-    button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) switchTo(id, ids); });
+    button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));
   menu.style.top = $('heading').getBoundingClientRect().bottom + 8 + 'px';
@@ -2547,7 +2557,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
       clearTimeout(gesture.timer);
       gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
       if (gesture.mode === 'ignored') return;
-      $('heading').classList.add('dragging');
+      $('session-swipe').classList.add('dragging');
     }
     gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
     gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
@@ -2562,7 +2572,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
       if (event.timeStamp - lastHeadingTap < 350) { lastHeadingTap = 0; returnToOrigin(); } else lastHeadingTap = event.timeStamp;
     }
     if (gesture.mode !== 'swiping') return;
-    $('heading').classList.remove('dragging');
+    $('session-swipe').classList.remove('dragging');
     const direction = gesture.dx < 0 ? 1 : -1, [first, last] = [gesture.samples[0], gesture.samples.at(-1)];
     const velocity = first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
     if (type === 'pointerup' && (Math.abs(gesture.dx) > $('heading-strip').offsetWidth * .35 || -velocity * direction > .3)) stepSession(direction);

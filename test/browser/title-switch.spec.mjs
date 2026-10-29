@@ -33,10 +33,11 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#heading-next')).toContainText('Task 3');
   await expect(page.locator('#session-dots i')).toHaveCount(6);
   const dot = () => page.locator('#session-dots b').evaluate(node => node.style.transform);
-  expect(await dot()).toBe('translateX(16px)');
-  // Five dots fit in a slightly taller pill; the dot beyond the window's end shrinks to hint at more.
-  expect((await page.locator('#heading').boundingBox()).height).toBe(50);
-  expect(await page.locator('#session-dots').evaluate(node => node.offsetWidth)).toBe(36);
+  expect(await dot()).toBe('translateX(24px)');
+  // Five dots sit in the strip above the composer; the dot beyond the window's end shrinks to hint at more.
+  expect((await page.locator('#heading').boundingBox()).height).toBe(44);
+  await expect(page.locator('#session-swipe')).toBeVisible();
+  expect(await page.locator('#session-dots').evaluate(node => node.offsetWidth)).toBe(54);
   await expect(page.locator('#session-dots i.edge')).toHaveCount(1);
   await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('title-dots.png') });
   // Until the first swipe, the next title peeks in once.
@@ -49,11 +50,17 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
     await page.mouse.move(from, atY); await page.mouse.down();
     await page.mouse.move(to, atY, { steps: 8 }); await during?.(); await page.mouse.up();
   };
-  // The bright dot follows the finger toward the next session.
-  await drag(box.x + box.width - 20, box.x + 20, async () => expect(parseFloat((await dot()).slice(11))).toBeGreaterThan(18));
+  // The bright dot and the conversation follow the finger toward the next session.
+  await drag(box.x + box.width - 20, box.x + 20, async () => {
+    expect(parseFloat((await dot()).slice(11))).toBeGreaterThan(26);
+    expect(await page.locator('#transcript').evaluate(node => node.style.transform)).toMatch(/^translateX\(-/);
+  });
   await expect(page.locator('#title')).toHaveText('Task 3');
   await expect(page.locator('#transcript')).toContainText('Reply for task 3');
-  expect(await dot()).toBe('translateX(24px)');
+  expect(await dot()).toBe('translateX(36px)');
+  // A ring marks the session switching started from.
+  await expect(page.locator('#session-dots i.origin')).toHaveCount(1);
+  expect(await page.locator('#session-dots i').nth(2).getAttribute('class')).toContain('origin');
   expect(await page.evaluate(() => localStorage.getItem('pi-remote-title-swipe-learned'))).toBe('1');
   // Swiping the other way returns to where you started.
   await drag(box.x + 20, box.x + box.width - 20);
@@ -74,11 +81,11 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await page.mouse.click(strip.x + strip.width / 2, stripY);
   await expect(page.locator('#title')).toHaveText('Task 2');
   await expect(page.locator('#transcript')).toContainText('Reply for task 2');
-  expect(await dot()).toBe('translateX(16px)');
+  expect(await dot()).toBe('translateX(24px)');
   // A short drag snaps back instead of switching.
   await drag(box.x + box.width / 2, box.x + box.width / 2 + 20);
   await expect(page.locator('#title')).toHaveText('Task 2');
-  expect(await dot()).toBe('translateX(16px)');
+  expect(await dot()).toBe('translateX(24px)');
 
   await page.mouse.move(box.x + box.width / 2, y); await page.mouse.down();
   await expect(page.locator('#nearby-sessions')).toBeVisible();

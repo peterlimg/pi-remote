@@ -230,7 +230,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell > main { --conversation-header-height: 64px; position: relative; }
-.shell > main:has(.session-dots:not(:empty)) { --conversation-header-height: 70px; }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 /* Keep the header controls centered over the composer controls. */
 .shell .conversation-header { position: absolute; z-index: 2; inset: 0 0 auto; width: calc(100% - 48px); max-width: var(--content-width); margin-inline: auto; padding: 10px 9px; gap: 16px; border: 0; pointer-events: none; }
@@ -248,14 +247,14 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .heading-slot > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .heading-slot > span:first-child { font-size: 14px; font-weight: 500; }
 .heading-slot > span + span { color: var(--muted); font-size: 12px; }
-/* The bright dot slides with the finger; past 5 sessions the row scrolls and its end dots shrink. */
-.shell .conversation-heading:has(.session-dots i) { min-height: 50px; padding: 3px 0 4px; }
-.session-dots { height: 5px; margin: 2px auto 0; overflow: hidden; }
-.session-dots:empty { display: none; }
-.session-dots-track { position: relative; display: flex; gap: 4px; padding-top: .5px; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
-.session-dots i { flex: 0 0 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 55%, transparent); transition: transform .22s; }
+/* Page dots like the home screen's: the bright dot slides with the finger, a ring marks where switching started,
+   and past 5 sessions the row scrolls and its end dots shrink. */
+.session-dots { height: 6px; overflow: hidden; }
+.session-dots-track { position: relative; display: flex; gap: 6px; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.session-dots i { flex: 0 0 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 55%, transparent); transition: transform .22s; }
+.session-dots i.origin { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .session-dots i.edge { transform: scale(.6); }
-.session-dots b { position: absolute; top: 0; left: 0; width: 5px; height: 5px; margin-left: -.5px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.session-dots b { position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .dragging .session-dots :is(.session-dots-track, b) { transition: none; }
 .nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); max-height: 60dvh; margin: 0 auto; padding: 6px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
 .nearby-sessions button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
@@ -390,10 +389,9 @@ pre.message-text { white-space: pre-wrap; }
 .connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid var(--muted); border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .session-icon[data-status=working] rect, .activity-dots { animation: none; } }
-/* A thumb-height strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button rises above it. */
+/* The dots strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button rises above it. */
 .session-swipe { position: absolute; bottom: 100%; left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .composer:has(#session-swipe:not([hidden])) #scroll-bottom { bottom: calc(100% + 32px); }
-.session-swipe span { width: 36px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 70%, transparent); }
 #scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--composer-bg); color: var(--text); box-shadow: 0 4px 12px #00000014; }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; background: var(--composer-bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px #0000001a; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
@@ -566,7 +564,6 @@ pre.message-text { white-space: pre-wrap; }
   .shell.viewing aside { visibility: hidden; }
   .shell.viewing:is(.swiping, .opening) aside { visibility: visible; }
   .shell.viewing main { --conversation-header-height: 60px; display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
-  .shell.viewing main:has(.session-dots:not(:empty)) { --conversation-header-height: 66px; }
   .shell:is(.swiping, .opening) main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .shell.viewing:not(.opening) .swipe-haptic-edge { display: block; }
   .mobile-only { display: block; }
