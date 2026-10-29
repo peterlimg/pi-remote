@@ -32,7 +32,8 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#heading-prev')).toContainText('Task 1');
   await expect(page.locator('#heading-next')).toContainText('Task 3');
   await expect(page.locator('#session-dots i')).toHaveCount(6);
-  await expect(page.locator('#session-dots i').nth(2)).toHaveClass('current');
+  const dot = () => page.locator('#session-dots b').evaluate(node => node.style.transform);
+  expect(await dot()).toBe('translateX(16px)');
   await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('title-dots.png') });
   // Until the first swipe, the next title peeks in once.
   await expect.poll(() => page.locator('#heading-strip').evaluate(node => node.style.transform)).toBe('translateX(-20px)');
@@ -40,17 +41,24 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect.poll(() => page.locator('#heading-strip').evaluate(node => node.style.transform)).toBe('');
 
   const box = await page.locator('#heading').boundingBox(), y = box.y + box.height / 2;
-  const drag = async (from, to) => {
+  const drag = async (from, to, during) => {
     await page.mouse.move(from, y); await page.mouse.down();
-    await page.mouse.move(to, y, { steps: 8 }); await page.mouse.up();
+    await page.mouse.move(to, y, { steps: 8 }); await during?.(); await page.mouse.up();
   };
-  await drag(box.x + box.width - 20, box.x + 20);
+  // The bright dot follows the finger toward the next session.
+  await drag(box.x + box.width - 20, box.x + 20, async () => expect(parseFloat((await dot()).slice(11))).toBeGreaterThan(18));
   await expect(page.locator('#title')).toHaveText('Task 3');
   await expect(page.locator('#transcript')).toContainText('Reply for task 3');
+  expect(await dot()).toBe('translateX(24px)');
   expect(await page.evaluate(() => localStorage.getItem('pi-remote-title-swipe-learned'))).toBe('1');
+  // Swiping the other way returns to where you started.
+  await drag(box.x + 20, box.x + box.width - 20);
+  await expect(page.locator('#title')).toHaveText('Task 2');
+  await expect(page.locator('#transcript')).toContainText('Reply for task 2');
   // A short drag snaps back instead of switching.
   await drag(box.x + box.width / 2, box.x + box.width / 2 + 20);
-  await expect(page.locator('#title')).toHaveText('Task 3');
+  await expect(page.locator('#title')).toHaveText('Task 2');
+  expect(await dot()).toBe('translateX(16px)');
 
   await page.mouse.move(box.x + box.width / 2, y); await page.mouse.down();
   await expect(page.locator('#nearby-sessions')).toBeVisible();
@@ -58,7 +66,7 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   // Lifting the finger after the hold leaves the list open.
   await expect(page.locator('#nearby-sessions')).toBeVisible();
   await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
-  await expect(page.locator('#nearby-sessions [aria-current=true]')).toContainText('Task 3');
+  await expect(page.locator('#nearby-sessions [aria-current=true]')).toContainText('Task 2');
   await page.screenshot({ path: testInfo.outputPath('nearby-sessions.png') });
   await page.locator('#nearby-sessions button', { hasText: 'Task 1' }).tap();
   await expect(page.locator('#nearby-sessions')).toBeHidden();

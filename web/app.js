@@ -950,9 +950,10 @@ function markSeen() {
   if (changed) localStorage.setItem('pi-remote-seen', JSON.stringify(seen));
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
-async function selectSession(id) {
+async function selectSession(id, keepOrder = false) {
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
-  switchOrder = undefined; $('nearby-sessions').hidePopover();
+  if (!keepOrder) switchOrder = undefined;
+  $('nearby-sessions').hidePopover();
   resetScrollback();
   resetSwipe();
   closePicker();
@@ -2452,28 +2453,34 @@ function renderHeading() {
     const item = at < 0 ? undefined : sessions.find(row => row.id === ids[at + step]);
     $('heading-' + side).replaceChildren(...item ? [el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), el('span', projectName(item.cwd))] : []);
   }
-  // Like the iOS page control: at most 7 dots, with smaller end dots when more sessions lie beyond.
-  const size = Math.min(ids.length, 7), start = Math.min(Math.max(at - 3, 0), ids.length - size);
-  $('session-dots').replaceChildren(...at < 0 || size < 2 ? [] : Array.from({ length: size }, (_, k) => {
-    const i = start + k, dot = el('i');
-    if (i === at) dot.className = 'current';
-    else if (i === start && i > 0 || i === start + size - 1 && i < ids.length - 1) dot.className = 'edge';
-    return dot;
-  }));
+  renderDots();
+}
+// progress is the drag's fraction of a full step, so the bright dot follows the finger.
+function renderDots(progress = 0) {
+  const ids = switchIds(), at = ids.indexOf(selected), dots = $('session-dots');
+  if (at < 0 || ids.length < 2) return dots.replaceChildren();
+  let track = dots.firstElementChild;
+  if (track?.children.length !== ids.length + 1) {
+    track = el('div', undefined, 'session-dots-track');
+    track.append(...ids.map(() => el('i')), el('b')); dots.replaceChildren(track);
+  }
+  const size = Math.min(ids.length, 7), position = at + progress;
+  dots.style.width = size * 8 - 4 + 'px';
+  track.style.transform = `translateX(${-Math.min(Math.max(position - 3, 0), ids.length - size) * 8}px)`;
+  track.lastElementChild.style.transform = `translateX(${position * 8}px)`;
 }
 function offsetHeading(dx, animate) {
   $('heading-strip').style.transition = animate ? 'transform .22s cubic-bezier(.2, .8, .2, 1)' : '';
   $('heading-strip').style.transform = dx ? `translateX(${dx}px)` : '';
 }
 function switchTo(id, ids) {
-  haptic(); selectSession(id);
-  switchOrder = ids; renderHeading();
+  haptic(); switchOrder = ids; selectSession(id, true);
 }
 function stepSession(direction) {
   const ids = switchIds(), id = neighbour(direction);
-  if (headingSwitching || !id) return offsetHeading(0, true);
+  if (headingSwitching || !id) { renderDots(); return offsetHeading(0, true); }
   headingSwitching = true; localStorage.setItem('pi-remote-title-swipe-learned', '1');
-  offsetHeading(-direction * $('heading-strip').offsetWidth, true);
+  offsetHeading(-direction * $('heading-strip').offsetWidth, true); renderDots(direction);
   setTimeout(() => { headingSwitching = false; offsetHeading(0); switchTo(id, ids); }, 220);
 }
 // Until the first title swipe, opening a session briefly slides the next title into view, once per visit.
@@ -2527,20 +2534,23 @@ $('heading').addEventListener('pointermove', event => {
     clearTimeout(gesture.timer);
     gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
     if (gesture.mode === 'ignored') return;
+    $('heading').classList.add('dragging');
   }
   gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
   gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
   offsetHeading(gesture.dx);
+  renderDots(Math.max(-1, Math.min(1, -gesture.dx / $('heading-strip').offsetWidth)));
 });
 for (const type of ['pointerup', 'pointercancel']) $('heading').addEventListener(type, event => {
   const gesture = headingGesture;
   if (event.pointerId !== gesture?.id) return;
   clearTimeout(gesture.timer); headingGesture = undefined;
   if (gesture.mode !== 'swiping') return;
+  $('heading').classList.remove('dragging');
   const direction = gesture.dx < 0 ? 1 : -1, [first, last] = [gesture.samples[0], gesture.samples.at(-1)];
   const velocity = first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
   if (type === 'pointerup' && (Math.abs(gesture.dx) > $('heading-strip').offsetWidth * .35 || -velocity * direction > .3)) stepSession(direction);
-  else offsetHeading(0, true);
+  else { offsetHeading(0, true); renderDots(); }
 });
 $('heading').addEventListener('contextmenu', event => { if (selected) { event.preventDefault(); openNearby(); } });
 // Browser edge-swipes reveal an old history screenshot, so rows and scroll can jump when the swipe lands.
