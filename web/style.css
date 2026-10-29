@@ -230,13 +230,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell > main { --conversation-header-height: 64px; position: relative; }
+.shell > main:has(.session-dots:not(:empty)) { --conversation-header-height: 70px; }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 /* Keep the header controls centered over the composer controls. */
 .shell .conversation-header { position: absolute; z-index: 2; inset: 0 0 auto; width: calc(100% - 48px); max-width: var(--content-width); margin-inline: auto; padding: 10px 9px; gap: 16px; border: 0; pointer-events: none; }
 .shell .conversation-header > * { pointer-events: auto; }
 .shell :is(.conversation-heading, #back, .session-info summary) { border: 1px solid color-mix(in srgb, var(--line) 85%, var(--text)); border-radius: 999px; background: color-mix(in srgb, var(--composer-bg) 94%, var(--text)); }
 .conversation-heading { grid-column: 2; min-width: 0; text-align: center; }
-.shell .conversation-heading { justify-self: center; max-width: 100%; min-height: 44px; display: flex; flex-direction: column; justify-content: center; position: relative; padding: 4px 0; line-height: 1.3; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.shell .conversation-heading { justify-self: center; max-width: 100%; min-height: 44px; display: flex; flex-direction: column; justify-content: center; padding: 4px 0; line-height: 1.3; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 /* Swiping the title slides the neighbouring sessions' titles through this window. */
 .heading-window { overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); }
 .heading-strip { position: relative; }
@@ -247,11 +248,13 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .heading-slot > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .heading-slot > span:first-child { font-size: 14px; font-weight: 500; }
 .heading-slot > span + span { color: var(--muted); font-size: 12px; }
-/* Page dots sit just under the pill; the bright dot slides with the finger, and the row scrolls when more than 7. */
-.session-dots { position: absolute; top: calc(100% + 3px); left: 50%; height: 5px; transform: translateX(-50%); overflow: hidden; }
+/* The bright dot slides with the finger; past 5 sessions the row scrolls and its end dots shrink. */
+.shell .conversation-heading:has(.session-dots i) { min-height: 50px; padding: 3px 0 4px; }
+.session-dots { height: 5px; margin: 2px auto 0; overflow: hidden; }
 .session-dots:empty { display: none; }
 .session-dots-track { position: relative; display: flex; gap: 4px; padding-top: .5px; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
-.session-dots i { flex: 0 0 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 55%, transparent); }
+.session-dots i { flex: 0 0 4px; height: 4px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 55%, transparent); transition: transform .22s; }
+.session-dots i.edge { transform: scale(.6); }
 .session-dots b { position: absolute; top: 0; left: 0; width: 5px; height: 5px; margin-left: -.5px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .dragging .session-dots :is(.session-dots-track, b) { transition: none; }
 .nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); max-height: 60dvh; margin: 0 auto; padding: 6px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
@@ -559,6 +562,7 @@ pre.message-text { white-space: pre-wrap; }
   .shell.viewing aside { visibility: hidden; }
   .shell.viewing:is(.swiping, .opening) aside { visibility: visible; }
   .shell.viewing main { --conversation-header-height: 60px; display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
+  .shell.viewing main:has(.session-dots:not(:empty)) { --conversation-header-height: 66px; }
   .shell:is(.swiping, .opening) main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .shell.viewing:not(.opening) .swipe-haptic-edge { display: block; }
   .mobile-only { display: block; }

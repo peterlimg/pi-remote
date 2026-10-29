@@ -34,6 +34,10 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#session-dots i')).toHaveCount(6);
   const dot = () => page.locator('#session-dots b').evaluate(node => node.style.transform);
   expect(await dot()).toBe('translateX(16px)');
+  // Five dots fit in a slightly taller pill; the dot beyond the window's end shrinks to hint at more.
+  expect((await page.locator('#heading').boundingBox()).height).toBe(50);
+  expect(await page.locator('#session-dots').evaluate(node => node.offsetWidth)).toBe(36);
+  await expect(page.locator('#session-dots i.edge')).toHaveCount(1);
   await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('title-dots.png') });
   // Until the first swipe, the next title peeks in once.
   await expect.poll(() => page.locator('#heading-strip').evaluate(node => node.style.transform)).toBe('translateX(-20px)');

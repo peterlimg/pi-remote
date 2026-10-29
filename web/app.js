@@ -2464,9 +2464,11 @@ function renderDots(progress = 0) {
     track = el('div', undefined, 'session-dots-track');
     track.append(...ids.map(() => el('i')), el('b')); dots.replaceChildren(track);
   }
-  const size = Math.min(ids.length, 7), position = at + progress;
+  const size = Math.min(ids.length, 5), position = at + progress, clamp = value => Math.min(Math.max(value - 2, 0), ids.length - size);
+  const first = clamp(Math.round(position));
+  [...track.children].slice(0, -1).forEach((dot, i) => dot.classList.toggle('edge', i === first && i > 0 || i === first + size - 1 && i < ids.length - 1));
   dots.style.width = size * 8 - 4 + 'px';
-  track.style.transform = `translateX(${-Math.min(Math.max(position - 3, 0), ids.length - size) * 8}px)`;
+  track.style.transform = `translateX(${-clamp(position) * 8}px)`;
   track.lastElementChild.style.transform = `translateX(${position * 8}px)`;
 }
 function offsetHeading(dx, animate) {
