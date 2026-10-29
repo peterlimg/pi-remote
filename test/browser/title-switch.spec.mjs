@@ -68,8 +68,14 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   await expect(page.locator('#session-dots i.origin')).toHaveCount(1);
   expect(await page.locator('#session-dots i').nth(2).getAttribute('class')).toContain('origin');
   expect(await page.evaluate(() => localStorage.getItem('pi-remote-title-swipe-learned'))).toBe('1');
-  // Swiping the other way returns to where you started.
-  await drag(box.x + 20, box.x + box.width - 20);
+  // Swiping the other way returns to where you started, with that thread sliding in alongside.
+  await drag(box.x + 20, box.x + box.width - 20, async () => {
+    await expect(page.locator('.transcript-peek')).toContainText('Reply for task 2');
+    const [peek, thread] = await Promise.all(['.transcript-peek', '#transcript'].map(selector => page.locator(selector).boundingBox()));
+    expect(Math.round(peek.x + peek.width)).toBe(Math.round(thread.x));
+    await page.screenshot({ path: testInfo.outputPath(`peek${iosSwitch ? '-ios' : ''}.png`) });
+  });
+  await expect(page.locator('.transcript-peek')).toHaveCount(0);
   await expect(page.locator('#title')).toHaveText('Task 2');
   await expect(page.locator('#transcript')).toContainText('Reply for task 2');
   // The strip above the composer switches too, and a double tap returns to where switching started.

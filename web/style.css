@@ -301,14 +301,17 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .icon-sheet .hint { margin: 8px 0 0; text-align: center; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { margin-top: var(--conversation-header-height); padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
-#transcript { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding-top: var(--conversation-header-height); overscroll-behavior: contain; -webkit-mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); }
+:is(#transcript, .transcript-peek) { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding-top: var(--conversation-header-height); overscroll-behavior: contain; -webkit-mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); }
 main:has(#notice:not([hidden])) #transcript { --conversation-header-height: 0px; }
 #transcript:focus-visible { outline: none; }
+/* The neighbour's saved thread, laid over the transcript's box and slid in from the side while swiping. */
+.transcript-peek { position: absolute; overflow: hidden; pointer-events: none; }
+.shell > main:has(> .transcript-peek) { overflow: clip; }
 .conversation-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 24px 0; color: var(--muted); }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
-#transcript::before, #transcript::after { content: ''; display: block; height: var(--transcript-gap); }
-#transcript::before { height: calc(var(--transcript-gap) + var(--conversation-header-height)); }
-.message, .tool, .skill-loaded, #transcript > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
+:is(#transcript, .transcript-peek)::before, :is(#transcript, .transcript-peek)::after { content: ''; display: block; height: var(--transcript-gap); }
+:is(#transcript, .transcript-peek)::before { height: calc(var(--transcript-gap) + var(--conversation-header-height)); }
+.message, .tool, .skill-loaded, :is(#transcript, .transcript-peek) > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
 .skill-loaded { color: var(--accent); font-size: 14px; overflow-wrap: anywhere; }
 .tool { font-family: var(--mono); }
 #transcript > .hint { font: 17px/1.65 var(--sans); }
@@ -348,7 +351,7 @@ pre.message-text { white-space: pre-wrap; }
 .thread-image a, .thread-image img, .thread-image button { display: block; width: 100%; height: 100%; }
 .thread-image img { object-fit: contain; }
 .thread-image button { font-size: 12px; line-height: 1.5; }
-#transcript > .thread-images { max-width: var(--content-width); margin: 0 auto 18px; }
+:is(#transcript, .transcript-peek) > .thread-images { max-width: var(--content-width); margin: 0 auto 18px; }
 .thread-video { width: 160px; max-width: 85%; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--panel); }
 .thread-video video, .thread-video img { display: block; width: 100%; max-height: 160px; object-fit: contain; }
 .thread-video button { position: relative; display: block; width: 100%; min-height: 90px; padding: 0; border: 0; border-radius: 0; }
@@ -577,7 +580,7 @@ pre.message-text { white-space: pre-wrap; }
   .shell .conversation-header { top: env(safe-area-inset-top); width: calc(100% - 16px); padding: 8px 9px; }
   .shell .conversation-heading { max-width: min(100%, 220px); }
   .shell #back { display: grid; place-items: center; }
-  #transcript { --transcript-gap: 20px; padding-inline: 16px; }
+  :is(#transcript, .transcript-peek) { --transcript-gap: 20px; padding-inline: 16px; }
   .message.user .message-text { padding: 10px 16px; }
   .composer { width: calc(100% - 16px); }
   .composer-actions { gap: 4px; }

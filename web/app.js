@@ -958,7 +958,7 @@ async function selectSession(id, keepOrder = false) {
   resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
-  if (selected !== id) { clearThreadImages(); clearThreadVideos(); }
+  if (selected !== id) { keepPeek(selected); clearThreadImages(); clearThreadVideos(); }
   selected = id; selectedSummary = sessions.find(item => item.id === id); $('prompt').value = drafts.get(id) || '';
   renderImages();
   commandDismissed = false; commandIndex = 0;
@@ -2476,11 +2476,36 @@ function renderDots(progress = 0) {
   track.lastElementChild.style.transform = `translateX(${position * step}px)`;
 }
 const switchEase = 'cubic-bezier(.2, .8, .2, 1)', reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-function offsetHeading(dx, animate) {
-  // The conversation follows the finger too, so a switch visibly replaces the whole thread.
-  for (const node of reducedMotion() ? [$('heading-strip')] : [$('heading-strip'), $('transcript')]) {
-    node.style.transition = animate ? `transform .22s ${switchEase}, opacity .22s` : '';
-    node.style.transform = dx ? `translateX(${dx}px)` : '';
+// A static copy of each thread as last seen, so swiping can slide it in beside the current one.
+// shortcut: sessions not opened in this visit have no copy (the host watches one session at a time); add a host preview op if that matters.
+const peeks = new Map();
+let peek;
+function keepPeek(id) {
+  if (!id || $('transcript').hidden || $('transcript').getAttribute('aria-busy') === 'true') return;
+  const copy = $('transcript').cloneNode(true);
+  copy.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  copy.querySelectorAll('img[src^="blob:"], video').forEach(node => node.remove()); // their object URLs are revoked on leaving
+  copy.removeAttribute('id'); copy.removeAttribute('tabindex'); copy.className = 'transcript-peek'; copy.inert = true; copy.setAttribute('aria-hidden', 'true');
+  peeks.delete(id); peeks.set(id, copy);
+  if (peeks.size > 8) peeks.delete(peeks.keys().next().value);
+}
+// The conversation follows the finger too (page is its offset), with the target's copy alongside, so a switch reads as a page turn.
+function offsetHeading(dx, animate, page = dx, target = page && neighbour(page < 0 ? 1 : -1)) {
+  const box = $('transcript'), motion = animate ? `transform .22s ${switchEase}, opacity .22s` : '', reduced = reducedMotion();
+  const copy = !reduced && page ? peeks.get(target) : undefined;
+  if (peek && peek !== copy) {
+    const old = peek; peek = undefined;
+    if (animate) { old.style.transition = motion; old.style.transform = `translateX(${old.side * box.offsetWidth}px)`; setTimeout(() => old.remove(), 220); }
+    else old.remove();
+  }
+  if (copy && !peek) {
+    peek = copy; peek.side = Math.sign(-page);
+    Object.assign(peek.style, { top: box.offsetTop + 'px', left: box.offsetLeft + 'px', width: box.offsetWidth + 'px', height: box.offsetHeight + 'px', transition: '', transform: `translateX(${page + peek.side * box.offsetWidth}px)` });
+    box.after(peek); peek.scrollTop = peek.scrollHeight;
+  }
+  for (const [node, x] of [[$('heading-strip'), dx], ...reduced ? [] : [[box, page]], ...peek ? [[peek, page + peek.side * box.offsetWidth]] : []]) {
+    node.style.transition = motion;
+    node.style.transform = x ? `translateX(${x}px)` : '';
   }
 }
 function switchTo(id, ids) {
@@ -2491,13 +2516,14 @@ function stepSession(direction, id = neighbour(direction)) {
   const ids = switchIds();
   if (headingSwitching || !id) { renderDots(); return offsetHeading(0, true); }
   headingSwitching = true; localStorage.setItem('pi-remote-title-swipe-learned', '1');
-  offsetHeading(-direction * $('heading-strip').offsetWidth, true); renderDots(ids.indexOf(id) - ids.indexOf(selected));
-  $('transcript').style.opacity = '0';
+  offsetHeading(-direction * $('heading-strip').offsetWidth, true, -direction * $('transcript').offsetWidth, id); renderDots(ids.indexOf(id) - ids.indexOf(selected));
+  const previewed = !!peek;
+  if (!previewed) $('transcript').style.opacity = '0';
   setTimeout(() => {
     headingSwitching = false; offsetHeading(0); $('transcript').style.opacity = '';
     switchTo(id, ids);
-    // The next conversation enters from the side the swipe pulls toward.
-    $('transcript').animate([{ transform: `translateX(${reducedMotion() ? 0 : direction * 40}%)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: switchEase });
+    // The copy already slid into place; otherwise the next conversation enters from the side the swipe pulls toward.
+    if (!previewed) $('transcript').animate([{ transform: `translateX(${reducedMotion() ? 0 : direction * 40}%)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: switchEase });
   }, 220);
 }
 // Double-tapping the title or the strip above the composer returns to the session the switching started from.
