@@ -1609,6 +1609,8 @@ function updateControls() {
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity(); debugActivity();
+  // Until a just-opened session's state arrives, its chips stay blanked rather than flashing placeholders, then fade in.
+  $('composer').classList.toggle('settling', !!selected && !state);
   const modelName = state?.modelName || state?.model?.slice(state.model.indexOf('/') + 1) || '';
   const pendingModel = !!selected && (!state || state.status === 'starting') && !state?.model;
   // Pi's display name minus decorations ("Anthropic: ", "Claude SDK ", " (experimental)"); saved sessions only have the id,
@@ -1785,6 +1787,11 @@ function renderStatusLine() {
     const turn = `${state.messages.findLast(message => message.role === 'assistant')?.id}:${state.status}`;
     if (usageTurns.get(selected) !== turn) { usageTurns.set(selected, turn); loadUsage(selected); }
   }
+  // A just-opened session keeps the line's space, blanked, until its state and first totals arrive, so the composer
+  // neither drops when the line collapses nor fills it in two steps.
+  const settling = !!selected && (!state || !totals && usageLoading.has(selected + ':context'));
+  line.classList.toggle('settling', settling);
+  if (settling) return;
   // A streaming reply has no usage until the provider reports it; keep the last known rate meanwhile.
   const parts = [], hit = state?.messages.findLast(message => message.role === 'assistant' && Number.isFinite(message.cacheHit))?.cacheHit;
   // A session's first reply only writes the cache; 0% then is expected, not a warning.

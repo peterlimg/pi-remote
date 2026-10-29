@@ -354,6 +354,38 @@ test('home-screen edge swipe drags the thread off the live list without a histor
   await expect(page.locator('#prompt')).toBeHidden();
 });
 
+test('switching to a session that has not loaded yet keeps the composer still', async ({ page }) => {
+  let client, held;
+  await page.routeWebSocket(/\/ws/, ws => {
+    client = ws;
+    const server = ws.connectToServer();
+    server.onMessage(raw => { if (held && JSON.parse(raw).type === 'snapshot') held.push(raw); else ws.send(raw); });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const footer = page.locator('#status-line'), composer = page.locator('#composer');
+  await expect(footer).toBeVisible();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  const before = { composer: await composer.boundingBox(), footer: await footer.boundingBox() };
+  held = [];
+  const strip = await page.locator('#session-swipe').boundingBox(), y = strip.y + strip.height / 2;
+  await page.mouse.move(strip.x + 4, y); await page.mouse.down();
+  await page.mouse.move(strip.x + strip.width + 200, y, { steps: 8 }); await page.mouse.up();
+  await expect.poll(() => held.length).toBe(1);
+  await expect(page.locator('#title')).toContainText('Beta');
+  // While the snapshot is in flight the line keeps its space, blanked, and the chips fade out instead of flipping to placeholders.
+  expect(await footer.boundingBox()).toEqual(before.footer);
+  expect(await composer.boundingBox()).toEqual(before.composer);
+  await expect(footer).toHaveClass(/settling/);
+  await expect(composer).toHaveClass(/settling/);
+  for (const raw of held.splice(0)) client.send(raw);
+  held = undefined;
+  await expect(footer).not.toHaveClass(/settling/);
+  await expect(composer).not.toHaveClass(/settling/);
+  await expect(footer).toBeVisible();
+  expect(await composer.boundingBox()).toEqual(before.composer);
+});
+
 test('keyboard footer spacing stays compact when iOS also resizes innerHeight', async ({ page }, testInfo) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();

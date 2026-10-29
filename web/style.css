@@ -448,6 +448,9 @@ pre.message-text { white-space: pre-wrap; }
 /* Pi's terminal footer stats, under the composer. */
 #status-line { display: flex; justify-content: center; gap: 8px; width: 100%; max-width: var(--content-width); min-height: 0; margin: 0 auto; padding: 0 16px max(6px, var(--safe-bottom)); overflow-x: auto; scrollbar-width: none; background: transparent; color: var(--muted); font: 11px/20px var(--mono); white-space: nowrap; border-radius: 0; flex-shrink: 0; }
 #status-line[hidden], #composer[hidden] + #status-line { display: none; }
+#status-line, .composer :is(#model, #reasoning-control, #usage-meter, #send) { transition: opacity .15s; }
+#status-line.settling, .composer.settling :is(#model, #reasoning-control, #usage-meter) { opacity: 0; transition: none; }
+.composer.settling #send:disabled { opacity: 1; }
 #status-line span + span::before { content: '·'; margin-right: 8px; color: var(--line); }
 .composer:has(+ #status-line:not([hidden])) { margin-bottom: 4px; }
 #usage-meter[data-level=error] { color: var(--error); }
