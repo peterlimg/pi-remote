@@ -101,19 +101,13 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   await expect(page.locator('#title')).toHaveText('Task 2');
   expect(await dot()).toBe('translateX(24px)');
 
-  // Holding the title opens the five sessions the dots stand for, under the title.
+  // Holding the title does nothing; only the dots open the nearby sessions.
   await page.mouse.move(box.x + box.width / 2, y); await page.mouse.down();
-  await expect(page.locator('#nearby-sessions')).toBeVisible();
-  await page.mouse.up();
-  // A few rows show at once and the rest scroll.
-  await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
-  expect(await page.locator('#nearby-sessions').evaluate(menu => menu.scrollHeight > menu.clientHeight && menu.clientHeight < 5.5 * 52)).toBe(true);
-  expect((await page.locator('#nearby-sessions').boundingBox()).y).toBeGreaterThan(box.y + box.height);
-  await page.keyboard.press('Escape');
+  await page.waitForTimeout(700);
   await expect(page.locator('#nearby-sessions')).toBeHidden();
-  await expect(page.locator('#session-swipe')).not.toHaveClass(/held/);
+  await page.mouse.up();
 
-  // Holding the dots enlarges them and opens the same list just above them.
+  // Holding the dots enlarges them and opens the list just above them.
   await page.mouse.move(strip.x + strip.width / 2, stripY); await page.mouse.down();
   await expect(page.locator('#session-swipe')).toHaveClass(/pressing/);
   await expect(page.locator('#nearby-sessions')).toBeVisible();
@@ -121,6 +115,9 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   await page.mouse.up();
   // Lifting the finger after the hold leaves the list open.
   await expect(page.locator('#nearby-sessions')).toBeVisible();
+  // A few rows show at once and the rest scroll.
+  await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
+  expect(await page.locator('#nearby-sessions').evaluate(menu => menu.scrollHeight > menu.clientHeight && menu.clientHeight < 5.5 * 52)).toBe(true);
   const pane = await page.locator('#nearby-sessions').boundingBox();
   expect(pane.y + pane.height).toBeLessThanOrEqual(strip.y + 1);
   expect(pane.y + pane.height).toBeGreaterThan(strip.y - 12);

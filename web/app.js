@@ -2543,7 +2543,7 @@ function nudgeHeading() {
     setTimeout(() => headingGesture || headingSwitching || offsetHeading(0, true), 280);
   }, 700);
 }
-function openNearby(nearDots = false) {
+function openNearby() {
   const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions');
   if (at < 0) return;
   menu.replaceChildren(...ids.map(id => {
@@ -2556,11 +2556,8 @@ function openNearby(nearDots = false) {
     button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));
-  // Open next to whatever was held: just above the dots, or under the title.
-  const anchor = $(nearDots ? 'session-swipe' : 'heading').getBoundingClientRect();
-  menu.dataset.anchor = nearDots ? 'dots' : 'title';
-  menu.style.top = nearDots ? '' : anchor.bottom + 8 + 'px';
-  menu.style.bottom = nearDots ? document.documentElement.clientHeight - anchor.top + 'px' : '';
+  // Open just above the held dots.
+  menu.style.bottom = document.documentElement.clientHeight - $('session-swipe').getBoundingClientRect().top + 'px';
   $('session-swipe').classList.add('held');
   menu.showPopover();
   // About four rows show at once, centred on the current session; a half row hints that the rest scroll.
@@ -2587,12 +2584,13 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   surface.addEventListener('pointerdown', event => {
     if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
     surface.setPointerCapture(event.pointerId);
-    // Held dots swell while the press builds, then pop as the nearby sessions open.
-    if (surface === $('session-swipe')) surface.classList.add('pressing');
-    headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: setTimeout(() => {
+    // Only the dots open the nearby sessions when held: they swell while the press builds, then pop as the list opens.
+    const dots = surface === $('session-swipe');
+    if (dots) surface.classList.add('pressing');
+    headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: dots && setTimeout(() => {
       if (!headingGesture) return;
-      $('session-swipe').classList.remove('pressing');
-      headingGesture.mode = 'held'; haptic(); openNearby(surface === $('session-swipe'));
+      surface.classList.remove('pressing');
+      headingGesture.mode = 'held'; haptic(); openNearby();
     }, 450) };
   });
   surface.addEventListener('pointermove', event => {
@@ -2626,7 +2624,6 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     else { offsetHeading(0, true); renderDots(); }
   });
 }
-$('heading').addEventListener('contextmenu', event => { if (selected) { event.preventDefault(); openNearby(); } });
 // Browser edge-swipes reveal an old history screenshot, so rows and scroll can jump when the swipe lands.
 // Drag the thread off the live list in both browser and home-screen mode instead.
 {

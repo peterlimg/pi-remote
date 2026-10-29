@@ -259,8 +259,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .session-dots b { position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .dragging .session-dots :is(.session-dots-track, b) { transition: none; }
 .nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); max-height: min(240px, 60dvh); margin: 0 auto; padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
-.nearby-sessions:popover-open { animation: nearby-in .2s cubic-bezier(.2, .8, .2, 1); transform-origin: top center; }
-.nearby-sessions[data-anchor=dots] { transform-origin: bottom center; }
+.nearby-sessions:popover-open { animation: nearby-in .2s cubic-bezier(.2, .8, .2, 1); transform-origin: bottom center; }
 @keyframes nearby-in { from { opacity: 0; transform: scale(.92); } }
 .nearby-sessions button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
 .nearby-sessions button[aria-current=true] { background: var(--selection); }
