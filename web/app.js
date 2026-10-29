@@ -1758,7 +1758,8 @@ function renderStatusLine() {
   }
   // A streaming reply has no usage until the provider reports it; keep the last known rate meanwhile.
   const parts = [], hit = state?.messages.findLast(message => message.role === 'assistant' && Number.isFinite(message.cacheHit))?.cacheHit;
-  if ((totals?.cacheRead > 0 || totals?.cacheWrite > 0) && Number.isFinite(hit)) {
+  // A session's first reply only writes the cache; 0% then is expected, not a warning.
+  if (totals?.cacheRead > 0 && Number.isFinite(hit)) {
     const cached = el('span', `CH${Math.round(hit)}%`);
     // A rebuilt cache (model switch, compaction, idle expiry) is the costly turn worth noticing.
     cached.dataset.level = hit < 50 ? 'warning' : 'normal';
