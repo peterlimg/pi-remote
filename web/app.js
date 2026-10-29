@@ -654,10 +654,15 @@ function positionRecentFilter() {
   menu.style.right = Math.max(8, innerWidth - anchor.right) + 'px';
   menu.style.top = Math.max(8, Math.min(anchor.bottom + 4, innerHeight - bounds.height - 8)) + 'px';
 }
+// WebKit rings every scripted focus, so only a keyboard opening (click detail 0) moves focus into the menu.
+let recentFilterByKeyboard = false;
+document.addEventListener('click', event => { if (event.target.closest?.('#recent-filter')) recentFilterByKeyboard = !event.detail; }, true);
 $('recent-filter-menu').addEventListener('toggle', event => {
   const open = event.newState === 'open';
   $('recent-filter')?.setAttribute('aria-expanded', String(open));
-  if (open) { positionRecentFilter(); $('recent-filter-menu').querySelector('input:not(:disabled)').focus({ preventScroll: true }); }
+  if (!open) return;
+  positionRecentFilter();
+  if (recentFilterByKeyboard) $('recent-filter-menu').querySelector('input:not(:disabled)').focus({ preventScroll: true });
 });
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || !$('recent-filter-menu').matches(':popover-open')) return;

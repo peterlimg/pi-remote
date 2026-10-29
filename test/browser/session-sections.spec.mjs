@@ -109,6 +109,9 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await expect(menu).toBeHidden();
     await expect(filter).toBeFocused();
     await filter.click();
+    // A tap leaves focus alone so iOS draws no ring on the checkbox.
+    await expect(menu).toBeVisible();
+    await expect(offlineChoice).not.toBeFocused();
     await recentGroup.getByRole('heading', { name: 'Recent', exact: true }).click();
     await expect(menu).toBeHidden();
     await expect(recentGroup.locator('.session strong')).toHaveText(['Older online task']);
