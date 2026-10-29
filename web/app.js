@@ -1756,7 +1756,8 @@ function renderStatusLine() {
     const turn = `${state.messages.findLast(message => message.role === 'assistant')?.id}:${state.status}`;
     if (usageTurns.get(selected) !== turn) { usageTurns.set(selected, turn); loadUsage(selected); }
   }
-  const parts = [], hit = state?.messages.findLast(message => message.role === 'assistant')?.cacheHit;
+  // A streaming reply has no usage until the provider reports it; keep the last known rate meanwhile.
+  const parts = [], hit = state?.messages.findLast(message => message.role === 'assistant' && Number.isFinite(message.cacheHit))?.cacheHit;
   if ((totals?.cacheRead > 0 || totals?.cacheWrite > 0) && Number.isFinite(hit)) {
     const cached = el('span', `CH${Math.round(hit)}%`);
     // A rebuilt cache (model switch, compaction, idle expiry) is the costly turn worth noticing.
