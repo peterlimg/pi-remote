@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const url = '/#token=browser-test-token-only-123456789012345';
 
-test('/model switches only the selected session without sending a prompt', async ({ page }) => {
+test('/model shows newest models first and switches only the selected session without sending a prompt', async ({ page }) => {
   const states = ['Alpha', 'Beta'].map(id => ({ id, title: id, cwd: '/project', status: 'idle', model: 'test/first', messages: [] }));
   const commands = [];
   let fail = false;
@@ -19,7 +19,18 @@ test('/model switches only the selected session without sending a prompt', async
       } else if (packet.op === 'commands') reply([{ name: 'model', description: 'Switch model for this session', source: 'remote' }]);
       else if (packet.op === 'models') reply({ current: 'test/first', models: [
         { provider: 'test', id: 'first', name: 'Claude Sonnet 4.6' }, { provider: 'test', id: 'org/second', name: 'Claude Opus 4.6' },
-        { provider: 'openai', id: 'gpt-5.4', name: 'GPT-5.4' }
+        { provider: 'openai', id: 'gpt-5.4', name: 'GPT-5.4' },
+        { provider: 'test', id: 'fable-5', name: 'Claude Fable 5' },
+        { provider: 'test', id: 'local', name: 'Local model' },
+        { provider: 'test', id: 'claude-4-5' },
+        { provider: 'test', id: 'haiku-4-6', name: 'Claude Haiku 4.6' },
+        { provider: 'test', id: 'fable-5-1', name: 'Claude Fable 5.1' },
+        { provider: 'test', id: 'sonnet-4-10', name: 'Claude Sonnet 4.10' },
+        { provider: 'anthropic', id: 'haiku-4-5', name: 'Claude Haiku 4.5' },
+        { provider: 'openai', id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra' },
+        { provider: 'openai', id: 'gpt-6-astra', name: 'GPT-6 Astra' },
+        { provider: 'openai', id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
+        { provider: 'openai', id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' }
       ] });
       else if (packet.op === 'command') {
         commands.push(packet);
@@ -39,6 +50,23 @@ test('/model switches only the selected session without sending a prompt', async
   await page.getByRole('option', { name: /\/model/ }).tap();
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(picker.getByRole('button', { pressed: true })).toContainText('Claude Sonnet');
+  await expect(picker.locator('.model-group h3')).toHaveText(['test', 'anthropic', 'openai']);
+  const currentGroup = picker.getByRole('region', { name: 'test', exact: true });
+  const openaiGroup = picker.getByRole('region', { name: 'openai', exact: true });
+  const firstFour = ['Claude Sonnet 4.6', 'Claude Fable 5.1', 'Claude Fable 5', 'Claude Sonnet 4.10'];
+  await expect(currentGroup.locator('.picker-option-label')).toHaveText(firstFour);
+  await expect(openaiGroup.locator('.picker-option-label')).toHaveText(['GPT-6.1 Sol', 'GPT-6.1 Terra', 'GPT-6 Astra', 'GPT-5.6 Luna']);
+  await currentGroup.getByRole('button', { name: 'Show 4 more', exact: true }).press('Enter');
+  await expect(currentGroup.locator('.picker-option-label')).toHaveText([
+    ...firstFour, 'Claude Haiku 4.6', 'Claude Opus 4.6', 'claude-4-5', 'Local model'
+  ]);
+  await expect(currentGroup.getByRole('button', { name: 'Claude Haiku 4.6', exact: true })).toBeFocused();
+  await expect(openaiGroup.locator('.picker-option-label')).toHaveCount(4);
+  await currentGroup.getByRole('button', { name: 'Show fewer', exact: true }).press('Enter');
+  await expect(currentGroup.locator('.picker-option-label')).toHaveText(firstFour);
+  await expect(currentGroup.getByRole('button', { name: 'Show 4 more', exact: true })).toBeFocused();
+  await page.screenshot({ path: test.info().outputPath('models-phone.png') });
+  await test.info().attach('models-phone.aria.txt', { body: await picker.ariaSnapshot(), contentType: 'text/plain' });
   const dialog = page.getByRole('dialog', { name: 'Model settings' });
   await expect(dialog).toBeVisible();
   expect(await dialog.evaluate(node => node.matches(':modal'))).toBe(true);
@@ -47,8 +75,10 @@ test('/model switches only the selected session without sending a prompt', async
   expect(menuBounds.width).toBe(page.viewportSize().width);
   expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(page.viewportSize().height);
   await page.getByRole('searchbox', { name: 'Search models' }).fill('openai');
-  await expect(picker.locator('#picker-options .picker-option')).toHaveCount(1);
-  await expect(picker.locator('#picker-options .picker-option')).toContainText('GPT-5.4');
+  await expect(picker.locator('.picker-option-label')).toHaveText([
+    'GPT-6.1 Sol', 'GPT-6.1 Terra', 'GPT-6 Astra', 'GPT-5.6 Luna', 'GPT-5.4'
+  ]);
+  await expect(picker.locator('.model-more')).toHaveCount(0);
   await page.getByRole('searchbox', { name: 'Search models' }).fill('not-a-model');
   await expect(page.locator('#picker-help')).toContainText('No matching models');
   await page.getByRole('searchbox', { name: 'Search models' }).fill('opus');
@@ -68,6 +98,7 @@ test('/model switches only the selected session without sending a prompt', async
   await page.getByRole('searchbox', { name: 'Search models' }).press('Enter');
   expect(commands).toHaveLength(2);
   await expect(prompt).toHaveValue('Keep this draft');
+  await picker.getByRole('button', { name: 'Show 4 more', exact: true }).click();
   await picker.getByRole('button', { name: /Claude Opus/ }).click();
   await expect(page.locator('#picker-help')).toContainText('authentication');
   await expect(picker).toBeVisible();
@@ -79,6 +110,8 @@ test('/model switches only the selected session without sending a prompt', async
   await expect(prompt).toHaveValue('Keep this draft');
   await page.getByRole('button', { name: 'Switch model: Claude Sonnet 4.6' }).click();
   await expect(picker).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('models-desktop.png') });
+  await test.info().attach('models-desktop.aria.txt', { body: await picker.ariaSnapshot(), contentType: 'text/plain' });
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
   await expect(page.locator('#model-name')).toHaveText('first');
@@ -137,6 +170,8 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
     { provider: 'test', id: 'current', name: 'Current model' },
     ...Array.from({ length: 40 }, (_, i) => ({ provider: 'test', id: `model-${i}`, name: `Model ${i}` }))
   ] } }));
+  await expect(page.locator('#picker-options .picker-option')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Show 37 more', exact: true }).click();
   await expect(page.locator('#picker-options .picker-option')).toHaveCount(41);
   await page.setViewportSize({ width: 390, height: 350 });
   await expect.poll(async () => {
@@ -148,7 +183,8 @@ test('model discovery handles loading, cancellation, stale results, empty lists 
   await page.getByRole('button', { name: /Current model/ }).click();
   await expect(page.locator('#settings-picker')).toBeHidden();
   await open(5);
-  await expect(page.locator('#picker-options .picker-option')).toHaveCount(41);
+  await expect(page.locator('#picker-options .picker-option')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: 'Show 37 more', exact: true })).toBeVisible();
   await expect(page.locator('#picker-help')).toHaveText('');
 });
 

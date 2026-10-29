@@ -482,7 +482,8 @@ pre.message-text { white-space: pre-wrap; }
 #picker-options { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 .model-group h3 { color: var(--muted); font-size: 12px; font-weight: 500; margin: 10px 12px 4px; }
 .picker-option { display: flex; align-items: center; gap: 12px; }
-.picker-option:focus-visible { outline-offset: -2px; }
+.picker-option:focus-visible, .model-more:focus-visible { outline-offset: -2px; }
+.model-more { color: var(--accent); font-size: 13px; }
 .picker-option[aria-pressed=true] { background: var(--selection); }
 .picker-option[aria-pressed=true] span { color: var(--text); }
 .picker-option-label { min-width: 0; flex: 1; }

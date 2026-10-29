@@ -1864,13 +1864,20 @@ function openUsage() {
 $('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker() : openUsage());
 $('status-line').addEventListener('click', () => $('usage-meter').click());
 setInterval(() => { if (!document.hidden && selected) loadUsage(selected); }, 15000);
+function modelVersion(model) {
+  // shortcut: infer recency from versions until discovery supplies release dates.
+  const version = /\d+(?:[.-]\d+)*/;
+  return (model.name?.match(version) || model.id.match(version))?.[0].replaceAll('-', '.') || '';
+}
 function renderModels() {
   const picker = settingsPicker;
   if (!picker?.models) return;
   const query = $('model-search').value.trim().toLowerCase();
   const matches = picker.models.filter(model => `${model.name || ''} ${model.provider} ${model.id}`.toLowerCase().includes(query))
     .sort((a, b) => Number(`${b.provider}/${b.id}` === picker.current) - Number(`${a.provider}/${a.id}` === picker.current)
-      || a.provider.localeCompare(b.provider) || (a.name || a.id).localeCompare(b.name || b.id));
+      || a.provider.localeCompare(b.provider)
+      || modelVersion(b).localeCompare(modelVersion(a), undefined, { numeric: true })
+      || (a.name || a.id).localeCompare(b.name || b.id));
   const groups = new Map();
   for (const model of matches) {
     if (!groups.has(model.provider)) groups.set(model.provider, []);
@@ -1879,8 +1886,10 @@ function renderModels() {
   const fragment = document.createDocumentFragment();
   for (const [provider, models] of groups) {
     const group = el('section', undefined, 'model-group');
+    group.id = `model-group-${provider}`;
     group.setAttribute('aria-label', provider); group.append(el('h3', provider));
-    for (const model of models) {
+    const expanded = picker.expandedProviders?.has(provider) === true;
+    for (const model of query || expanded ? models : models.slice(0, 4)) {
       const key = `${model.provider}/${model.id}`, current = key === picker.current;
       const button = el('button', undefined, 'command-option picker-option'); button.type = 'button';
       button.setAttribute('aria-pressed', String(current));
@@ -1889,6 +1898,18 @@ function renderModels() {
       button.disabled = !!picker.busy;
       button.addEventListener('click', event => chooseModel(picker, key, event.detail === 0));
       group.append(button);
+    }
+    if (!query && models.length > 4) {
+      const more = el('button', expanded ? 'Show fewer' : `Show ${models.length - 4} more`, 'command-option model-more');
+      more.type = 'button'; more.disabled = !!picker.busy;
+      more.setAttribute('aria-expanded', String(expanded)); more.setAttribute('aria-controls', group.id);
+      more.addEventListener('click', event => {
+        picker.expandedProviders ||= new Set();
+        if (expanded) picker.expandedProviders.delete(provider); else picker.expandedProviders.add(provider);
+        renderModels();
+        if (event.detail === 0) (expanded ? $(group.id).querySelector('.model-more') : $(group.id).querySelectorAll('.picker-option')[4]).focus();
+      });
+      group.append(more);
     }
     fragment.append(group);
   }
