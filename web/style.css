@@ -400,7 +400,7 @@ pre.message-text { white-space: pre-wrap; }
   .composer textarea { max-height: 44px; }
 }
 .composer-actions button { font-size: 12px; }
-#usage-meter { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--accent); background: transparent; }
+#usage-meter { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; color: var(--accent); background-color: transparent; }
 .composer-actions #usage-meter svg { width: 24px; height: 24px; }
 .usage-track { stroke: var(--line); }
 #usage-meter[data-unknown] .usage-track { stroke: var(--muted); stroke-dasharray: 2 3; }
@@ -412,7 +412,7 @@ pre.message-text { white-space: pre-wrap; }
 #status-line span + span::before { content: '·'; margin-right: 8px; color: var(--line); }
 .composer:has(+ #status-line:not([hidden])) { margin-bottom: 4px; }
 #usage-meter[data-level=error] { color: var(--error); }
-#usage-meter[aria-expanded=true] { background: var(--selection); }
+#usage-meter[aria-expanded=true] { background-color: var(--panel); }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
