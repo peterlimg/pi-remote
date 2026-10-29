@@ -664,7 +664,6 @@ $('recent-filter-menu').addEventListener('change', () => {
   const checked = [...$('recent-filter-menu').querySelectorAll('input:checked')];
   haptic(); recentAvailability = checked.length === 1 ? checked[0].value : 'all';
   listLimit = 20; moreObserver.disconnect();
-  $('recent-filter')?.closest('.session-group').scrollIntoView({ block: 'start' });
   positionRecentFilter(); loadList();
 });
 window.addEventListener('resize', positionRecentFilter);

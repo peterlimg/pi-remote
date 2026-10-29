@@ -58,6 +58,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
       expect((await peer.request('list', { limit: 20, section: 'overview' })).value.matched).toBe(46);
     } finally { peer.ws.terminate(); }
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto(url + '/#token=' + config.clientToken);
     const nowGroup = page.getByRole('region', { name: 'Now', exact: true });
     const pinsGroup = page.getByRole('region', { name: 'Pinned', exact: true });
@@ -71,12 +72,24 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await filter.press('Enter');
     await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).toBeChecked();
     await expect(menu.getByRole('checkbox', { name: 'Offline', exact: true })).not.toBeChecked();
-    // Clearing the filter shows all; keyboard toggling and closing keep focus usable.
+    // Clearing the filter shows all without moving its heading or the open menu.
+    const filterTop = (await filter.boundingBox()).y;
+    const menuTop = (await menu.boundingBox()).y;
     await menu.getByRole('checkbox', { name: 'Online', exact: true }).press('Space');
     await expect(recentGroup.locator('.badge')).toHaveText('46');
+    expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
+    expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
     await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).not.toBeChecked();
     await menu.getByRole('checkbox', { name: 'Online', exact: true }).press('Space');
     await expect(recentGroup.locator('.badge')).toHaveText('1');
+    expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
+    expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
+    for (const total of ['46', '1']) {
+      await menu.getByRole('checkbox', { name: 'Offline', exact: true }).tap();
+      await expect(recentGroup.locator('.badge')).toHaveText(total);
+      expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
+      expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
+    }
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
     await expect(filter).toBeFocused();
@@ -149,6 +162,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
       expect(trigger.width).toBe(44); expect(trigger.height).toBe(44); expect(glyph.width).toBe(18);
       await filter.click();
       await expect(menu).toBeVisible();
+      await expect(menu.locator('input:checked')).toHaveCSS('accent-color', 'rgb(10, 132, 255)');
       const popup = await menu.boundingBox();
       expect(popup.x).toBeGreaterThanOrEqual(8); expect(popup.y).toBeGreaterThanOrEqual(8);
       expect(popup.x + popup.width).toBeLessThanOrEqual(page.viewportSize().width - 8);
@@ -163,6 +177,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-phone.png') });
     await page.setViewportSize({ width: 320, height: 720 });
+    await page.emulateMedia({ colorScheme: 'light' });
     await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-narrow.png') });
     await page.setViewportSize({ width: 1280, height: 900 });
