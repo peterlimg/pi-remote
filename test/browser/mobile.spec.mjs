@@ -354,6 +354,44 @@ test('home-screen edge swipe drags the thread off the live list without a histor
   await expect(page.locator('#prompt')).toBeHidden();
 });
 
+test('keyboard footer spacing stays compact when iOS also resizes innerHeight', async ({ page }, testInfo) => {
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  await page.evaluate(() => {
+    const sheet = document.styleSheets[0];
+    sheet.insertRule(':root { --safe-bottom: 34px; }', sheet.cssRules.length);
+  });
+  const footer = page.locator('#status-line'), prompt = page.locator('#prompt');
+  await expect(footer).toBeVisible();
+  await expect(footer).toHaveCSS('padding-bottom', '34px');
+  const full = await page.evaluate(() => innerHeight);
+  for (const resizeInnerHeight of [false, true]) {
+    await prompt.tap();
+    // Focus alone must keep the home-indicator inset until the viewport shrinks.
+    await expect(footer).toHaveCSS('padding-bottom', '34px');
+    await page.evaluate(({ full, resizeInnerHeight }) => {
+      const height = full - 300;
+      Object.defineProperty(window, 'innerHeight', { value: resizeInnerHeight ? height : full, configurable: true });
+      Object.defineProperty(visualViewport, 'height', { value: height, configurable: true });
+      visualViewport.dispatchEvent(new Event('resize'));
+    }, { full, resizeInnerHeight });
+    await page.screenshot({ path: testInfo.outputPath(`keyboard-footer-${resizeInnerHeight ? 'inner' : 'visual'}-height.png`) });
+    await expect(footer).toHaveCSS('padding-bottom', '6px');
+    const box = await footer.boundingBox();
+    expect(box.height).toBe(26);
+    expect(box.y + box.height).toBe(full - 300);
+    await expect(page.locator('#app')).toHaveCSS('height', `${full - 300}px`);
+    await prompt.blur();
+    await expect(footer).toHaveCSS('padding-bottom', '34px');
+    await page.evaluate(full => {
+      Object.defineProperty(window, 'innerHeight', { value: full, configurable: true });
+      Object.defineProperty(visualViewport, 'height', { value: full, configurable: true });
+      visualViewport.dispatchEvent(new Event('resize'));
+    }, full);
+  }
+});
+
 test('an open keyboard drops the home-indicator inset so bottom controls sit on it', async ({ page }) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('#sessions .session')).toHaveCount(2);
