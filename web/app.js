@@ -662,7 +662,7 @@ document.addEventListener('keydown', event => {
 });
 $('recent-filter-menu').addEventListener('change', () => {
   const checked = [...$('recent-filter-menu').querySelectorAll('input:checked')];
-  haptic(); recentAvailability = checked.length === 1 ? checked[0].value : 'all';
+  haptic(); recentAvailability = checked.length === 1 ? checked[0].value : checked.length ? 'all' : 'none';
   listLimit = 20; moreObserver.disconnect();
   positionRecentFilter(); loadList();
 });
@@ -704,7 +704,7 @@ function renderList() {
       const items = sessions.filter(item => sessionGroup(item) === group);
       if (group === 'now') items.sort(activityOrder);
       if (group === 'recent' && supportsRecentAvailability && !items.length) {
-        section.append(el('p', recentAvailability === 'online' ? 'No online sessions. Include Offline in the filter to see saved sessions.' : recentAvailability === 'offline' ? 'No offline sessions.' : 'No recent sessions.', 'hint recent-empty'));
+        section.append(el('p', recentAvailability === 'online' ? 'No online sessions. Include Offline in the filter to see saved sessions.' : recentAvailability === 'offline' ? 'No offline sessions.' : recentAvailability === 'none' ? 'No statuses selected. Choose Online or Offline in the filter.' : 'No recent sessions.', 'hint recent-empty'));
       }
       section.append(...items.map(sessionRow)); fragment.append(section);
     }
@@ -1009,9 +1009,9 @@ function clearThreadImages(keep = new Set()) {
 }
 const imageViewer = $('image-viewer'), imageStage = $('image-stage'), fullImage = imageViewer.querySelector('img');
 const imagePointers = new Map();
-let imageZoom = 1, imageX = 0, imageY = 0, imagePull;
+let imageZoom = 1, imageX = 0, imageY = 0, imagePull, imageGallery;
 function resetImagePull() {
-  imagePull = undefined; imageViewer.style.transform = '';
+  imagePull = undefined; imageViewer.style.transform = ''; imageStage.style.transform = '';
 }
 function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
   imageZoom = Math.max(1, Math.min(8, zoom));
@@ -1028,10 +1028,19 @@ function zoomImage(zoom, x = 0, y = 0) {
   const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
   positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
 }
+function showImage(href) {
+  resetImagePull(); imagePointers.clear(); fullImage.src = href; positionImage(1, 0, 0);
+}
 function openImage(event) {
   event.preventDefault();
-  resetImagePull(); imagePointers.clear(); fullImage.src = event.currentTarget.href;
-  imageViewer.showModal(); positionImage(1, 0, 0); imageViewer.focus();
+  imageGallery = event.currentTarget.closest('#transcript, #attachments');
+  imageViewer.showModal(); showImage(event.currentTarget.href); imageViewer.focus();
+}
+function stepImage(step) {
+  // Query on each step so images that loaded after opening are included.
+  const links = [...(imageGallery?.querySelectorAll('[data-image-key] > a, #attachments a') ?? [])];
+  const index = links.findIndex(link => link.href === fullImage.src);
+  if (index >= 0 && links[index + step]) showImage(links[index + step].href);
 }
 function showThreadImage(image, blob) {
   image.url = URL.createObjectURL(blob);
@@ -2000,7 +2009,7 @@ imageStage.addEventListener('pointerdown', event => {
     const width = fullImage.naturalWidth * fit * imageZoom;
     const top = imageY + (imageStage.clientHeight - fullImage.naturalHeight * fit * imageZoom) / 2;
     // A tall image must pan back to its top before a new pull can dismiss it.
-    if (width <= imageStage.clientWidth + 1 && top >= -1) imagePull = { x: event.clientX, y: event.clientY, distance: 0 };
+    if (width <= imageStage.clientWidth + 1) imagePull = { x: event.clientX, y: event.clientY, distance: 0, canDismiss: top >= -1 };
   }
   // Touch and pen already capture implicitly; mouse drags need explicit capture.
   if (event.pointerType === 'mouse') imageStage.setPointerCapture(event.pointerId);
@@ -2011,9 +2020,15 @@ imageStage.addEventListener('pointermove', event => {
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (imagePull) {
     const dx = event.clientX - imagePull.x, dy = event.clientY - imagePull.y;
-    if (!imagePull.distance) {
+    if (!imagePull.axis) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
-      if (dy <= 0 || Math.abs(dx) > dy) resetImagePull();
+      imagePull.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : imagePull.canDismiss && dy > 0 ? 'y' : undefined;
+      if (!imagePull.axis) resetImagePull();
+    }
+    if (imagePull?.axis === 'x') {
+      imagePull.distance = dx;
+      imageStage.style.transform = `translateX(${dx}px)`;
+      return;
     }
     if (imagePull) {
       imagePull.distance = Math.max(0, dy);
@@ -2029,9 +2044,10 @@ imageStage.addEventListener('pointermove', event => {
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => {
   if (!imagePointers.has(event.pointerId)) return;
-  const dismiss = type === 'pointerup' && imagePull?.distance >= 80;
+  const pull = type === 'pointerup' ? imagePull : undefined;
   imagePointers.delete(event.pointerId); resetImagePull();
-  if (dismiss) imageViewer.close();
+  if (pull?.axis === 'y' && pull.distance >= 80) imageViewer.close();
+  else if (pull?.axis === 'x' && Math.abs(pull.distance) >= 60) stepImage(pull.distance < 0 ? 1 : -1);
 });
 imageStage.addEventListener('dblclick', event => {
   const box = imageStage.getBoundingClientRect();

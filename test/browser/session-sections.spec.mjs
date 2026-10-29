@@ -56,6 +56,9 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     try {
       for (const availability of [null, {}, 'busy']) expect((await peer.request('list', { limit: 20, section: 'overview', availability })).ok).toBe(false);
       expect((await peer.request('list', { limit: 20, section: 'overview' })).value.matched).toBe(46);
+      const empty = (await peer.request('list', { limit: 20, section: 'overview', availability: 'none' })).value;
+      expect(empty).toMatchObject({ matched: 0, loaded: 0, groups: { now: 3, pinned: 31, recent: 0 } });
+      expect(empty.changes).toHaveLength(6);
     } finally { peer.ws.terminate(); }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -72,11 +75,16 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await filter.press('Enter');
     await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).toBeChecked();
     await expect(menu.getByRole('checkbox', { name: 'Offline', exact: true })).not.toBeChecked();
-    // Clearing the filter shows all without moving its heading or the open menu.
+    // Each checkbox includes its status; clearing both shows no Recent rows.
     const filterTop = (await filter.boundingBox()).y;
     const menuTop = (await menu.boundingBox()).y;
     await menu.getByRole('checkbox', { name: 'Online', exact: true }).press('Space');
-    await expect(recentGroup.locator('.badge')).toHaveText('46');
+    await expect(recentGroup.locator('.badge')).toHaveText('0');
+    await expect(recentGroup.locator('.session')).toHaveCount(0);
+    await expect(recentGroup.locator('.recent-empty')).toHaveText('No statuses selected. Choose Online or Offline in the filter.');
+    await expect(nowGroup.locator('.session strong')).toHaveText(titles);
+    await expect(pinsGroup.locator('.session strong')).toHaveText(pinnedTitles);
+    await page.screenshot({ path: testInfo.outputPath('recent-no-status-phone.png') });
     expect((await filter.boundingBox()).y).toBeCloseTo(filterTop, 0);
     expect((await menu.boundingBox()).y).toBeCloseTo(menuTop, 0);
     await expect(menu.getByRole('checkbox', { name: 'Online', exact: true })).not.toBeChecked();
@@ -117,6 +125,11 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await recentGroup.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(recentGroup.locator('.session')).toHaveCount(46);
     await expect(recentGroup.locator('.session').last()).toContainText('Older online task');
+    // Clearing a fully loaded page must not leave rows behind or page them back in.
+    await filterRecentSessions(page, 'none');
+    await expect(recentGroup.locator('.session')).toHaveCount(0);
+    await expect(recentGroup.locator('.badge')).toHaveText('0');
+    await expect(page.locator('#sessions .session')).toHaveCount(6);
     await filterRecentSessions(page, 'offline');
     await expect(recentGroup.locator('.badge')).toHaveText('45');
     await expect(recentGroup.locator('.session')).toHaveCount(20);

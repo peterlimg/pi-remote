@@ -29,7 +29,7 @@ export function sessionWindow(service) {
     request({ limit, query = '', section, availability }) {
       if (!Number.isSafeInteger(limit) || limit < 1 || typeof query !== 'string' || query.length > 500 ||
         section !== undefined && !['overview', 'now', 'pinned'].includes(section) ||
-        availability !== undefined && !['online', 'offline', 'all'].includes(availability)) throw new Error('Invalid session page');
+        availability !== undefined && !['online', 'offline', 'all', 'none'].includes(availability)) throw new Error('Invalid session page');
       const reset = view?.query !== query || view?.section !== section || view?.availability !== availability;
       if (reset) view = { query, section, availability, sent: new Map() };
       view.limit = limit;
