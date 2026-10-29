@@ -3,7 +3,12 @@ import { SessionService } from '../../src/service.mjs';
 import { BridgeSession } from '../../src/live-session.mjs';
 import { sessionWindow } from '../../src/client-channel.mjs';
 
-test('swiping or holding the title switches to neighbouring sessions', async ({ page }, testInfo) => {
+for (const iosSwitch of [false, true]) test(`swiping or holding the title switches to neighbouring sessions${iosSwitch ? ' through the iOS haptic switch' : ''}`, async ({ page }, testInfo) => {
+  // iOS has no navigator.vibrate but supports <input switch>, so the dots get an invisible native switch on top.
+  if (iosSwitch) await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'vibrate', { value: undefined });
+    Object.defineProperty(HTMLInputElement.prototype, 'switch', { value: false, writable: true });
+  });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const states = Array.from({ length: 6 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/project',
@@ -37,6 +42,7 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   // Five dots sit in the strip above the composer; the dot beyond the window's end shrinks to hint at more.
   expect((await page.locator('#heading').boundingBox()).height).toBe(44);
   await expect(page.locator('#session-swipe')).toBeVisible();
+  await expect(page.locator('#session-swipe .session-swipe-haptic')).toHaveCount(iosSwitch ? 1 : 0);
   expect(await page.locator('#session-dots').evaluate(node => node.offsetWidth)).toBe(54);
   await expect(page.locator('#session-dots i.edge')).toHaveCount(1);
   await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('title-dots.png') });
@@ -68,6 +74,8 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect(page.locator('#transcript')).toContainText('Reply for task 2');
   // The strip above the composer switches too, and a double tap returns to where switching started.
   const strip = await page.locator('#session-swipe').boundingBox(), stripY = strip.y + strip.height / 2;
+  // On iOS the finger lands on the native switch itself; its events still drive the strip.
+  if (iosSwitch) expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y).className, [strip.x + strip.width / 2, stripY])).toBe('session-swipe-haptic');
   // The go-to-bottom button rises above the strip instead of covering its handle.
   expect(await page.locator('#scroll-bottom').evaluate(button => {
     button.hidden = false; const bottom = button.getBoundingClientRect().bottom; button.hidden = true;
@@ -111,7 +119,7 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   expect(pane.y + pane.height).toBeLessThanOrEqual(strip.y + 1);
   expect(pane.y + pane.height).toBeGreaterThan(strip.y - 12);
   await expect(page.locator('#nearby-sessions [aria-current=true]')).toContainText('Task 2');
-  await page.screenshot({ path: testInfo.outputPath('nearby-sessions.png') });
+  await page.screenshot({ path: testInfo.outputPath(`nearby-sessions${iosSwitch ? '-ios' : ''}.png`) });
   await page.locator('#nearby-sessions button', { hasText: 'Task 1' }).tap();
   await expect(page.locator('#nearby-sessions')).toBeHidden();
   await expect(page.locator('#title')).toHaveText('Task 1');

@@ -2542,6 +2542,16 @@ function openNearby(nearDots = false) {
   menu.scrollTop = current.offsetTop - (menu.clientHeight - current.offsetHeight) / 2;
 }
 $('nearby-sessions').addEventListener('toggle', event => { if (event.newState === 'closed') $('session-swipe').classList.remove('held'); });
+// iOS 26.5+ only ticks for a finger on a real switch, so an invisible one covers the dots: lifting after a hold,
+// or a tap, toggles it natively. Its pointer events still bubble to the strip's gesture handlers.
+// shortcut: whether iOS counts the lift after a 450 ms hold as a tap is unverified; check on a device.
+{
+  const input = document.createElement('input');
+  if (!navigator.vibrate && matchMedia('(pointer: coarse)').matches && 'switch' in input) {
+    input.type = 'checkbox'; input.setAttribute('switch', ''); input.tabIndex = -1; input.className = 'session-swipe-haptic';
+    $('session-swipe').append(input);
+  }
+}
 // A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
 document.addEventListener('pointerdown', event => {
   if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
