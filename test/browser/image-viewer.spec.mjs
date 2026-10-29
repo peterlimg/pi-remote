@@ -19,15 +19,17 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await expect(image).toBeVisible();
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
   const stage = viewer.locator('.image-stage');
-  const zoom = viewer.getByRole('button', { name: 'Reset image zoom' });
-  await zoom.tap();
+  // Phones zoom by gesture, so the hidden reset button only reports the zoom level.
+  const zoom = viewer.locator('#image-zoom-reset');
+  await expect(zoom).toBeHidden();
+  await expect(viewer.getByRole('button', { name: 'Zoom in', exact: true })).toBeHidden();
+  await page.keyboard.press('0');
   await expect(zoom).toHaveText('100%');
   const initial = await image.boundingBox();
-  await expect(viewer.getByRole('button', { name: 'Zoom out', exact: true })).toBeDisabled();
-  await viewer.getByRole('button', { name: 'Zoom in', exact: true }).tap();
+  await page.keyboard.press('+');
   await expect(zoom).toHaveText('200%');
   expect((await image.boundingBox()).width).toBeCloseTo(initial.width * 2);
-  await zoom.tap();
+  await page.keyboard.press('0');
 
   const bounds = await stage.boundingBox();
   const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
@@ -105,7 +107,7 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await touch('touchEnd', []);
   await expect(viewer).toBeVisible();
   await expect(zoom).toHaveText('200%');
-  await zoom.tap();
+  await page.keyboard.press('0');
   await stage.tap();
   await expect(viewer).toBeVisible();
   await stage.dblclick();
@@ -114,7 +116,7 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await expect(zoom).toHaveText('100%');
   await page.screenshot({ path: info.outputPath('fit-mobile.png') });
 
-  await viewer.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.keyboard.press('+');
   await page.keyboard.press('-');
   await expect(zoom).toHaveText('100%');
   await page.keyboard.press('+');
@@ -123,7 +125,6 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await expect(zoom).toHaveText('100%');
   for (let i = 0; i < 4; i++) await page.keyboard.press('+');
   await expect(zoom).toHaveText('800%');
-  await expect(viewer.getByRole('button', { name: 'Zoom in', exact: true })).toBeDisabled();
   await viewer.getByRole('button', { name: 'Close image' }).tap();
   await expect(viewer).toBeHidden();
   await page.getByRole('link', { name: 'Open portrait.png' }).tap();
@@ -147,7 +148,7 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await expect(viewer).toBeHidden();
   await page.getByRole('link', { name: 'Open portrait.png' }).tap();
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
-  await zoom.tap();
+  await page.keyboard.press('0');
   await expect(zoom).toHaveText('100%');
   await cdp?.detach();
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -178,7 +179,7 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   const open = page.getByRole('link', { name: 'Open screenshot.png' });
   await open.tap();
   const viewer = page.getByRole('dialog', { name: 'Image', exact: true });
-  const image = viewer.getByRole('img'), zoom = viewer.getByRole('button', { name: 'Reset image zoom' });
+  const image = viewer.getByRole('img'), zoom = viewer.locator('#image-zoom-reset');
   await expect(image).toHaveCSS('object-fit', 'contain');
   await expect(viewer.locator('#image-position')).toBeHidden();
   const frame = await viewer.locator('.image-stage').boundingBox();
@@ -195,9 +196,9 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   expect(initial.x + initial.width).toBeCloseTo(frame.x + frame.width, 1);
   expect(initial.y).toBeCloseTo(frame.y + Math.max(0, (frame.height - initial.height) / 2), 1);
   await page.screenshot({ path: info.outputPath('fit-width-mobile.png') });
-  await viewer.getByRole('button', { name: 'Zoom in', exact: true }).tap();
+  await page.keyboard.press('+');
   await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(frame.width * 2, 1);
-  await zoom.tap();
+  await page.keyboard.press('0');
   await expect(zoom).toHaveText('100%');
   const fitted = await imageBounds();
   expect(fitted.width).toBeLessThanOrEqual(frame.width + 1);
