@@ -43,7 +43,20 @@ function render(center = index) {
   pages.innerHTML = around.map(item => `<section class="page">${page(item)}</section>`).join('');
   pill.setAttribute('aria-label', `${sessions[center].title}, ${center + 1} of ${sessions.length}. Swipe to switch sessions, hold for nearby sessions.`);
   $('position').textContent = `${center + 1} of ${sessions.length}`;
+  // Like the iOS page control: at most 7 dots, with smaller end dots when more sessions lie beyond.
+  const size = Math.min(sessions.length, 7), start = Math.min(Math.max(center - 3, 0), sessions.length - size);
+  $('dots').innerHTML = Array.from({ length: size }, (_, k) => start + k).map(i =>
+    `<i class="${i === center ? 'current' : ''}${(i === start && i > 0) || (i === start + size - 1 && i < sessions.length - 1) ? ' edge' : ''}"></i>`).join('');
   offset(0);
+}
+// The real app would nudge only until the first swipe; the prototype replays it on every load.
+function nudge() {
+  const direction = sessions[index + 1] ? 1 : -1;
+  setTimeout(() => {
+    if (gesture || busy) return;
+    offset(-direction * 20, true);
+    setTimeout(() => gesture || busy || offset(0, true), 280);
+  }, 700);
 }
 const pageMode = () => variant.swipe === 'page';
 const travel = () => pageMode() ? pages.parentElement.clientWidth : strip.parentElement.clientWidth;
@@ -164,7 +177,7 @@ function setVariant(key) {
   $('variant-description').textContent = variant.description;
   $('hint').textContent = variant.swipe === 'page' ? 'Swipe the title to flip chats' : 'Swipe the title to switch';
   const url = new URL(location.href); url.searchParams.set('variant', variant.key); history.replaceState(null, '', url);
-  closeNearby(); render();
+  closeNearby(); render(); nudge();
 }
 function cycle(direction) { setVariant(variants[(variants.indexOf(variant) + direction + variants.length) % variants.length].key); }
 $('previous-variant').addEventListener('click', () => cycle(-1));
