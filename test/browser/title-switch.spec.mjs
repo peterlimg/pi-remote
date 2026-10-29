@@ -45,9 +45,9 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await expect.poll(() => page.locator('#heading-strip').evaluate(node => node.style.transform)).toBe('');
 
   const box = await page.locator('#heading').boundingBox(), y = box.y + box.height / 2;
-  const drag = async (from, to, during) => {
-    await page.mouse.move(from, y); await page.mouse.down();
-    await page.mouse.move(to, y, { steps: 8 }); await during?.(); await page.mouse.up();
+  const drag = async (from, to, during, atY = y) => {
+    await page.mouse.move(from, atY); await page.mouse.down();
+    await page.mouse.move(to, atY, { steps: 8 }); await during?.(); await page.mouse.up();
   };
   // The bright dot follows the finger toward the next session.
   await drag(box.x + box.width - 20, box.x + 20, async () => expect(parseFloat((await dot()).slice(11))).toBeGreaterThan(18));
@@ -59,6 +59,17 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await drag(box.x + 20, box.x + box.width - 20);
   await expect(page.locator('#title')).toHaveText('Task 2');
   await expect(page.locator('#transcript')).toContainText('Reply for task 2');
+  // The strip above the composer switches too, and a double tap returns to where switching started.
+  const strip = await page.locator('#session-swipe').boundingBox(), stripY = strip.y + strip.height / 2;
+  for (const title of ['Task 3', 'Task 4']) {
+    await drag(strip.x + strip.width - 10, strip.x + 10, undefined, stripY);
+    await expect(page.locator('#title')).toHaveText(title);
+  }
+  await page.mouse.click(strip.x + strip.width / 2, stripY);
+  await page.mouse.click(strip.x + strip.width / 2, stripY);
+  await expect(page.locator('#title')).toHaveText('Task 2');
+  await expect(page.locator('#transcript')).toContainText('Reply for task 2');
+  expect(await dot()).toBe('translateX(16px)');
   // A short drag snaps back instead of switching.
   await drag(box.x + box.width / 2, box.x + box.width / 2 + 20);
   await expect(page.locator('#title')).toHaveText('Task 2');

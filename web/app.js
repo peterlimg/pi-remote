@@ -121,7 +121,7 @@ let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefine
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
 let swipeTimer, trackingSwipe = false, openingAnimation;
-let switchOrder, headingGesture, headingSwitching = false, headingNudged = false;
+let switchOrder, switchOrigin, headingGesture, headingSwitching = false, headingNudged = false, lastHeadingTap = 0;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
@@ -2458,7 +2458,8 @@ function renderHeading() {
 // progress is the drag's fraction of a full step, so the bright dot follows the finger.
 function renderDots(progress = 0) {
   const ids = switchIds(), at = ids.indexOf(selected), dots = $('session-dots');
-  if (at < 0 || ids.length < 2) return dots.replaceChildren();
+  $('session-swipe').hidden = at < 0 || ids.length < 2;
+  if ($('session-swipe').hidden) return dots.replaceChildren();
   let track = dots.firstElementChild;
   if (track?.children.length !== ids.length + 1) {
     track = el('div', undefined, 'session-dots-track');
@@ -2472,18 +2473,27 @@ function renderDots(progress = 0) {
   track.lastElementChild.style.transform = `translateX(${position * 8}px)`;
 }
 function offsetHeading(dx, animate) {
-  $('heading-strip').style.transition = animate ? 'transform .22s cubic-bezier(.2, .8, .2, 1)' : '';
-  $('heading-strip').style.transform = dx ? `translateX(${dx}px)` : '';
+  // The strip's handle follows at a third of the distance, so a thumb swipe there visibly moves something nearby.
+  for (const [node, scale] of [[$('heading-strip'), 1], [$('session-swipe').firstElementChild, 1 / 3]]) {
+    node.style.transition = animate ? 'transform .22s cubic-bezier(.2, .8, .2, 1)' : '';
+    node.style.transform = dx ? `translateX(${dx * scale}px)` : '';
+  }
 }
 function switchTo(id, ids) {
+  if (!switchOrder) switchOrigin = selected;
   haptic(); switchOrder = ids; selectSession(id, true);
 }
-function stepSession(direction) {
-  const ids = switchIds(), id = neighbour(direction);
+function stepSession(direction, id = neighbour(direction)) {
+  const ids = switchIds();
   if (headingSwitching || !id) { renderDots(); return offsetHeading(0, true); }
   headingSwitching = true; localStorage.setItem('pi-remote-title-swipe-learned', '1');
-  offsetHeading(-direction * $('heading-strip').offsetWidth, true); renderDots(direction);
+  offsetHeading(-direction * $('heading-strip').offsetWidth, true); renderDots(ids.indexOf(id) - ids.indexOf(selected));
   setTimeout(() => { headingSwitching = false; offsetHeading(0); switchTo(id, ids); }, 220);
+}
+// Double-tapping the title or the strip above the composer returns to the session the switching started from.
+function returnToOrigin() {
+  const ids = switchIds();
+  if (switchOrigin !== selected && ids.includes(switchOrigin)) stepSession(Math.sign(ids.indexOf(switchOrigin) - ids.indexOf(selected)), switchOrigin);
 }
 // Until the first title swipe, opening a session briefly slides the next title into view, once per visit.
 function nudgeHeading() {
@@ -2519,41 +2529,46 @@ document.addEventListener('pointerdown', event => {
   if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
 }, true);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('nearby-sessions').hidePopover(); });
-$('heading').addEventListener('pointerdown', event => {
-  if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
-  $('heading').setPointerCapture(event.pointerId);
-  headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: setTimeout(() => {
-    if (!headingGesture) return;
-    headingGesture.mode = 'held'; haptic(); openNearby();
-  }, 450) };
-});
-$('heading').addEventListener('pointermove', event => {
-  const gesture = headingGesture;
-  if (event.pointerId !== gesture?.id || gesture.mode === 'held' || gesture.mode === 'ignored') return;
-  const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-  if (!gesture.mode) {
-    if (Math.hypot(dx, dy) < 8) return;
-    clearTimeout(gesture.timer);
-    gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
-    if (gesture.mode === 'ignored') return;
-    $('heading').classList.add('dragging');
-  }
-  gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
-  gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
-  offsetHeading(gesture.dx);
-  renderDots(Math.max(-1, Math.min(1, -gesture.dx / $('heading-strip').offsetWidth)));
-});
-for (const type of ['pointerup', 'pointercancel']) $('heading').addEventListener(type, event => {
-  const gesture = headingGesture;
-  if (event.pointerId !== gesture?.id) return;
-  clearTimeout(gesture.timer); headingGesture = undefined;
-  if (gesture.mode !== 'swiping') return;
-  $('heading').classList.remove('dragging');
-  const direction = gesture.dx < 0 ? 1 : -1, [first, last] = [gesture.samples[0], gesture.samples.at(-1)];
-  const velocity = first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
-  if (type === 'pointerup' && (Math.abs(gesture.dx) > $('heading-strip').offsetWidth * .35 || -velocity * direction > .3)) stepSession(direction);
-  else { offsetHeading(0, true); renderDots(); }
-});
+for (const surface of [$('heading'), $('session-swipe')]) {
+  surface.addEventListener('pointerdown', event => {
+    if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
+    surface.setPointerCapture(event.pointerId);
+    headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: setTimeout(() => {
+      if (!headingGesture) return;
+      headingGesture.mode = 'held'; haptic(); openNearby();
+    }, 450) };
+  });
+  surface.addEventListener('pointermove', event => {
+    const gesture = headingGesture;
+    if (event.pointerId !== gesture?.id || gesture.mode === 'held' || gesture.mode === 'ignored') return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    if (!gesture.mode) {
+      if (Math.hypot(dx, dy) < 8) return;
+      clearTimeout(gesture.timer);
+      gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
+      if (gesture.mode === 'ignored') return;
+      $('heading').classList.add('dragging');
+    }
+    gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
+    gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
+    offsetHeading(gesture.dx);
+    renderDots(Math.max(-1, Math.min(1, -gesture.dx / $('heading-strip').offsetWidth)));
+  });
+  for (const type of ['pointerup', 'pointercancel']) surface.addEventListener(type, event => {
+    const gesture = headingGesture;
+    if (event.pointerId !== gesture?.id) return;
+    clearTimeout(gesture.timer); headingGesture = undefined;
+    if (!gesture.mode && type === 'pointerup') {
+      if (event.timeStamp - lastHeadingTap < 350) { lastHeadingTap = 0; returnToOrigin(); } else lastHeadingTap = event.timeStamp;
+    }
+    if (gesture.mode !== 'swiping') return;
+    $('heading').classList.remove('dragging');
+    const direction = gesture.dx < 0 ? 1 : -1, [first, last] = [gesture.samples[0], gesture.samples.at(-1)];
+    const velocity = first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+    if (type === 'pointerup' && (Math.abs(gesture.dx) > $('heading-strip').offsetWidth * .35 || -velocity * direction > .3)) stepSession(direction);
+    else { offsetHeading(0, true); renderDots(); }
+  });
+}
 $('heading').addEventListener('contextmenu', event => { if (selected) { event.preventDefault(); openNearby(); } });
 // Browser edge-swipes reveal an old history screenshot, so rows and scroll can jump when the swipe lands.
 // Drag the thread off the live list in both browser and home-screen mode instead.

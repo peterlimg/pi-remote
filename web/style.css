@@ -390,6 +390,9 @@ pre.message-text { white-space: pre-wrap; }
 .connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid var(--muted); border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .session-icon[data-status=working] rect, .activity-dots { animation: none; } }
+/* A thumb-height strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button sits on top. */
+.session-swipe { position: absolute; bottom: 100%; left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.session-swipe span { width: 36px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 70%, transparent); }
 #scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--composer-bg); color: var(--text); box-shadow: 0 4px 12px #00000014; }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; background: var(--composer-bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px #0000001a; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
