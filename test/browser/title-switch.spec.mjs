@@ -91,7 +91,9 @@ test('swiping or holding the title switches to neighbouring sessions', async ({ 
   await page.mouse.move(box.x + box.width / 2, y); await page.mouse.down();
   await expect(page.locator('#nearby-sessions')).toBeVisible();
   await page.mouse.up();
-  await expect(page.locator('#nearby-sessions button')).toHaveCount(5);
+  // A few rows show at once and the rest scroll.
+  await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
+  expect(await page.locator('#nearby-sessions').evaluate(menu => menu.scrollHeight > menu.clientHeight && menu.clientHeight < 5.5 * 52)).toBe(true);
   expect((await page.locator('#nearby-sessions').boundingBox()).y).toBeGreaterThan(box.y + box.height);
   await page.keyboard.press('Escape');
   await expect(page.locator('#nearby-sessions')).toBeHidden();

@@ -2520,9 +2520,7 @@ function nudgeHeading() {
 function openNearby(nearDots = false) {
   const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions');
   if (at < 0) return;
-  // The same sessions the five dots stand for.
-  const size = Math.min(ids.length, 5), first = Math.min(Math.max(at - 2, 0), ids.length - size);
-  menu.replaceChildren(...ids.slice(first, first + size).map(id => {
+  menu.replaceChildren(...ids.map(id => {
     const item = sessions.find(row => row.id === id), text = el('span');
     const button = el('button'); button.type = 'button';
     if (id === selected) button.setAttribute('aria-current', 'true');
@@ -2539,6 +2537,9 @@ function openNearby(nearDots = false) {
   menu.style.bottom = nearDots ? document.documentElement.clientHeight - anchor.top + 'px' : '';
   $('session-swipe').classList.add('held');
   menu.showPopover();
+  // About four rows show at once, centred on the current session; a half row hints that the rest scroll.
+  const current = menu.querySelector('[aria-current]');
+  menu.scrollTop = current.offsetTop - (menu.clientHeight - current.offsetHeight) / 2;
 }
 $('nearby-sessions').addEventListener('toggle', event => { if (event.newState === 'closed') $('session-swipe').classList.remove('held'); });
 // A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
