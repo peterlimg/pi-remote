@@ -1,0 +1,57 @@
+/* Throwaway: compares session-kind icon designs with sample sessions only. */
+body { height: auto; min-height: 100dvh; overflow: auto; }
+.page { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) 12px calc(120px + env(safe-area-inset-bottom)); background: var(--bg); color: var(--text); }
+h1 { margin: 8px 10px 4px; font-size: 28px; font-weight: 700; }
+.note { margin: 0 10px 16px; color: var(--muted); font-size: 13px; }
+.legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 4px 20px; }
+.legend div { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px 10px; border-radius: 12px; background: var(--panel); }
+.legend .big { display: grid; place-items: center; height: 36px; }
+.legend small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.page .session { cursor: default; }
+
+.kind { --hue: var(--muted); display: inline-grid; place-items: center; flex-shrink: 0; color: var(--muted); }
+.kind svg { display: block; }
+[data-kind=review] { --hue: light-dark(#8250df, #c4a2ff); }
+[data-kind=fix] { --hue: light-dark(#cf222e, #ff8a80); }
+[data-kind=research] { --hue: light-dark(#0969da, #7cb9ff); }
+[data-kind=build] { --hue: light-dark(#1a7f37, #6fdc9a); }
+[data-kind=idea] { --hue: light-dark(#9a6700, #f2c94c); }
+[data-kind=notes] { --hue: light-dark(#57606a, #c9c4c9); }
+.kind + .session-project-name { margin-left: 6px; }
+
+/* B: coloured line glyph. */
+[data-variant=B] .kind { color: var(--hue); }
+/* C: glyph on a soft tile. */
+[data-variant=C] .kind { width: 20px; height: 20px; border-radius: 6px; color: var(--hue); background: color-mix(in srgb, var(--hue) 18%, transparent); }
+[data-variant=C] .big .kind { width: 36px; height: 36px; border-radius: 10px; }
+[data-variant=C] .kind + .session-project-name { margin-left: 7px; }
+/* D: colour dot only. */
+[data-variant=D] .kind { width: 8px; height: 8px; margin: 0 2px; border-radius: 50%; background: var(--hue); }
+[data-variant=D] .legend .kind { width: 14px; height: 14px; }
+/* E: the kind replaces the empty idle circle in the lead column. */
+.session-indicators .kind { height: 26px; margin-top: 2px; }
+[data-variant=E] .kind { color: var(--hue); }
+/* F: Linear label pill. */
+.chip { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; height: 20px; padding: 0 8px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 12px; line-height: 1; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--hue, var(--muted)); }
+.big .chip { height: 26px; padding: 0 10px; font-size: 14px; }
+.chip + .session-project-name { margin-left: 6px; }
+/* G: Linear status circle; colour is the kind, fill is the state. */
+.ring { color: var(--hue); }
+.ring .spin { transform-origin: 8px 8px; animation: ring-spin 2.4s linear infinite; }
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+/* H: calm grey glyph; colour only on the dot that needs you. */
+.badged { position: relative; }
+.badged[data-saved] svg { opacity: .5; }
+.badge { position: absolute; top: 3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg); }
+.badge[data-state=working] { background: var(--text); animation: badge-pulse 1.2s ease-in-out infinite; }
+.badge[data-state=waiting] { background: var(--warning); }
+.badge[data-state=unread] { background: #0a84ff; }
+@keyframes badge-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .ring .spin, .badge { animation: none; } }
+
+.switcher { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; width: min(406px, calc(100% - 24px)); padding: 5px; border-radius: 18px; background: var(--text); color: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
+.switcher button { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
+.switcher div { flex: 1; min-width: 0; text-align: center; }
+.switcher strong { display: block; font-size: 13px; }
+.switcher small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--bg) 75%, var(--text)); font-size: 11px; line-height: 1.4; }
