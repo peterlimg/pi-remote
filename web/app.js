@@ -1605,7 +1605,7 @@ function updateControls() {
   $('image-files').disabled = $('attach').disabled;
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
-  $('abort').hidden = !working;
+  $('abort').hidden = !working || hasDraft;
   $('prompt').disabled = !selected;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;

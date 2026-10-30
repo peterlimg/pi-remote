@@ -49,6 +49,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await expect(page.locator('#abort')).toBeHidden();
   await expect(page.locator('#commands')).toBeEnabled();
   const rowFits = async () => {
+    await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
     await expect(page.locator('#reasoning-value')).toBeVisible();
     const controls = await page.locator('#attach, #model, #reasoning-control, #usage-meter, #commands, #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
@@ -80,20 +81,32 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await expect(page.locator('#commands')).toBeEnabled();
   await rowFits();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Message Pi while it works…');
+  const settingsWidth = (await page.locator('.composer-settings').boundingBox()).width;
   await page.locator('#prompt').fill('Keep working on the tests');
   await expect(page.locator('#send')).toBeVisible();
+  await expect(page.locator('#abort')).toBeHidden();
   await rowFits();
+  expect((await page.locator('.composer-settings').boundingBox()).width).toBeCloseTo(settingsWidth, 1);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: testInfo.outputPath('composer-working-draft-mobile-dark.png') });
   delete state.modelName;
   state.model = 'custom/provider/a-very-long-model-name-that-must-not-hide-the-send-button'; state.thinkingLevel = 'xhigh'; snapshot();
   await page.setViewportSize({ width: 320, height: 568 });
   await expect(page.locator('#reasoning-value')).toHaveText('Extra high');
   await rowFits();
   await page.locator('#prompt').fill('');
+  await expect(page.locator('#abort')).toBeVisible();
+  await expect(page.locator('#send')).toBeHidden();
+  await rowFits();
   await page.locator('#image-files').setInputFiles({ name: 'image.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64') });
   await expect(page.locator('#send')).toBeVisible();
+  await expect(page.locator('#abort')).toBeHidden();
+  await rowFits();
   await page.getByRole('button', { name: 'Remove image.png' }).click();
   await expect(page.locator('#send')).toBeHidden();
+  await expect(page.locator('#abort')).toBeVisible();
+  await rowFits();
   state.status = 'idle'; state.model = 'anthropic/claude-sonnet-4-6'; snapshot();
   await expect(page.locator('#send')).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });

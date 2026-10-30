@@ -44,7 +44,7 @@ test('mid-turn text appears and sends immediately without queue or steering cont
   await expect(page.locator('#composer-send-status')).toBeHidden();
   await expect(sent.locator('.delivery-status')).toHaveCount(0);
   await expect(prompt).toHaveValue('My next draft');
-  await expect(page.locator('#abort')).toBeVisible();
+  await expect(page.locator('#abort')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
   await expect(page.locator('#send')).not.toContainText('Steer');
   state.messages.push({ id: 'stream', role: 'assistant', text: 'Still working on the original request…' });
