@@ -2451,7 +2451,9 @@ window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('near
 // Swiping the title steps through the session list's order. The order freezes while switching this way,
 // since a prompt would otherwise move the session to the top and swiping back would skip past it.
 function switchIds() {
-  const ids = switchOrder?.includes(selected) ? switchOrder : [...$('sessions').querySelectorAll('.session')].map(row => row.dataset.id);
+  // Idle pinned sessions stay out of the switcher; the one you are on stays so you can swipe away and back.
+  const ids = switchOrder?.includes(selected) ? switchOrder : [...$('sessions').querySelectorAll('.session')].map(row => row.dataset.id)
+    .filter(id => id === selected || sessionGroup(sessions.find(item => item.id === id) || {}) !== 'pinned');
   return ids.filter(id => sessions.some(item => item.id === id));
 }
 const neighbour = step => { const ids = switchIds(), at = ids.indexOf(selected); return at < 0 ? undefined : ids[at + step]; };

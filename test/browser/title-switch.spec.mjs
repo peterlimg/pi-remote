@@ -16,8 +16,10 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
     messages: [{ id: 'reply', role: 'assistant', text: `Reply for task ${i}` }] }));
   // The last session has a reply this device has not read, below the fold of the nearby list.
   await page.addInitScript(() => localStorage.setItem('pi-remote-seen', JSON.stringify({ 5: 0 })));
+  // An idle pinned session tops the main list but stays out of the dots and the nearby list.
+  states.push({ id: 'pinned', title: 'Pinned notes', cwd: '/project', status: 'idle', updatedAt: Date.now(), messages: [] });
   const service = Object.assign(Object.create(SessionService.prototype), {
-    catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [],
+    catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['pinned']), closedSessions: new Set(), warnings: [],
   });
   service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
   await page.routeWebSocket('**/ws', ws => {
@@ -34,6 +36,7 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session[data-id="pinned"]')).toHaveCount(1);
   await page.locator('#sessions .session[data-id="2"]').tap();
   await expect(page.locator('#title')).toHaveText('Task 2');
   await expect(page.locator('#heading-prev')).toContainText('Task 1');
