@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#100d10">
+  <title>Nearby sessions prototypes · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/nearby-sessions-prototype.css">
+  <script type="module" src="/nearby-sessions-prototype.js"></script>
+</head>
+<body class="nearby-prototype">
+  <!-- Throwaway: compares ways to make the held-dots session list scannable, with sample sessions only. -->
+  <div class="phone">
+    <header class="mock-header">
+      <a class="round" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
+      <div class="mock-pill"><strong id="pill-title"></strong><small id="pill-project"></small></div>
+      <span class="round" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    </header>
+    <p class="mock-note">Sample data. Tap a row to switch; its “new” mark clears.</p>
+    <div class="dock">
+      <div id="list" class="list" role="group" aria-label="Nearby sessions"></div>
+      <div id="dots" class="dots" aria-hidden="true"></div>
+      <nav class="prototype-switcher" aria-label="Compare prototypes">
+        <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+        <div><span id="variant-label" aria-live="polite"></span><small id="variant-description"></small></div>
+        <button id="next-variant" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+      </nav>
+    </div>
+  </div>
+  <noscript><p>Enable JavaScript to try these prototypes. This page uses sample data and does not connect to your sessions.</p></noscript>
+</body>
+</html>
