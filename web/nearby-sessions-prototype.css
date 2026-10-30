@@ -13,13 +13,11 @@
 .list { max-height: min(330px, calc(var(--phone-height, 100dvh) * .42)); padding: 6px; overflow: auto; overscroll-behavior: contain; }
 .list-wrap { position: relative; }
 .pane-bar { display: flex; gap: 6px; padding: 6px; border-top: 1px solid var(--line); }
+.pane-bar.in-list { padding: 0 0 6px; border: 0; }
 .pane-bar.top { border-top: 0; border-bottom: 1px solid var(--line); }
 .search-box { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 10px; border-radius: 10px; background: var(--bg); color: var(--muted); }
 /* 16px stops iOS zooming into the field. */
 .search-box input { flex: 1; min-width: 0; min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--text); font-size: 16px; outline: none; }
-.bar-new { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 12px; border-radius: 10px; font-size: 14px; }
-.create-row .create-icon { flex-shrink: 0; display: grid; place-items: center; width: 16px; color: var(--text); }
-.create-row strong { font-weight: 600; }
 .empty { margin: 0; padding: 14px 12px; color: var(--muted); font-size: 13px; text-align: center; }
 .dots-row { display: flex; align-items: center; gap: 16px; }
 .dot-action { display: grid; place-items: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); color: var(--text); }
