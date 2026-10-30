@@ -55,3 +55,67 @@ h1 { margin: 8px 10px 4px; font-size: 28px; font-weight: 700; }
 .switcher div { flex: 1; min-width: 0; text-align: center; }
 .switcher strong { display: block; font-size: 13px; }
 .switcher small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--bg) 75%, var(--text)); font-size: 11px; line-height: 1.4; }
+
+/* I/J/K: Grok-style bots. The lead column widens to fit a face. */
+.page:is([data-variant=I], [data-variant=J], [data-variant=K]) .session { grid-template-columns: 28px minmax(0, 1fr); }
+.bot { --ink: light-dark(#fff, #18141a); --shine: light-dark(transparent, #fff); display: inline-grid; place-items: center; flex-shrink: 0; color: var(--hue, var(--muted)); }
+.bot[data-kind=none] { --hue: var(--muted); }
+.bot svg { display: block; overflow: visible; }
+.bot :is(.body, .tip) { fill: var(--hue); }
+.bot .accent { fill: color-mix(in srgb, var(--hue) 62%, #000); }
+.bot .lens { fill: light-dark(#fff, #18141a); }
+.bot[data-style=J] .lens { fill: color-mix(in srgb, var(--hue) 35%, #fff); }
+.bot .bulb { fill: #ffd84d; }
+.bot .ink { fill: var(--ink); }
+.bot .shine { fill: var(--shine); }
+.bot .ink-line { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
+.bot .hue-line { fill: none; stroke: var(--hue); stroke-width: 2.2; stroke-linecap: round; }
+.bot :is(.figure, .eyes, .look) { transform-box: fill-box; transform-origin: center; }
+.bot-badge circle { stroke: var(--bg); stroke-width: 2; }
+.bot-badge[data-state=waiting] circle { fill: var(--warning); }
+.bot-badge[data-state=waiting] path { stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; }
+.bot-badge[data-state=unread] circle { fill: #0a84ff; }
+.bot-badge[data-state=working] circle { fill: var(--text); animation: badge-pulse 1.2s ease-in-out infinite; }
+.bot[data-state=saved] { opacity: .5; }
+.bot .eyes { animation: bot-blink 6s var(--blink-delay, 0s) infinite; }
+.bot[data-state=saved] .eyes, .bot[data-state=unread]:not([data-style=J]) .eyes { animation: none; }
+@keyframes bot-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+/* I and J: the face carries the state. */
+.bot:not([data-style=K])[data-state=working] .figure { animation: bot-bob .5s ease-in-out infinite alternate; }
+.bot:not([data-style=K])[data-state=working] .look { animation: bot-glance 1.6s ease-in-out infinite; }
+.bot[data-style=J][data-state=working] .figure { animation-timing-function: steps(2, jump-none); }
+.bot[data-style=J][data-state=working] .look { animation-timing-function: steps(3, jump-none); }
+.bot:not([data-style=K])[data-state=waiting] .figure { transform-origin: 50% 100%; animation: bot-wiggle 1.4s ease-in-out infinite; }
+.bot:not([data-style=K])[data-state=waiting] .look { transform: translateY(-1.5px); }
+.bot[data-style=J][data-state=saved] .eyes { transform: scaleY(.25); }
+@keyframes bot-bob { to { transform: translateY(-2px); } }
+@keyframes bot-glance { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
+@keyframes bot-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-9deg); } 80% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
+.bot-states { display: flex; justify-content: space-between; margin: -8px 4px 16px; padding: 12px 8px; border-radius: 12px; background: var(--panel); }
+.bot-states div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bot-states small { color: var(--muted); font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .bot *, .bot-badge circle { animation: none !important; } }
+
+/* L/M/N: Notion. Its nine-colour palette for text, icons and tags. */
+.page:is([data-variant=L], [data-variant=N]) [data-kind=review] { --hue: light-dark(#9065b0, #9d68d3); }
+.page:is([data-variant=L], [data-variant=N]) [data-kind=fix] { --hue: light-dark(#d44c47, #df5452); }
+.page:is([data-variant=L], [data-variant=N]) [data-kind=research] { --hue: light-dark(#337ea9, #5e87c9); }
+.page:is([data-variant=L], [data-variant=N]) [data-kind=build] { --hue: light-dark(#448361, #529e72); }
+.page:is([data-variant=L], [data-variant=N]) [data-kind=idea] { --hue: light-dark(#cb912f, #ca9849); }
+.page:is([data-variant=L], [data-variant=N]) [data-kind=notes] { --hue: light-dark(#9f6b53, #ba856f); }
+.page-icon { display: inline-grid; place-items: center; margin-right: 8px; vertical-align: -3px; color: var(--hue, var(--muted)); line-height: 1; }
+.page-icon svg { display: block; }
+.page-icon .cut { fill: none; stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.page-icon .leg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.page-icon .ring { fill: none; stroke: currentColor; stroke-width: 3; }
+.page-icon .outline { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.legend .page-icon { margin: 0; }
+.page[data-variant=N] .session { grid-template-columns: 28px minmax(0, 1fr); }
+.bot[data-style=N] { --ink: var(--text); --shine: transparent; }
+.bot[data-style=N] .face { fill: var(--bg); stroke: var(--ink); stroke-width: 1.5; }
+.bot[data-style=N] .hair { fill: var(--ink); }
+.bot[data-style=N] .acc { fill: var(--hue); }
+.bot .doodle-line { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.bot .acc-line { fill: none; stroke: var(--hue); stroke-width: 1.8; stroke-linecap: round; }
+.bot .acc-line.thick { stroke-width: 2.6; }
+.bot[data-style=N][data-kind=none] { --hue: var(--muted); }
