@@ -891,10 +891,10 @@ function dressKind(node, kind, size) {
   else node.innerHTML = kindSvg(kind.type, size);
   return node;
 }
-// The header's second line: the session's kind whatever its status, then its project.
-function kindAndProject(item, cwd = item?.cwd) {
+// The header leads its title with the session's kind, whatever its status.
+function headingKind(item) {
   const kind = item && sessionKind(item);
-  return [...kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 12)] : [], projectName(cwd || '')];
+  return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 16)] : [];
 }
 function renderSessionIconChoice() {
   const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
@@ -964,8 +964,9 @@ function projectName(cwd) {
 }
 function renderProject(cwd = '', item) {
   $('project').textContent = displayPaths(cwd);
-  $('project-name').replaceChildren(...kindAndProject(item, cwd));
-  $('project-name').hidden = !$('project-name').textContent && !$('project-name').firstElementChild;
+  $('project-name').textContent = projectName(cwd);
+  $('project-name').hidden = !$('project-name').textContent;
+  $('title-kind').replaceChildren(...headingKind(item));
 }
 // Read state lives per device: the last activity time of each session as of when its thread was on screen.
 // Sessions never seen before start as read so a fresh device doesn't light up the whole history.
@@ -1388,7 +1389,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     }
     statusLabel.hidden = status === 'done' && !timed;
     heading.append(statusLabel); summary.append(heading);
-    const output = displayPaths(result?.text || live?.text || '');
+    // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
+    const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
     entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
     detail.append(summary);
     if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
@@ -2488,9 +2490,9 @@ function renderHeading() {
   const ids = switchIds(), at = ids.indexOf(selected);
   for (const [side, step] of [['prev', -1], ['next', 1]]) {
     const item = at < 0 ? undefined : sessions.find(row => row.id === ids[at + step]);
-    const project = el('span');
-    if (item) project.append(...kindAndProject(item));
-    $('heading-' + side).replaceChildren(...item ? [el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), project] : []);
+    const title = el('span');
+    if (item) title.append(...headingKind(item), sessionTitle(item.title, cache.get(item.id)?.messages));
+    $('heading-' + side).replaceChildren(...item ? [title, el('span', projectName(item.cwd))] : []);
   }
   renderDots();
 }

@@ -39,6 +39,11 @@ test('inline activity shows fresh output before tools finish and keeps separate 
     await expect(group.locator('[data-tool-id="checks"]')).toHaveAttribute('data-status', 'working');
     await expect(group).not.toHaveAttribute('open', '');
   }
+  // Playwright rewrites its status line with cursor codes; they used to show as boxes.
+  state.tools[0].text = 'Running 1 test\n\x1b[1A\x1b[2K  \x1b[32m1 passed\x1b[39m (17.1s)\n';
+  publish();
+  await expect(preview).toHaveText('Running 1 test\n  1 passed (17.1s)');
+  await expect(preview).not.toContainText('\x1b');
   for (const [width, scheme] of [[390, 'light'], [320, 'light'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme: scheme });
     await summary.scrollIntoViewIfNeeded();

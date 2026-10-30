@@ -183,7 +183,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
 .session-icon[data-unread] circle { fill: currentColor; }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
-.heading-kind { display: inline-grid; place-items: center; margin-right: 4px; vertical-align: -1px; font-size: 11px; line-height: 1; }
+.heading-kind { display: inline-grid; place-items: center; margin-right: 6px; vertical-align: -3px; font-size: 14px; line-height: 1; }
+.heading-title { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.heading-title h1 { min-width: 0; }
+#title-kind:empty { display: none; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
 [data-kind=review] { --kind: light-dark(#8250df, #c4a2ff); }
 [data-kind=fix] { --kind: light-dark(#cf222e, #ff8a80); }
