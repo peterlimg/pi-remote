@@ -44,6 +44,9 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
   expect(await spinStart(), 'Tool updates must not restart the working animation').toBe(started);
+  // iOS Safari can show the dots with the spin named in CSS but no running animation; cancelling reproduces that state.
+  await activity.locator('svg').evaluate(svg => svg.getAnimations()[0].cancel());
+  await expect.poll(() => activity.locator('svg').evaluate(svg => svg.getAnimations()[0]?.playState), { message: 'A stalled spin must restart' }).toBe('running');
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await expect(toolLabel).toHaveCSS('animation-name', 'none');

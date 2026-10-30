@@ -1610,7 +1610,14 @@ function debugActivity(reason = 'sample') {
   } catch { /* Diagnostics must never interrupt the conversation. */ }
 }
 window.addEventListener('pagehide', () => debugActivity('pagehide'));
-setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); } }, 1000);
+// iOS 18 Safari sometimes re-shows the dots without creating their CSS spin, mostly when switching from an idle session.
+// Re-applying the animation makes WebKit create it again. Runs after diagnostics so samples still record the stall.
+function restartStalledDots() {
+  const dots = activityIndicator.querySelector('.activity-dots');
+  if (dots.getAnimations().length || !dots.getClientRects().length || reducedMotion()) return;
+  dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
+}
+setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
   $('session-close').disabled = !connected;
