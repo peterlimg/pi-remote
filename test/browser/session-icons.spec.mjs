@@ -27,7 +27,8 @@ test('session icons detect reviews, stay separate from status and support persis
   const saved = page.locator('.session', { hasText: states[2].title });
   await expect(review.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
   await expect(saved.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
-  await expect(normal.locator('.session-type-icon')).toHaveCount(0);
+  // Automatic keys off the leading verb, so a review mentioned later in the title is not a review session.
+  await expect(normal.locator('.session-type-icon')).toHaveText('🛠️');
   await expect(review.locator('.session-icon')).toHaveAttribute('data-status', 'waiting');
   const typeBox = await review.locator('.session-project .session-type-icon').boundingBox();
   const metaBox = await review.locator('.session-meta').boundingBox();

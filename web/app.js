@@ -858,9 +858,23 @@ for (const list of [$('sessions'), $('collection-sessions')]) {
   list.addEventListener('touchcancel', () => endRowSwipe(false));
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) endRowSwipe(false); });
+// Titles are generated verb-first, so the leading verb says what kind of work the session is.
+const autoSessionIcons = [
+  ['review', /^(?:(?:pr|code|pull request)\s+)?(?:re-?)?review\b/i],
+  ['🐛', /^(?:fix|debug|diagnose|repair|resolve|stabilize)\b/i],
+  ['🔎', /^(?:investigate|research|check|find|identify|locate|inspect|audit|evaluate|explore|compare|verify|test|testing|read|clarify|analy[sz]e)\b/i],
+  ['💡', /^(?:prototype|design|propose|suggest|brainstorm|plan|sketch)\b/i],
+  ['📝', /^(?:write|draft|document|summari[sz]e|explain)\b/i],
+  ['🛠️', /^(?:add|build|create|implement|improve|update|show|replace|hide|remove|refine|reduce|refactor|enable|disable|make|support|keep|move|rename|align|adapt|convert|compress|consolidate|enlarge|shrink|shorten|sharpen|smooth|sort|optimize|close|import|match|migrate|upgrade|restart|set up|configure|deploy|clean)\b/i],
+  ['review', /\b(?:re-?)?review\b/i],
+];
+function autoSessionIcon(title) {
+  const icon = autoSessionIcons.find(([, pattern]) => pattern.test(title))?.[0];
+  return !icon ? { type: 'none' } : icon === 'review' ? { type: 'review' } : { type: 'custom', icon };
+}
 function sessionTypeIcon(item) {
-  const choice = sessionIcons.get(item.id);
-  const type = choice?.type || (/^(?:(?:pr|code|pull request)\s+)?(?:re-)?review\b/i.test(sessionTitle(item.title, cache.get(item.id)?.messages)) ? 'review' : 'none');
+  const choice = sessionIcons.get(item.id) || autoSessionIcon(sessionTitle(item.title, cache.get(item.id)?.messages));
+  const type = choice.type;
   if (type === 'none' || (type === 'custom' && !choice.icon)) return;
   const icon = el('span', type === 'custom' ? choice.icon : undefined, 'session-type-icon');
   icon.setAttribute('role', 'img');
