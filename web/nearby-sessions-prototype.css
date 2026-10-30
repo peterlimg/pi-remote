@@ -12,8 +12,6 @@
 .list { width: min(340px, 100%); max-height: min(330px, 52dvh); padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
 .list h3 { margin: 8px 12px 4px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .list h3:first-child { margin-top: 4px; }
-.summary { margin: 4px 12px 6px; color: var(--muted); font-size: 12px; }
-.summary b { color: var(--text); font-weight: 600; }
 .row { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
 .row[aria-current=true] { background: var(--selection); }
 .row .text { flex: 1; min-width: 0; }
@@ -22,34 +20,21 @@
 .row small { color: var(--muted); font-size: 12px; }
 .row time { align-self: flex-start; margin-top: 3px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .row .session-icon { flex-shrink: 0; width: 16px; margin-top: 0; }
-.row[data-attention] strong { font-weight: 650; }
-.row[data-attention=waiting] small.label { color: var(--warning); }
-.row[data-attention=unread] small.label { color: #0a84ff; }
-.row[data-status=saved] .text, .row[data-status=saved] .tile { opacity: .55; }
+.row:is([data-attention=waiting], [data-attention=unread]) strong { font-weight: 650; }
+.row[data-attention=waiting] .label { color: var(--warning); }
+.row[data-attention=unread] .label { color: #0a84ff; }
+.row[data-status=saved] .text { opacity: .55; }
 .pin { margin-left: 4px; color: var(--muted); font-size: 11px; }
-
-/* Project tile: colour = project, glyph = session emoji or project initials, corner badge = status. */
-.tile { position: relative; flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: oklch(.42 .09 var(--hue)); color: oklch(.95 .03 var(--hue)); font-size: 12px; font-weight: 700; letter-spacing: -.02em; }
-.tile.emoji { font-size: 17px; }
-.badge { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 15px; height: 15px; border: 2px solid var(--panel); border-radius: 50%; }
-.row[aria-current=true] .badge { border-color: var(--selection); }
-.badge[data-kind=unread] { background: #0a84ff; }
-.badge[data-kind=waiting] { background: var(--warning); color: var(--panel); font-size: 10px; font-weight: 800; }
-.badge[data-kind=working] { background: var(--panel); }
-.badge[data-kind=working]::after { content: ''; width: 7px; height: 7px; border: 2px solid var(--muted); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(1turn); } }
+.inline-emoji { display: inline-grid; place-items: center; width: 15px; margin-right: 5px; font-size: 13px; vertical-align: -2px; }
+.lead-emoji { flex-shrink: 0; display: grid; place-items: center; width: 16px; color: var(--muted); font-size: 14px; }
+.list hr { height: 1px; margin: 4px 12px; border: 0; background: var(--line); }
 
 .dots { display: flex; align-items: center; gap: 8px; height: 12px; }
 .dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); opacity: .6; }
 .dots span.current { width: 9px; height: 9px; background: var(--text); opacity: 1; }
-.dots.coloured span[data-kind=unread] { background: #0a84ff; opacity: 1; }
-.dots.coloured span[data-kind=waiting] { background: var(--warning); opacity: 1; }
-.dots.coloured span[data-kind=working] { animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .15; } }
 
 .prototype-switcher { display: flex; align-items: center; gap: 4px; width: 100%; padding: 5px; border-radius: 18px; background: var(--text); color: var(--bg); }
 .prototype-switcher button { display: grid; place-items: center; width: 44px; flex-shrink: 0; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
 .prototype-switcher > div { flex: 1; min-width: 0; padding: 5px 2px; text-align: center; }
 .prototype-switcher #variant-label { display: block; font-size: 13px; font-weight: 600; }
 .prototype-switcher small { display: block; margin-top: 3px; color: color-mix(in srgb, var(--bg) 75%, var(--text)); font-size: 11px; line-height: 1.4; }
-@media (prefers-reduced-motion: reduce) { .badge[data-kind=working]::after, .dots.coloured span { animation: none; } }
