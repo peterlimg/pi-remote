@@ -21,6 +21,7 @@ const files = new Map([
   ['/nearby-sessions-prototype.html', ['nearby-sessions-prototype.html', 'text/html; charset=utf-8']],
   ['/nearby-sessions-prototype.css', ['nearby-sessions-prototype.css', 'text/css; charset=utf-8']],
   ['/nearby-sessions-prototype.js', ['nearby-sessions-prototype.js', 'text/javascript; charset=utf-8']],
+  ['/session-icons-prototype.html', ['session-icons-prototype.html', 'text/html; charset=utf-8']],
   ['/protocol.js', ['protocol.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/images.js', ['images.js', 'text/javascript; charset=utf-8']],
