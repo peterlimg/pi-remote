@@ -1294,7 +1294,7 @@ function formatToolDuration(durationMs) {
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
   activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
-  renderProject(state.cwd, sessions.find(item => item.id === selected));
+  renderProject(state.cwd, sessions.find(item => item.id === selected) || selectedSummary);
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   if (state.error || $('notice').dataset.sessionId === state.id) notice(state.error, state.id);
