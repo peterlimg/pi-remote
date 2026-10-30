@@ -25,7 +25,7 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   const review = page.locator('.session', { hasText: states[0].title });
   const normal = page.locator('.session', { hasText: states[1].title });
   const saved = page.locator('.session', { hasText: states[2].title });
-  await expect(saved.locator('.session-indicators').getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+  await expect(saved.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
   // Automatic keys off the leading verb, so a review mentioned later in the title is not a review session.
   await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
   expect((await normal.locator('.session-indicators svg').boundingBox()).width).toBe(16);
@@ -63,13 +63,13 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   await expect(picker.getByRole('button', { name: 'None', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await picker.getByRole('button', { name: 'Automatic', exact: true }).click();
   await backToList();
-  await expect(saved.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+  await expect(saved.getByRole('img', { name: 'Review', exact: true })).toBeVisible();
 
   await openSettings(normal);
   await expect(picker.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await picker.getByRole('button', { name: 'PR review', exact: true }).click();
+  await picker.getByRole('button', { name: 'Review', exact: true }).click();
   await backToList();
-  await expect(normal.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+  await expect(normal.getByRole('img', { name: 'Review', exact: true })).toBeVisible();
   await openSettings(normal);
   await picker.getByRole('button', { name: 'Idea', exact: true }).tap();
   await expect(picker.getByRole('button', { name: 'Idea', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -98,7 +98,7 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
   await page.reload();
   await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
-  await expect(saved.locator('.session-icon')).toHaveAttribute('aria-label', 'PR review');
+  await expect(saved.locator('.session-icon')).toHaveAttribute('aria-label', 'Review');
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
   await expect(page.getByLabel('Emoji', { exact: true })).toHaveValue('👩🏽‍💻');

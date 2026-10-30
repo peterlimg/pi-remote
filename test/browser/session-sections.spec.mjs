@@ -173,7 +173,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
         await expect(group.locator('.session-meta').first()).toHaveCSS('font-size', '14px');
       }
       const review = pinsGroup.locator('.session').last();
-      await expect(review.locator('.session-indicators').getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+      await expect(review.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
       await expect(filter).toHaveCSS('border-radius', '6px');
       const trigger = await filter.boundingBox(), glyph = await filter.locator('svg').boundingBox();
       expect(trigger.width).toBe(44); expect(trigger.height).toBe(44); expect(glyph.width).toBe(18);
