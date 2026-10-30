@@ -1837,14 +1837,6 @@ function renderUsagePanel() {
   } else {
     context.append(el('p', usage?.tokens === null ? 'Waiting for the next model response after compaction.' : 'This session has not reported its context usage.', 'hint'));
   }
-  const tokens = el('section'), totals = usageTotals.get(selected);
-  if (totals) {
-    const list = el('dl', undefined, 'usage-tokens');
-    for (const [label, key] of [['Input', 'input'], ['Output', 'output'], ['Cache read', 'cacheRead'], ['Cache write', 'cacheWrite']]) {
-      list.append(el('dt', label), el('dd', tokenNumbers.format(totals[key])));
-    }
-    tokens.append(el('h3', 'Session tokens'), list);
-  }
   const limits = el('section'); limits.append(el('h3', 'Account limits'));
   const summary = usageSummaries.get(selected);
   const report = current?.providerUsage || (summary && summary.model === state?.model ? summary.dialog : undefined);
@@ -1859,7 +1851,7 @@ function renderUsagePanel() {
     }
     if (current?.capturedAt) limits.append(el('p', 'Checked ' + new Date(current.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), 'hint'));
   } else limits.append(el('p', current?.busy ? 'Checking provider limits…' : current?.providerMessage || 'Five-hour and weekly limits are shown when reported by your provider.', 'hint'));
-  content.append(context, ...(totals ? [tokens] : []), limits); $('picker-options').replaceChildren(content);
+  content.append(context, limits); $('picker-options').replaceChildren(content);
   const online = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   $('picker-help').classList.toggle('picker-error', !!current?.error);
   $('picker-help').textContent = current?.error || (!connected ? 'Offline. Usage may be out of date.' : !online ? 'Resume this session to check current usage.' :

@@ -549,9 +549,6 @@ pre.message-text { white-space: pre-wrap; }
 .usage-details section + section { margin-top: 24px; }
 .usage-details h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .usage-limit { margin-top: 16px; }
-.usage-tokens { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 10px 0 0; font-size: 14px; }
-.usage-tokens dt { color: var(--muted); }
-.usage-tokens dd { margin: 0; text-align: right; }
 .usage-limit h4 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .usage-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
 .usage-heading strong { flex-shrink: 0; font-size: 14px; font-weight: 500; }
