@@ -593,11 +593,12 @@ function loadMore() {
   if (!connected || listLoading || listError || listLoaded < listLimit || listLoaded >= listMatched) return;
   listLimit += 20; loadList();
 }
+const isUnread = item => item.previewRole !== 'user' && item.updatedAt > seen[item.id];
 function sessionRow(item) {
   const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
   button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
   const icon = statusIcon(item.status);
-  if (item.previewRole !== 'user' && item.updatedAt > seen[item.id]) { icon.dataset.unread = ''; icon.title = 'New reply'; }
+  if (isUnread(item)) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
   indicators.append(icon);
   if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
@@ -2551,15 +2552,32 @@ function nudgeHeading() {
   }, 700);
 }
 function openNearby() {
-  const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions');
+  const ids = switchIds(), at = ids.indexOf(selected), menu = $('nearby-sessions'), list = $('nearby-list');
   if (at < 0) return;
-  menu.replaceChildren(...ids.map(id => {
-    const item = sessions.find(row => row.id === id), text = el('span');
-    const button = el('button'); button.type = 'button';
+  const here = projectName(sessions.find(row => row.id === selected)?.cwd);
+  list.replaceChildren(...ids.map(id => {
+    const item = sessions.find(row => row.id === id), text = el('span', undefined, 'nearby-text'), meta = el('small');
+    const button = el('button'); button.type = 'button'; button.dataset.status = item.status;
     if (id === selected) button.setAttribute('aria-current', 'true');
-    text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)),
-      el('small', [projectName(item.cwd), ['idle', 'saved'].includes(item.status) ? age(new Date(item.updatedAt)) : statusLabels[item.status]].filter(Boolean).join(' · ')));
-    button.append(statusIcon(item.status), text);
+    const icon = statusIcon(item.status), fresh = isUnread(item), project = projectName(item.cwd);
+    if (fresh) icon.dataset.unread = '';
+    const preview = item.preview ? displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })) : '';
+    const elapsed = age(new Date(item.lastPromptAt ?? item.updatedAt));
+    // Line 2 says what opening the session would show: its question, the new reply, or how long it has run.
+    const state = item.status === 'waiting' ? item.dialog?.title?.split('\n')[0] || statusLabels.waiting
+      : item.status === 'working' ? statusLabels.working + (elapsed === 'now' ? '' : ' ' + elapsed) : '';
+    const detail = item.status === 'waiting' ? '' : fresh && !state ? preview : preview && (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + preview;
+    if (item.status === 'waiting') button.dataset.attention = 'waiting';
+    else if (fresh && !state && preview) button.dataset.attention = 'unread';
+    // The project only when it differs from the one you are in.
+    const parts = [project !== here && project && el('span', project, 'nearby-project'), state && el('span', state, 'nearby-state'), detail].filter(Boolean);
+    const typeIcon = sessionTypeIcon(item);
+    if (typeIcon) meta.append(typeIcon);
+    meta.append(...parts.flatMap((part, i) => i ? [' · ', part] : [part]));
+    if (!parts.length) meta.append(project || 'No messages yet');
+    text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)), meta);
+    // A running session is always "now"; its elapsed time is on line 2 instead.
+    button.append(icon, text, el('time', item.status === 'working' ? '' : age(new Date(item.updatedAt))));
     button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));
@@ -2568,9 +2586,22 @@ function openNearby() {
   $('session-swipe').classList.add('held');
   menu.showPopover();
   // About four rows show at once, centred on the current session; a half row hints that the rest scroll.
-  const current = menu.querySelector('[aria-current]');
-  menu.scrollTop = current.offsetTop - (menu.clientHeight - current.offsetHeight) / 2;
+  const current = list.querySelector('[aria-current]');
+  list.scrollTop = current.offsetTop - (list.clientHeight - current.offsetHeight) / 2;
+  updateNearbyHints();
 }
+// Count sessions that need you beyond each edge, so a long list never hides them.
+function updateNearbyHints() {
+  const list = $('nearby-list'), top = list.scrollTop, bottom = top + list.clientHeight, rows = [...list.querySelectorAll('[data-attention]')];
+  for (const [id, arrow, outside] of [['nearby-up', '↑', row => row.offsetTop + row.offsetHeight / 2 < top], ['nearby-down', '↓', row => row.offsetTop + row.offsetHeight / 2 > bottom]]) {
+    const away = rows.filter(outside), waiting = away.filter(row => row.dataset.attention === 'waiting').length, hint = $(id);
+    hint.hidden = !away.length;
+    hint.dataset.kind = waiting ? 'waiting' : 'unread';
+    hint.textContent = `${arrow} ${[waiting && `${waiting} needs you`, away.length - waiting && `${away.length - waiting} new`].filter(Boolean).join(' · ')}`;
+    hint.onclick = () => (arrow === '↑' ? away.at(-1) : away[0]).scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+}
+$('nearby-list').addEventListener('scroll', updateNearbyHints, { passive: true });
 $('nearby-sessions').addEventListener('toggle', event => { if (event.newState === 'closed') $('session-swipe').classList.remove('held'); });
 // iOS 26.5+ only ticks for a finger on a real switch, so an invisible one covers the dots: lifting after a hold,
 // or a tap, toggles it natively. Its pointer events still bubble to the strip's gesture handlers.

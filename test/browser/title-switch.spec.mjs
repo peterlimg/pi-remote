@@ -14,6 +14,8 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   const states = Array.from({ length: 6 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/project',
     status: i === 0 ? 'working' : 'idle', updatedAt: Date.now() - i * 1000,
     messages: [{ id: 'reply', role: 'assistant', text: `Reply for task ${i}` }] }));
+  // The last session has a reply this device has not read, below the fold of the nearby list.
+  await page.addInitScript(() => localStorage.setItem('pi-remote-seen', JSON.stringify({ 5: 0 })));
   const service = Object.assign(Object.create(SessionService.prototype), {
     catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [],
   });
@@ -116,14 +118,23 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   // Lifting the finger after the hold leaves the list open.
   await expect(page.locator('#nearby-sessions')).toBeVisible();
   // A few rows show at once and the rest scroll.
-  await expect(page.locator('#nearby-sessions button')).toHaveCount(6);
-  expect(await page.locator('#nearby-sessions').evaluate(menu => menu.scrollHeight > menu.clientHeight && menu.clientHeight < 5.5 * 52)).toBe(true);
+  await expect(page.locator('#nearby-list button')).toHaveCount(6);
+  expect(await page.locator('#nearby-list').evaluate(menu => menu.scrollHeight > menu.clientHeight && menu.clientHeight < 5.5 * 52)).toBe(true);
   const pane = await page.locator('#nearby-sessions').boundingBox();
   expect(pane.y + pane.height).toBeLessThanOrEqual(strip.y + 1);
   expect(pane.y + pane.height).toBeGreaterThan(strip.y - 12);
   await expect(page.locator('#nearby-sessions [aria-current=true]')).toContainText('Task 2');
+  // Line 2 says what each session is doing; a pill counts sessions below the fold that need you.
+  await expect(page.locator('#nearby-list button', { hasText: 'Task 0' })).toContainText('Working');
+  await expect(page.locator('#nearby-list button', { hasText: 'Task 1' })).toContainText('Pi: Reply for task 1');
+  await expect(page.locator('#nearby-up')).toBeHidden();
+  await expect(page.locator('#nearby-down')).toHaveText('↓ 1 new');
   await page.screenshot({ path: testInfo.outputPath(`nearby-sessions${iosSwitch ? '-ios' : ''}.png`) });
-  await page.locator('#nearby-sessions button', { hasText: 'Task 1' }).tap();
+  await page.locator('#nearby-down').tap();
+  await expect(page.locator('#nearby-list button', { hasText: 'Task 5' })).toBeInViewport();
+  await expect(page.locator('#nearby-list button', { hasText: 'Task 5' })).toContainText(/^Task 5Reply for task 5/);
+  await expect(page.locator('#nearby-down')).toBeHidden();
+  await page.locator('#nearby-list button', { hasText: 'Task 1' }).tap();
   await expect(page.locator('#nearby-sessions')).toBeHidden();
   await expect(page.locator('#title')).toHaveText('Task 1');
   await expect(page.locator('#transcript')).toContainText('Reply for task 1');

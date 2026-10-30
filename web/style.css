@@ -258,16 +258,28 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .session-dots i.edge { transform: scale(.6); }
 .session-dots b { position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .dragging .session-dots :is(.session-dots-track, b) { transition: none; }
-.nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); max-height: min(240px, 60dvh); margin: 0 auto; padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
+.nearby-sessions { position: fixed; inset: auto 0; width: min(340px, calc(100% - 24px)); margin: 0 auto; padding: 0; overflow: visible; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
 .nearby-sessions:popover-open { animation: nearby-in .2s cubic-bezier(.2, .8, .2, 1); transform-origin: bottom center; }
 @keyframes nearby-in { from { opacity: 0; transform: scale(.92); } }
-.nearby-sessions button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
-.nearby-sessions button[aria-current=true] { background: var(--selection); }
-.nearby-sessions strong, .nearby-sessions small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nearby-sessions strong { font-size: 14px; font-weight: 500; }
-.nearby-sessions small { color: var(--muted); font-size: 12px; }
-.nearby-sessions .session-icon { flex-shrink: 0; width: 16px; margin-top: 0; }
-.nearby-sessions span:last-child { min-width: 0; }
+.nearby-list { position: relative; max-height: min(240px, 60dvh); padding: 6px; overflow: auto; overscroll-behavior: contain; border-radius: inherit; }
+.nearby-list button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
+.nearby-list button[aria-current=true] { background: var(--selection); }
+.nearby-list strong, .nearby-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nearby-list strong { font-size: 14px; font-weight: 500; }
+.nearby-list small { color: var(--muted); font-size: 12px; }
+.nearby-list small .session-type-icon { display: inline-grid; width: 14px; height: 14px; margin-right: 5px; vertical-align: -3px; }
+.nearby-list time { align-self: flex-start; margin-top: 3px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.nearby-list .session-icon { flex-shrink: 0; width: 16px; margin-top: 0; }
+.nearby-text { flex: 1; min-width: 0; }
+.nearby-list [data-status=saved] .nearby-text { opacity: .55; }
+.nearby-list [data-attention] strong { font-weight: 650; }
+.nearby-list [data-attention=waiting] .nearby-state { color: var(--warning); }
+.nearby-list [data-attention=unread] .nearby-state { color: var(--text); }
+.nearby-project { color: var(--text); opacity: .8; }
+.nearby-hint { position: absolute; left: 50%; transform: translateX(-50%); min-height: 24px; padding: 3px 10px; border-radius: 12px; background: #0a84ff; color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; box-shadow: 0 4px 12px rgb(0 0 0 / .35); }
+.nearby-hint[data-kind=waiting] { background: var(--warning); color: var(--panel); }
+.nearby-hint.up { top: 6px; }
+.nearby-hint.down { bottom: 6px; }
 .conversation-header h1 { font-size: 14px; font-weight: 500; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #project-name { margin: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #back, .session-info summary { width: 44px; height: 44px; padding: 0; color: var(--text); }
