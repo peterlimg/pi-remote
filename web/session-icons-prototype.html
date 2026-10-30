@@ -39,8 +39,26 @@
     [data-variant=D] .kind { width: 8px; height: 8px; margin: 0 2px; border-radius: 50%; background: var(--hue); }
     [data-variant=D] .legend .kind { width: 14px; height: 14px; }
     /* E: the kind replaces the empty idle circle in the lead column. */
-    [data-variant=E] .session-indicators .kind { height: 26px; margin-top: 2px; }
+    .session-indicators .kind { height: 26px; margin-top: 2px; }
     [data-variant=E] .kind { color: var(--hue); }
+    /* F: Linear label pill. */
+    .chip { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; height: 20px; padding: 0 8px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 12px; line-height: 1; }
+    .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--hue, var(--muted)); }
+    .big .chip { height: 26px; padding: 0 10px; font-size: 14px; }
+    .chip + .session-project-name { margin-left: 6px; }
+    /* G: Linear status circle; colour is the kind, fill is the state. */
+    .ring { color: var(--hue); }
+    .ring .spin { transform-origin: 8px 8px; animation: ring-spin 2.4s linear infinite; }
+    @keyframes ring-spin { to { transform: rotate(360deg); } }
+    /* H: calm grey glyph; colour only on the dot that needs you. */
+    .badged { position: relative; }
+    .badged[data-saved] svg { opacity: .5; }
+    .badge { position: absolute; top: 3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg); }
+    .badge[data-state=working] { background: var(--text); animation: badge-pulse 1.2s ease-in-out infinite; }
+    .badge[data-state=waiting] { background: var(--warning); }
+    .badge[data-state=unread] { background: #0a84ff; }
+    @keyframes badge-pulse { 50% { opacity: .3; } }
+    @media (prefers-reduced-motion: reduce) { .ring .spin, .badge { animation: none; } }
 
     .switcher { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; width: min(406px, calc(100% - 24px)); padding: 5px; border-radius: 18px; background: var(--text); color: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
     .switcher button { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
@@ -92,6 +110,9 @@
       { key: 'C', name: 'Tile', description: 'Coloured glyph on a soft tinted tile' },
       { key: 'D', name: 'Dot', description: 'Just a colour dot; the title already says the verb' },
       { key: 'E', name: 'Lead slot', description: 'Kind takes the empty circle on the left; status wins while active' },
+      { key: 'F', name: 'Label chip', description: 'Linear labels: colour dot and word in an outlined pill' },
+      { key: 'G', name: 'Status ring', description: 'Linear status circle: colour is the kind; dashed saved, half working, ¾ needs you, check new reply' },
+      { key: 'H', name: 'Calm glyph', description: 'Linear 2026 calm look: grey kind icon, colour only on a dot that needs you' },
     ];
     let variant;
 
@@ -103,6 +124,41 @@
       if (variant.key === 'C') size = size === 16 ? 13 : 22;
       node.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${size > 20 ? 1.6 : 1.9}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${glyphs[kind][1]}</svg>`;
       return node;
+    }
+    function chip(kind) {
+      const node = el('span', glyphs[kind][0], 'chip');
+      node.dataset.kind = kind; node.prepend(el('i'));
+      return node;
+    }
+    // Linear-style circle on a 16px grid: ring for the kind colour, inner pie for the state.
+    function ring(kind, item = {}, size = 16) {
+      const node = el('span', undefined, 'kind ring'), state = item.unread ? 'unread' : item.status || 'idle';
+      node.dataset.kind = kind || 'none'; node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${kind ? glyphs[kind][0] : 'Session'}, ${state}`);
+      const inner = {
+        saved: '',
+        working: '<path class="spin" d="M8 8V4a4 4 0 0 1 0 8Z" fill="currentColor"/>',
+        waiting: '<path d="M8 8V4a4 4 0 1 1-4 4Z" fill="currentColor"/>',
+        unread: '<circle cx="8" cy="8" r="6.5" fill="currentColor"/><path d="m5.4 8.2 1.8 1.8 3.4-3.6" stroke="var(--bg)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+      }[state] || '';
+      node.innerHTML = `<svg viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"${state === 'saved' ? ' stroke-dasharray="2.4 2"' : ''}/>${inner}</svg>`;
+      return node;
+    }
+    function badged(item) {
+      const node = kindIcon(item.kind), state = item.unread ? 'unread' : item.status;
+      node.classList.add('badged');
+      if (state === 'saved') node.dataset.saved = '';
+      if (['working', 'waiting', 'unread'].includes(state)) {
+        const badge = el('span', undefined, 'badge');
+        badge.dataset.state = state; node.append(badge);
+      }
+      return node;
+    }
+    function lead(item) {
+      const active = ['working', 'waiting'].includes(item.status) || item.unread;
+      if (variant.key === 'E' && item.kind && !active) return kindIcon(item.kind);
+      if (variant.key === 'G') return ring(item.kind, item);
+      if (variant.key === 'H' && item.kind) return badged(item);
+      return statusIcon(item);
     }
     // Same glyphs as app.js statusIcon; style.css animates and colours them.
     function statusIcon(item) {
@@ -119,8 +175,7 @@
     function row(item) {
       const button = el('button', undefined, 'session'), indicators = el('span', undefined, 'session-indicators');
       button.type = 'button';
-      const active = ['working', 'waiting'].includes(item.status) || item.unread;
-      indicators.append(variant.key === 'E' && item.kind && !active ? kindIcon(item.kind) : statusIcon(item));
+      indicators.append(lead(item));
       const body = el('div', undefined, 'session-body'), top = el('div', undefined, 'session-top');
       top.append(el('strong', item.title));
       if (item.pinned) top.append(Object.assign(el('span', '', 'session-pinned'), { innerHTML: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 3H8v2l1 1v5l-3 3v2h5v5l1 1 1-1v-5h5v-2l-3-3V6l1-1Z"/></svg>' }));
@@ -132,7 +187,7 @@
         state.dataset.status = item.status; meta.append(state);
       }
       const project = el('span', undefined, 'session-project');
-      if (item.kind && variant.key !== 'E') project.append(kindIcon(item.kind));
+      if (item.kind && !['E', 'G', 'H'].includes(variant.key)) project.append(variant.key === 'F' ? chip(item.kind) : kindIcon(item.kind));
       project.append(el('span', item.project, 'session-project-name'));
       meta.append(project, el('time', item.age, 'session-time'));
       body.append(meta);
@@ -145,7 +200,8 @@
       $('description').textContent = variant.description;
       $('legend').replaceChildren(...Object.entries(glyphs).map(([kind, [name]]) => {
         const cell = el('div'), big = el('span', undefined, 'big'), small = el('small');
-        big.append(kindIcon(kind, 28)); small.append(kindIcon(kind), name);
+        big.append(variant.key === 'F' ? chip(kind) : variant.key === 'G' ? ring(kind, {}, 28) : kindIcon(kind, 28));
+        if (variant.key !== 'F') small.append(name);
         cell.append(big, small);
         return cell;
       }));
