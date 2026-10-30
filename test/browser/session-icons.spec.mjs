@@ -67,12 +67,17 @@ test('resting sessions show their kind in the status slot, with persistent per-s
 
   await openSettings(normal);
   await expect(picker.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  // The header shows the kind next to the project, and follows a new choice straight away.
+  await expect(page.locator('#project-name')).toHaveText('pi-remote');
+  await expect(page.locator('#project-name').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
+  await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('header-kind.png') });
   await picker.getByRole('button', { name: 'Review', exact: true }).click();
   await backToList();
   await expect(normal.getByRole('img', { name: 'Review', exact: true })).toBeVisible();
   await openSettings(normal);
   await picker.getByRole('button', { name: 'Idea', exact: true }).tap();
   await expect(picker.getByRole('button', { name: 'Idea', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#project-name').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();
   await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
   await backToList();
   await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();

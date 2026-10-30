@@ -182,7 +182,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
 .session-icon[data-unread] circle { fill: currentColor; }
-.session-icon[data-kind] { color: var(--kind, var(--muted)); }
+:is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
+.heading-kind { display: inline-grid; place-items: center; margin-right: 4px; vertical-align: -1px; font-size: 11px; line-height: 1; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
 [data-kind=review] { --kind: light-dark(#8250df, #c4a2ff); }
 [data-kind=fix] { --kind: light-dark(#cf222e, #ff8a80); }

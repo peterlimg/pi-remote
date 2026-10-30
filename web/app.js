@@ -724,7 +724,7 @@ function renderList() {
   const last = [...root.querySelectorAll('.session')].at(-1);
   if (last) moreObserver.observe(last);
   const current = sessions.find(item => item.id === selected);
-  if (current) $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages);
+  if (current) { $('title').textContent = sessionTitle(current.title, cache.get(current.id)?.messages); renderProject(current.cwd, current); }
   renderHeading();
 }
 function openCollection(section) {
@@ -876,15 +876,25 @@ const autoSessionIcons = [
 ];
 // Resting sessions show their kind in the status slot; activity and new replies take it back.
 function showSessionKind(icon, item) {
+  const kind = sessionKind(item);
+  return kind && ['idle', 'saved'].includes(item.status) && !('unread' in icon.dataset) ? dressKind(icon, kind, 16) : icon;
+}
+function sessionKind(item) {
   const choice = sessionIcons.get(item.id) || { type: autoSessionIcons.find(([, pattern]) => pattern.test(sessionTitle(item.title, cache.get(item.id)?.messages)))?.[0] };
-  const custom = choice.type === 'custom' && choice.icon;
-  if (!['idle', 'saved'].includes(item.status) || 'unread' in icon.dataset || !custom && !sessionKinds[choice.type]) return icon;
-  const label = custom ? `Session icon: ${choice.icon}` : sessionKinds[choice.type][0];
-  icon.dataset.kind = choice.type; icon.removeAttribute('aria-hidden');
-  icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label;
-  if (custom) icon.textContent = choice.icon;
-  else icon.innerHTML = kindSvg(choice.type, 16);
-  return icon;
+  if (choice.type === 'custom' && choice.icon) return { type: 'custom', emoji: choice.icon, label: `Session icon: ${choice.icon}` };
+  if (sessionKinds[choice.type]) return { type: choice.type, label: sessionKinds[choice.type][0] };
+}
+function dressKind(node, kind, size) {
+  node.dataset.kind = kind.type; node.removeAttribute('aria-hidden');
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', kind.label); node.title = kind.label;
+  if (kind.emoji) node.textContent = kind.emoji;
+  else node.innerHTML = kindSvg(kind.type, size);
+  return node;
+}
+// The header's second line: the session's kind whatever its status, then its project.
+function kindAndProject(item, cwd = item?.cwd) {
+  const kind = item && sessionKind(item);
+  return [...kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 12)] : [], projectName(cwd || '')];
 }
 function renderSessionIconChoice() {
   const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
@@ -952,10 +962,10 @@ function projectName(cwd) {
   cwd = displayPaths(cwd);
   return cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
 }
-function renderProject(cwd = '') {
+function renderProject(cwd = '', item) {
   $('project').textContent = displayPaths(cwd);
-  $('project-name').textContent = projectName(cwd);
-  $('project-name').hidden = !$('project-name').textContent;
+  $('project-name').replaceChildren(...kindAndProject(item, cwd));
+  $('project-name').hidden = !$('project-name').textContent && !$('project-name').firstElementChild;
 }
 // Read state lives per device: the last activity time of each session as of when its thread was on screen.
 // Sessions never seen before start as read so a fresh device doesn't light up the whole history.
@@ -988,7 +998,7 @@ async function selectSession(id, keepOrder = false) {
   document.querySelector('.session-info').open = false;
   $('session-icon-picker').close();
   renderSessionIconChoice();
-  renderProject(selectedSummary?.cwd);
+  renderProject(selectedSummary?.cwd, selectedSummary);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!standalone && !history.state?.session) history.pushState({ session: true }, '');
   $('app').classList.add('viewing');
@@ -1283,7 +1293,7 @@ function formatToolDuration(durationMs) {
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
   activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
-  renderProject(state.cwd);
+  renderProject(state.cwd, sessions.find(item => item.id === selected));
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   if (state.error || $('notice').dataset.sessionId === state.id) notice(state.error, state.id);
@@ -2471,7 +2481,9 @@ function renderHeading() {
   const ids = switchIds(), at = ids.indexOf(selected);
   for (const [side, step] of [['prev', -1], ['next', 1]]) {
     const item = at < 0 ? undefined : sessions.find(row => row.id === ids[at + step]);
-    $('heading-' + side).replaceChildren(...item ? [el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), el('span', projectName(item.cwd))] : []);
+    const project = el('span');
+    if (item) project.append(...kindAndProject(item));
+    $('heading-' + side).replaceChildren(...item ? [el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), project] : []);
   }
   renderDots();
 }
