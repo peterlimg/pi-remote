@@ -600,7 +600,7 @@ function sessionRow(item) {
   const icon = statusIcon(item.status);
   if (isUnread(item)) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
-  indicators.append(icon);
+  indicators.append(showSessionKind(icon, item));
   if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
   button.append(indicators);
   const body = el('div', undefined, 'session-body');
@@ -624,14 +624,10 @@ function sessionRow(item) {
     status.dataset.status = item.status;
     meta.append(status);
   }
-  const typeIcon = sessionTypeIcon(item);
-  if (typeIcon || !isBlank(item.cwd)) {
+  if (!isBlank(item.cwd)) {
     const project = el('span', undefined, 'session-project');
-    if (typeIcon) project.append(typeIcon);
-    if (!isBlank(item.cwd)) {
-      project.append(el('span', projectName(item.cwd), 'session-project-name'));
-      project.title = displayPaths(item.cwd);
-    }
+    project.append(el('span', projectName(item.cwd), 'session-project-name'));
+    project.title = displayPaths(item.cwd);
     meta.append(project);
   }
   const date = new Date(item.updatedAt);
@@ -858,36 +854,43 @@ for (const list of [$('sessions'), $('collection-sessions')]) {
   list.addEventListener('touchcancel', () => endRowSwipe(false));
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) endRowSwipe(false); });
+// One stroke family on a 24px grid; style.css gives each kind its colour.
+const sessionKinds = {
+  review: ['PR review', '<circle cx="6" cy="5" r="3"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="19" r="3"/><path d="M6 8v8M18 16V9a4 4 0 0 0-4-4h-1m2-2-2 2 2 2"/>'],
+  fix: ['Fix', '<path d="m8 2 1.9 1.9M14.1 3.9 16 2M9 7.1v-1a3 3 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6Zm0 0v-9M6.5 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M21 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4"/>'],
+  research: ['Research', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],
+  build: ['Build', '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8Z"/>'],
+  idea: ['Idea', '<path d="M15 14c.2-1 .7-1.7 1.5-2.5A5.5 5.5 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.8.8 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/>'],
+  notes: ['Notes', '<path d="M12 20h9"/><path d="M16.4 3.6a2.1 2.1 0 0 1 3 3L7.4 18.6a2 2 0 0 1-.9.5l-2.9.8.8-2.9a2 2 0 0 1 .5-.8Z"/>'],
+};
+const kindSvg = (kind, size) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${sessionKinds[kind][1]}</svg>`;
 // Titles are generated verb-first, so the leading verb says what kind of work the session is.
 const autoSessionIcons = [
   ['review', /^(?:(?:pr|code|pull request)\s+)?(?:re-?)?review\b/i],
-  ['🐛', /^(?:fix|debug|diagnose|repair|resolve|stabilize)\b/i],
-  ['🔎', /^(?:investigate|research|check|find|identify|locate|inspect|audit|evaluate|explore|compare|verify|test|testing|read|clarify|analy[sz]e)\b/i],
-  ['💡', /^(?:prototype|design|propose|suggest|brainstorm|plan|sketch)\b/i],
-  ['📝', /^(?:write|draft|document|summari[sz]e|explain)\b/i],
-  ['🛠️', /^(?:add|build|create|implement|improve|update|show|replace|hide|remove|refine|reduce|refactor|enable|disable|make|support|keep|move|rename|align|adapt|convert|compress|consolidate|enlarge|shrink|shorten|sharpen|smooth|sort|optimize|close|import|match|migrate|upgrade|restart|set up|configure|deploy|clean)\b/i],
+  ['fix', /^(?:fix|debug|diagnose|repair|resolve|stabilize)\b/i],
+  ['research', /^(?:investigate|research|check|find|identify|locate|inspect|audit|evaluate|explore|compare|verify|test|testing|read|clarify|analy[sz]e)\b/i],
+  ['idea', /^(?:prototype|design|propose|suggest|brainstorm|plan|sketch)\b/i],
+  ['notes', /^(?:write|draft|document|summari[sz]e|explain)\b/i],
+  ['build', /^(?:add|build|create|implement|improve|update|show|replace|hide|remove|refine|reduce|refactor|enable|disable|make|support|keep|move|rename|align|adapt|convert|compress|consolidate|enlarge|shrink|shorten|sharpen|smooth|sort|optimize|close|import|match|migrate|upgrade|restart|set up|configure|deploy|clean)\b/i],
   ['review', /\b(?:re-?)?review\b/i],
 ];
-function autoSessionIcon(title) {
-  const icon = autoSessionIcons.find(([, pattern]) => pattern.test(title))?.[0];
-  return !icon ? { type: 'none' } : icon === 'review' ? { type: 'review' } : { type: 'custom', icon };
-}
-function sessionTypeIcon(item) {
-  const choice = sessionIcons.get(item.id) || autoSessionIcon(sessionTitle(item.title, cache.get(item.id)?.messages));
-  const type = choice.type;
-  if (type === 'none' || (type === 'custom' && !choice.icon)) return;
-  const icon = el('span', type === 'custom' ? choice.icon : undefined, 'session-type-icon');
-  icon.setAttribute('role', 'img');
-  icon.setAttribute('aria-label', type === 'custom' ? `Session icon: ${choice.icon}` : 'PR review');
-  icon.title = icon.getAttribute('aria-label');
-  if (type === 'review') icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="3"/><circle cx="6" cy="19" r="3"/><circle cx="18" cy="19" r="3"/><path d="M6 8v8M18 16V9a4 4 0 0 0-4-4h-1m2-2-2 2 2 2"/></svg>';
+// Resting sessions show their kind in the status slot; activity and new replies take it back.
+function showSessionKind(icon, item) {
+  const choice = sessionIcons.get(item.id) || { type: autoSessionIcons.find(([, pattern]) => pattern.test(sessionTitle(item.title, cache.get(item.id)?.messages)))?.[0] };
+  const custom = choice.type === 'custom' && choice.icon;
+  if (!['idle', 'saved'].includes(item.status) || 'unread' in icon.dataset || !custom && !sessionKinds[choice.type]) return icon;
+  const label = custom ? `Session icon: ${choice.icon}` : sessionKinds[choice.type][0];
+  icon.dataset.kind = choice.type; icon.removeAttribute('aria-hidden');
+  icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label;
+  if (custom) icon.textContent = choice.icon;
+  else icon.innerHTML = kindSvg(choice.type, 16);
   return icon;
 }
 function renderSessionIconChoice() {
   const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
-  $('session-icon-current').textContent = type === 'custom' ? choice.icon : { auto: 'Automatic', review: 'PR review', none: 'None' }[type];
+  $('session-icon-current').textContent = type === 'custom' ? choice.icon : { auto: 'Automatic', none: 'None' }[type] || sessionKinds[type]?.[0] || 'None';
   for (const button of $('session-icon-options').children) button.setAttribute('aria-pressed', String(button.dataset.iconType === type));
-  for (const button of $('session-emoji-options').children) button.setAttribute('aria-pressed', String(type === 'custom' && button.dataset.emoji === choice.icon));
+  for (const button of $('session-kind-options').children) button.setAttribute('aria-pressed', String(button.dataset.kind === type));
   $('session-emoji-other').textContent = type === 'custom' ? `${choice.icon}  Other emoji…` : 'Other emoji…';
 }
 function saveSessionIcon(type, icon = '') {
@@ -898,11 +901,12 @@ function saveSessionIcon(type, icon = '') {
   renderSessionIconChoice(); renderList();
 }
 for (const button of $('session-icon-options').children) button.addEventListener('click', () => saveSessionIcon(button.dataset.iconType));
-for (const [emoji, name] of [['🔎', 'Research'], ['🐛', 'Bug'], ['🛠️', 'Tools'], ['💡', 'Idea'], ['📝', 'Notes'], ['⭐', 'Star']]) {
-  const button = el('button', emoji);
-  button.type = 'button'; button.dataset.emoji = emoji; button.setAttribute('aria-label', name);
-  button.addEventListener('click', () => saveSessionIcon('custom', emoji));
-  $('session-emoji-options').append(button);
+for (const [kind, [name]] of Object.entries(sessionKinds)) {
+  const button = el('button');
+  button.type = 'button'; button.dataset.kind = kind; button.setAttribute('aria-label', name); button.title = name;
+  button.innerHTML = kindSvg(kind, 22);
+  button.addEventListener('click', () => saveSessionIcon(kind));
+  $('session-kind-options').append(button);
 }
 $('session-icon-open').addEventListener('click', () => {
   document.querySelector('.session-info').open = false;
@@ -2579,13 +2583,11 @@ function openNearby() {
     else if (fresh && !state && preview) button.dataset.attention = 'unread';
     // The project only when it differs from the one you are in.
     const parts = [project !== here && project && el('span', project, 'nearby-project'), state && el('span', state, 'nearby-state'), detail].filter(Boolean);
-    const typeIcon = sessionTypeIcon(item);
-    if (typeIcon) meta.append(typeIcon);
     meta.append(...parts.flatMap((part, i) => i ? [' · ', part] : [part]));
     if (!parts.length) meta.append(project || 'No messages yet');
     text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)), meta);
     // A running session is always "now"; its elapsed time is on line 2 instead.
-    button.append(icon, text, el('time', item.status === 'working' ? '' : age(new Date(item.updatedAt))));
+    button.append(showSessionKind(icon, item), text, el('time', item.status === 'working' ? '' : age(new Date(item.updatedAt))));
     button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));

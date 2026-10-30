@@ -173,10 +173,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
         await expect(group.locator('.session-meta').first()).toHaveCSS('font-size', '14px');
       }
       const review = pinsGroup.locator('.session').last();
-      const icon = await review.getByRole('img', { name: 'PR review', exact: true }).boundingBox();
-      const meta = await review.locator('.session-meta').boundingBox();
-      expect(Math.abs(icon.y + icon.height / 2 - meta.y - meta.height / 2)).toBeLessThanOrEqual(1);
-      expect(icon.x).toBeGreaterThanOrEqual(meta.x);
+      await expect(review.locator('.session-indicators').getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
       await expect(filter).toHaveCSS('border-radius', '6px');
       const trigger = await filter.boundingBox(), glyph = await filter.locator('svg').boundingBox();
       expect(trigger.width).toBe(44); expect(trigger.height).toBe(44); expect(glyph.width).toBe(18);
@@ -210,7 +207,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await page.getByRole('button', { name: 'View all pinned sessions' }).press('Enter');
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await expect(collection.locator('.session')).toHaveCount(20);
-    await expect(collection.locator('.session-meta .session-type-icon')).toHaveCount(2);
+    await expect(collection.locator('.session-indicators [data-kind]')).toHaveCount(2);
     await collection.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(collection.locator('.session')).toHaveCount(31);
     // Pin/unpin uses the same gesture and real API inside the collection.

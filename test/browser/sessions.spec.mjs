@@ -237,7 +237,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
   await expect(login.locator('.session-icon rect')).toHaveCount(0);
-  await expect(login.locator('.session-icon circle')).toHaveCount(1);
+  await expect(login.locator('.session-icon')).toHaveAttribute('data-kind', 'fix'); // Resting again, so the kind takes the slot back.
   await expect(login.locator('.session-preview')).toHaveText('You: Now check logout');
 });
 

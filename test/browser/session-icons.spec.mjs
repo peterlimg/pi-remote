@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 
-test('session icons detect reviews, stay separate from status and support persistent per-session overrides', async ({ page }, testInfo) => {
+test('resting sessions show their kind in the status slot, with persistent per-session overrides', async ({ page }, testInfo) => {
   const states = [
     { id: 'review', title: 'Review betting legacy removal PR #28', status: 'waiting', cwd: '/projects/primezero', updatedAt: Date.now(), preview: 'Which branch should I review?', previewRole: 'assistant', messages: [] },
     { id: 'normal', title: 'Add session icons for PR review', status: 'idle', cwd: '/projects/pi-remote', updatedAt: Date.now() - 1000, messages: [] },
@@ -25,15 +25,14 @@ test('session icons detect reviews, stay separate from status and support persis
   const review = page.locator('.session', { hasText: states[0].title });
   const normal = page.locator('.session', { hasText: states[1].title });
   const saved = page.locator('.session', { hasText: states[2].title });
-  await expect(review.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
-  await expect(saved.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+  await expect(saved.locator('.session-indicators').getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
   // Automatic keys off the leading verb, so a review mentioned later in the title is not a review session.
-  await expect(normal.locator('.session-type-icon')).toHaveText('🛠️');
+  await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
+  expect((await normal.locator('.session-indicators svg').boundingBox()).width).toBe(16);
+  // Activity takes the slot back from the kind.
   await expect(review.locator('.session-icon')).toHaveAttribute('data-status', 'waiting');
-  const typeBox = await review.locator('.session-project .session-type-icon').boundingBox();
-  const metaBox = await review.locator('.session-meta').boundingBox();
-  expect(Math.abs(typeBox.y + typeBox.height / 2 - metaBox.y - metaBox.height / 2)).toBeLessThanOrEqual(1);
-  expect(typeBox.width).toBe(16);
+  await expect(review.locator('[data-kind]')).toHaveCount(0);
+  await expect(page.locator('.session-meta [data-kind]')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('icons-mobile.png') });
   await writeFile(testInfo.outputPath('icons-mobile.aria.txt'), await page.locator('body').ariaSnapshot());
 
@@ -52,18 +51,19 @@ test('session icons detect reviews, stay separate from status and support persis
     if (await picker.isVisible()) await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await page.getByRole('button', { name: 'Show sessions' }).click();
   };
-  await openSettings(review);
+  await openSettings(saved);
   await page.screenshot({ path: testInfo.outputPath('icon-picker-mobile.png') });
   await picker.getByRole('button', { name: 'None', exact: true }).click();
   await backToList();
-  await expect(review.locator('.session-type-icon')).toHaveCount(0);
+  await expect(saved.locator('[data-kind]')).toHaveCount(0);
+  await expect(saved.locator('.session-icon circle')).toHaveCount(1);
   await page.reload();
-  await expect(review.locator('.session-type-icon')).toHaveCount(0);
-  await openSettings(review);
+  await expect(saved.locator('[data-kind]')).toHaveCount(0);
+  await openSettings(saved);
   await expect(picker.getByRole('button', { name: 'None', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await picker.getByRole('button', { name: 'Automatic', exact: true }).click();
   await backToList();
-  await expect(review.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
+  await expect(saved.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
 
   await openSettings(normal);
   await expect(picker.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -71,14 +71,12 @@ test('session icons detect reviews, stay separate from status and support persis
   await backToList();
   await expect(normal.getByRole('img', { name: 'PR review', exact: true })).toBeVisible();
   await openSettings(normal);
-  await picker.getByRole('button', { name: 'Star', exact: true }).tap();
-  await expect(picker.getByRole('button', { name: 'Star', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(picker.getByRole('button', { name: 'Star', exact: true })).toHaveCSS('font-size', '24px');
+  await picker.getByRole('button', { name: 'Idea', exact: true }).tap();
+  await expect(picker.getByRole('button', { name: 'Idea', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
   await backToList();
-  await expect(normal.locator('.session-project .session-type-icon')).toHaveText('⭐');
-  await expect(normal.locator('.session-type-icon')).toHaveCSS('font-size', '12px');
-  await page.screenshot({ path: testInfo.outputPath('small-list-emoji.png') });
+  await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('list-kinds.png') });
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
   await page.getByLabel('Emoji', { exact: true }).fill('👩🏽‍💻');
@@ -95,23 +93,24 @@ test('session icons detect reviews, stay separate from status and support persis
   await expect(page.getByLabel('Session details', { exact: true })).toBeFocused();
   await page.evaluate(() => { delete visualViewport.height; visualViewport.dispatchEvent(new Event('resize')); });
   await backToList();
-  await expect(normal.locator('.session-type-icon')).toHaveText('👩🏽‍💻');
+  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
   publish(); // Live list replacements must retain the device's choice.
-  await expect(normal.locator('.session-type-icon')).toHaveText('👩🏽‍💻');
+  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
   await page.reload();
-  await expect(normal.locator('.session-type-icon')).toHaveText('👩🏽‍💻');
-  await expect(review.locator('.session-type-icon')).toHaveAttribute('aria-label', 'PR review');
+  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
+  await expect(saved.locator('.session-icon')).toHaveAttribute('aria-label', 'PR review');
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
   await expect(page.getByLabel('Emoji', { exact: true })).toHaveValue('👩🏽‍💻');
   await page.getByLabel('Emoji', { exact: true }).fill('🔎🐛');
   await picker.getByRole('button', { name: 'Use emoji', exact: true }).click();
   await backToList();
-  await expect(normal.locator('.session-type-icon')).toHaveText('🔎');
+  await expect(normal.locator('.session-icon')).toHaveText('🔎');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await openSettings(normal);
-  await expect(picker.getByRole('button', { name: 'Research', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.getByRole('button', { name: /Other emoji/ })).toContainText('🔎');
+  await expect(picker.locator('[aria-pressed=true]')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('icons-desktop-dark.png') });
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
