@@ -7,9 +7,10 @@
 .mock-pill strong { font-size: 15px; font-weight: 500; }
 .mock-pill small { color: var(--muted); font-size: 12px; }
 .mock-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
-.dock { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: auto; }
+.dock { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: auto; }
 
-.list { width: min(340px, 100%); max-height: min(330px, 52dvh); padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
+.pane { position: relative; width: min(340px, 100%); }
+.list { width: 100%; max-height: min(330px, 52dvh); padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 16px 40px rgb(0 0 0 / .25); }
 .list h3 { margin: 8px 12px 4px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .list h3:first-child { margin-top: 4px; }
 .row { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: 10px; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
@@ -27,6 +28,14 @@
 .pin { margin-left: 4px; color: var(--muted); font-size: 11px; }
 .inline-emoji { display: inline-grid; place-items: center; width: 15px; margin-right: 5px; font-size: 13px; vertical-align: -2px; }
 .lead-emoji { flex-shrink: 0; display: grid; place-items: center; width: 16px; color: var(--muted); font-size: 14px; }
+.list:not([data-variant=B]) [data-attention=unread] .label { color: var(--text); }
+.project { color: var(--text); opacity: .8; }
+.edge-hint { position: absolute; left: 50%; transform: translateX(-50%); min-height: 24px; padding: 3px 10px; border-radius: 12px; background: #0a84ff; color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; box-shadow: 0 4px 12px rgb(0 0 0 / .35); }
+.edge-hint[data-kind=waiting] { background: var(--warning); color: var(--panel); }
+/* Straddle the border so a pill never sits on a fully visible row. */
+.edge-hint.up { top: 0; transform: translate(-50%, -50%); }
+.edge-hint.down { bottom: 0; transform: translate(-50%, 50%); }
+.edge-hint[hidden] { display: none; }
 .list hr { height: 1px; margin: 4px 12px; border: 0; background: var(--line); }
 
 .dots { display: flex; align-items: center; gap: 8px; height: 12px; }

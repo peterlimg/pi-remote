@@ -20,7 +20,11 @@
     </header>
     <p class="mock-note">Sample data. Tap a row to switch; its “new” mark clears.</p>
     <div class="dock">
-      <div id="list" class="list" role="group" aria-label="Nearby sessions"></div>
+      <div class="pane">
+        <div id="list" class="list" role="group" aria-label="Nearby sessions"></div>
+        <button id="hint-up" class="edge-hint up" type="button" hidden></button>
+        <button id="hint-down" class="edge-hint down" type="button" hidden></button>
+      </div>
       <div id="dots" class="dots" aria-hidden="true"></div>
       <nav class="prototype-switcher" aria-label="Compare prototypes">
         <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>

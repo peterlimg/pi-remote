@@ -1,23 +1,26 @@
 // Throwaway: sample sessions only, nothing here talks to the host.
+// Every field below already arrives in the session list: preview/previewRole, dialog, lastPromptAt, the unread check, emoji.
 const $ = id => document.getElementById(id);
 const sessions = [
-  { title: 'Fix login redirect on Safari', project: 'primezero-web', age: '20m', status: 'idle', unread: true },
-  { title: 'Add model-independent voice input to the composer', project: 'pi-remote', age: '1d', status: 'idle', icon: '💡' },
-  { title: 'Investigate Claude SDK session recovery', project: 'pi-remote', age: 'Oct 21', status: 'saved', icon: '🔎' },
-  { title: 'Untitled session', project: 'pi-remote', age: '1h', status: 'idle' },
-  { title: 'Review PZ-756 withdrawal-only exclusion', project: 'primezero', age: '3h', status: 'waiting', icon: 'review' },
-  { title: 'Compress video with FFmpeg while preserving quality', project: 'scratch', age: 'now', status: 'working', icon: '🛠️' },
-  { title: 'Opentunnel reconnect flake', project: 'pi-remote', age: 'now', status: 'working', pinned: true, icon: '🐛' },
-  { title: 'Draft daily update', project: 'notes', age: '2d', status: 'saved', icon: '📝' },
+  { title: 'Draft daily update', project: 'notes', age: '2d', status: 'saved', icon: '📝', preview: 'Pi: Here is today’s update.' },
+  { title: 'Fix login redirect on Safari', project: 'primezero-web', age: '20m', status: 'idle', unread: true, preview: 'Pi: Fixed. The cookie was SameSite=Strict, so Safari dropped it on the redirect.' },
+  { title: 'Investigate Claude SDK session recovery', project: 'pi-remote', age: 'Oct 21', status: 'saved', icon: '🔎', preview: 'Pi: Wrote docs/research/sdk-recovery.md' },
+  { title: 'Add model-independent voice input to the composer', project: 'pi-remote', age: '1d', status: 'idle', icon: '💡', preview: 'You: try the Web Speech API first' },
+  { title: 'Compress video with FFmpeg while preserving quality', project: 'scratch', age: 'now', running: '3m', status: 'working', icon: '🛠️', preview: 'Pi: Encoding pass 2 of 2…' },
+  { title: 'Untitled session', project: 'pi-remote', age: '1h', status: 'idle', preview: '' },
+  { title: 'Opentunnel reconnect flake', project: 'pi-remote', age: 'now', running: '12m', status: 'working', pinned: true, icon: '🐛', preview: 'You: run the reconnect test 20 times' },
+  { title: 'Keep the composer still while a session loads', project: 'pi-remote', age: '2h', status: 'idle', preview: 'Pi: Pushed c2a33ae to main.' },
+  { title: 'Rename Linear labels for Q4', project: 'primezero', age: '5h', status: 'idle', preview: 'Pi: Renamed 14 labels.' },
+  { title: 'Session dots haptics on iOS 26.5', project: 'pi-remote', age: '1d', status: 'idle', preview: 'Pi: The switch trick ticks on release.' },
+  { title: 'Review PZ-756 withdrawal-only exclusion', project: 'primezero', age: '3h', status: 'waiting', icon: 'review', dialog: 'Post these 3 review comments to the PR?', preview: 'Pi: Drafted 3 comments.' },
+  { title: 'Upgrade Go to 1.25 in backend-go', project: 'backend-go', age: '40m', status: 'idle', unread: true, preview: 'Pi: Done. CI passes; two deprecation warnings remain.' },
 ];
-let current = 3, variant;
+let current = 5, variant;
 
 const variants = [
-  { key: 'A', name: 'Signals', description: 'Status icon and label for what needs you; same order as the dots' },
-  { key: 'B', name: 'Signals + emoji', description: 'A, plus the session emoji before the project, like the main list' },
-  { key: 'C', name: 'Emoji or status', description: 'The left icon shows status while active, otherwise the session emoji' },
-  { key: 'D', name: 'Working first', description: 'B, sorted: working, then needs you, then the rest' },
-  { key: 'E', name: 'Working first, labelled', description: 'D with small group labels' },
+  { key: 'B', name: 'Signals + emoji', description: 'Your pick: status, emoji and project' },
+  { key: 'F', name: 'What’s happening', description: 'Line 2 shows the question, the new reply, or how long it has run; project only when it differs' },
+  { key: 'G', name: 'F + off-screen hints', description: 'F, plus a pill at the edge when something above or below needs you' },
 ];
 
 const kind = item => item.status === 'working' ? 'working' : item.status === 'waiting' ? 'waiting' : item.unread ? 'unread' : '';
@@ -37,53 +40,69 @@ function statusIcon(item) {
     : '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>';
   return icon;
 }
-function emoji(item, className) {
-  const node = el('span', item.icon === 'review' ? '' : item.icon, className);
+function emoji(item) {
+  if (!item.icon) return [];
+  const node = el('span', item.icon === 'review' ? '' : item.icon, 'inline-emoji');
   if (item.icon === 'review') node.innerHTML = reviewSvg;
-  return node;
+  return [node];
+}
+
+// B: state label, emoji, project.
+function metaB(item) {
+  const meta = el('small');
+  if (label[kind(item)]) meta.append(el('span', label[kind(item)], 'label'), ' · ');
+  meta.append(...emoji(item), item.project);
+  return meta;
+}
+// F/G: what you would find if you opened it. Project only when it is not the one you are in.
+function metaF(item) {
+  const meta = el('small'), here = sessions[current].project, k = kind(item);
+  meta.append(...emoji(item));
+  if (item.project !== here) meta.append(el('span', item.project, 'project'), ' · ');
+  if (k === 'waiting') meta.append(el('span', item.dialog || 'Needs input', 'label'));
+  else if (k === 'working') meta.append(el('span', `Working ${item.running}`, 'label'), ...item.preview ? [' · ', item.preview.replace(/^Pi: /, '')] : []);
+  else if (k === 'unread') meta.append(el('span', item.preview.replace(/^Pi: /, ''), 'label'));
+  else meta.append(item.preview || (item.project === here ? item.project : 'No messages yet'));
+  return meta;
 }
 
 function row(item) {
   const index = sessions.indexOf(item), button = el('button', undefined, 'row'), text = el('span', undefined, 'text');
-  button.type = 'button'; button.dataset.status = item.status;
+  button.type = 'button'; button.dataset.status = item.status; button.dataset.index = index;
   button.setAttribute('aria-current', String(index === current));
   if (kind(item)) button.dataset.attention = kind(item);
   const title = el('strong', item.title);
   if (item.pinned) title.append(el('span', '📌', 'pin'));
-  const meta = el('small');
-  if (label[kind(item)]) meta.append(el('span', label[kind(item)], 'label'), ' · ');
-  // C moves the emoji to the left slot, so the meta line only repeats it when status took that slot.
-  const inlineEmoji = item.icon && variant.key !== 'A' && (variant.key !== 'C' || kind(item));
-  if (inlineEmoji) meta.append(emoji(item, 'inline-emoji'));
-  meta.append(item.project);
-  text.append(title, meta);
-  const lead = variant.key === 'C' && item.icon && !kind(item) ? emoji(item, 'lead-emoji') : statusIcon(item);
-  button.append(lead, text, el('time', item.age));
+  text.append(title, variant.key === 'B' ? metaB(item) : metaF(item));
+  // A running session is always "now"; F/G put its elapsed time in line 2 instead.
+  button.append(statusIcon(item), text, el('time', variant.key !== 'B' && kind(item) === 'working' ? '' : item.age));
   button.addEventListener('click', () => { current = index; item.unread = false; render(); });
   return button;
 }
 
+// G: count what needs you beyond each edge of the scrolled list.
+function updateHints() {
+  const list = $('list'), top = list.scrollTop, bottom = top + list.clientHeight;
+  for (const [id, outside, arrow] of [['hint-up', row => row.offsetTop + row.offsetHeight / 2 < top, '↑'], ['hint-down', row => row.offsetTop + row.offsetHeight / 2 > bottom, '↓']]) {
+    const rows = variant.key === 'G' ? [...list.querySelectorAll('[data-attention=waiting], [data-attention=unread]')].filter(outside) : [];
+    const hint = $(id), waiting = rows.filter(row => row.dataset.attention === 'waiting').length, fresh = rows.length - waiting;
+    hint.hidden = !rows.length;
+    hint.dataset.kind = waiting ? 'waiting' : 'unread';
+    hint.textContent = `${arrow} ${[waiting && `${waiting} needs you`, fresh && `${fresh} new`].filter(Boolean).join(' · ')}`;
+    hint.onclick = () => (arrow === '↑' ? rows.at(-1) : rows[0]).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+$('list').addEventListener('scroll', updateHints, { passive: true });
+
 function render() {
   const list = $('list'), item = sessions[current];
   $('pill-title').textContent = item.title; $('pill-project').textContent = item.project;
-  if (['D', 'E'].includes(variant.key)) {
-    const groups = [['Working', s => s.status === 'working'], ['Needs you', s => ['waiting', 'unread'].includes(kind(s))], ['Others', () => true]];
-    const left = [...sessions], nodes = [];
-    for (const [name, test] of groups) {
-      const rows = left.filter(test);
-      if (!rows.length) continue;
-      rows.forEach(s => left.splice(left.indexOf(s), 1));
-      nodes.push(variant.key === 'E' ? el('h3', name) : el('hr'), ...rows.map(row));
-    }
-    if (nodes[0].tagName === 'HR') nodes.shift();
-    list.replaceChildren(...nodes);
-    list.scrollTop = 0;
-  } else {
-    list.replaceChildren(...sessions.map(row));
-    const at = list.querySelector('[aria-current=true]');
-    list.scrollTop = at.offsetTop - (list.clientHeight - at.offsetHeight) / 2;
-  }
+  list.dataset.variant = variant.key;
+  list.replaceChildren(...sessions.map(row));
+  const at = list.querySelector('[aria-current=true]');
+  list.scrollTop = at.offsetTop - (list.clientHeight - at.offsetHeight) / 2;
   $('dots').replaceChildren(...sessions.map((s, i) => el('span', undefined, i === current ? 'current' : '')));
+  updateHints();
 }
 
 function setVariant(key) {
