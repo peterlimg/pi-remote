@@ -182,34 +182,112 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
 .session-icon[data-unread]:not(.bot) circle { fill: currentColor; }
-/* Session bots: the face carries the state, so it bobs while working and wiggles when it needs you. */
-.bot { --bot-ink: light-dark(#fff, #18141a); --bot-shine: light-dark(transparent, #fff); }
+/* Session bots: the face carries the state, and while working each bot does its own job. */
+.bot { --bot-ink: light-dark(#fff, #18141a); --bot-shine: light-dark(transparent, #fff); --bot-dark: color-mix(in srgb, var(--kind, var(--muted)) 55%, #000); }
 .session-icon.bot { height: 28px; margin-top: 0; }
 .bot svg { display: block; overflow: visible; }
 .bot .bot-body { fill: var(--kind, var(--muted)); }
-.bot .bot-accent { fill: color-mix(in srgb, var(--kind, var(--muted)) 62%, #000); }
+.bot .bot-accent { fill: var(--bot-dark); }
 .bot .bot-bulb { fill: #ffd84d; }
 .bot .bot-eye { fill: var(--bot-ink); }
 .bot .bot-shine { fill: var(--bot-shine); }
 .bot .bot-line { fill: none; stroke: var(--bot-ink); stroke-width: 1.6; stroke-linecap: round; }
-.bot .bot-frame { fill: none; stroke: color-mix(in srgb, var(--kind, var(--muted)) 55%, #000); stroke-width: 1.8; }
+.bot .bot-frame { fill: none; stroke: var(--bot-dark); stroke-width: 1.8; }
 .bot .bot-stalk { fill: none; stroke: var(--kind, var(--muted)); stroke-width: 2.2; stroke-linecap: round; }
-.bot :is(.bot-figure, .bot-eyes, .bot-look) { transform-box: fill-box; transform-origin: center; }
 .bot .bot-badge circle { stroke: var(--bg); stroke-width: 2; fill: #0a84ff; }
 .bot[data-mood=waiting] .bot-badge circle { fill: var(--warning); }
 .bot .bot-badge path { stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; }
 .bot[data-mood=saved] { opacity: .5; }
-@media (prefers-reduced-motion: no-preference) {
-  .bot:is([data-mood=idle], [data-mood=working], [data-mood=waiting]) .bot-eyes { animation: bot-blink 6s var(--bot-blink, 0s) infinite; }
-  .bot[data-mood=working] .bot-figure { animation: bot-bob .5s ease-in-out var(--bot-t, 0s) infinite alternate; }
-  .bot[data-mood=working] .bot-look { animation: bot-glance 1.5s ease-in-out var(--bot-t, 0s) infinite; }
-  .bot[data-mood=waiting] .bot-figure { transform-origin: 50% 100%; animation: bot-wiggle 1.5s ease-in-out var(--bot-t, 0s) infinite; }
-}
+.bot .bot-zz text { fill: var(--muted); font: 600 7px var(--sans); opacity: 0; }
+.bot .bot-glint { fill: none; stroke: #fff; stroke-width: 1.4; stroke-linecap: round; }
+.bot :is(.bot-spark, .bot-rays) { fill: none; stroke: #ffd84d; stroke-width: 1.4; stroke-linecap: round; }
+.bot :is(.bot-scan, .bot-pulse) { fill: none; stroke: var(--kind); stroke-width: 1.4; }
+.bot .bot-handle { fill: none; stroke: #b07a45; stroke-width: 2; stroke-linecap: round; }
+.bot .bot-scribble { fill: none; stroke: var(--kind); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 20; }
+.bot .bot-pencil-body { fill: #ffd84d; stroke: var(--bot-dark); stroke-width: .8; }
+.bot .bot-bubbles circle { fill: var(--kind); }
+.bot .bot-flame-out { fill: #ff8a3d; }
+.bot .bot-flame-in { fill: #ffe066; }
+.bot :is(.bot-star, .bot-sparkle) { fill: #ffe066; }
+.bot .bot-band { fill: none; stroke: var(--bot-dark); stroke-width: 1.6; }
+.bot .bot-spin { fill: none; stroke: #fff; stroke-width: 1.4; stroke-dasharray: 3 3; stroke-linecap: round; }
+.bot .bot-chevron { fill: none; stroke: var(--bot-dark); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bot .bot-typing circle { fill: var(--bot-ink); }
+.bot .bot-headset { fill: none; stroke: var(--bot-dark); stroke-width: 2.2; stroke-linecap: round; }
+.bot .bot-gear-teeth { fill: var(--bot-dark); stroke: var(--bot-dark); stroke-width: 2.2; stroke-dasharray: 1.6 1.6; }
+.bot .bot-gear-hole { fill: var(--kind); }
+.bot :is(.bot-figure, .bot-eyes, .bot-look, .bot-badge, .bot-zz text, .bot-antenna, .bot-scan, .bot-bubbles circle, .bot-sparkle, .bot-pulse, .bot-typing circle, .bot-swatches rect, .bot-gear, .bot-pencil) { transform-box: fill-box; transform-origin: center; }
+.bot .bot-hammer { transform-box: view-box; transform-origin: 28px 28px; }
+.bot .bot-flame { transform-box: fill-box; transform-origin: 50% 0; }
 .bot[data-mood=waiting] .bot-look { transform: translateY(-1.5px); }
+/* Rows rebuild on every update, so every loop starts from --bot-t (the clock) and its period divides 6s: motion never restarts mid-swing. */
+@media (prefers-reduced-motion: no-preference) {
+  .bot { --t: var(--bot-t, 0s); }
+  .bot:is([data-mood=idle], [data-mood=working], [data-mood=waiting]) .bot-eyes { animation: bot-blink 6s var(--bot-blink, 0s) infinite; }
+  .bot[data-mood=working] .bot-figure { animation: bot-bob .5s ease-in-out var(--t) infinite alternate; }
+  .bot[data-mood=working] .bot-look { animation: bot-glance 1.5s ease-in-out var(--t) infinite; }
+  .bot[data-mood=waiting] .bot-figure { transform-origin: 50% 100%; animation: bot-wiggle 1.5s ease-in-out var(--t) infinite; }
+  .bot[data-mood=waiting] .bot-badge { animation: bot-badge 1.5s ease-in-out var(--t) infinite; }
+  .bot[data-mood=unread] .bot-figure { transform-origin: 50% 100%; animation: bot-hop 3s ease-in-out var(--t) infinite; }
+  .bot[data-mood=saved] .bot-zz text { animation: bot-zz 3s ease-out var(--t) infinite; }
+  .bot[data-mood=saved] .bot-zz text + text { animation-delay: calc(var(--t) - 1.5s); }
+  .bot[data-kind=review][data-mood=working] .bot-figure { transform-origin: 50% 100%; animation: bot-nod 1.2s ease-in-out var(--t) infinite; }
+  .bot .bot-glint { animation: bot-flash 1.2s ease-in-out var(--t) infinite; }
+  .bot[data-kind=fix][data-mood=working] .bot-antenna { transform-origin: 50% 100%; animation: bot-twitch .3s ease-in-out var(--t) infinite alternate; }
+  .bot[data-kind=fix][data-mood=working] .bot-antenna.bot-right { animation-direction: alternate-reverse; }
+  .bot .bot-spark { animation: bot-flash .6s steps(2, jump-none) var(--t) infinite; }
+  .bot[data-kind=research][data-mood=working] .bot-look { animation-duration: 2s; }
+  .bot .bot-scan { animation: bot-ring 1.5s ease-out var(--t) infinite; }
+  .bot[data-kind=build][data-mood=working] .bot-figure { animation-duration: .3s; }
+  .bot .bot-hammer { animation: bot-hammer .6s ease-in var(--t) infinite; }
+  .bot .bot-rays { animation: bot-flash .5s steps(2, jump-none) var(--t) infinite; }
+  .bot[data-kind=idea][data-mood=working] .bot-bulb { animation: bot-flicker 1s steps(1, end) var(--t) infinite; }
+  .bot .bot-pencil { animation: bot-write .5s ease-in-out var(--t) infinite alternate; }
+  .bot .bot-scribble { animation: bot-draw 1.5s linear var(--t) infinite; }
+  .bot .bot-bubbles circle { animation: bot-rise 1.2s ease-out var(--t) infinite; }
+  .bot .bot-bubbles circle:nth-child(2) { animation-delay: calc(var(--t) - .8s); }
+  .bot .bot-bubbles circle:nth-child(3) { animation-delay: calc(var(--t) - .4s); }
+  .bot[data-kind=test][data-mood=working] .bot-figure { transform-origin: 50% 100%; animation: bot-slosh 1.2s ease-in-out var(--t) infinite; }
+  .bot[data-kind=ship][data-mood=working] .bot-figure { animation: bot-launch .5s ease-in-out var(--t) infinite alternate; }
+  .bot .bot-flame { animation: bot-flame .12s ease-in-out var(--t) infinite alternate; }
+  .bot .bot-sparkle { animation: bot-twinkle 1.2s ease-in-out var(--t) infinite; }
+  .bot .bot-sparkle:nth-of-type(2) { animation-delay: calc(var(--t) - .8s); }
+  .bot .bot-sparkle:nth-of-type(3) { animation-delay: calc(var(--t) - .4s); }
+  .bot .bot-spin { animation: bot-spin .6s linear var(--t) infinite; }
+  .bot .bot-pulse { animation: bot-shield 1.5s ease-out var(--t) infinite; }
+  .bot[data-kind=chat][data-mood=working] :is(.bot-figure, .bot-look) { animation: none; }
+  .bot .bot-typing circle { animation: bot-type 1s ease-in-out var(--t) infinite; }
+  .bot .bot-typing circle:nth-child(2) { animation-delay: calc(var(--t) - .85s); }
+  .bot .bot-typing circle:nth-child(3) { animation-delay: calc(var(--t) - .7s); }
+  .bot[data-kind=design][data-mood=working] .bot-swatches rect { animation: bot-type 1s ease-in-out var(--t) infinite; }
+  .bot[data-kind=design][data-mood=working] .bot-swatches rect:nth-child(2) { animation-delay: calc(var(--t) - .85s); }
+  .bot[data-kind=design][data-mood=working] .bot-swatches rect:nth-child(3) { animation-delay: calc(var(--t) - .7s); }
+  .bot .bot-gear { animation: bot-turn 2s linear var(--t) infinite; }
+}
 @keyframes bot-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
 @keyframes bot-bob { to { transform: translateY(-2px); } }
 @keyframes bot-glance { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
 @keyframes bot-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-9deg); } 80% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
+@keyframes bot-badge { 50% { transform: scale(1.25); } }
+@keyframes bot-hop { 0%, 70%, 100% { transform: none; } 76% { transform: scale(1.08, .9); } 84% { transform: translateY(-4px) scale(.95, 1.06); } 92% { transform: scale(1.04, .96); } }
+@keyframes bot-zz { 0% { opacity: 0; transform: none; } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(4px, -7px); } }
+@keyframes bot-nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(5deg) translateY(1px); } }
+@keyframes bot-flash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes bot-twitch { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes bot-ring { from { opacity: .9; transform: scale(.7); } to { opacity: 0; transform: scale(2.3); } }
+@keyframes bot-shield { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.4); } }
+@keyframes bot-hammer { 0%, 100% { transform: rotate(-45deg); } 45% { transform: rotate(12deg); } 55% { transform: rotate(6deg); } }
+@keyframes bot-flicker { 0%, 100% { opacity: 1; } 40% { opacity: .35; } 45% { opacity: 1; } 60% { opacity: .5; } }
+@keyframes bot-write { from { transform: translateX(-4px); } to { transform: translateX(1px) translateY(-1px); } }
+@keyframes bot-draw { from { stroke-dashoffset: 20; } to { stroke-dashoffset: -20; } }
+@keyframes bot-rise { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-7px); } }
+@keyframes bot-slosh { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes bot-launch { to { transform: translateY(-3px); } }
+@keyframes bot-flame { from { transform: scaleY(.7); } to { transform: scaleY(1.15); } }
+@keyframes bot-twinkle { 0%, 100% { opacity: 0; transform: scale(.3) rotate(0); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+@keyframes bot-spin { to { stroke-dashoffset: -12; } }
+@keyframes bot-type { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-2.5px); } }
+@keyframes bot-turn { to { transform: rotate(360deg); } }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
 .heading-kind { display: grid; place-items: center; flex-shrink: 0; font-size: 24px; line-height: 1; }
 #title-kind { display: flex; }
@@ -222,6 +300,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 [data-kind=idea] { --kind: light-dark(#9a6700, #f2c94c); }
 [data-kind=notes] { --kind: light-dark(#57606a, #c9c4c9); }
 [data-kind=general] { --kind: var(--muted); }
+[data-kind=test] { --kind: light-dark(#0f766e, #5fd4c4); }
+[data-kind=ship] { --kind: light-dark(#c2410c, #ffab70); }
+[data-kind=tidy] { --kind: light-dark(#be185d, #f9a8d4); }
+[data-kind=data] { --kind: light-dark(#4338ca, #a5b4fc); }
+[data-kind=guard] { --kind: light-dark(#4d7c0f, #bef264); }
+[data-kind=chat] { --kind: light-dark(#8a5a2b, #e2bf94); }
+[data-kind=design] { --kind: light-dark(#52525b, #f4f4f5); }
+[data-kind=ops] { --kind: light-dark(#0e7490, #67e8f9); }
 /* statusIcon phase-locks the brick highlights to this .9s period. */
 .session-icon[data-status=working] rect { animation: session-brick-step .9s steps(1, end) var(--block-delay, 0s) infinite; }
 .session-icon[data-status=working] rect:nth-child(2) { animation-delay: calc(var(--block-delay, 0s) - .75s); }
@@ -344,7 +430,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .icon-sheet-body { overflow: auto; padding: 12px 16px 16px; }
 .session-icon-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .session-icon-options button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 76px; padding: 10px 4px; border: 1px solid transparent; border-radius: 12px; background: var(--user); color: var(--muted); font-size: 13px; font-weight: 500; }
-#session-kind-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 16px; }
+#session-kind-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 4px; margin-top: 16px; }
 #session-kind-options button { display: grid; place-items: center; min-height: 44px; padding: 4px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--kind); }
 :is(.session-icon-options, #session-kind-options) button[aria-pressed=true] { border-color: var(--accent); background: var(--user); }
 .session-icon-options button[aria-pressed=true] { color: var(--accent); }
