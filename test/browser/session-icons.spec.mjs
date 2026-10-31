@@ -55,20 +55,27 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   };
   await openSettings(saved);
   await page.screenshot({ path: testInfo.outputPath('icon-picker-mobile.png') });
-  await picker.getByRole('button', { name: 'None', exact: true }).click();
+  // A centred card of bots only: the current one is pressed and plays its job.
+  const card = await page.locator('.icon-sheet').boundingBox(), viewport = page.viewportSize();
+  expect(Math.abs(card.y + card.height / 2 - viewport.height / 2)).toBeLessThan(2);
+  await expect(picker.getByRole('button', { name: /Automatic|None/ })).toHaveCount(0);
+  await expect(picker.getByRole('button', { name: 'Review', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.locator('[aria-pressed=true] .bot')).toHaveAttribute('data-mood', 'working');
+  await expect(picker.locator('[aria-pressed=true] svg')).toHaveAttribute('width', '44');
+  await picker.getByRole('button', { name: 'Fix', exact: true }).click();
   await backToList();
-  await expect(saved.locator('[data-kind]')).toHaveCount(0);
-  await expect(saved.locator('.session-icon circle')).toHaveCount(1);
+  await expect(saved.getByRole('img', { name: 'Fix', exact: true })).toBeVisible();
   await page.reload();
-  await expect(saved.locator('[data-kind]')).toHaveCount(0);
+  await expect(saved.getByRole('img', { name: 'Fix', exact: true })).toBeVisible();
+  // Picking the title's own bot drops the override instead of pinning it.
   await openSettings(saved);
-  await expect(picker.getByRole('button', { name: 'None', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await picker.getByRole('button', { name: 'Automatic', exact: true }).click();
+  await picker.getByRole('button', { name: 'Review', exact: true }).click();
+  expect(await page.evaluate(() => localStorage.getItem('pi-remote-session-icons'))).toBe('[]');
   await backToList();
   await expect(saved.getByRole('img', { name: 'Review', exact: true })).toBeVisible();
 
   await openSettings(normal);
-  await expect(picker.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.getByRole('button', { name: 'Build', exact: true })).toHaveAttribute('aria-pressed', 'true');
   // The header shows the kind next to the project, and follows a new choice straight away.
   await expect(page.locator('#project-name')).toHaveText('pi-remote');
   await expect(page.locator('#title-kind').getByRole('img', { name: 'Build', exact: true })).toBeVisible();

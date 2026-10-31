@@ -933,8 +933,11 @@ function showSessionKind(icon, item, size = 28) {
   if (!kind || kind.emoji && (unread || !['idle', 'saved'].includes(item.status))) return icon;
   return dressKind(icon, kind, size, item.status, unread);
 }
+const autoKind = item => autoSessionIcons.find(([, pattern]) => pattern.test(sessionTitle(item.title, cache.get(item.id)?.messages)))?.[0] || 'general';
 function sessionKind(item) {
-  const choice = sessionIcons.get(item.id) || { type: autoSessionIcons.find(([, pattern]) => pattern.test(sessionTitle(item.title, cache.get(item.id)?.messages)))?.[0] || 'general' };
+  // Older devices may have saved a 'none' choice; it now falls back to the title's bot.
+  const saved = sessionIcons.get(item.id), choice = saved?.type === 'none' ? undefined : saved;
+  if (!choice) return { type: autoKind(item), label: sessionKinds[autoKind(item)][0], id: item.id };
   if (choice.type === 'custom' && choice.icon) return { type: 'custom', emoji: choice.icon, label: `Session icon: ${choice.icon}` };
   if (sessionKinds[choice.type]) return { type: choice.type, label: sessionKinds[choice.type][0], id: item.id };
 }
@@ -961,27 +964,31 @@ function headingKind(item) {
   const kind = item && sessionKind(item);
   return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 32, item.status)] : [];
 }
+// The picker shows the session's current bot playing its job; picking the title's own bot drops the override.
 function renderSessionIconChoice() {
-  const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
-  $('session-icon-current').textContent = type === 'custom' ? choice.icon : { auto: 'Automatic', none: 'None' }[type] || sessionKinds[type]?.[0] || 'None';
-  for (const bot of $('session-kind-options').querySelectorAll('.bot')) bot.style.setProperty('--bot-blink', `-${Math.random() * 6000}ms`);
-  for (const button of $('session-icon-options').children) button.setAttribute('aria-pressed', String(button.dataset.iconType === type));
-  for (const button of $('session-kind-options').children) button.setAttribute('aria-pressed', String(button.dataset.kind === type));
-  $('session-emoji-other').textContent = type === 'custom' ? `${choice.icon}  Other emoji…` : 'Other emoji…';
+  const item = sessions.find(row => row.id === selected) || selectedSummary, kind = item && sessionKind(item);
+  $('session-icon-current').textContent = kind?.emoji || (kind?.type === 'general' ? 'Default' : kind?.label || '');
+  for (const button of $('session-kind-options').children) {
+    const pressed = button.dataset.kind === kind?.type, mood = pressed ? 'working' : 'idle';
+    button.setAttribute('aria-pressed', String(pressed));
+    button.firstElementChild.dataset.mood = mood; button.firstElementChild.innerHTML = botSvg(button.dataset.kind, mood, 44);
+  }
+  $('session-emoji-other').textContent = kind?.emoji ? `${kind.emoji}  Other emoji…` : 'Other emoji…';
 }
 function saveSessionIcon(type, icon = '') {
   if (!selected) return;
-  if (type === 'auto') sessionIcons.delete(selected);
+  const item = sessions.find(row => row.id === selected) || selectedSummary;
+  if (type !== 'custom' && item && type === autoKind(item)) sessionIcons.delete(selected);
   else sessionIcons.set(selected, { type, icon });
   localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
   renderSessionIconChoice(); renderList();
 }
-for (const button of $('session-icon-options').children) button.addEventListener('click', () => saveSessionIcon(button.dataset.iconType));
 for (const [kind, [name]] of Object.entries(sessionKinds)) {
   if (kind === 'general') continue;
-  const button = el('button');
-  button.type = 'button'; button.dataset.kind = kind; button.setAttribute('aria-label', name); button.title = name;
-  button.innerHTML = `<span class="bot" data-kind="${kind}" data-mood="idle">${botSvg(kind, 'idle', 30)}</span>`;
+  const button = el('button'), bot = el('span', undefined, 'bot');
+  button.type = 'button'; button.dataset.kind = kind;
+  bot.dataset.kind = kind; bot.setAttribute('aria-hidden', 'true');
+  button.append(bot, el('span', name));
   button.addEventListener('click', () => saveSessionIcon(kind));
   $('session-kind-options').append(button);
 }

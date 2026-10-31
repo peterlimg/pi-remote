@@ -146,16 +146,11 @@
       <dialog id="session-icon-picker" class="project-picker" aria-labelledby="session-icon-title" tabindex="-1"><div class="project-sheet icon-sheet">
         <header><h2 id="session-icon-title">Session icon</h2><button id="session-icon-done" type="button" class="quiet">Done</button></header>
         <div class="icon-sheet-body">
-          <div id="session-icon-options" class="session-icon-options" role="group" aria-label="Icon type">
-            <button type="button" data-icon-type="auto"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg>Automatic</button>
-            <button type="button" data-icon-type="none"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>None</button>
-          </div>
           <div id="session-kind-options" role="group" aria-label="Kinds"></div>
           <button id="session-emoji-other" type="button" class="quiet" aria-expanded="false" aria-controls="session-emoji-form">Other emoji…</button>
           <form id="session-emoji-form" hidden>
             <label class="sr-only" for="session-custom-icon">Emoji</label><input id="session-custom-icon" type="text" maxlength="32" autocomplete="off" placeholder="Paste an emoji" enterkeyhint="done"><button type="submit">Use emoji</button>
           </form>
-          <p class="hint">Automatic uses the session title. Only saved on this device.</p>
         </div>
       </div></dialog>
       <div id="notice" class="notice" role="status" hidden></div>
