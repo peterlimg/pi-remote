@@ -211,10 +211,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 @keyframes bot-glance { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
 @keyframes bot-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-9deg); } 80% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
-.heading-kind { display: inline-grid; place-items: center; margin-right: 6px; vertical-align: -3px; font-size: 14px; line-height: 1; }
-.heading-kind.bot { margin-block: -4px; }
-.heading-title { display: flex; align-items: center; justify-content: center; min-width: 0; }
-.heading-title h1 { min-width: 0; }
+.heading-kind { display: grid; place-items: center; flex-shrink: 0; font-size: 24px; line-height: 1; }
 #title-kind { display: flex; }
 #title-kind:empty { display: none; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
@@ -281,13 +278,17 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* Swiping the title slides the neighbouring sessions' titles through this window. */
 .heading-window { overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); }
 .heading-strip { position: relative; }
-.heading-slot { padding: 0 16px; }
+.heading-slot { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; }
+/* With a bot, the header reads like a contact chip: avatar at the left edge, both lines aligned beside it. */
+.heading-slot:has(.heading-kind) { padding-left: 6px; }
+.heading-slot:has(.heading-kind) .heading-text { text-align: left; }
+.heading-text { min-width: 0; }
 .heading-slot[data-side] { position: absolute; top: 0; width: 100%; }
 .heading-slot[data-side=prev] { right: 100%; }
 .heading-slot[data-side=next] { left: 100%; }
-.heading-slot > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.heading-slot > span:first-child { font-size: 14px; font-weight: 500; }
-.heading-slot > span + span { color: var(--muted); font-size: 12px; }
+.heading-text > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heading-text > span:first-child { font-size: 14px; font-weight: 500; }
+.heading-text > span + span { color: var(--muted); font-size: 12px; }
 /* Page dots like the home screen's: the bright dot slides with the finger, a ring marks where switching started,
    and past 5 sessions the row scrolls and its end dots shrink. */
 .session-dots { height: 6px; overflow: hidden; transition: transform .3s cubic-bezier(.3, 1.6, .5, 1); }

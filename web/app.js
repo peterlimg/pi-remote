@@ -914,10 +914,10 @@ function dressKind(node, kind, size, status, unread = false) {
   node.removeAttribute('aria-hidden'); node.setAttribute('role', 'img'); node.setAttribute('aria-label', kind.label); node.title = kind.label;
   return node;
 }
-// The header leads its title with the session's bot; it shows activity but not unread, since you are reading it.
+// The header leads with the session's bot beside both lines; it shows activity but not unread, since you are reading it.
 function headingKind(item) {
   const kind = item && sessionKind(item);
-  return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 22, item.status)] : [];
+  return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 32, item.status)] : [];
 }
 function renderSessionIconChoice() {
   const choice = sessionIcons.get(selected), type = choice?.type || 'auto';
@@ -2515,9 +2515,9 @@ function renderHeading() {
   const ids = switchIds(), at = ids.indexOf(selected);
   for (const [side, step] of [['prev', -1], ['next', 1]]) {
     const item = at < 0 ? undefined : sessions.find(row => row.id === ids[at + step]);
-    const title = el('span');
-    if (item) title.append(...headingKind(item), sessionTitle(item.title, cache.get(item.id)?.messages));
-    $('heading-' + side).replaceChildren(...item ? [title, el('span', projectName(item.cwd))] : []);
+    const text = el('div', undefined, 'heading-text');
+    if (item) text.append(el('span', sessionTitle(item.title, cache.get(item.id)?.messages)), el('span', projectName(item.cwd)));
+    $('heading-' + side).replaceChildren(...item ? [...headingKind(item), text] : []);
   }
   renderDots();
 }
