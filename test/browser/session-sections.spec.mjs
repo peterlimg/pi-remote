@@ -207,7 +207,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await page.getByRole('button', { name: 'View all pinned sessions' }).press('Enter');
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await expect(collection.locator('.session')).toHaveCount(20);
-    await expect(collection.locator('.session-indicators [data-kind]')).toHaveCount(2);
+    await expect(collection.locator('.session-indicators [data-kind]:not([data-kind=general])')).toHaveCount(2);
     await collection.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(collection.locator('.session')).toHaveCount(31);
     // Pin/unpin uses the same gesture and real API inside the collection.

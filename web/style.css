@@ -175,17 +175,47 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .list-pagination button { padding-inline: 8px; font-size: 12px; }
 #list-page { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
 #list-retry { width: 100%; }
-.session { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
+.session { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; width: 100%; text-align: left; background: transparent; color: var(--text); padding: 12px 10px; border-radius: 8px; }
 .session-indicators { display: flex; flex-direction: column; align-items: center; }
 .session-icon { display: grid; place-items: center; height: 26px; margin-top: 2px; color: var(--muted); }
 .session-icon[data-status=waiting] { color: var(--warning); }
 .session-icon:is([data-status=saved], [data-status=disconnected]) { opacity: .5; }
 .session-icon[data-unread] { color: #0a84ff; opacity: 1; }
-.session-icon[data-unread] circle { fill: currentColor; }
+.session-icon[data-unread]:not(.bot) circle { fill: currentColor; }
+/* Session bots: the face carries the state, so it bobs while working and wiggles when it needs you. */
+.bot { --bot-ink: light-dark(#fff, #18141a); --bot-shine: light-dark(transparent, #fff); }
+.session-icon.bot { height: 28px; margin-top: 0; }
+.bot svg { display: block; overflow: visible; }
+.bot .bot-body { fill: var(--kind, var(--muted)); }
+.bot .bot-accent { fill: color-mix(in srgb, var(--kind, var(--muted)) 62%, #000); }
+.bot .bot-bulb { fill: #ffd84d; }
+.bot .bot-eye { fill: var(--bot-ink); }
+.bot .bot-shine { fill: var(--bot-shine); }
+.bot .bot-line { fill: none; stroke: var(--bot-ink); stroke-width: 1.6; stroke-linecap: round; }
+.bot .bot-frame { fill: none; stroke: color-mix(in srgb, var(--kind, var(--muted)) 55%, #000); stroke-width: 1.8; }
+.bot .bot-stalk { fill: none; stroke: var(--kind, var(--muted)); stroke-width: 2.2; stroke-linecap: round; }
+.bot :is(.bot-figure, .bot-eyes, .bot-look) { transform-box: fill-box; transform-origin: center; }
+.bot .bot-badge circle { stroke: var(--bg); stroke-width: 2; fill: #0a84ff; }
+.bot[data-mood=waiting] .bot-badge circle { fill: var(--warning); }
+.bot .bot-badge path { stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; }
+.bot[data-mood=saved] { opacity: .5; }
+@media (prefers-reduced-motion: no-preference) {
+  .bot:is([data-mood=idle], [data-mood=working], [data-mood=waiting]) .bot-eyes { animation: bot-blink 6s var(--bot-blink, 0s) infinite; }
+  .bot[data-mood=working] .bot-figure { animation: bot-bob .5s ease-in-out var(--bot-t, 0s) infinite alternate; }
+  .bot[data-mood=working] .bot-look { animation: bot-glance 1.5s ease-in-out var(--bot-t, 0s) infinite; }
+  .bot[data-mood=waiting] .bot-figure { transform-origin: 50% 100%; animation: bot-wiggle 1.5s ease-in-out var(--bot-t, 0s) infinite; }
+}
+.bot[data-mood=waiting] .bot-look { transform: translateY(-1.5px); }
+@keyframes bot-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+@keyframes bot-bob { to { transform: translateY(-2px); } }
+@keyframes bot-glance { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
+@keyframes bot-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-9deg); } 80% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
 .heading-kind { display: inline-grid; place-items: center; margin-right: 6px; vertical-align: -3px; font-size: 14px; line-height: 1; }
+.heading-kind.bot { margin-block: -4px; }
 .heading-title { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .heading-title h1 { min-width: 0; }
+#title-kind { display: flex; }
 #title-kind:empty { display: none; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
 [data-kind=review] { --kind: light-dark(#8250df, #c4a2ff); }
@@ -194,6 +224,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 [data-kind=build] { --kind: light-dark(#1a7f37, #6fdc9a); }
 [data-kind=idea] { --kind: light-dark(#9a6700, #f2c94c); }
 [data-kind=notes] { --kind: light-dark(#57606a, #c9c4c9); }
+[data-kind=general] { --kind: var(--muted); }
 /* statusIcon phase-locks the brick highlights to this .9s period. */
 .session-icon[data-status=working] rect { animation: session-brick-step .9s steps(1, end) var(--block-delay, 0s) infinite; }
 .session-icon[data-status=working] rect:nth-child(2) { animation-delay: calc(var(--block-delay, 0s) - .75s); }
@@ -279,6 +310,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .nearby-list small { color: var(--muted); font-size: 12px; }
 .nearby-list time { align-self: flex-start; margin-top: 3px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .nearby-list .session-icon { flex-shrink: 0; width: 16px; margin-top: 0; }
+.nearby-list .session-icon.bot { width: 24px; height: 24px; }
 .nearby-text { flex: 1; min-width: 0; }
 .nearby-list [data-status=saved] .nearby-text { opacity: .55; }
 .nearby-list [data-attention] strong { font-weight: 650; }

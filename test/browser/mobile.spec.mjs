@@ -93,7 +93,9 @@ test('conversation header floats above scrolling messages without crowding its c
     const transcript = page.locator('#transcript');
     await transcript.evaluate(node => { node.scrollTop = 0; });
     const header = await page.locator('.conversation-header').boundingBox();
-    const title = await page.locator('#title').boundingBox();
+    // The bot and title centre as one group.
+    const name = await page.locator('#title').boundingBox(), kind = await page.locator('#title-kind').boundingBox();
+    const title = { x: kind.x, width: name.x + name.width - kind.x };
     const firstMessage = await page.locator('.message').first().boundingBox();
     expect(firstMessage.y).toBeGreaterThanOrEqual(header.y + header.height + 16);
     expect((await transcript.boundingBox()).y).toBeLessThan(header.y + header.height);

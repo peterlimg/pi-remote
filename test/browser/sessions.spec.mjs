@@ -146,32 +146,16 @@ test('same-project sessions show their tasks, previews, status and activity with
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
   await expect(login.locator('.session-state')).toHaveText('Working');
-  const workingIcon = login.locator('.session-icon'), bricks = workingIcon.locator('rect');
-  await expect(bricks).toHaveCount(6);
-  expect(await bricks.evaluateAll(nodes => nodes.map(node => ['x', 'y', 'width', 'height'].map(name => Number(node.getAttribute(name)))))).toEqual([
-    [3, 0, 4, 4], [9, 0, 4, 4], [9, 6, 4, 4], [9, 12, 4, 4], [3, 12, 4, 4], [3, 6, 4, 4]
-  ]);
-  await expect(workingIcon.locator('path, circle')).toHaveCount(0);
-  await expect(workingIcon.locator('svg')).toHaveCSS('animation-name', 'none');
-  await expect(workingIcon.locator('svg')).toHaveCSS('width', '16px');
-  await expect(workingIcon.locator('svg')).toHaveCSS('height', '16px');
-  await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
-  await expect(bricks.first()).toHaveCSS('animation-duration', '0.9s');
-  await expect.poll(() => bricks.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).opacity).sort())).toEqual(['0.35', '0.35', '0.35', '0.35', '0.35', '1']);
-  const clockwiseSteps = await bricks.evaluateAll(nodes => new Promise(resolve => {
-    const steps = [], deadline = performance.now() + 2000;
-    function sample() {
-      const active = nodes.findIndex(node => getComputedStyle(node).opacity === '1');
-      if (active >= 0 && active !== steps.at(-1)) steps.push(active);
-      if (steps.length === 7 || performance.now() >= deadline) resolve(steps);
-      else requestAnimationFrame(sample);
-    }
-    sample();
-  }));
-  expect(clockwiseSteps).toHaveLength(7);
-  expect(clockwiseSteps.slice(1)).toEqual(clockwiseSteps.slice(0, -1).map(index => (index + 1) % 6));
+  // The session's bot carries the working state: it bobs and glances, phase-locked to the clock across list rebuilds.
+  const workingIcon = login.locator('.session-icon');
+  await expect(workingIcon).toHaveAttribute('data-mood', 'working');
+  await expect(workingIcon).toHaveAttribute('aria-label', 'Fix');
+  await expect(workingIcon.locator('svg')).toHaveCSS('width', '28px');
+  await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
+  await expect(workingIcon.locator('.bot-look')).toHaveCSS('animation-name', 'bot-glance');
+  expect(Number((await workingIcon.getAttribute('style')).match(/--bot-t: -(\d+)ms/)[1])).toBeLessThan(6000);
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
+  await expect(page.locator('.session-icon[data-status=idle]')).toHaveAttribute('data-mood', 'idle');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.first().locator('.session-preview')).toHaveCount(0);
@@ -180,26 +164,21 @@ test('same-project sessions show their tasks, previews, status and activity with
     return sidebar.scrollWidth <= sidebar.clientWidth && document.documentElement.scrollWidth <= innerWidth;
   })).toBe(true);
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-mobile.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await noOverflow();
-  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-desktop-dark.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-bot-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
-  publish(); // Unread replies still turn the bricks blue after a list replacement.
+  publish(); // An unread reply badges the working bot without stopping it, and survives a list replacement.
   await expect(workingIcon).toHaveAttribute('data-unread', '');
-  for (const brick of await bricks.all()) await expect(brick).toHaveCSS('fill', 'rgb(10, 132, 255)');
-  const phaseDelay = await workingIcon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--block-delay')));
-  expect(phaseDelay).toBeLessThanOrEqual(0);
-  expect(phaseDelay).toBeGreaterThan(-900);
+  await expect(workingIcon).toHaveAttribute('data-mood', 'working');
+  await expect(workingIcon.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const brick of await bricks.all()) {
-    await expect(brick).toHaveCSS('animation-name', 'none');
-    await expect(brick).toHaveCSS('opacity', '1');
-  }
-  await page.screenshot({ path: testInfo.outputPath('working-square-bricks-unread-reduced-motion.png') });
+  await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
+  await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect(bricks.first()).toHaveCSS('animation-name', 'session-brick-step');
+  await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.locator('.session').last().scrollIntoViewIfNeeded();

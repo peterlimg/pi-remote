@@ -28,10 +28,12 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   await expect(saved.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
   // Automatic keys off the leading verb, so a review mentioned later in the title is not a review session.
   await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
-  expect((await normal.locator('.session-indicators svg').boundingBox()).width).toBe(16);
-  // Activity takes the slot back from the kind.
+  expect((await normal.locator('.session-indicators svg').boundingBox()).width).toBe(28);
+  // The bot keeps the slot while active; its mood and badge show the state.
   await expect(review.locator('.session-icon')).toHaveAttribute('data-status', 'waiting');
-  await expect(review.locator('[data-kind]')).toHaveCount(0);
+  await expect(review.locator('.session-icon')).toHaveAttribute('data-mood', 'waiting');
+  await expect(review.locator('.bot-badge')).toHaveCount(1);
+  await expect(saved.locator('.session-icon')).toHaveAttribute('data-mood', 'saved');
   await expect(page.locator('.session-meta [data-kind]')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('icons-mobile.png') });
   await writeFile(testInfo.outputPath('icons-mobile.aria.txt'), await page.locator('body').ariaSnapshot());
