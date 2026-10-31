@@ -132,3 +132,28 @@ h1 { margin: 8px 10px 4px; font-size: 28px; font-weight: 700; }
 @keyframes bot-spin { to { stroke-dashoffset: -12; } }
 @keyframes bot-type { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-2.5px); } }
 @keyframes bot-turn { to { transform: rotate(360deg); } }
+
+/* List-style comparison. The lead column grows with the bot. */
+.page[data-style=tile] .session { grid-template-columns: 40px minmax(0, 1fr); }
+.page[data-style=large] .session { grid-template-columns: 40px minmax(0, 1fr); }
+.page[data-style=mono] .session { grid-template-columns: 32px minmax(0, 1fr); }
+.page:is([data-style=large], [data-style=mono], [data-style=tile]) .session-indicators .bot { height: auto; }
+.bot-tile { display: grid; place-items: center; width: 40px; height: 40px; margin-top: -4px; border-radius: 12px; background: color-mix(in srgb, var(--kind) 16%, transparent); }
+.bot-tile[data-mood=saved] { opacity: .55; }
+.bot-tile .bot[data-mood=saved] { opacity: 1; }
+/* Muted palette: the same hues at lower chroma, so the bots sit beside the text instead of shouting over it. */
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=review] { --kind: light-dark(oklch(.56 0.09 300), oklch(0.76 0.075 300)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=fix] { --kind: light-dark(oklch(.56 0.09 25), oklch(0.76 0.075 25)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=research] { --kind: light-dark(oklch(.56 0.09 245), oklch(0.76 0.075 245)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=build] { --kind: light-dark(oklch(.56 0.09 155), oklch(0.76 0.075 155)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=idea] { --kind: light-dark(oklch(.56 0.09 85), oklch(0.8 0.075 85)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=notes] { --kind: light-dark(oklch(.56 0.015 260), oklch(0.76 0.015 260)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=test] { --kind: light-dark(oklch(.56 0.09 185), oklch(0.76 0.075 185)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=ship] { --kind: light-dark(oklch(.56 0.09 50), oklch(0.76 0.075 50)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=tidy] { --kind: light-dark(oklch(.56 0.09 350), oklch(0.76 0.075 350)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=data] { --kind: light-dark(oklch(.56 0.09 275), oklch(0.76 0.075 275)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=guard] { --kind: light-dark(oklch(.56 0.09 125), oklch(0.76 0.075 125)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=chat] { --kind: light-dark(oklch(.56 0.05 65), oklch(0.76 0.05 65)); }
+.page:is([data-style=muted], [data-style=large], [data-style=tile], [data-style=mono]) [data-kind=ops] { --kind: light-dark(oklch(.56 0.09 215), oklch(0.76 0.075 215)); }
+/* D: grey at rest; colour returns with activity. */
+.page[data-style=mono] .bot:is([data-mood=idle], [data-mood=saved]) { --kind: light-dark(#8b908c, #77737a); }

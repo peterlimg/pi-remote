@@ -67,63 +67,58 @@ function bot(kind, mood, size) {
   return node;
 }
 
-const moods = [
-  { key: 'working', name: 'Working', description: 'Each bot does its own job: hammering, scanning, scribbling, typing, launching' },
-  { key: 'idle', name: 'Ready', description: 'At rest: calm, blinking now and then, each on its own beat' },
-  { key: 'waiting', name: 'Needs you', description: 'Wiggles and raises an amber badge until you answer' },
-  { key: 'unread', name: 'New reply', description: 'Smiles and hops every few seconds, with a blue badge' },
-  { key: 'saved', name: 'Saved', description: 'Dozes: eyes closed, dimmed, a slow drift of z’s' },
-  { key: 'mixed', name: 'All together', description: 'A mix of states, the way a real list looks' },
+// Ways to show the bots in the session list. The page sets data-style; the CSS does the rest.
+const styles = [
+  { key: 'now', name: 'Today', description: '28px bots in bright pastel, as the app is now', size: 28 },
+  { key: 'tile', name: 'A · Avatar tile', description: 'Each bot sits on a soft tinted squircle, like an app icon: one even shape down the column', size: 30 },
+  { key: 'muted', name: 'B · Muted colour', description: 'Same size, but softer, lower-saturation colours that sit with the text', size: 28 },
+  { key: 'large', name: 'C · Larger and muted', description: '40px muted bots, closer to how they look in the picker', size: 40 },
+  { key: 'mono', name: 'D · Quiet until active', description: 'Grey bots at rest; a bot takes its colour only while working, waiting or with a new reply', size: 32 },
 ];
 const sessions = [
-  ['ship', 'working', 'Deploy release 1.4 to staging', 'pi-remote', 'now'],
-  ['review', 'waiting', 'Review PZ-756 withdrawal-only exclusion logic', 'primezero', '6h'],
-  ['tidy', 'unread', 'Refactor the session list rendering in app.js', 'pi-remote', '10m'],
-  ['test', 'working', 'Test video attachment access', 'pi-remote', 'now'],
-  ['data', 'waiting', 'Migrate staging users table', 'primezero', '1h'],
-  ['build', 'working', 'Add model-independent voice input to composer', 'pi-remote', 'now'],
-  ['research', 'idle', 'Investigate Claude SDK session recovery errors', 'pi-remote', '1h'],
-  ['fix', 'unread', 'Fix stuck composer after image sending', 'pi-remote', '20m'],
-  ['guard', 'idle', 'Harden pairing token rotation', 'pi-remote', '3h'],
-  ['design', 'working', 'Design the session bot cast', 'pi-remote', 'now'],
-  ['ops', 'idle', 'Restart the Pi Remote host', 'pi-remote', '5h'],
-  ['chat', 'idle', 'Greet the user', 'scratch', '1d'],
-  ['idea', 'working', 'Prototype richer session list panes', 'pi-remote', 'now'],
-  ['notes', 'saved', 'Draft daily update', 'notes', '2d'],
-  ['general', 'saved', 'Start a coding session', 'pi-remote', '4d'],
+  ['research', 'idle', 'Investigate Claude SDK session recovery errors', '', '22h'],
+  ['review', 'idle', 'Review architecture of web app.js', '', '1d'],
+  ['build', 'idle', 'Add model-independent voice input to composer', '', '2d'],
+  ['idea', 'working', 'Session icon auto-assignment is unreliable', 'Pi: Here’s where each part came from…', '4h'],
+  ['research', 'unread', 'Investigate stuck working dot animation', 'Pi: Yes. Logging works the same as before…', '20h'],
+  ['ship', 'waiting', 'Submit backend-api-sports PR 38 review', 'Pi: Post these 3 comments?', '6h'],
+  ['fix', 'saved', 'Fix stuck composer after image sending', 'Pi: Fixed. Only Send appears when you have text.', '2d'],
+  ['test', 'idle', 'Test video attachment access', '', '3d'],
+  ['chat', 'saved', 'Greet the user', '', '5d'],
 ];
 const stateLabels = { working: 'Working', waiting: 'Needs input' };
-let mood;
+let style;
 
-function row([kind, state, title, project, ageText]) {
+function lead(kind, mood) {
+  const node = bot(kind, mood, style.size);
+  if (style.key !== 'tile') return node;
+  const tile = el('span', undefined, 'bot-tile');
+  tile.dataset.kind = kind; tile.dataset.mood = mood; tile.append(node);
+  return tile;
+}
+function row([kind, mood, title, preview, ageText]) {
   const button = el('button', undefined, 'session'), indicators = el('span', undefined, 'session-indicators');
   button.type = 'button';
-  indicators.append(bot(kind, mood.key === 'mixed' ? state : mood.key, 28));
-  const shown = mood.key === 'mixed' ? state : mood.key;
-  const body = el('div', undefined, 'session-body'), meta = el('div', undefined, 'session-meta');
-  if (stateLabels[shown]) { const label = el('span', stateLabels[shown], 'session-state'); label.dataset.status = shown; meta.append(label); }
-  meta.append(el('span', project, 'session-project'), el('time', ageText, 'session-time'));
-  const top = el('div', undefined, 'session-top');
-  top.append(el('strong', title));
-  body.append(top, meta);
+  indicators.append(lead(kind, mood));
+  const body = el('div', undefined, 'session-body'), top = el('div', undefined, 'session-top'), meta = el('div', undefined, 'session-meta');
+  top.append(el('strong', title)); body.append(top);
+  if (preview) body.append(el('div', preview, 'session-preview'));
+  if (stateLabels[mood]) { const label = el('span', stateLabels[mood], 'session-state'); label.dataset.status = mood; meta.append(label); }
+  meta.append(el('span', 'pi-remote', 'session-project'), el('time', ageText, 'session-time'));
+  body.append(meta);
   button.append(indicators, body);
   return button;
 }
 function render() {
-  $('label').textContent = mood.name;
-  $('description').textContent = mood.description;
-  const mixed = Object.fromEntries(sessions.map(([kind, state]) => [kind, state]));
-  $('legend').replaceChildren(...Object.entries(kinds).map(([kind, [name, verbs]]) => {
-    const cell = el('div'), big = el('span', undefined, 'big');
-    big.append(bot(kind, mood.key === 'mixed' ? mixed[kind] : mood.key, 52));
-    cell.append(big, el('strong', name), el('small', verbs));
-    return cell;
-  }));
+  $('page').dataset.style = style.key;
+  $('label').textContent = style.name;
+  $('description').textContent = style.description;
+  $('legend').replaceChildren();
   $('list').replaceChildren(...sessions.map(row));
-  const url = new URL(location.href); url.searchParams.set('mood', mood.key); history.replaceState(null, '', url);
+  const url = new URL(location.href); url.searchParams.set('style', style.key); history.replaceState(null, '', url);
 }
-const set = key => { mood = moods.find(item => item.key === key) || moods[0]; render(); };
-const cycle = step => set(moods[(moods.indexOf(mood) + step + moods.length) % moods.length].key);
+const set = key => { style = styles.find(item => item.key === key) || styles[1]; render(); };
+const cycle = step => set(styles[(styles.indexOf(style) + step + styles.length) % styles.length].key);
 $('prev').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
-set(new URLSearchParams(location.search).get('mood'));
+set(new URLSearchParams(location.search).get('style'));
