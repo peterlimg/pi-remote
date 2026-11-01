@@ -1,15 +1,15 @@
-// Throwaway: matte and outline art, identical geometry, poses and session placement. No app transport or storage.
+// Throwaway: original colourful shapes and warm companions, with identical session placement. No app transport or storage.
 const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
 const variants = [
-  { key: 'matte', name: 'Matte filled', description: 'Soft neutral bodies. One small working gesture.' },
-  { key: 'outline', name: 'Neutral outline', description: 'The same shapes and motion, drawn with a consistent stroke.' },
+  { key: 'colour', name: 'Colourful shapes', description: 'Four colours. One simple shape-and-eyes language.' },
+  { key: 'warm', name: 'Warm companions', description: 'Cream bodies, peach faces and a softer finish.' },
 ];
 const characters = {
-  review: { name: 'Review', body: '<rect x="4" y="8" width="24" height="22" rx="8"/>', detail: '<g class="study-detail"><circle cx="11.5" cy="20" r="4.5"/><circle cx="20.5" cy="20" r="4.5"/></g>' },
-  fix: { name: 'Fix', body: '<circle cx="16" cy="19" r="11.5"/>', back: '<g class="study-antenna"><path d="m10 10-2-6"/><circle cx="8" cy="4" r="1.5"/></g><path d="m22 10 2-6"/><circle cx="24" cy="4" r="1.5"/>' },
-  research: { name: 'Research', body: '<rect x="4" y="7" width="24" height="23" rx="10"/>', detail: '<g class="study-lens study-detail"><circle cx="20.5" cy="20" r="4.8"/><path d="m24 23.5 3 3"/></g>' },
-  build: { name: 'Build', body: '<rect x="4" y="12" width="24" height="18" rx="6"/>', detail: '<g class="study-cap"><path d="M7 12a9 8 0 0 1 18 0Z"/><path d="M3 13h26"/></g>' },
+  review: { name: 'Review', body: '<rect x="4.5" y="5" width="23" height="23" rx="7"/>' },
+  fix: { name: 'Fix', body: '<circle cx="16" cy="16.5" r="12"/>' },
+  research: { name: 'Research', body: '<rect x="5.5" y="3.5" width="21" height="26" rx="10.5"/>' },
+  build: { name: 'Build', body: '<path d="M7 29a2 2 0 0 1-2-2V15a11 11 0 0 1 22 0v12a2 2 0 0 1-2 2Z"/>' },
 };
 let variant = variants[0], selected = 'fix-rest', paused = false;
 const visibleIcons = new IntersectionObserver(entries => {
@@ -20,8 +20,12 @@ function icon(kind, mood, size, style = variant.key) {
   node.dataset.kind = kind; node.dataset.mood = mood; node.dataset.size = size; node.dataset.style = style;
   node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${character.name}, ${mood}, ${size}px, ${style}`);
   node.style.setProperty('--study-phase', `-${Date.now() % 2400}ms`);
-  const rx = size === 20 ? 2 : 1.8;
-  node.innerHTML = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${character.back || ''}<g class="study-body">${character.body}</g>${character.detail || ''}<g class="study-eyes"><ellipse cx="11.5" cy="20" rx="${rx}" ry="2.5"/><ellipse cx="20.5" cy="20" rx="${rx}" ry="2.5"/></g></svg>`;
+  const eyes = style === 'colour'
+    ? [12, 20].map(x => `<rect class="study-eye" x="${x - 1.7}" y="15.5" width="3.4" height="6" rx="1.7" transform="rotate(-8 ${x} 18.5)"/>`).join('')
+    : [12, 20].map(x => `<ellipse class="study-eye" cx="${x}" cy="17.5" rx="${size === 20 ? 1.9 : 1.7}" ry="2"/>`).join('');
+  const face = style === 'warm' ? '<rect class="study-warm-face" x="7.5" y="9" width="17" height="16" rx="6.5"/><g class="study-cheeks"><ellipse cx="10" cy="21" rx="1.7" ry="1.1"/><ellipse cx="22" cy="21" rx="1.7" ry="1.1"/></g>' : '';
+  const mouth = style === 'warm' ? '<path class="study-mouth" d="M14 21.5q2 2.5 4 0"/>' : '';
+  node.innerHTML = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="study-character"><g class="study-body">${character.body}</g>${face}<g class="study-gaze">${eyes}${mouth}</g></g></svg>`;
   return node;
 }
 function renderComparison() {
@@ -91,7 +95,7 @@ function setVariant(key) {
   renderList();
   visibleIcons.disconnect(); document.querySelectorAll('.study-icon').forEach(node => visibleIcons.observe(node));
 }
-function cycle() { setVariant(variant.key === 'matte' ? 'outline' : 'matte'); }
+function cycle() { setVariant(variant.key === 'colour' ? 'warm' : 'colour'); }
 $('prev').addEventListener('click', cycle); $('next').addEventListener('click', cycle);
 for (const button of document.querySelectorAll('button[data-style]')) button.addEventListener('click', () => setVariant(button.dataset.style));
 $('motion').addEventListener('click', () => {

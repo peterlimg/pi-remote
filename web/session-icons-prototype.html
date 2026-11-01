@@ -4,16 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#100d10">
-  <title>Neutral icon study · Pi Remote</title>
+  <title>Character icon study · Pi Remote</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/session-icons-prototype.css">
   <script type="module" src="/session-icons-prototype.js"></script>
 </head>
 <body>
+  <svg class="study-defs" width="0" height="0" aria-hidden="true"><defs>
+    <radialGradient id="study-warm-body" cx=".35" cy=".2" r=".9"><stop offset="0" stop-color="#fff2d8"/><stop offset=".6" stop-color="#e8cfa7"/><stop offset="1" stop-color="#d3b184"/></radialGradient>
+    <radialGradient id="study-warm-face" cx=".4" cy=".3" r=".9"><stop offset="0" stop-color="#ffe5c1"/><stop offset="1" stop-color="#efc594"/></radialGradient>
+  </defs></svg>
   <main class="page" id="page">
     <h1>Session icons</h1>
-    <p class="note">Prototype only. Same characters and motion, two neutral treatments.</p>
+    <p class="note">Prototype only. Colourful shapes or warm companions. Same list, new character artwork.</p>
     <div class="study-controls">
       <button id="theme" type="button" class="quiet">Preview light theme</button>
       <button id="motion" type="button" class="quiet" aria-pressed="false">Pause motion</button>
@@ -21,8 +25,8 @@
     <details class="comparison" open>
       <summary>Compare the icons</summary>
       <p class="note">Each pair: 28px working, 20px resting. Actual size.</p>
-      <table aria-label="Matte and outline icon comparison">
-        <thead><tr><th scope="col">Character</th><th scope="col"><button type="button" data-style="matte" aria-pressed="true">Matte</button></th><th scope="col"><button type="button" data-style="outline" aria-pressed="false">Outline</button></th></tr></thead>
+      <table aria-label="Colourful and warm character comparison">
+        <thead><tr><th scope="col">Character</th><th scope="col"><button type="button" data-style="colour" aria-pressed="true">Colourful</button></th><th scope="col"><button type="button" data-style="warm" aria-pressed="false">Warm</button></th></tr></thead>
         <tbody id="comparison-icons"></tbody>
       </table>
     </details>
