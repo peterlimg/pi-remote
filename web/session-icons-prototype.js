@@ -1,117 +1,201 @@
-// Throwaway: original colourful shapes and warm companions, with identical session placement. No app transport or storage.
+// Throwaway visual lifecycle model. All runtime events are simulated; no transport or storage.
 const $ = id => document.getElementById(id);
-const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
-const variants = [
-  { key: 'colour', name: 'Colourful shapes', description: 'Four colours. One simple shape-and-eyes language.' },
-  { key: 'warm', name: 'Warm companions', description: 'Cream bodies, peach faces and a softer finish.' },
-];
-const characters = {
-  review: { name: 'Review', body: '<rect x="4.5" y="5" width="23" height="23" rx="7"/>' },
-  fix: { name: 'Fix', body: '<circle cx="16" cy="16.5" r="12"/>' },
-  research: { name: 'Research', body: '<rect x="5.5" y="3.5" width="21" height="26" rx="10.5"/>' },
-  build: { name: 'Build', body: '<path d="M7 29a2 2 0 0 1-2-2V15a11 11 0 0 1 22 0v12a2 2 0 0 1-2 2Z"/>' },
+const el = (tag, text) => { const node = document.createElement(tag); node.textContent = text; return node; };
+const initial = { runtime: 'idle', phase: 'ready', connection: 'connected', unread: false, outcome: 'unknown', viewing: false };
+
+// Pure model: acknowledgement, runtime evidence, attention and outcome stay separate.
+function evolve(state, event) {
+  const online = state.connection === 'connected', active = ['working', 'waiting'].includes(state.runtime);
+  switch (event) {
+    case 'accept': return online && state.phase === 'ready' ? { ...state, phase: 'accepted', outcome: 'unknown' } : state;
+    case 'start': return online && state.phase === 'accepted' && state.runtime === 'idle' ? { ...state, runtime: 'working', phase: 'working' } : state;
+    case 'ask': return online && state.phase === 'working' ? { ...state, runtime: 'waiting', phase: 'waiting' } : state;
+    case 'answer': return online && state.phase === 'waiting' ? { ...state, phase: 'accepted' } : state;
+    case 'resume': return online && state.phase === 'accepted' && state.runtime === 'waiting' ? { ...state, runtime: 'working', phase: 'working' } : state;
+    case 'settle': return online && active ? { ...state, runtime: 'idle', phase: 'settling', outcome: 'ended' } : state;
+    case 'rest': return online && state.phase === 'settling' ? { ...state, phase: 'ready' } : state;
+    case 'stop-request': return online && active && state.phase !== 'stopping' ? { ...state, phase: 'stopping' } : state;
+    case 'stop-confirm': return online && state.phase === 'stopping' ? { ...state, runtime: 'idle', phase: 'settling', outcome: 'stopped' } : state;
+    case 'reply': return online ? { ...state, unread: !state.viewing } : state;
+    case 'disconnect': return online ? { ...state, connection: 'offline', phase: 'offline' } : state;
+    case 'reconnect': return state.connection === 'offline' ? { ...state, connection: 'checking', phase: 'syncing' } : state;
+    case 'snapshot-working': return state.connection !== 'offline' ? { ...state, connection: 'connected', runtime: 'working', phase: 'working' } : state;
+    case 'snapshot-idle': return state.connection !== 'offline' ? { ...state, connection: 'connected', runtime: 'idle', phase: 'ready', outcome: 'unknown' } : state;
+    case 'open': return { ...state, viewing: true, unread: false };
+    case 'back': return state.viewing ? { ...state, viewing: false } : state;
+    default: return state;
+  }
+}
+const events = {
+  accept: ['Request accepted', 'The computer accepted the request. The working loop has not started.'],
+  start: ['Runtime starts', 'Runtime activity is confirmed. The same mark moves beside the title.'],
+  ask: ['Agent needs input', 'Activity pauses. The agent needs a response, not more time to keep working.'],
+  answer: ['Answer accepted', 'The answer was accepted. Wait for runtime evidence before restarting the working loop.'],
+  resume: ['Runtime resumes', 'Runtime activity resumes. The waiting pose returns to the working rhythm.'],
+  settle: ['Run ends', 'The run ended. This does not establish success or that its result was reviewed.'],
+  rest: ['Return to calm', 'The same mark returns to the detail line. It is available, not disabled or asleep.'],
+  'stop-request': ['Stop requested', 'A stop was requested. Keep the last confirmed activity until the runtime acknowledges the stop.'],
+  'stop-confirm': ['Runtime confirms stop', 'The runtime confirmed the stop. Any partial work remains unverified; there is no success celebration.'],
+  reply: ['A reply arrives', 'A reply arrived while the session list was on screen. Unread is independent of the working motion.'],
+  disconnect: ['Connection lost', 'Freeze the last known activity. Losing contact does not prove that the agent stopped.'],
+  reconnect: ['Connection returns', 'Connected again, but activity has not been confirmed. The mark stays still.'],
+  'snapshot-working': ['Fresh snapshot: working', 'A fresh runtime snapshot confirms that work is still active.'],
+  'snapshot-idle': ['Fresh snapshot: idle', 'The agent is idle. Do not infer how the work ended from that state alone.'],
+  open: ['Open conversation', 'The sample conversation is open. Unread clears without changing the agent identity or runtime state.'],
+  back: ['Back to sessions', 'Reading the reply did not change the runtime state. The same mark returns with the session.'],
 };
-let variant = variants[0], selected = 'fix-rest', paused = false;
-const visibleIcons = new IntersectionObserver(entries => {
-  for (const { target, isIntersecting } of entries) target.classList.toggle('in-view', isIntersecting);
-});
-function icon(kind, mood, size, style = variant.key) {
-  const character = characters[kind], node = el('span', undefined, 'study-icon');
-  node.dataset.kind = kind; node.dataset.mood = mood; node.dataset.size = size; node.dataset.style = style;
-  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${character.name}, ${mood}, ${size}px, ${style}`);
-  node.style.setProperty('--study-phase', `-${Date.now() % 2400}ms`);
-  const eyes = style === 'colour'
-    ? [12, 20].map(x => `<rect class="study-eye" x="${x - 1.7}" y="15.5" width="3.4" height="6" rx="1.7" transform="rotate(-8 ${x} 18.5)"/>`).join('')
-    : [12, 20].map(x => `<ellipse class="study-eye" cx="${x}" cy="17.5" rx="${size === 20 ? 1.9 : 1.7}" ry="2"/>`).join('');
-  const face = style === 'warm' ? '<rect class="study-warm-face" x="7.5" y="9" width="17" height="16" rx="6.5"/><g class="study-cheeks"><ellipse cx="10" cy="21" rx="1.7" ry="1.1"/><ellipse cx="22" cy="21" rx="1.7" ry="1.1"/></g>' : '';
-  const mouth = style === 'warm' ? '<path class="study-mouth" d="M14 21.5q2 2.5 4 0"/>' : '';
-  node.innerHTML = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="study-character"><g class="study-body">${character.body}</g>${face}<g class="study-gaze">${eyes}${mouth}</g></g></svg>`;
-  return node;
-}
-function renderComparison() {
-  $('comparison-icons').replaceChildren(...Object.entries(characters).map(([kind, { name }]) => {
-    const row = el('tr'), label = el('th', name); label.scope = 'row'; row.append(label);
-    for (const { key } of variants) {
-      const cell = el('td'), pair = el('div', undefined, 'icon-pair');
-      pair.append(icon(kind, 'working', 28, key), icon(kind, 'resting', 20, key)); cell.append(pair); row.append(cell);
-    }
-    return row;
-  }));
-}
-const sessions = [
-  { id: 'review-work', kind: 'review', group: 'Now', working: true, title: 'Review X post for Pi remote improvements', age: 'now', unread: true },
-  { id: 'fix-work', kind: 'fix', group: 'Now', working: true, title: 'Fix model selection issue', age: 'now' },
-  { id: 'research-work', kind: 'research', group: 'Now', working: true, title: 'Investigate Claude SDK session recovery errors', age: '2m' },
-  { id: 'build-work', kind: 'build', group: 'Now', working: true, title: 'Build the mobile session picker', age: '3m' },
-  { id: 'build-rest', kind: 'build', group: 'Pinned', title: 'Compress video with FFmpeg without quality loss', age: '12h' },
-  { id: 'research-rest', kind: 'research', group: 'Pinned', title: 'Investigate Claude SDK session recovery errors', age: '2d' },
-  { id: 'review-rest', kind: 'review', group: 'Pinned', title: 'Review architecture of web app.js', age: '2d' },
-  { id: 'fix-rest', kind: 'fix', group: 'Recent', title: 'Fix model selection issue', age: '7h' },
+const scenarios = [
+  { id: 'run', name: 'A run starts and settles', steps: ['accept', 'start', 'settle', 'rest'] },
+  { id: 'input', name: 'Pause for input, then resume', steps: ['accept', 'start', 'ask', 'answer', 'resume', 'settle', 'rest'] },
+  { id: 'stop', name: 'Stop before the work finishes', steps: ['accept', 'start', 'stop-request', 'stop-confirm', 'rest'] },
+  { id: 'unread', name: 'A reply arrives while off-screen', steps: ['accept', 'start', 'reply', 'settle', 'rest', 'open', 'back'] },
+  { id: 'reconnect', name: 'Lose connection, then reconnect', steps: ['accept', 'start', 'disconnect', 'reconnect', 'snapshot-working', 'settle', 'rest'] },
 ];
-const pinSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 3h8v2l-1 4 3 3v2h-5v6l-1 2-1-2v-6H6v-2l3-3-1-4Z"/></svg>';
-function row(item) {
-  const button = el('button', undefined, 'session' + (item.working ? ' session-busy' : ''));
-  button.type = 'button'; button.dataset.id = item.id; button.setAttribute('aria-pressed', String(item.id === selected));
-  const indicators = el('span', undefined, 'session-indicators');
-  if (item.working) {
-    const bot = icon(item.kind, 'working', 28);
-    if (item.unread) bot.dataset.unread = '';
-    indicators.append(bot);
-  } else {
-    const dot = el('span', undefined, 'session-icon'); dot.dataset.status = 'idle';
-    dot.setAttribute('role', 'img'); dot.setAttribute('aria-label', 'Ready');
-    dot.innerHTML = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>';
-    indicators.append(dot);
-  }
-  const body = el('div', undefined, 'session-body'), top = el('div', undefined, 'session-top');
-  top.append(el('strong', item.title));
-  if (item.group === 'Pinned') {
-    const pin = el('span', undefined, 'session-pinned'); pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned'); pin.innerHTML = pinSvg; top.append(pin);
-  }
-  const meta = el('div', undefined, 'session-meta');
-  if (item.working) { const status = el('span', 'Working', 'session-state'); status.dataset.status = 'working'; meta.append(status); }
-  const project = el('span', undefined, 'session-project'); project.append(el('span', 'pi-remote', 'session-project-name'));
-  meta.append(project, el('span', item.age, 'session-time'));
-  if (!item.working) { const kind = el('span', undefined, 'session-kind'); kind.append(icon(item.kind, 'resting', 20)); meta.append(kind); }
-  body.append(top, meta); button.append(indicators, body);
-  button.addEventListener('click', () => {
-    selected = item.id;
-    for (const sibling of document.querySelectorAll('.session')) sibling.setAttribute('aria-pressed', String(sibling.dataset.id === selected));
-  });
-  return button;
-}
-function renderList() {
-  $('list').replaceChildren(...['Now', 'Pinned', 'Recent'].map(name => {
-    const group = el('section', undefined, 'session-group'); group.setAttribute('aria-label', name);
-    const heading = el('div', undefined, 'session-group-heading'), items = sessions.filter(item => item.group === name);
-    heading.append(el('h3', name), el('span', String(items.length), 'badge')); group.append(heading, ...items.map(row)); return group;
-  }));
-}
-function setVariant(key) {
-  variant = variants.find(item => item.key === key) || variants[0];
-  $('page').dataset.variant = variant.key; $('label').textContent = variant.name; $('description').textContent = variant.description;
-  for (const button of document.querySelectorAll('button[data-style]')) button.setAttribute('aria-pressed', String(button.dataset.style === variant.key));
-  const url = new URL(location.href); url.searchParams.set('variant', variant.key); history.replaceState(null, '', url);
-  renderList();
-  visibleIcons.disconnect(); document.querySelectorAll('.study-icon').forEach(node => visibleIcons.observe(node));
-}
-function cycle() { setVariant(variant.key === 'colour' ? 'warm' : 'colour'); }
-$('prev').addEventListener('click', cycle); $('next').addEventListener('click', cycle);
-for (const button of document.querySelectorAll('button[data-style]')) button.addEventListener('click', () => setVariant(button.dataset.style));
-$('motion').addEventListener('click', () => {
-  paused = !paused; document.documentElement.classList.toggle('study-paused', paused);
-  $('motion').setAttribute('aria-pressed', String(paused)); $('motion').textContent = paused ? 'Resume motion' : 'Pause motion';
-});
+const phaseNames = { ready: 'Ready', accepted: 'Accepted', working: 'Working', waiting: 'Needs input', stopping: 'Stop requested', offline: 'Connection lost', syncing: 'Checking activity' };
+const mark = $('presence-mark'), row = $('focus-row'), statusNode = $('focus-status');
+const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+let scenario = scenarios[0], state = { ...initial }, history = [], step = 0, manual = false, notice = '';
+let playing = false, timer, movement, reduceMotion = false;
 let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-function setTheme() {
+const motionReduced = () => reduceMotion || motionPreference.matches;
+const phaseName = () => state.phase === 'settling' ? state.outcome === 'stopped' ? 'Stopped' : 'Run ended' : phaseNames[state.phase];
+mark.style.setProperty('--presence-delay', `-${Date.now() % 1400}ms`);
+const visibility = new IntersectionObserver(entries => entries.forEach(({ isIntersecting }) => mark.classList.toggle('in-view', isIntersecting)));
+visibility.observe(mark);
+
+function renderControls() {
+  $('previous').disabled = history.length === 0;
+  $('play').textContent = playing ? 'Pause flow' : 'Play flow';
+  $('play').setAttribute('aria-pressed', String(playing));
+  $('next').textContent = manual ? 'Restart walkthrough' : step < scenario.steps.length ? 'Next: ' + events[scenario.steps[step]][0] : 'Replay walkthrough';
+}
+function render() {
+  const before = mark.getBoundingClientRect();
+  movement?.cancel();
+  const leading = state.runtime !== 'idle' || state.phase === 'settling';
+  $('page').dataset.phase = state.phase;
+  $('page').dataset.runtime = state.runtime;
+  $('page').dataset.connection = state.connection;
+  $('page').dataset.outcome = state.outcome;
+  $('scenario').value = scenario.id;
+  row.classList.toggle('session-busy', leading);
+  row.setAttribute('aria-label', `Open sample conversation: ${row.querySelector('strong').textContent}. ${phaseName()}${state.unread ? ', unread reply' : ''}`);
+  mark.dataset.leading = String(leading);
+  mark.dataset.runtime = state.runtime;
+  mark.dataset.unread = String(state.unread);
+  if (mark.dataset.phase !== state.phase) mark.dataset.phase = state.phase;
+  mark.setAttribute('aria-label', `Session A, ${phaseName().toLowerCase()}`);
+  const target = $(leading ? 'focus-leading' : 'focus-inline');
+  if (mark.parentElement !== target) target.append(mark);
+  $('focus-inline').hidden = leading;
+  $('focus-dot').hidden = leading;
+  if (state.unread && !leading) $('focus-dot').dataset.unread = '';
+  else delete $('focus-dot').dataset.unread;
+  if (state.phase === 'ready') statusNode.remove();
+  else {
+    statusNode.textContent = phaseName();
+    statusNode.dataset.status = state.phase === 'stopping' ? 'working' : state.phase;
+    $('focus-meta').prepend(statusNode);
+  }
+  $('session-view').hidden = state.viewing;
+  $('conversation-view').hidden = !state.viewing;
+  $('story-step').textContent = manual ? `Manual exploration · ${history.length} events` : `Step ${step + 1} of ${scenario.steps.length + 1} · ${scenario.name}`;
+  $('moment').textContent = notice ? 'Event ignored' : phaseName();
+  const last = history.at(-1);
+  $('event-note').textContent = notice || (last === 'reply' && state.viewing ? 'A reply arrived while you were reading. It does not become unread.' : last ? events[last][1] : 'The agent is available. Its working loop has not started.');
+  const fields = {
+    Identity: 'Session A', Runtime: state.runtime + (state.connection === 'connected' ? '' : ' (last known)'),
+    Presentation: phaseName(), Connection: state.connection === 'connected' ? 'Connected' : state.connection === 'checking' ? 'Checking fresh activity' : 'Offline',
+    Unread: state.unread ? 'New reply' : 'Read', Outcome: state.outcome === 'stopped' ? 'Stopped; partial work unverified' : state.outcome === 'ended' ? 'Run ended; result unreviewed' : 'Not inferred',
+    Placement: leading ? 'Beside title · 28px' : 'After details · 20px', View: state.viewing ? 'Conversation' : 'Session list',
+  };
+  $('model-state').replaceChildren(...Object.entries(fields).map(([name, value]) => {
+    const field = document.createElement('div'), description = el('dd', value); description.dataset.field = name;
+    field.append(el('dt', name), description); return field;
+  }));
+  // Measure after the explanation reflows, so a longer event note cannot jump the mark.
+  const after = mark.getBoundingClientRect();
+  if (!motionReduced() && before.width && after.width && (Math.abs(before.x - after.x) > .5 || Math.abs(before.y - after.y) > .5 || before.width !== after.width)) {
+    movement = mark.animate([
+      { transform: `translate(${before.x - after.x}px, ${before.y - after.y}px) scale(${before.width / after.width})`, transformOrigin: '0 0' },
+      { transform: 'none', transformOrigin: '0 0' },
+    ], { duration: 360, easing: 'cubic-bezier(.16, 1, .3, 1)' });
+  }
+  const url = new URL(location.href); url.searchParams.delete('variant'); url.searchParams.set('scenario', scenario.id);
+  if (manual) url.searchParams.delete('step'); else url.searchParams.set('step', String(step));
+  window.history.replaceState(null, '', url);
+  renderControls();
+}
+function stopPlayback() { playing = false; clearTimeout(timer); renderControls(); }
+function chooseScenario(id, requestedStep = 0) {
+  stopPlayback();
+  const found = scenarios.find(item => item.id === id);
+  scenario = found || scenarios[0];
+  step = found && Number.isInteger(requestedStep) && requestedStep >= 0 && requestedStep <= scenario.steps.length ? requestedStep : 0;
+  history = scenario.steps.slice(0, step); state = history.reduce(evolve, { ...initial }); manual = false; notice = ''; render();
+}
+function dispatch(event, guided = false) {
+  const next = evolve(state, event);
+  if (next === state) { notice = `${events[event][0]} does not apply to the current state. Nothing changed.`; render(); return; }
+  state = next; history.push(event); notice = '';
+  if (guided) step++; else manual = true;
+  render();
+}
+function advance(automatic = false) {
+  if (!automatic) stopPlayback();
+  if (manual || step === scenario.steps.length) { chooseScenario(scenario.id); return; }
+  dispatch(scenario.steps[step], true);
+  if (step === scenario.steps.length) stopPlayback();
+}
+function previous() {
+  stopPlayback(); if (!history.length) return;
+  history.pop(); state = history.reduce(evolve, { ...initial });
+  if (!manual) step = Math.max(0, step - 1);
+  notice = ''; render();
+}
+function tick() {
+  if (!playing) return;
+  advance(true);
+  if (playing) timer = setTimeout(tick, 1800);
+}
+$('scenario').addEventListener('change', () => chooseScenario($('scenario').value));
+$('next').addEventListener('click', () => advance());
+$('previous').addEventListener('click', previous);
+$('play').addEventListener('click', () => {
+  if (playing) { stopPlayback(); return; }
+  if (manual || step === scenario.steps.length) chooseScenario(scenario.id);
+  playing = true; renderControls(); timer = setTimeout(tick, 900);
+});
+for (const [event, [label]] of Object.entries(events)) {
+  const button = el('button', label); button.type = 'button'; button.dataset.event = event;
+  button.addEventListener('click', () => { stopPlayback(); dispatch(event); }); $('free-events').append(button);
+}
+$('focus-row').addEventListener('click', () => { stopPlayback(); dispatch('open'); });
+$('back-to-list').addEventListener('click', () => { stopPlayback(); dispatch('back'); });
+function renderMotion() {
+  document.documentElement.classList.toggle('reduced-motion', motionReduced());
+  $('motion').setAttribute('aria-pressed', String(motionReduced()));
+  $('motion').disabled = motionPreference.matches;
+  if (motionReduced()) movement?.cancel();
+}
+$('motion').addEventListener('click', () => { reduceMotion = !reduceMotion; renderMotion(); });
+motionPreference.addEventListener('change', renderMotion);
+function renderTheme() {
   document.documentElement.dataset.theme = theme;
   $('theme').textContent = theme === 'dark' ? 'Preview light theme' : 'Preview dark theme';
   document.querySelector('meta[name=theme-color]').content = theme === 'dark' ? '#100d10' : '#fafaf8';
 }
-$('theme').addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; setTheme(); });
-document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('document-hidden', document.hidden));
+$('theme').addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; renderTheme(); });
+document.addEventListener('visibilitychange', () => {
+  document.documentElement.classList.toggle('document-hidden', document.hidden);
+  if (document.hidden) stopPlayback();
+});
+window.addEventListener('pagehide', stopPlayback);
 document.addEventListener('keydown', event => {
   if (event.target.closest('input, textarea, select, [contenteditable]') || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(); }
+  if (event.key === 'ArrowRight') { event.preventDefault(); advance(); }
+  if (event.key === 'ArrowLeft') { event.preventDefault(); previous(); }
 });
-setTheme(); renderComparison(); setVariant(new URLSearchParams(location.search).get('variant'));
+renderTheme(); renderMotion();
+const url = new URL(location.href);
+chooseScenario(url.searchParams.get('scenario'), Number(url.searchParams.get('step')));

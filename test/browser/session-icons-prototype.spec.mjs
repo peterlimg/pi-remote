@@ -1,81 +1,145 @@
 import { test, expect } from '@playwright/test';
 
-// Static art comparison only. Real served assets, no Pi sessions or model calls.
-test('colourful shapes and warm companions preserve placement and accessible motion controls', async ({ page }, testInfo) => {
-  const errors = [], sockets = [], requests = [];
-  page.on('pageerror', error => errors.push(error.message));
-  page.on('websocket', socket => sockets.push(socket.url()));
-  page.on('request', request => requests.push(new URL(request.url()).pathname));
-  const route = '/session-icons-prototype.html';
-  for (const [width, colorScheme] of [[390, 'dark'], [320, 'light'], [1280, 'dark']]) {
+// Served storyboard only. Every runtime event is simulated by visible demo controls.
+const route = '/session-icons-prototype.html';
+const settlePlacement = mark => mark.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))));
+
+const flows = {
+  run: [['accepted', 'idle'], ['working', 'working'], ['settling', 'idle'], ['ready', 'idle']],
+  input: [['accepted', 'idle'], ['working', 'working'], ['waiting', 'waiting'], ['accepted', 'waiting'], ['working', 'working'], ['settling', 'idle'], ['ready', 'idle']],
+  stop: [['accepted', 'idle'], ['working', 'working'], ['stopping', 'working'], ['settling', 'idle'], ['ready', 'idle']],
+  unread: [['accepted', 'idle'], ['working', 'working'], ['working', 'working'], ['settling', 'idle'], ['ready', 'idle']],
+  reconnect: [['accepted', 'idle'], ['working', 'working'], ['offline', 'working'], ['syncing', 'working'], ['working', 'working'], ['settling', 'idle'], ['ready', 'idle']],
+};
+for (const [scenario, steps] of Object.entries(flows)) {
+  test(`one mark follows the ${scenario} walkthrough without inventing success`, async ({ page }, testInfo) => {
+    const errors = [], sockets = [], requests = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('websocket', socket => sockets.push(socket.url()));
+    page.on('request', request => requests.push(new URL(request.url()).pathname));
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
+    await page.goto(`${route}?scenario=${scenario}`);
+    const mark = page.locator('#presence-mark'), cursor = mark.locator('.presence-cursor');
+    const original = await mark.elementHandle();
+    await expect(page.locator('#page')).toHaveAttribute('data-phase', 'ready');
+    for (const [index, [phase, runtime]] of steps.entries()) {
+      let runningAnimation;
+      if (scenario === 'unread' && index === 2) {
+        await expect(cursor).toHaveCSS('animation-name', 'presence-work');
+        runningAnimation = await cursor.evaluateHandle(node => node.getAnimations()[0]);
+      }
+      await page.locator('#next').click();
+      await expect(page.locator('#page')).toHaveAttribute('data-phase', phase);
+      await expect(page.locator('#page')).toHaveAttribute('data-runtime', runtime);
+      expect(await mark.evaluate((node, first) => node === first, original)).toBe(true);
+      await expect(mark).toHaveAttribute('data-identity', 'sample-a');
+      const leading = runtime !== 'idle' || phase === 'settling';
+      await expect(mark).toHaveCSS('width', leading ? '28px' : '20px');
+      expect(await mark.evaluate(node => node.parentElement.id)).toBe(leading ? 'focus-leading' : 'focus-inline');
+      if (['working', 'stopping'].includes(phase)) {
+        await mark.scrollIntoViewIfNeeded();
+        await expect(cursor).toHaveCSS('animation-name', 'presence-work');
+      } else await expect(cursor).toHaveCSS('animation-name', 'none');
+      if (runtime === 'waiting') await expect(mark.locator('.presence-wait')).toBeVisible();
+      if (runningAnimation) {
+        expect(await cursor.evaluate((node, animation) => node.getAnimations()[0] === animation, runningAnimation)).toBe(true);
+        await expect(mark).toHaveAttribute('data-unread', 'true');
+        await expect(page.locator('#focus-row')).toHaveAccessibleName(/unread reply/);
+        await runningAnimation.dispose();
+      }
+      if (phase === 'offline') await expect(page.locator('#page')).toHaveAttribute('data-connection', 'offline');
+      if (phase === 'syncing') await expect(page.locator('#page')).toHaveAttribute('data-connection', 'checking');
+      await settlePlacement(mark);
+      expect(await page.locator('#focus-row').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      if (phase === 'waiting' || phase === 'offline' || scenario === 'stop' && index === 3 || scenario === 'run' && index < 2) {
+        await page.screenshot({ path: testInfo.outputPath(`${scenario}-${phase}.png`), fullPage: true });
+      }
+    }
+    if (scenario === 'run' || scenario === 'stop') {
+      await expect(page.locator('#page')).toHaveAttribute('data-outcome', scenario === 'stop' ? 'stopped' : 'ended');
+      await page.getByText('State details', { exact: true }).click();
+      await expect(page.locator('[data-field=Outcome]')).toHaveText(scenario === 'stop' ? 'Stopped; partial work unverified' : 'Run ended; result unreviewed');
+      await page.getByText('State details', { exact: true }).click();
+    }
+    if (scenario === 'unread') {
+      await expect(page.locator('#focus-dot')).toHaveAttribute('data-unread', '');
+      await expect(mark).toHaveAttribute('data-unread', 'true');
+      await page.locator('#focus-row').click();
+      await expect(page.getByRole('region', { name: 'Sample conversation' })).toBeVisible();
+      await expect(mark).toHaveAttribute('data-unread', 'false');
+      await expect(page.locator('#page')).toHaveAttribute('data-runtime', 'idle');
+      await page.getByRole('button', { name: 'Back to sessions', exact: true }).click();
+      await expect(page.locator('#focus-row')).toBeVisible();
+      await expect(page.locator('#focus-dot')).not.toHaveAttribute('data-unread');
+      expect(await mark.evaluate((node, first) => node === first, original)).toBe(true);
+    }
+    expect(errors).toEqual([]); expect(sockets).toEqual([]);
+    expect([...new Set(requests)].every(path => [route, '/session-icons-prototype.js', '/session-icons-prototype.css', '/style.css', '/icon.svg'].includes(path))).toBe(true);
+  });
+}
+
+test('story controls, reduced motion and actual-size placements work on narrow and wide screens', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+  await page.goto(`${route}?scenario=reconnect&step=2`);
+  const movingMark = page.locator('#presence-mark');
+  await settlePlacement(movingMark);
+  const before = await movingMark.boundingBox();
+  // Observe the first frame without pausing, finishing or otherwise changing the animation.
+  const [startY] = await Promise.all([
+    movingMark.evaluate(node => new Promise(resolve => {
+      const observer = new MutationObserver(() => {
+        observer.disconnect();
+        const first = node.getAnimations()[0]?.effect.getKeyframes()[0];
+        resolve(node.getBoundingClientRect().y - new DOMMatrix(getComputedStyle(node).transform).f + new DOMMatrix(first?.transform || 'none').f);
+      });
+      observer.observe(node, { attributes: true, attributeFilter: ['data-phase'] });
+    })),
+    page.locator('#next').click(),
+  ]);
+  expect(startY).toBeCloseTo(before.y, 0);
+  for (const [width, colorScheme] of [[320, 'light'], [390, 'dark'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme, reducedMotion: 'no-preference' });
-    let baseline;
-    for (const variant of ['colour', 'warm']) {
-      await page.goto(`${route}?variant=${variant}`);
-      await expect(page.locator('#page')).toHaveAttribute('data-variant', variant);
-      await expect(page.locator('#comparison-icons tr')).toHaveCount(4);
-      await expect(page.locator('#comparison-icons .study-icon')).toHaveCount(16);
-      await expect(page.locator('#list .session')).toHaveCount(8);
-      await expect(page.locator('#list .session-busy .session-indicators .study-icon[data-size="28"]')).toHaveCount(4);
-      await expect(page.locator('#list .session-kind .study-icon[data-size="20"]')).toHaveCount(4);
-      expect(await page.locator('#list .study-icon').evaluateAll((nodes, style) => nodes.every(node => node.dataset.style === style), variant)).toBe(true);
-      const layout = await page.locator('#list .session').evaluateAll(rows => rows.map(row => {
-        const box = row.getBoundingClientRect(), title = row.querySelector('strong').getBoundingClientRect();
-        const icon = row.querySelector('.study-icon').getBoundingClientRect(), time = row.querySelector('.session-time').getBoundingClientRect();
-        return { id: row.dataset.id, width: box.width, height: box.height, titleX: title.x, iconX: icon.x, iconY: icon.y - box.y,
-          contained: row.scrollWidth <= row.clientWidth, placed: row.classList.contains('session-busy') ? icon.right <= title.x : icon.x - time.right >= 0 && icon.x - time.right <= 8 };
-      }));
-      expect(layout.every(row => row.contained && row.placed)).toBe(true);
-      if (baseline) expect(layout).toEqual(baseline);
-      baseline = layout;
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      expect(await page.locator('#comparison-icons .study-icon[data-style=colour][data-size="28"] .study-body').evaluateAll(nodes => {
-        const colours = nodes.map(node => getComputedStyle(node).fill);
-        const luminance = colour => {
-          const [r, g, b] = colour.match(/\d+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
-          return .2126 * r + .7152 * g + .0722 * b;
-        };
-        const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const background = luminance(getComputedStyle(document.documentElement).backgroundColor);
-        const eyes = luminance(getComputedStyle(nodes[0].parentNode.querySelector('.study-eye')).fill);
-        return new Set(colours).size === 4 && colours.every(colour => contrast(luminance(colour), background) >= 3 && contrast(luminance(colour), eyes) >= 3);
-      })).toBe(true);
-      await expect(page.locator('#comparison-icons .study-icon[data-style=warm] .study-warm-face')).toHaveCount(8);
-      await expect(page.locator('#comparison-icons .study-icon[data-style=colour] .study-warm-face')).toHaveCount(0);
-      await page.locator('.comparison').screenshot({ path: testInfo.outputPath(`comparison-${width}-${colorScheme}-${variant}.png`), animations: 'disabled' });
-      await page.screenshot({ path: testInfo.outputPath(`${variant}-${width}-${colorScheme}.png`), fullPage: true, animations: 'disabled' });
-    }
+    await page.goto(`${route}?scenario=run&step=2`);
+    await expect(page.locator('#page')).toHaveAttribute('data-phase', 'working');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
+    const mark = page.locator('#presence-mark');
+    await mark.scrollIntoViewIfNeeded();
+    await expect(mark.locator('.presence-cursor')).toHaveCSS('animation-name', 'presence-work');
+    await settlePlacement(mark);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`working-${width}-${colorScheme}.png`), fullPage: true });
+    await page.getByRole('button', { name: 'Reduce motion', exact: true }).click();
+    await expect(mark.locator('.presence-cursor')).toHaveCSS('animation-name', 'none');
+    await page.locator('#next').click(); await page.locator('#next').click();
+    await expect(mark).toHaveCSS('width', '20px');
+    expect(await mark.evaluate(node => node.getAnimations({ subtree: true }).length)).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath(`ready-${width}-${colorScheme}.png`), fullPage: true });
   }
-  await page.getByRole('button', { name: 'Colourful', exact: true }).click();
-  await expect(page).toHaveURL(/variant=colour$/);
-  const selected = page.locator('.session[data-id=review-work]');
-  await selected.click();
-  await page.getByRole('button', { name: 'Next style' }).click();
-  await expect(selected).toHaveAttribute('aria-pressed', 'true');
-  await expect(page).toHaveURL(/variant=warm$/);
-  await page.keyboard.press('ArrowLeft');
-  await expect(page).toHaveURL(/variant=colour$/);
   await page.getByRole('button', { name: 'Preview light theme', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.locator('#comparison-icons .study-icon[data-style=colour] .study-body').first()).toHaveCSS('fill', 'rgb(209, 104, 109)');
-  await page.getByRole('button', { name: 'Preview dark theme', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  const eyes = page.locator('#comparison-icons .study-icon[data-kind=review][data-style=colour][data-mood=working] .study-gaze');
-  await eyes.scrollIntoViewIfNeeded();
-  await expect(eyes).toHaveCSS('animation-name', 'study-read');
-  await page.getByRole('button', { name: 'Pause motion', exact: true }).click();
-  await expect(eyes).toHaveCSS('animation-play-state', 'paused');
-  await page.getByRole('button', { name: 'Resume motion', exact: true }).click();
-  await expect(eyes).toHaveCSS('animation-play-state', 'running');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(eyes).toHaveCSS('animation-name', 'none');
-  expect(await page.locator('.study-icon[data-mood=resting] *').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).animationName === 'none'))).toBe(true);
+  await page.goto(`${route}?scenario=input&step=2`);
+  await expect(page.getByRole('button', { name: 'Reduce motion', exact: true })).toBeDisabled();
+  await expect(page.locator('.presence-cursor')).toHaveCSS('animation-name', 'none');
+  await page.locator('#previous').click();
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'accepted');
   await page.reload();
-  await expect(page.locator('#page')).toHaveAttribute('data-variant', 'colour');
-  await expect(page.getByRole('button', { name: 'Pause motion', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.goto(`${route}?variant=invalid`);
-  await expect(page).toHaveURL(/variant=colour$/);
-  expect(errors).toEqual([]); expect(sockets).toEqual([]);
-  expect([...new Set(requests)].every(path => [route, '/session-icons-prototype.js', '/session-icons-prototype.css', '/style.css', '/icon.svg'].includes(path))).toBe(true);
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'accepted');
+  await page.getByLabel('Walkthrough').selectOption('run');
+  await page.getByRole('button', { name: 'Play flow', exact: true }).click();
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'accepted');
+  await page.getByRole('button', { name: 'Pause flow', exact: true }).click();
+  // Waiting one event interval proves the paused walkthrough does not advance.
+  await page.waitForTimeout(1900);
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'accepted');
+  await page.getByLabel('Walkthrough').selectOption('run');
+  await page.getByText('Try a single event', { exact: true }).click();
+  await page.locator('[data-event=start]').click();
+  await expect(page.getByRole('status')).toContainText('Nothing changed');
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'ready');
+  await page.goto(`${route}?scenario=__proto__&step=999`);
+  await expect(page.locator('#page')).toHaveAttribute('data-phase', 'ready');
+  await expect(page).toHaveURL(/scenario=run&step=0$/);
 });
