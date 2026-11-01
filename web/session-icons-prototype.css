@@ -1,47 +1,26 @@
-/* Throwaway: the shipped session bots, plus design refinements to compare against them. */
-body { height: auto; min-height: 100dvh; overflow: auto; }
-.page { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) 12px calc(120px + env(safe-area-inset-bottom)); background: var(--bg); color: var(--text); }
-h1 { margin: 8px 10px 4px; font-size: 28px; font-weight: 700; }
-.note { margin: 0 10px 16px; color: var(--muted); font-size: 13px; }
-.page .session { cursor: default; }
-.page:not([data-variant=now]) .session { grid-template-columns: 32px minmax(0, 1fr); }
-.page[data-variant=tile] .session { grid-template-columns: 40px minmax(0, 1fr); }
-.page:not([data-variant=now]) .session-indicators .bot { height: auto; margin-top: -2px; }
+/* Throwaway: original status dots with three second-line bot placements. */
+body { min-height: 100dvh; }
+.page { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) 12px calc(120px + env(safe-area-inset-bottom)); }
+.prototype-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-inline: 10px; }
+h1 { margin: 8px 0 4px; font-size: 28px; font-weight: 700; }
+#play { padding-inline: 8px; font-size: 13px; }
+#play[aria-pressed=true] { background: var(--user); }
+.note { margin: 4px 10px 16px; color: var(--muted); font-size: 13px; }
+.page .session { grid-template-columns: 16px minmax(0, 1fr); gap: 12px; }
+.session[aria-pressed=true] { background: var(--user); }
+.page .session-group-heading { margin-top: 16px; }
+.page .session-group-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.page .session-meta { min-height: 26px; }
+.session-meta .bot { flex: none; }
+.session-meta > .bot::before, .session-meta > .bot + *::before { content: none; }
+.page[data-variant=B] .session-meta > .bot { margin-left: auto; padding-left: 8px; }
+.bot-activity { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--muted); }
+.bot-activity .bot { flex: none; }
+.bot-activity[data-mood=working] { color: var(--text); }
+.bot-activity[data-mood=waiting] { color: var(--warning); }
 .switcher { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; width: min(406px, calc(100% - 24px)); padding: 5px; border-radius: 18px; background: var(--text); color: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
-.switcher button { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
+.switcher button { display: grid; place-items: center; width: 44px; height: 52px; flex-shrink: 0; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
 .switcher div { flex: 1; min-width: 0; text-align: center; }
 .switcher strong { display: block; font-size: 13px; }
-.switcher small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--bg) 75%, var(--text)); font-size: 11px; line-height: 1.4; }
-.roster { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px 6px; margin: 0 4px 20px; padding: 16px 6px; border-radius: 16px; background: var(--panel); }
-.roster-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.roster-cell small { color: var(--muted); font-size: 11px; }
-.bot-defs { position: absolute; }
-.bot svg { overflow: visible; }
-
-/* Refinements. One colour family: every kind at the same lightness and similar chroma, evenly spread round the wheel. */
-.page:not([data-variant=now]) [data-kind=review] { --kind: light-dark(oklch(.72 0.140 300), oklch(0.79 0.12 300)); }
-.page:not([data-variant=now]) [data-kind=fix] { --kind: light-dark(oklch(.72 0.150 25), oklch(0.79 0.13 25)); }
-.page:not([data-variant=now]) [data-kind=research] { --kind: light-dark(oklch(.72 0.130 245), oklch(0.79 0.11 245)); }
-.page:not([data-variant=now]) [data-kind=build] { --kind: light-dark(oklch(.72 0.140 155), oklch(0.79 0.12 155)); }
-.page:not([data-variant=now]) [data-kind=idea] { --kind: light-dark(oklch(.83 0.150 92), oklch(0.84 0.13 92)); }
-.page:not([data-variant=now]) [data-kind=notes] { --kind: light-dark(oklch(.72 0.045 70), oklch(0.79 0.025 70)); }
-.page:not([data-variant=now]) [data-kind=test] { --kind: light-dark(oklch(.72 0.120 190), oklch(0.79 0.1 190)); }
-.page:not([data-variant=now]) [data-kind=ship] { --kind: light-dark(oklch(.72 0.150 50), oklch(0.79 0.13 50)); }
-.page:not([data-variant=now]) [data-kind=tidy] { --kind: light-dark(oklch(.72 0.140 355), oklch(0.79 0.12 355)); }
-.page:not([data-variant=now]) [data-kind=data] { --kind: light-dark(oklch(.72 0.130 275), oklch(0.79 0.11 275)); }
-.page:not([data-variant=now]) [data-kind=guard] { --kind: light-dark(oklch(.72 0.140 130), oklch(0.79 0.12 130)); }
-.page:not([data-variant=now]) [data-kind=chat] { --kind: light-dark(oklch(.72 0.090 65), oklch(0.79 0.07 65)); }
-.page:not([data-variant=now]) [data-kind=ops] { --kind: light-dark(oklch(.72 0.120 215), oklch(0.79 0.1 215)); }
-.page:not([data-variant=now]) [data-kind=general] { --kind: light-dark(oklch(.72 0.035 260), oklch(0.79 0.015 260)); }
-.page:not([data-variant=now]) [data-kind=design] { --kind: light-dark(oklch(.9 0 0), oklch(.95 0 0)); }
-/* One eye style in both themes: dark eyes with a white catch-light. */
-.page:not([data-variant=now]) .bot { --bot-ink: #1d1822; --bot-shine: #fff; }
-.page:not([data-variant=now]) .bot .bot-line { stroke-width: 1.8; }
-/* C: a tinted tile behind each bot. */
-.bot-tile { display: grid; place-items: center; width: 40px; height: 40px; margin-top: -4px; border-radius: 12px; background: color-mix(in srgb, var(--kind) 20%, transparent); }
-.roster .bot-tile { width: 52px; height: 52px; margin: 0; border-radius: 15px; }
-.bot-tile[data-mood=saved] { opacity: .55; }
-.bot-tile .bot[data-mood=saved] { opacity: 1; }
-/* D: grey at rest; colour returns with activity. */
-.page[data-variant=calm] .bot:is([data-mood=idle], [data-mood=saved]) { --kind: light-dark(oklch(.8 .008 260), oklch(.6 .008 260)); }
-.page[data-variant=calm] .roster .bot { --kind: light-dark(oklch(.8 .008 260), oklch(.6 .008 260)); }
+.switcher small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; }
+@media (hover: hover) { .session:hover { background: var(--user); } .switcher button:hover { background: color-mix(in srgb, var(--bg) 12%, transparent); } }

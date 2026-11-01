@@ -1,4 +1,4 @@
-// Throwaway: the shipped session bots, plus design refinements to compare against them.
+// Throwaway: three second-line bot placements with the original status dots. Sample data only.
 const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
 const star = (x, y, r) => `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`;
@@ -48,89 +48,121 @@ const kinds = {
   general: ['Session', 'anything else', '<rect x="5" y="7" width="22" height="21" rx="8"/>', [[12, 17], [20, 17]], '', '', ''],
 };
 
-// Shared light and shade, so every refined bot is lit the same way.
-document.body.insertAdjacentHTML('afterbegin', '<svg class="bot-defs" width="0" height="0" aria-hidden="true"><defs><radialGradient id="bot-light" cx=".32" cy=".2" r=".85"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="bot-shade" x1="0" y1="0" x2="0" y2="1"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".2"/></linearGradient></defs></svg>');
 
 const variants = [
-  { key: 'now', name: 'Today', description: 'The bots as the app ships them now', refined: false, size: 28 },
-  { key: 'balanced', name: 'A · Balanced', description: 'Same art, evened out: equal size and baseline, one eye style, one colour family', refined: true, size: 32 },
-  { key: 'lit', name: 'B · Lit', description: 'A, plus soft light from the top-left and shade below, so they read as objects, not stickers', refined: true, lit: true, size: 32 },
-  { key: 'tile', name: 'C · Lit on a tile', description: 'B on a tinted rounded square: an even shape down the column, like app icons', refined: true, lit: true, tile: true, size: 30 },
-  { key: 'calm', name: 'D · Calm until active', description: 'B in grey while resting; a bot takes its colour while working, waiting or with a new reply', refined: true, lit: true, size: 32 },
+  { key: 'A', name: 'A · Beside project', description: 'Small bot leads the project line. Dots keep the title clear.' },
+  { key: 'B', name: 'B · Right of details', description: 'Bot sits at the right of the project line, away from the text.' },
+  { key: 'C', name: 'C · Activity line', description: 'Bot gets a second line with its activity. Taller, but easier to read.' },
 ];
-let variant;
+const stateLabels = { idle: 'Ready', saved: 'Saved', working: 'Working', waiting: 'Needs input', unread: 'New reply' };
+const jobs = { build: 'Building', review: 'Reviewing', fix: 'Fixing', research: 'Investigating', ship: 'Shipping', idea: 'Thinking', test: 'Testing', design: 'Designing' };
+let variant, playing = false, selected = 'review-post';
 
-// Optical balance: measure each bot's art once and fit it to the same box, standing on the same baseline.
-const fits = {};
-function fit(kind) {
-  if (fits[kind]) return fits[kind];
-  const [, , body, , back, front] = kinds[kind];
-  const probe = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  probe.setAttribute('class', 'bot-defs'); probe.innerHTML = `<g>${back}${body}${front}</g>`;
-  document.body.append(probe);
-  const { x, y, width, height } = probe.firstChild.getBBox(); probe.remove();
-  const scale = Math.min(25 / width, 25 / height);
-  return fits[kind] = `translate(${(16 - scale * (x + width / 2)).toFixed(2)} ${(29 - scale * (y + height)).toFixed(2)}) scale(${scale.toFixed(3)})`;
-}
-function botSvg(kind, mood, size) {
+// The artwork and animation classes match the shipped bots.
+function bot(kind, mood, size) {
   const [, , body, eyes, back, front, work] = kinds[kind];
   const face = eyes.map(([x, y, s = 1]) => mood === 'saved' ? `<path class="bot-line" d="M${x - 2.4 * s} ${y}h${4.8 * s}"/>`
-    : mood === 'unread' ? `<path class="bot-line" d="M${x - 2.4 * s} ${y + 1}q${2.4 * s} -${3.6 * s} ${4.8 * s} 0"/>`
     : `<ellipse class="bot-eye" cx="${x}" cy="${y}" rx="${2.1 * s}" ry="${2.9 * s}"/><circle class="bot-shine" cx="${x + .7 * s}" cy="${y - 1.1 * s}" r="${.7 * s}"/>`).join('');
-  const badge = mood === 'waiting' ? '<g class="bot-badge"><circle cx="27" cy="5" r="4.5"/><path d="M27 2.8v2.6M27 7.3v.1"/></g>'
-    : mood === 'unread' ? '<g class="bot-badge"><circle cx="27" cy="5" r="4"/></g>' : '';
-  const zz = mood === 'saved' ? '<g class="bot-zz"><text x="24" y="9">z</text><text x="24" y="9">z</text></g>' : '';
-  const light = variant.lit ? `<g fill="url(#bot-light)">${body}</g><g fill="url(#bot-shade)">${body}</g>` : '';
-  const art = `${back}<g class="bot-body">${body}</g>${light}<g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}`;
-  return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${variant.refined ? `<g transform="${fit(kind)}">${art}</g>` : art}</g>${badge}${zz}</svg>`;
-}
-function bot(kind, mood, size) {
   const node = el('span', undefined, 'bot');
-  node.dataset.kind = kind; node.dataset.mood = mood;
-  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${kinds[kind][0]} bot, ${mood}`);
-  node.style.setProperty('--bot-blink', `-${Math.round(Math.random() * 6000)}ms`);
-  node.innerHTML = botSvg(kind, mood, size);
-  if (!variant.tile) return node;
-  const tile = el('span', undefined, 'bot-tile');
-  tile.dataset.kind = kind; tile.dataset.mood = mood; tile.append(node);
-  return tile;
+  node.dataset.kind = kind; node.dataset.mood = mood === 'unread' ? 'idle' : mood;
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${kinds[kind][0]} bot, ${stateLabels[mood].toLowerCase()}`);
+  node.style.setProperty('--bot-t', `-${Date.now() % 6000}ms`);
+  node.style.setProperty('--bot-blink', `-${Date.now() % 6000}ms`);
+  node.innerHTML = `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${back}<g class="bot-body">${body}</g><g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}</g></svg>`;
+  return node;
+}
+
+// Original statusIcon construction: ring at rest, blue unread dot, bricks while working, hand for input.
+function statusIcon(mood) {
+  const icon = el('span', undefined, 'session-icon');
+  icon.dataset.status = mood === 'unread' ? 'idle' : mood;
+  icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', stateLabels[mood]);
+  if (mood === 'unread') icon.dataset.unread = '';
+  icon.style.setProperty('--block-delay', `-${Date.now() % 900}ms`);
+  icon.innerHTML = mood === 'working'
+    ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="0" width="4" height="4"/><rect x="9" y="0" width="4" height="4"/><rect x="9" y="6" width="4" height="4"/><rect x="9" y="12" width="4" height="4"/><rect x="3" y="12" width="4" height="4"/><rect x="3" y="6" width="4" height="4"/></svg>'
+    : mood === 'waiting'
+    ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>';
+  return icon;
 }
 
 const sessions = [
-  ['research', 'idle', 'Investigate Claude SDK session recovery errors', '', '22h'],
-  ['review', 'idle', 'Review architecture of web app.js', '', '1d'],
-  ['build', 'idle', 'Add model-independent voice input to composer', '', '2d'],
-  ['idea', 'working', 'Session icon auto-assignment is unreliable', 'Pi: Here’s where each part came from…', '4h'],
-  ['research', 'unread', 'Investigate stuck working dot animation', 'Pi: Yes. Logging works the same as before…', '20h'],
-  ['ship', 'waiting', 'Submit backend-api-sports PR 38 review', 'Pi: Post these 3 comments?', '6h'],
-  ['fix', 'working', 'Fix stuck composer after image sending', 'You: try again with a photo', 'now'],
-  ['tidy', 'idle', 'Refactor the session list rendering', '', '1d'],
-  ['test', 'saved', 'Test video attachment access', 'Pi: Both formats play.', '3d'],
-  ['chat', 'saved', 'Greet the user', '', '5d'],
-  ['general', 'idle', 'Start a coding session', '', '6d'],
+  { id: 'compress', kind: 'build', mood: 'idle', title: 'Compress video with FFmpeg without quality loss', age: '11h', pinned: true },
+  { id: 'research', kind: 'research', mood: 'saved', title: 'Investigate Claude SDK session recovery errors', age: '2d', pinned: true },
+  { id: 'architecture', kind: 'review', mood: 'idle', title: 'Review architecture of web app.js', age: '2d', pinned: true },
+  { id: 'review-post', kind: 'review', mood: 'working', title: 'Review X post for Pi remote improvements', preview: 'Pi: Checking the wording against the latest changes…', age: 'now' },
+  { id: 'fix-model', kind: 'fix', mood: 'working', title: 'Fix model selection issue', preview: 'You: Keep the compact toolbar on the phone.', age: 'now' },
+  { id: 'release', kind: 'ship', mood: 'waiting', title: 'Ship the mobile navigation fixes', preview: 'Pi: Ready to publish. Should I go ahead?', age: '6h' },
+  { id: 'ideas', kind: 'idea', mood: 'unread', title: 'Prototype session pane improvements', preview: 'Pi: Three options are ready to compare.', age: '10h' },
+  { id: 'video', kind: 'test', mood: 'saved', title: 'Test video delivery on the phone', preview: 'Pi: Both formats play in the browser.', age: '1d' },
+  { id: 'design', kind: 'design', mood: 'idle', title: 'Polish the mobile session list', project: 'a-very-long-project-name-for-mobile-layout', age: '2d' },
 ];
-const stateLabels = { working: 'Working', waiting: 'Needs input' };
-function row([kind, mood, title, preview, ageText]) {
-  const button = el('button', undefined, 'session'), indicators = el('span', undefined, 'session-indicators');
-  button.type = 'button'; indicators.append(bot(kind, mood, variant.size));
-  const body = el('div', undefined, 'session-body'), top = el('div', undefined, 'session-top'), meta = el('div', undefined, 'session-meta');
-  top.append(el('strong', title)); body.append(top);
-  if (preview) body.append(el('div', preview, 'session-preview'));
-  if (stateLabels[mood]) { const label = el('span', stateLabels[mood], 'session-state'); label.dataset.status = mood; meta.append(label); }
-  meta.append(el('span', 'pi-remote', 'session-project'), el('time', ageText, 'session-time'));
+
+function row(item) {
+  const mood = playing ? 'working' : item.mood;
+  const button = el('button', undefined, 'session');
+  button.type = 'button'; button.dataset.id = item.id;
+  button.setAttribute('aria-pressed', String(item.id === selected));
+  const indicators = el('span', undefined, 'session-indicators');
+  indicators.append(statusIcon(mood));
+  const body = el('div', undefined, 'session-body'), top = el('div', undefined, 'session-top');
+  top.append(el('strong', item.title));
+  if (item.pinned) {
+    const pin = el('span', undefined, 'session-pinned');
+    pin.setAttribute('role', 'img'); pin.setAttribute('aria-label', 'Pinned');
+    pin.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 3h8v2l-1 4 3 3v2h-5v6l-1 2-1-2v-6H6v-2l3-3-1-4Z"/></svg>';
+    top.append(pin);
+  }
+  body.append(top);
+  if (variant.key === 'C') {
+    const activity = el('div', undefined, 'bot-activity'); activity.dataset.mood = mood;
+    activity.append(bot(item.kind, mood, 24), el('span', mood === 'working' ? jobs[item.kind] : `${kinds[item.kind][0]} · ${stateLabels[mood]}`));
+    body.append(activity);
+  }
+  if (item.preview) body.append(el('div', item.preview, 'session-preview'));
+  const meta = el('div', undefined, 'session-meta');
+  if (variant.key === 'A') meta.append(bot(item.kind, mood, 20));
+  if (variant.key !== 'C' && ['working', 'waiting'].includes(mood)) {
+    const status = el('span', stateLabels[mood], 'session-state'); status.dataset.status = mood; meta.append(status);
+  }
+  const project = el('span', undefined, 'session-project');
+  project.append(el('span', item.project || 'pi-remote', 'session-project-name'));
+  meta.append(project, el('span', item.age, 'session-time'));
+  if (variant.key === 'B') meta.append(bot(item.kind, mood, 24));
   body.append(meta); button.append(indicators, body);
+  button.addEventListener('click', () => {
+    selected = item.id;
+    for (const sibling of document.querySelectorAll('.session')) sibling.setAttribute('aria-pressed', String(sibling.dataset.id === selected));
+  });
   return button;
+}
+function group(name, pinned) {
+  const section = el('section', undefined, 'session-group');
+  section.setAttribute('aria-label', name);
+  const heading = el('div', undefined, 'session-group-heading'), items = sessions.filter(item => !!item.pinned === pinned);
+  heading.append(el('h2', name), el('span', String(items.length), 'badge'));
+  section.append(heading, ...items.map(row));
+  return section;
 }
 function render() {
   $('page').dataset.variant = variant.key;
   $('label').textContent = variant.name; $('description').textContent = variant.description;
-  $('legend').className = 'roster';
-  $('legend').replaceChildren(...Object.entries(kinds).map(([kind, [name]]) => { const cell = el('div', undefined, 'roster-cell'); cell.append(bot(kind, 'idle', 44), el('small', name)); return cell; }));
-  $('list').replaceChildren(...sessions.map(row));
-  const url = new URL(location.href); url.searchParams.set('variant', variant.key); history.replaceState(null, '', url);
+  $('play').setAttribute('aria-pressed', String(playing));
+  $('play').textContent = playing ? 'Show sample states' : 'Play all bots';
+  $('list').replaceChildren(group('Pinned', true), group('Recent', false));
 }
-const set = key => { variant = variants.find(item => item.key === key) || variants[1]; render(); };
+function set(key) {
+  variant = variants.find(item => item.key === key) || variants[0];
+  const url = new URL(location.href); url.searchParams.set('variant', variant.key); history.replaceState(null, '', url);
+  render();
+}
 const cycle = step => set(variants[(variants.indexOf(variant) + step + variants.length) % variants.length].key);
 $('prev').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
+$('play').addEventListener('click', () => { playing = !playing; render(); });
+document.addEventListener('keydown', event => {
+  if (event.target.closest('input, textarea, select, [contenteditable]') || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(event.key === 'ArrowRight' ? 1 : -1); }
+});
 set(new URLSearchParams(location.search).get('variant'));
