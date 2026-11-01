@@ -1,85 +1,93 @@
-# Character icon research: Grok Bot and Muse
+# Character icon design: principles and behaviour
 
-## Revised recommendation
+## Why the previous attempts missed
 
-Colour is compatible with a coherent character family. The monochrome direction was too restrictive, and the user found the resulting comparison too gray.
+The user rejected both the neutral art study and the colourful/warm character comparison. They are asking for an understanding of design patterns, flow and principles, not drawings that resemble Grok or Muse.
 
-The next comparison should be **colourful simple characters versus a warm companion character**, not gray fill versus gray outline. Keep session-list layout and icon placement unchanged. Evaluate the artwork at the actual 20px and 28px sizes.
+The prototypes compared appearances before establishing the icon's job. They showed separate working and resting examples, not one character responding to an actual sequence. Changing colour, shape and finish did not address that missing behaviour.
 
-This revision follows inspection of first-party Grok and Muse artwork. It replaces the earlier neutral-only recommendation. Exact colours, finish and character geometry remain design hypotheses, not approved implementation choices.
+This is a proposed behaviour brief, not an approved visual direction. Do not draw another set of faces or change the live list from this document alone.
 
-## Grok Bot: bold colour with a consistent construction
+## What the references actually teach
 
-### Primary sources
+### Grok: identity and state form one system
 
-- [Designing Grok Bot for a world of persistent agents](https://x.ai/news/designing-grok-bot)
-- [Designing Grok Bot with Grok Bot](https://x.ai/bot/guides/designing-grok-bot-with-grok-bot)
+[Grok's design team](https://x.ai/news/designing-grok-bot#presence-as-interface) frames the avatar around recognition, activity and how much detail the person needs. The same account describes a sequence: calm at rest, acknowledgement when work arrives, active movement while working, different behaviour when help is needed, and settling after completion.
 
-The design team explicitly describes the trade-off between individual character and a coherent family:
+The important transfer is that sequence and its meaning. Bright colours and capsule eyes are one implementation, not the principle.
 
-> Watercolor and clay gave individual Bots plenty of character but carried too much detail at sidebar scale.
+I operated the article's interactive avatar demo through Idle, Working, Waiting, Blocked, Thinking and Done, checking the selected tab and capturing each state. It keeps a common presentation context while changing gaze, expression and form. Thinking can become dots and Blocked can become an exclamation mark. Continuity therefore does not require the same face to remain literally visible in every frame. It requires the changes to be understandable as the same agent's state.
 
-Its chosen system keeps the basic construction consistent, using:
+Those are observations of an illustrative public demo, not a test of real Grok work or every transition's timing. The [designer's workflow article](https://x.ai/bot/guides/designing-grok-bot-with-grok-bot) separately emphasizes tuning motion with production assets in context. That supports judging behaviour over time rather than approving a static mascot sheet.
 
-> simple shapes and expressive eyes
+### Muse: material and expression support a consistent presence
 
-with controlled variations and accessories. That is direct guidance about these character avatars, unlike generic rules for toolbar pictograms.
+[Muse's official personal-agent site](https://muse.ai/) uses one recognisable cream/peach character, with a consistent face, material and manner. Its blue app mark is separate from that character. The [portrait](https://muse.ai/images/landing/brand/hatch.jpg) and sampled [working animation](https://muse.ai/videos/avatars/hatch_working.mp4) support those observations.
 
-### What the artwork actually shows
+The transferable principle is consistency of presence and expression. Fur, cheeks and a cream palette are stylistic choices. We have not verified Muse's full interactive task lifecycle, so it cannot supply our complete state model. It remains a plausible match for the user's Muse reference, not a confirmed identification.
 
-The official designer's team animation has a bright red capsule, a bright blue rounded character, a black circle carrying the Figma mark, and a black rounded square. Repeated capsule-like eyes and simple body construction make the cast recognizable as one family despite strong colour differences.
+## Principles for Pi Remote
 
-![Grok's official design-team characters, showing red, blue and black bodies with a shared facial language](https://media.x.ai/v1/website/grok-bot-guides-designing-grok-bot-with-grok-bot-meet-the-team-b9959c98.gif)
+- **Give the icon one primary job.** Proposed job: make this session's agent feel recognisable and communicate its activity at a glance. It should not simultaneously become a job-category legend, an outcome guarantee and a decoration.
+- **Separate what stays from what changes.** Identity supplies stable construction and recognisable traits. Activity changes pose, rhythm or expression. Unread is a separate attention signal. A new reply should not accidentally create a new identity.
+- **Design cause and response.** An acknowledgement follows a confirmed action; a working loop follows actual runtime activity; waiting redirects attention; settling follows the run ending. Motion needs a reason to start, change and stop.
+- **Use one motion grammar.** Related characters can have personality, but the same state should feel related across the family. Choreographed layers are allowed. Unrelated loops at competing frequencies are not a substitute for choreography.
+- **Preserve perceptual continuity.** The person should understand a change as the same agent changing state. Data refreshes, automatic retitling and movement between the leading and detail-line slots must not make it feel replaced or restarted.
+- **Control attention at page scale.** A character can be expressive without every quiet session competing for attention. Evaluate several active sessions together and the return to rest, not just one enlarged icon looping alone.
+- **Derive the visual language from this product.** Pi Remote's own `web/icon.svg` already uses warm off-white with coral, blue and gold modular shapes. That is a possible starting vocabulary, not a mandate to put three colours on every icon. Grok's shapes and Muse's material should not become imported skins.
+- **Let scale constrain the drawing.** At 20px and 28px, apparent mass, facial spacing and contrast matter more than nominal canvas equality. Preserve meaning without motion, with textual status still available.
 
-The guide's motion storyboard also shows a vivid purple circular character. Grok therefore does not support a rule that every character must be gray, muted or restricted to one shared hue.
+These are design constraints and hypotheses. They do not yet select a silhouette, palette, material, metaphor or assignment scheme.
 
-I inspected the team GIF and six frames sampled at 2 fps. The frames show changing gaze, blinking, body turns and orbiting elements. The article describes motion changing with activity and settling after work finishes. The samples are not a complete verification of every state transition.
+## Behaviour before artwork
 
-**Useful transfer:** a common shape/face/motion recipe can support distinct coloured characters. Colour itself is not the inconsistency.
+```text
+Ready → Acknowledge → Working → Settle → Ready
+                         ↕
+                    Needs input
 
-**Do not copy:** the entire roster architecture, the exact artwork or every motion at once. The article's gallery contains rejected and exploratory styles, including rendered 3D figures; those are not all evidence of the shipped visual system. This research does not establish a public palette formula or reusable asset licence.
+Interrupted run → neutral settling, not a success celebration
+Connection lost → stop implying live activity
+Unread reply    → independent attention signal
+```
 
-## Muse: warm material colour, plus a separate brand mark
+This is intended choreography, not a claim that the host exposes each box as a status.
 
-The best-supported Muse reference is [Muse, Your Personal AI Agent](https://muse.ai/). Its official page identifies the product as a personal agent and its footer says © Meta 2026. This is a plausible match for the user's reference, not confirmation of which Muse they intended. It is not labelled Muse Code in the inspected material.
+| Moment | What the person should understand | Constraint |
+| --- | --- | --- |
+| Ready | Available, with nothing currently running | Calm does not mean disabled or asleep |
+| Action acknowledged | The computer accepted the request | Do not imply the model has started before runtime evidence arrives |
+| Working | The agent is active | A loop is not proof of useful progress or successful output |
+| Needs input | The person has an action to take | Different from merely continuing to work; no urgent-looking decoration without a real need |
+| Run settles | The activity has ended | `idle` alone does not prove success, completion of the user's goal, review or delivery |
+| Stopped or interrupted | The run ended with an uncertain or partial outcome | No automatic celebration |
+| Saved or disconnected | The agent is not currently live in the same way | Do not infer completion, failure or sleep from connectivity alone |
+| Unread | A reply arrived since the conversation was last seen | Can coexist with activity; should not restart its motion |
 
-### What the artwork actually shows
+The source contract matters. `src/state.mjs:refreshStatus` exposes starting, working, waiting, idle, saved and disconnected conditions. Working can include retries, compaction or a pending reply. It does not expose a general successful-done status. Acknowledge and Settle above are proposed presentation phases, not new backend states.
 
-- [Character portrait](https://muse.ai/images/landing/brand/hatch.jpg): ivory/cream fur, a pale peach-yellow face, peach-pink cheeks, glossy dark eyes and a tiny curved smile.
-- [Official working illustration](https://muse.ai/images/landing/brand/og-image.jpg?v=3): the same character wearing headphones at a laptop. Orange, green and blue appear more strongly in the surrounding objects and app mark.
-- [App-mark SVG](https://muse.ai/images/favicon/app-squiggle.svg): a separate blue squiggle with gradient stops including `#0082FB`, `#0064E0` and `#0040DC`. This is not the character's body palette.
+## Boundaries already established
 
-![Muse's official character portrait with cream material and peach facial details](https://muse.ai/images/landing/brand/hatch.jpg)
+This remains icon design, not a session-list redesign. Preserve the existing title, metadata, sections, navigation and controls. The current requested placements are a larger leading character while active and a smaller detail-line character at rest. The transition between those placements must be part of the study, rather than an unexplained swap.
 
-I also inspected six frames from the official [working avatar video](https://muse.ai/videos/avatars/hatch_working.mp4). They show the character at a laptop, with changing head/hand positions and expression. The connecting video exists too, but was not played for this review. Asset basenames do not establish the mascot's public name.
+Stable identity is still a product decision, not permission to invent persistent teammates across unrelated sessions. Today `web/app.js:sessionKind` derives automatic kinds from the title. We should decide deliberately whether the icon identifies the session, the agent presence or the task kind before changing that contract.
 
-**Useful transfer:** warm colour and a consistent material/face treatment can supply personality without assigning a different vivid hue to every character. A brand accent and a character palette can have different roles.
+## Next design artifact
 
-**Do not copy:** miniature fur or a full desk scene into a 20px SVG. The supplied portrait is 1080px wide; inspecting it does not prove the same detail reads at our size. Either simplify deliberately or create appropriately rendered small assets. Vendor artwork remains reference material, not a proposed dependency.
+Make one small lifecycle storyboard with an original placeholder mark, not another gallery of polished characters. Show the same session through:
 
-## What was wrong with the earlier conclusion
+1. Request accepted, runtime starts, work continues, run settles.
+2. Work pauses for a real question or permission, then resumes.
+3. The person stops the run; activity ends without implying success.
+4. A reply arrives while off-screen; opening the conversation clears unread without changing identity.
+5. Connection is lost and restored; the icon does not invent activity during the gap.
 
-[Fluent's one-colour recommendation](https://fluent2.microsoft.design/iconography) is for system icons. [Apple's monochrome and hierarchical rendering](https://developer.apple.com/sf-symbols/) are available rendering modes, not proof that character avatars should be monochrome. Applying those rules as an overall art direction lost the personality the user wanted.
-
-Our existing cast also changes several variables at once: category colour, body proportions, eye count, accessories and working motion. Removing all hue preserved much of that construction while removing its energy. Palette changes alone cannot establish a coherent character family.
-
-The screenshots and source show these differences. The judgment that the result feels like mismatched stickers is a design assessment, not a measured usability finding.
-
-## Next icon-only comparison
-
-| Direction | Construction | Colour and finish | What it tests |
-| --- | --- | --- | --- |
-| Colourful shapes | Four simple, related silhouettes; the same capsule eyes and comparable apparent mass; no occupational props in the first pass | A small, deliberately chosen set of distinct body colours; consistent flat finish and eye contrast | Whether shared construction makes colour variety feel coherent |
-| Warm companion | One recognisable character family with the same face proportions and a small number of pose/silhouette variations | Cream/sand bodies, peach facial warmth and dark eyes; a consistent soft finish rather than gray outlines | Whether warmth and material character provide enough personality with less hue variation |
-
-These are original Pi Remote concepts to explore, not reproductions of the vendor mascots. My preferred first pass is colourful shapes because it is better supported at small sidebar scale; the warm direction is worth comparing rather than rejecting from a large illustration alone.
-
-Keep the same subjects, placement, sample titles and row density across both directions. Show working and resting poses side by side at actual size, on light and dark backgrounds. Match face contrast and apparent visual weight before judging colour. Preserve the existing semantic unread/attention markers and check that character colours do not obscure them.
-
-The decision should be whether the set reads as one family at 20px and still has character at 28px. Do not make the decision from enlarged artwork or another arbitrary palette swap. Keep the gray version only as a baseline.
+Keep the real start/end placements and include a long title and several neighbouring sessions. The evaluation is whether the viewer can tell what changed, why it changed and what needs their attention. Only then choose the final drawing and palette to support that behaviour.
 
 ## Evidence and limits
 
-The parent directly fetched the two Grok articles, Grok's team GIF and motion storyboard, Muse's product page, portrait, working illustration, app-mark SVG and working video. It inspected the images and sampled motion frames. A delegated search independently checked Muse-name alternatives; Museapp now points to Allume, and Msty's mark is a faceted cube rather than this character.
+Reviewed current `web/app.js`, `src/state.mjs`, `web/icon.svg` and the prototype. The prototype currently has only working/resting samples and style/theme/motion switches; it does not enact the task lifecycle above.
 
-The Grok Bot product route returned HTTP 403; the public design articles and linked assets were accessible. No private product account, live vendor interface, phone-scale recognition test, user study, contrast approval or artwork reuse permission was established. No live Pi Remote UI changed as part of this research.
+The first-party artwork research remains in Git history at `494e22a`. This pass additionally operated Grok's public state demo in an isolated browser and inspected six captured states. The first attempt to wait for network idle timed out; the bounded retry used DOM readiness and visible controls. No private vendor account or live task was used.
+
+No UI or implementation changed in this pass. No user study, approved design brief, phone usability validation or evidence that a particular final appearance will fit has been established.
