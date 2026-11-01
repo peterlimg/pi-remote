@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#100d10" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Coordinator storyboard · Pi Remote</title>
+  <title>Session orchestration prototype · Pi Remote</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/coordinator-prototype.css">
   <script type="module" src="/coordinator-prototype.js"></script>
 </head>
 <body>
-  <!-- A fixed six-scene storyboard, not a working coordinator. The production composer is unchanged. -->
+  <!-- Interactive worker-session inspection and routing over six simulated milestones. The production composer is unchanged. -->
   <header class="story-guide" aria-label="Storyboard navigation">
     <nav>
       <button id="story-previous" class="quiet" type="button" aria-label="Previous scene"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
@@ -137,8 +137,8 @@
     </main>
   </div>
   <div id="story-index" class="story-index" popover aria-label="Storyboard scenes">
-    <h2>Briefing-first coordination</h2>
-    <p class="hint">Illustrative storyboard. No agents run and no changes are applied. Next advances the story, not a real task.</p>
+    <h2>Sessions and worker orchestration</h2>
+    <p class="hint">No agents run and no changes are applied. Open a worker session, send it a sample instruction, then return to its coordinator. Next changes the simulated milestone.</p>
     <ol id="story-scenes"></ol>
     <button type="button" class="quiet" popovertarget="story-index" popovertargetaction="hide">Close</button>
   </div>

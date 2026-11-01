@@ -37,6 +37,31 @@
 .story-attachment { height: auto; padding-bottom: 16px; }
 .story-attachment-copy { padding: 8px 20px; }
 .story-guide button:not(:disabled):hover, .story-index button:hover, .story-actions .quiet:hover { background: var(--user); }
+.delegation-block { margin: 16px 0 8px; }
+.delegation-block h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.delegation-owner { margin: 0 0 8px !important; color: var(--muted); font-size: 12px; }
+.delegation-workers, .worker-sessions { margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
+.worker-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 58px; padding: 8px 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; }
+.worker-link + .worker-link { border-top: 1px solid var(--line); }
+.worker-link strong, .worker-link small { display: block; }
+.worker-link strong { font-size: 14px; font-weight: 500; }
+.worker-link small { margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.worker-state { flex-shrink: 0; max-width: 42%; color: var(--muted); font-size: 12px; font-weight: 400; text-align: right; }
+.worker-state[data-state=waiting] { color: var(--warning); }
+.worker-link::after { content: ''; width: 6px; height: 6px; flex-shrink: 0; margin-right: 4px; border-top: 1px solid var(--muted); border-right: 1px solid var(--muted); transform: rotate(45deg); }
+.worker-link .worker-state { margin-left: auto; }
+.worker-link:hover, .worker-origin button:hover, .routing-receipt button:hover { background: var(--user); }
+.session-state-dot { width: 7px; height: 7px; margin-top: 7px; border: 1px solid currentColor; border-radius: 50%; color: var(--muted); }
+.session-state-dot[data-state=working] { background: var(--accent); color: var(--accent); }
+.session-state-dot[data-state=waiting] { background: var(--warning); color: var(--warning); }
+.session-role { color: var(--muted); font-size: 11px; font-weight: 400; }
+.worker-origin { max-width: var(--content-width); margin: 0 auto 20px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.worker-origin button { min-height: 44px; padding: 8px 0; font-size: 13px; text-align: left; }
+.worker-origin p { margin: 0; color: var(--muted); font-size: 12px; }
+.worker-origin .worker-context { margin-top: 8px; overflow-wrap: anywhere; }
+.routing-receipt { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; margin: 10px 0; color: var(--muted); font-size: 12px; }
+.routing-receipt button { min-height: 44px; padding: 6px 0; font-size: 12px; font-weight: 500; }
+.worker-question-link { display: block; max-width: var(--content-width); min-height: 44px; margin: 0 auto 16px; padding: 8px 0; font-size: 13px; text-align: left; }
 @media (min-width: 701px) {
   .story-guide { padding-left: 340px; padding-right: 20px; }
 }

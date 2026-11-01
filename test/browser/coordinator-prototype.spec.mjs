@@ -27,20 +27,21 @@ async function observe(page) {
   };
 }
 async function fits(page) {
-  for (const id of ['attach', 'model', 'reasoning-control', 'usage-meter', 'commands', 'send']) await expect(page.locator('#' + id)).toBeVisible();
+  for (const id of ['attach', 'model', 'reasoning-control', 'usage-meter', 'commands']) await expect(page.locator('#' + id)).toBeVisible();
+  await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
   const bounds = await page.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth, y: scrollY,
     guide: document.querySelector('.story-guide').getBoundingClientRect().bottom,
     shell: document.querySelector('#app').getBoundingClientRect().top,
     transcript: document.querySelector('#transcript').getBoundingClientRect().height,
     headerBottom: document.querySelector('.conversation-header').getBoundingClientRect().bottom,
-    currentTop: document.querySelector('[data-current-scene]').getBoundingClientRect().top,
+    currentTop: document.querySelector('[data-current-scene], .worker-origin').getBoundingClientRect().top,
     controls: [...document.querySelectorAll('#composer button:not([hidden]), .story-guide button')].filter(n => n.checkVisibility()).map(n => {
       const r = n.getBoundingClientRect(); return { x: r.x, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
     }), width: innerWidth, height: innerHeight }));
   expect(bounds.overflow).toBe(false); expect(bounds.y).toBe(0);
   expect(bounds.guide).toBeLessThanOrEqual(bounds.shell); expect(bounds.transcript).toBeGreaterThan(40);
   expect(bounds.currentTop).toBeGreaterThanOrEqual(bounds.headerBottom);
-  if (page.viewportSize().width > 700) expect(await page.locator('#sessions strong').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
+  if (page.viewportSize().width > 700) expect(await page.locator('#sessions strong').evaluateAll(nodes => nodes.every(n => n.scrollWidth <= n.clientWidth))).toBe(true);
   for (const r of bounds.controls) {
     expect(r.x).toBeGreaterThanOrEqual(0); expect(r.right).toBeLessThanOrEqual(bounds.width);
     expect(r.bottom).toBeLessThanOrEqual(bounds.height); expect(r.width).toBeGreaterThanOrEqual(44); expect(r.height).toBeGreaterThanOrEqual(44);
@@ -82,7 +83,7 @@ test('six-scene briefing storyboard preserves drafts and separates permission, s
   const isolated = await observe(page);
   await page.goto(route);
   await expect(page).toHaveURL(/scene=1/);
-  await expect(page.locator('#story-title')).toHaveText('Hand off two jobs');
+  await expect(page.locator('#story-title')).toHaveText('A coordinator, two workers');
   await expect(page.getByRole('button', { name: 'Previous scene' })).toBeDisabled();
   await expect(page.locator('#transcript .message')).toHaveCount(2);
   await page.getByRole('button', { name: 'Next scene' }).click();
@@ -129,6 +130,66 @@ test('six-scene briefing storyboard preserves drafts and separates permission, s
   await expect(page.locator('#story-index')).toContainText('No agents run');
   await page.locator('[data-scene="4"]').click(); await expect(page).toHaveURL(/scene=5/);
   await page.goto(route + '?scene=invalid'); await expect(page).toHaveURL(/scene=1/);
+  isolated();
+});
+
+test('coordinator and child sessions expose ownership, isolate instructions and attachments, and stop only the selected worker', async ({ page }) => {
+  const isolated = await observe(page); await page.goto(route + '?scene=1');
+  const delegation = page.getByRole('region', { name: 'Coordinator and worker sessions' });
+  await expect(delegation).toContainText('Assigned by Mobile release · Coordinator');
+  await expect(delegation.locator('[data-open-session]')).toHaveCount(2);
+  await page.locator('#prompt').fill('Keep my coordinator draft.');
+  await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
+  await delegation.getByRole('button', { name: 'Open Navigation worker session' }).click();
+  await expect(page.locator('#title')).toHaveText('Navigation');
+  await expect(page.getByRole('region', { name: 'Worker session ownership' })).toContainText('Navigation · Worker session · Working');
+  await expect(page.locator('#transcript')).toContainText('Coordinator → Navigation · Worker');
+  await expect(page.locator('#prompt')).toHaveValue(''); await expect(page.locator('#attachments')).toBeHidden();
+  await expect(page.locator('#abort')).toBeVisible();
+  await page.locator('#prompt').fill('Check scrolling before changing the gesture.');
+  await expect(page.locator('#send')).toBeVisible(); await page.locator('#send').click();
+  await expect(page.locator('#transcript')).toContainText('You → Navigation · Worker');
+  await expect(page.locator('#transcript .message.assistant').last()).toContainText('only by Navigation');
+  await page.getByRole('button', { name: 'Return to Mobile release · Coordinator' }).click();
+  await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
+  await expect(page.locator('#attachments img')).toBeVisible();
+  await delegation.getByRole('button', { name: 'Open Login copy worker session' }).click();
+  await expect(page.locator('#transcript')).not.toContainText('Check scrolling before');
+  await expect(page.locator('#prompt')).toHaveValue(''); await expect(page.locator('#attachments')).toBeHidden();
+  await page.getByRole('button', { name: 'Return to Mobile release · Coordinator' }).click();
+  await delegation.getByRole('button', { name: 'Open Navigation worker session' }).click();
+  await page.getByRole('button', { name: 'Abort turn', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Worker session ownership' })).toContainText('Stopped · unverified');
+  await expect(page.locator('#transcript .message.assistant').last()).toContainText('other worker are unchanged');
+  await page.getByRole('button', { name: 'Return to Mobile release · Coordinator' }).click();
+  await expect(delegation.locator('[data-open-session=navigation]')).toContainText('Stopped · unverified');
+  await expect(delegation.locator('[data-open-session=login]')).toContainText('Working');
+  await page.locator('#back').click();
+  const group = page.getByRole('group', { name: 'Workers coordinated by Mobile release' });
+  await expect(group.locator('[data-session]')).toHaveCount(2);
+  await group.locator('[data-session=login]').click(); await expect(page.locator('#title')).toHaveText('Login copy');
+  await page.goto(route + '?scene=3');
+  await page.getByRole('button', { name: 'Keep saved format', exact: true }).click();
+  await page.locator('.delegation-workers [data-open-session=login]').click();
+  await expect(page.locator('#transcript')).toContainText('Coordinator → Login copy');
+  await expect(page.locator('#transcript')).toContainText('Keep the saved format. Just simplify the copy.');
+  await page.getByRole('button', { name: 'Return to Mobile release · Coordinator' }).click();
+  await page.goto(route + '?scene=3&session=login');
+  await expect(page.locator('#title')).toHaveText('Login copy');
+  await expect(page.locator('#transcript')).toContainText('this worker is waiting');
+  await page.getByRole('button', { name: 'Open the question in the coordinator' }).click();
+  await expect(page.locator('#title')).toHaveText('Mobile release');
+  await expect(page.getByRole('button', { name: 'Keep saved format', exact: true })).toBeVisible();
+  await page.goto(route + '?scene=5&session=login');
+  await expect(page.locator('#transcript')).toContainText('report was delivered to Mobile release');
+  await page.getByRole('button', { name: 'Return to Mobile release · Coordinator' }).click();
+  await expect(page.getByRole('group', { name: 'Report delivered', exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Next scene' }).click();
+  const revision = page.getByRole('group', { name: 'Revision routed', exact: true });
+  await expect(revision).toContainText('Coordinator →');
+  await revision.getByRole('button', { name: 'Open Login copy worker session' }).click();
+  await expect(page.locator('#transcript')).toContainText('Keep the Private login link label. Shorten only the placeholder.');
+  await expect(page.locator('#transcript')).not.toContainText('Investigate the back gesture');
   isolated();
 });
 
@@ -179,6 +240,10 @@ test('storyboard scenes fit phones and desktop in both themes, with one batched 
       for (let scene = 1; scene <= 6; scene++) {
         await page.goto(route + '?scene=' + scene); await fits(page);
         if (view.name !== 'narrow' && view.name !== 'short') await page.screenshot({ path: join(evidence, `${view.name}-${theme}-${scene}.png`) });
+      }
+      for (const sample of [{ session: 'navigation', scene: 1 }, { session: 'login', scene: 3 }, { session: 'login', scene: 5 }, { session: 'login', scene: 6 }]) {
+        await page.goto(`${route}?scene=${sample.scene}&session=${sample.session}`); await fits(page);
+        if (view.name !== 'narrow' && view.name !== 'short') await page.screenshot({ path: join(evidence, `${view.name}-${theme}-${sample.session}-${sample.scene}.png`) });
       }
     }
   }
