@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Static UI prototype only. No Pi, login, session changes or transport.
-test('original indicators stay separate from all three detail-line bot placements', async ({ page }, testInfo) => {
+test('original indicators stay separate from all four detail-line bot placements', async ({ page }, testInfo) => {
   const errors = [], sockets = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('websocket', socket => sockets.push(socket.url()));
@@ -9,7 +9,7 @@ test('original indicators stay separate from all three detail-line bot placement
   for (const [width, colorScheme] of [[390, 'dark'], [320, 'light'], [1280, 'light']]) {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme, reducedMotion: 'no-preference' });
-    for (const variant of ['A', 'B', 'C']) {
+    for (const variant of ['A', 'B', 'C', 'D']) {
       await page.goto(`${route}?variant=${variant}`);
       await expect(page.locator('#page')).toHaveAttribute('data-variant', variant);
       await expect(page.locator('.session')).toHaveCount(9);
@@ -28,6 +28,14 @@ test('original indicators stay separate from all three detail-line bot placement
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       if (variant === 'C') await expect(page.locator('.bot-activity .bot')).toHaveCount(9);
       else await expect(page.locator('.session-meta .bot')).toHaveCount(9);
+      if (variant === 'D') {
+        await expect(page.locator('.session-preview')).toHaveCount(0);
+        expect(await page.locator('.session').evaluateAll(rows => rows.every(row => {
+          const meta = row.querySelector('.session-meta'), time = meta.querySelector('.session-time').getBoundingClientRect();
+          const bot = meta.querySelector('.bot').getBoundingClientRect(), title = row.querySelector('strong');
+          return bot.left - time.right >= 0 && bot.left - time.right <= 8 && Math.abs(bot.y + bot.height / 2 - time.y - time.height / 2) <= 1 && title.clientHeight <= 26;
+        }))).toBe(true);
+      }
       await page.screenshot({ path: testInfo.outputPath(`${variant}-${width}-${colorScheme}.png`), fullPage: true });
     }
   }
@@ -38,7 +46,7 @@ test('original indicators stay separate from all three detail-line bot placement
   await expect(page).toHaveURL(/variant=A$/);
   await expect(fix).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('ArrowLeft');
-  await expect(page).toHaveURL(/variant=C$/);
+  await expect(page).toHaveURL(/variant=D$/);
   await page.keyboard.press('ArrowRight');
   await expect(page).toHaveURL(/variant=A$/);
   await page.getByRole('button', { name: 'Play all bots', exact: true }).click();
@@ -52,7 +60,7 @@ test('original indicators stay separate from all three detail-line bot placement
   await expect(fix.locator('.bot-antenna').first()).toHaveCSS('animation-name', 'none');
   await expect(fix.locator('.session-icon rect').first()).toHaveCSS('animation-name', 'none');
   await page.goto(`${route}?variant=invalid`);
-  await expect(page).toHaveURL(/variant=A$/);
+  await expect(page).toHaveURL(/variant=D$/);
   expect(errors).toEqual([]);
   expect(sockets).toEqual([]);
 });

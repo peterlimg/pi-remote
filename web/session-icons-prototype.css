@@ -1,4 +1,4 @@
-/* Throwaway: original status dots with three second-line bot placements. */
+/* Throwaway: original status dots with four second-line bot placements. */
 body { min-height: 100dvh; }
 .page { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) 12px calc(120px + env(safe-area-inset-bottom)); }
 .prototype-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-inline: 10px; }
@@ -14,6 +14,10 @@ h1 { margin: 8px 0 4px; font-size: 28px; font-weight: 700; }
 .session-meta .bot { flex: none; }
 .session-meta > .bot::before, .session-meta > .bot + *::before { content: none; }
 .page[data-variant=B] .session-meta > .bot { margin-left: auto; padding-left: 8px; }
+.page[data-variant=D] .session { padding-block: 14px; }
+.page[data-variant=D] .session + .session { border-top: 0; }
+.page[data-variant=D] .session strong { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.page[data-variant=D] .session-state { color: var(--muted); font-weight: 400; }
 .bot-activity { display: flex; align-items: center; gap: 8px; min-height: 30px; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--muted); }
 .bot-activity .bot { flex: none; }
 .bot-activity[data-mood=working] { color: var(--text); }

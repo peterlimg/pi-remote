@@ -1,4 +1,4 @@
-// Throwaway: three second-line bot placements with the original status dots. Sample data only.
+// Throwaway: four second-line bot placements with the original status dots. Sample data only.
 const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
 const star = (x, y, r) => `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`;
@@ -53,6 +53,7 @@ const variants = [
   { key: 'A', name: 'A · Beside project', description: 'Small bot leads the project line. Dots keep the title clear.' },
   { key: 'B', name: 'B · Right of details', description: 'Bot sits at the right of the project line, away from the text.' },
   { key: 'C', name: 'C · Activity line', description: 'Bot gets a second line with its activity. Taller, but easier to read.' },
+  { key: 'D', name: 'D · Inline after details', description: 'Two lines, no preview. Small bot follows the text, not the edge.' },
 ];
 const stateLabels = { idle: 'Ready', saved: 'Saved', working: 'Working', waiting: 'Needs input', unread: 'New reply' };
 const jobs = { build: 'Building', review: 'Reviewing', fix: 'Fixing', research: 'Investigating', ship: 'Shipping', idea: 'Thinking', test: 'Testing', design: 'Designing' };
@@ -120,7 +121,7 @@ function row(item) {
     activity.append(bot(item.kind, mood, 24), el('span', mood === 'working' ? jobs[item.kind] : `${kinds[item.kind][0]} · ${stateLabels[mood]}`));
     body.append(activity);
   }
-  if (item.preview) body.append(el('div', item.preview, 'session-preview'));
+  if (item.preview && variant.key !== 'D') body.append(el('div', item.preview, 'session-preview'));
   const meta = el('div', undefined, 'session-meta');
   if (variant.key === 'A') meta.append(bot(item.kind, mood, 20));
   if (variant.key !== 'C' && ['working', 'waiting'].includes(mood)) {
@@ -129,7 +130,7 @@ function row(item) {
   const project = el('span', undefined, 'session-project');
   project.append(el('span', item.project || 'pi-remote', 'session-project-name'));
   meta.append(project, el('span', item.age, 'session-time'));
-  if (variant.key === 'B') meta.append(bot(item.kind, mood, 24));
+  if (['B', 'D'].includes(variant.key)) meta.append(bot(item.kind, mood, variant.key === 'D' ? 20 : 24));
   body.append(meta); button.append(indicators, body);
   button.addEventListener('click', () => {
     selected = item.id;
@@ -153,7 +154,7 @@ function render() {
   $('list').replaceChildren(group('Pinned', true), group('Recent', false));
 }
 function set(key) {
-  variant = variants.find(item => item.key === key) || variants[0];
+  variant = variants.find(item => item.key === key) || variants[3];
   const url = new URL(location.href); url.searchParams.set('variant', variant.key); history.replaceState(null, '', url);
   render();
 }
