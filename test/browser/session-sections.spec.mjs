@@ -10,7 +10,7 @@ import { acquireLock, sessionKey } from '../../src/locks.mjs';
 import { readSession } from '../../src/catalog.mjs';
 import { socket, until } from '../helpers.mjs';
 
-test('activity stays above a full page of pins, with bounded previews and live, paged collections', async ({ page }, testInfo) => {
+test('activity stays above compact resting rows with live, paged collections', async ({ page }, testInfo) => {
   test.setTimeout(60000);
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-sections-')), root = join(dir, 'sessions');
   mkdirSync(root);
@@ -151,8 +151,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await expect(recentGroup.locator('.session')).toHaveCount(20);
     await expect(page.locator('#sessions .session')).toHaveCount(26);
     await expect(nowGroup.locator('.session').last().getByRole('img', { name: 'Pinned', exact: true })).toBeVisible();
-    await expect(pinsGroup.locator('.session-preview').first()).toBeHidden();
-    await expect(recentGroup.locator('.session-preview').first()).toBeVisible();
+    await expect(page.locator('#sessions .session-preview')).toHaveCount(0);
     await expect(pinsGroup.locator('time').first()).toBeVisible();
     await page.locator('#sidebar, #sessions').evaluateAll(nodes => nodes.forEach(node => { node.scrollTop = 0; }));
     const bounds = await nowGroup.boundingBox();
@@ -169,17 +168,21 @@ test('activity stays above a full page of pins, with bounded previews and live, 
       for (const group of [recentGroup, pinsGroup]) {
         await expect(group.locator('.session').first()).toHaveCSS('border-radius', '0px');
         await expect(group.locator('strong').first()).toHaveCSS('font-size', '17px');
-        await expect(group.locator('strong').first()).toHaveCSS('-webkit-line-clamp', '2');
+        await expect(group.locator('strong').first()).toHaveCSS('white-space', 'nowrap');
+        await expect(group.locator('strong').first()).toHaveCSS('text-overflow', 'ellipsis');
+        await expect(group.locator('.session').nth(1)).toHaveCSS('border-top-width', '0px');
         await expect(group.locator('.session-meta').first()).toHaveCSS('font-size', '14px');
       }
       const review = pinsGroup.locator('.session').last();
-      await expect(review.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
+      await expect(review.locator('.session-meta').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
       await expect(filter).toHaveCSS('border-radius', '6px');
       const trigger = await filter.boundingBox(), glyph = await filter.locator('svg').boundingBox();
       expect(trigger.width).toBe(44); expect(trigger.height).toBe(44); expect(glyph.width).toBe(18);
       await filter.click();
       await expect(menu).toBeVisible();
       await expect(menu.locator('input:checked')).toHaveCSS('accent-color', 'rgb(10, 132, 255)');
+      // The popover toggle positions the menu after the click opens it.
+      await expect.poll(() => menu.evaluate(node => node.getBoundingClientRect().bottom)).toBeLessThanOrEqual(page.viewportSize().height - 8);
       const popup = await menu.boundingBox();
       expect(popup.x).toBeGreaterThanOrEqual(8); expect(popup.y).toBeGreaterThanOrEqual(8);
       expect(popup.x + popup.width).toBeLessThanOrEqual(page.viewportSize().width - 8);
@@ -189,7 +192,7 @@ test('activity stays above a full page of pins, with bounded previews and live, 
       await expect(filter).toBeFocused();
       const short = await pinsGroup.locator('.session').nth(1).boundingBox();
       const long = await pinsGroup.locator('.session').first().boundingBox();
-      expect(long.height).toBeGreaterThan(short.height);
+      expect(long.height).toBe(short.height);
     };
     await checkLayout();
     await page.screenshot({ path: testInfo.outputPath('activity-first-phone.png') });
@@ -207,7 +210,8 @@ test('activity stays above a full page of pins, with bounded previews and live, 
     await page.getByRole('button', { name: 'View all pinned sessions' }).press('Enter');
     const collection = page.getByRole('dialog', { name: 'Pinned sessions', exact: true });
     await expect(collection.locator('.session')).toHaveCount(20);
-    await expect(collection.locator('.session-indicators [data-kind]:not([data-kind=general])')).toHaveCount(2);
+    await expect(collection.locator('.session-meta [data-kind]:not([data-kind=general])')).toHaveCount(2);
+    await expect(collection.locator('.session-indicators .bot')).toHaveCount(0);
     await collection.locator('.session').last().scrollIntoViewIfNeeded();
     await expect(collection.locator('.session')).toHaveCount(31);
     // Pin/unpin uses the same gesture and real API inside the collection.

@@ -34,7 +34,7 @@ test('sessions sort by your last prompt without jumping during background activi
     state.updatedAt = time;
     publish();
     const row = page.locator('#sessions .session').filter({ hasText: state.title });
-    await expect(row.locator('.session-preview')).toHaveText((role === 'user' ? 'You: ' : 'Pi: ') + text);
+    await expect(row.locator('.session-preview')).toHaveCount(0);
     await expect(row.locator('time')).toHaveAttribute('datetime', new Date(time).toISOString());
   };
   await update(states[1], 'Beta streaming update', 'assistant', 'message_update');
@@ -94,7 +94,7 @@ test('sessions sort by your last prompt without jumping during background activi
   await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
 });
 
-test('same-project sessions show their tasks, previews, status and activity without overflowing', async ({ page }, testInfo) => {
+test('compact same-project sessions show tasks, status dots and inline bots without overflowing', async ({ page }, testInfo) => {
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
   const states = [
@@ -144,10 +144,11 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.brand .badge')).toHaveCount(0);
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
   const login = page.getByRole('button', { name: /Fix login timing out/ });
-  await expect(login.locator('.session-preview')).toHaveText('Pi: Checking the WebSocket authentication timeout.');
+  await expect(login.locator('.session-preview')).toHaveCount(0);
   await expect(login.locator('.session-state')).toHaveText('Working');
-  // The session's bot carries the working state: it bobs and glances, phase-locked to the clock across list rebuilds.
-  const workingIcon = login.locator('.session-icon');
+  // Active bots lead the title; finishing moves the small bot to the detail line.
+  const workingIcon = login.locator('.session-indicators .bot');
+  await expect(login.locator('.session-kind')).toHaveCount(0);
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
   await expect(workingIcon).toHaveAttribute('aria-label', 'Fix');
   await expect(workingIcon.locator('svg')).toHaveCSS('width', '28px');
@@ -155,7 +156,7 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(workingIcon.locator('.bot-look')).toHaveCSS('animation-name', 'bot-glance');
   expect(Number((await workingIcon.getAttribute('style')).match(/--bot-t: -(\d+)ms/)[1])).toBeLessThan(6000);
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.session-icon[data-status=idle]')).toHaveAttribute('data-mood', 'idle');
+  await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.first().locator('.session-preview')).toHaveCount(0);
@@ -170,8 +171,8 @@ test('same-project sessions show their tasks, previews, status and activity with
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
-  publish(); // An unread reply badges the working bot without stopping it, and survives a list replacement.
-  await expect(workingIcon).toHaveAttribute('data-unread', '');
+  publish(); // The leading working bot keeps its motion and unread badge across updates.
+  await expect(login.locator('.session-icon')).toHaveAttribute('data-unread', '');
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
   await expect(workingIcon.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -216,8 +217,12 @@ test('same-project sessions show their tasks, previews, status and activity with
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
   await expect(login.locator('.session-icon rect')).toHaveCount(0);
-  await expect(login.locator('.session-icon')).toHaveAttribute('data-kind', 'fix'); // Resting again, so the kind takes the slot back.
-  await expect(login.locator('.session-preview')).toHaveText('You: Now check logout');
+  await expect(login.locator('.session-icon circle')).toHaveCount(1);
+  await expect(login.locator('.session-kind')).toHaveAttribute('data-kind', 'fix');
+  await expect(login.locator('.session-kind')).toHaveAttribute('data-mood', 'idle');
+  await expect(login.locator('.session-indicators .bot')).toHaveCount(0);
+  await expect(login.locator('.session-kind svg')).toHaveCSS('width', '20px');
+  await expect(login.locator('.session-preview')).toHaveCount(0);
 });
 
 test('closing search clears the filter before the keyboard moves the close button', async ({ page }) => {

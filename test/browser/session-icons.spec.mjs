@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 
-test('resting sessions show their kind in the status slot, with persistent per-session overrides', async ({ page }, testInfo) => {
+test('active sessions lead with animated bots and resting sessions keep persistent icons after details', async ({ page }, testInfo) => {
   const states = [
     { id: 'review', title: 'Review betting legacy removal PR #28', status: 'waiting', cwd: '/projects/primezero', updatedAt: Date.now(), preview: 'Which branch should I review?', previewRole: 'assistant', messages: [] },
     { id: 'normal', title: 'Add session icons for PR review', status: 'idle', cwd: '/projects/pi-remote', updatedAt: Date.now() - 1000, messages: [] },
@@ -25,16 +25,35 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   const review = page.locator('.session', { hasText: states[0].title });
   const normal = page.locator('.session', { hasText: states[1].title });
   const saved = page.locator('.session', { hasText: states[2].title });
-  await expect(saved.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
+  await expect(saved.locator('.session-meta').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
   // Automatic keys off the leading verb, so a review mentioned later in the title is not a review session.
-  await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
-  expect((await normal.locator('.session-indicators svg').boundingBox()).width).toBe(28);
-  // The bot keeps the slot while active; its mood and badge show the state.
+  await expect(normal.locator('.session-meta').getByRole('img', { name: 'Build', exact: true })).toBeVisible();
+  expect((await normal.locator('.session-kind svg').boundingBox()).width).toBe(20);
+  await expect(page.locator('.session-indicators .bot')).toHaveCount(1);
+  await expect(page.locator('.session-indicators .session-icon')).toHaveCount(3);
+  await expect(page.locator('.session-preview')).toHaveCount(0);
   await expect(review.locator('.session-icon')).toHaveAttribute('data-status', 'waiting');
   await expect(review.locator('.session-icon')).toHaveAttribute('data-mood', 'waiting');
-  await expect(review.locator('.bot-badge')).toHaveCount(1);
-  await expect(saved.locator('.session-icon')).toHaveAttribute('data-mood', 'saved');
-  await expect(page.locator('.session-meta [data-kind]')).toHaveCount(0);
+  await expect(review.locator('.session-kind')).toHaveCount(0);
+  await expect(saved.locator('.session-kind')).toHaveAttribute('data-mood', 'saved');
+  await expect(page.locator('.session-meta [data-kind]')).toHaveCount(2);
+  for (const width of [390, 320, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.locator('.session').evaluateAll(rows => rows.every(row => {
+      const title = row.querySelector('strong'), meta = row.querySelector('.session-meta').getBoundingClientRect();
+      if (row.classList.contains('session-busy')) return row.querySelector('.session-indicators .bot').getBoundingClientRect().right <= title.getBoundingClientRect().left && !row.querySelector('.session-kind') && row.scrollWidth <= row.clientWidth;
+      const time = row.querySelector('time').getBoundingClientRect(), bot = row.querySelector('.session-kind').getBoundingClientRect();
+      return bot.left - time.right >= 0 && bot.left - time.right <= 8 && Math.abs(bot.y + bot.height / 2 - time.y - time.height / 2) <= 1 && title.clientHeight <= 26 && meta.top >= title.getBoundingClientRect().bottom && row.scrollWidth <= row.clientWidth;
+    }))).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  states[1].status = 'working'; publish();
+  await expect(normal.locator('.session-indicators .bot')).toHaveAttribute('data-mood', 'working');
+  await expect(normal.locator('.session-kind')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('active-and-finished-mobile.png') });
+  states[1].status = 'idle'; publish();
+  await expect(normal.locator('.session-indicators .bot')).toHaveCount(0);
+  await expect(normal.locator('.session-kind')).toHaveAttribute('data-kind', 'build');
   await page.screenshot({ path: testInfo.outputPath('icons-mobile.png') });
   await writeFile(testInfo.outputPath('icons-mobile.aria.txt'), await page.locator('body').ariaSnapshot());
 
@@ -89,7 +108,7 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   await expect(page.locator('#title-kind').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();
   await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
   await backToList();
-  await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();
+  await expect(normal.locator('.session-meta').getByRole('img', { name: 'Idea', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('list-kinds.png') });
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
@@ -107,19 +126,25 @@ test('resting sessions show their kind in the status slot, with persistent per-s
   await expect(page.getByLabel('Session details', { exact: true })).toBeFocused();
   await page.evaluate(() => { delete visualViewport.height; visualViewport.dispatchEvent(new Event('resize')); });
   await backToList();
-  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
+  await expect(normal.locator('.session-kind')).toHaveText('👩🏽‍💻');
   publish(); // Live list replacements must retain the device's choice.
-  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
+  await expect(normal.locator('.session-kind')).toHaveText('👩🏽‍💻');
   await page.reload();
-  await expect(normal.locator('.session-icon')).toHaveText('👩🏽‍💻');
-  await expect(saved.locator('.session-icon')).toHaveAttribute('aria-label', 'Review');
+  await expect(normal.locator('.session-kind')).toHaveText('👩🏽‍💻');
+  await expect(normal.locator('.session-icon circle')).toHaveCount(1);
+  states[1].status = 'working'; publish();
+  await expect(normal.locator('.session-icon rect')).toHaveCount(6);
+  await expect(normal.locator('.session-kind')).toHaveText('👩🏽‍💻');
+  states[1].status = 'idle'; publish();
+  await expect(normal.locator('.session-icon circle')).toHaveCount(1);
+  await expect(saved.locator('.session-kind')).toHaveAttribute('aria-label', 'Review');
   await openSettings(normal);
   await picker.getByRole('button', { name: /Other emoji/ }).click();
   await expect(page.getByLabel('Emoji', { exact: true })).toHaveValue('👩🏽‍💻');
   await page.getByLabel('Emoji', { exact: true }).fill('🔎🐛');
   await picker.getByRole('button', { name: 'Use emoji', exact: true }).click();
   await backToList();
-  await expect(normal.locator('.session-icon')).toHaveText('🔎');
+  await expect(normal.locator('.session-kind')).toHaveText('🔎');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await openSettings(normal);

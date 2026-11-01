@@ -25,7 +25,8 @@ test('home paths hide usernames in tool labels, details and project locations', 
   }));
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('.session-project')).toHaveAttribute('title', '~/workspace/project');
-  await expect(page.locator('.session-preview')).toHaveText('Pi: Read ~/workspace/project/notes.md');
+  await expect(page.locator('.session-preview')).toHaveCount(0);
+  await expect(page.locator('.session')).not.toContainText('local-user');
   await expect(page.locator('.session-time')).toHaveText('5m');
   await page.locator('.session').click();
   await page.locator('.session-info summary').click();

@@ -32,7 +32,7 @@ for (const oldHost of [false, true]) test(`skills keep labels, titles and reques
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('.session strong')).toHaveText(oldHost ? 'Skill: code-review' : 'Review PR #26');
-  if (oldHost) await expect(page.locator('.session-preview')).toHaveText('You: Skill: code-review');
+  await expect(page.locator('.session-preview')).toHaveCount(0);
   await page.locator('.session').click();
   const labels = page.locator('.skill-loaded');
   const verify = async () => {
@@ -54,7 +54,9 @@ for (const oldHost of [false, true]) test(`skills keep labels, titles and reques
     const style = await labels.first().evaluate(node => ({ color: getComputedStyle(node).color,
       normal: getComputedStyle(document.querySelector('.message-text')).color,
       height: node.getBoundingClientRect().height }));
-    expect(style.color).not.toBe(style.normal);
+    // Dark mode intentionally uses the same accent and body text colour.
+    if (colorScheme === 'light') expect(style.color).not.toBe(style.normal);
+    await expect(labels.first()).toHaveCSS('font-size', '14px');
     expect(style.height).toBeLessThan(30);
     expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await labels.first().scrollIntoViewIfNeeded();

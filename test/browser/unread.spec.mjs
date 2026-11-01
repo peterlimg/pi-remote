@@ -37,7 +37,8 @@ test('unread dots mark agent replies since the thread was last on screen and sur
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await expect(dot).toHaveCount(0);
   reply('user', 'Thanks'); // Your own messages never mark a session unread.
-  await expect(session.locator('.session-preview')).toContainText('Thanks');
+  await expect(session.locator('time')).toHaveAttribute('datetime', new Date(state.updatedAt).toISOString());
+  await expect(session.locator('.session-preview')).toHaveCount(0);
   await expect(dot).toHaveCount(0);
   reply('assistant', 'Welcome.'); // Selected but off screen still counts as unread.
   await expect(dot).toHaveCount(1);

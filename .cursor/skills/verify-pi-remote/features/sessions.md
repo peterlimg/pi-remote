@@ -5,7 +5,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 ## Sub-features
 
 - `sessions-select`: select from the mobile list or desktop sidebar.
-- `sessions-sections`: Now, three compact pins, then Recent; View all opens a live, scrollable collection. Pins share Recent's typography and two-line title limit but hide previews. Session type icons sit beside the project label, separate from the status indicator.
+- `sessions-sections`: Now, three compact pins, then Recent; View all opens a live, scrollable collection. Working and needs-input sessions lead with a 28px animated bot beside a title of up to two lines. Resting sessions use a single-line ellipsized title, a status dot on the left, and a 20px bot immediately after the project/time text. Rows have no message previews or dividers. A custom emoji stays on the detail line with the standard status indicator on the left.
 - `sessions-filter`: Recent defaults to Online. A compact filter icon opens Online and Offline checkboxes, including saved and disconnected sessions under Offline. Selecting both shows all sessions. The final checked option is disabled and grayed out so at least one status stays selected; checking the other option enables both again. Filtering happens before pagination; Now and Pinned stay unchanged. Search spans every availability, then restores the chosen filter. Reload starts at Online.
 - `sessions-search`: filter by task or project and recover from an empty result.
 - `sessions-pin`: pin or unpin through Session details or a right swipe.

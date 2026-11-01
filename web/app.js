@@ -597,10 +597,12 @@ const isUnread = item => item.previewRole !== 'user' && item.updatedAt > seen[it
 function sessionRow(item) {
   const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
   button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
+  const kind = sessionKind(item), busy = ['working', 'waiting'].includes(item.status) && kind && !kind.emoji;
+  if (busy) button.classList.add('session-busy');
   const icon = statusIcon(item.status);
   if (isUnread(item)) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
-  indicators.append(showSessionKind(icon, item));
+  indicators.append(busy ? showSessionKind(icon, item) : icon);
   if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
   button.append(indicators);
   const body = el('div', undefined, 'session-body');
@@ -613,9 +615,6 @@ function sessionRow(item) {
     pin.innerHTML = pinSvg; top.append(pin);
   }
   body.append(top);
-  if (item.preview && item.preview !== item.title) {
-    body.append(el('div', (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })), 'session-preview'));
-  }
   const meta = el('div', undefined, 'session-meta');
   if (item.closed) meta.append(el('span', 'Closed', 'session-closed'));
   // Ready and Saved are the resting states; only label what needs attention.
@@ -636,6 +635,7 @@ function sessionRow(item) {
     time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
     meta.append(time);
   }
+  if (kind && !busy) meta.append(dressKind(el('span', undefined, 'session-kind'), kind, 20, item.status));
   body.append(meta);
   button.append(body);
   // The finger lifting after a swipe must not also open the session.
