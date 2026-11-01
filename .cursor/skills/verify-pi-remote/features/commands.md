@@ -17,7 +17,7 @@ Typing `/` or tapping the `/` shortcut beside the model selector discovers the s
 - Open a session and tap `Open slash commands` in the composer, or type `/` at the start of Message or after whitespace anywhere in the draft. Suggestions follow the command at the cursor, not slashes inside paths or URLs. The shortcut stays enabled for live sessions. It reopens a command already at the cursor, or inserts `/` there with separating whitespace as needed, without replacing the draft.
 - Tap a suggestion; on desktop use arrows and Tab to complete. Enter runs a command at the start of the draft, but only completes a mid-sentence command without sending the message.
 - Send `/new`, `/model`, or `/model provider/model-id`.
-- Choose the model button or the adjacent `Reasoning effort` button in the compact composer toolbar. Each opens its picker directly, as a bottom sheet on phones or an anchored menu on desktop. Both controls stay visible; only very narrow screens wrap them to preserve touch targets.
+- Choose the model button or the adjacent `Reasoning effort` button in the compact composer toolbar. Each opens its picker directly, as a bottom sheet on phones or an anchored menu on desktop. Both controls stay visible; phone-sized composers give settings their own row to keep the labels readable and preserve touch targets.
 
 ## Driving it with Playwright
 

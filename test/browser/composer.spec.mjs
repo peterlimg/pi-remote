@@ -21,7 +21,7 @@ test('focusing the message field has no tap overlay or border change', async ({ 
 
 test('compact composer keeps controls reachable across draft, working and offline states', async ({ page }, testInfo) => {
   const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
-    model: 'openai/gpt-6.1-sol', modelName: 'GPT-6.1 Sol', thinkingLevel: 'medium', messages: [
+    model: 'openai/gpt-6.1-sol', modelName: 'GPT-6.1 Sol', thinkingLevel: 'xhigh', messages: [
       { id: 'reply', role: 'assistant', text: 'The changes are ready to review.' }
     ] };
   let client, version = 0;
@@ -43,7 +43,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await page.getByRole('button', { name: /Review changes/ }).click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await expect(page.locator('#model-name')).toHaveText('GPT-6.1 Sol');
-  await expect(page.locator('#reasoning-value')).toHaveText('Medium');
+  await expect(page.locator('#reasoning-value')).toHaveText('Extra high');
   await expect(page.locator('#reasoning-control')).toBeVisible();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
   await expect(page.locator('#abort')).toBeHidden();
@@ -60,19 +60,26 @@ test('compact composer keeps controls reachable across draft, working and offlin
       expect(control.width).toBeGreaterThanOrEqual(44);
       expect(control.x).toBeGreaterThanOrEqual(8);
       expect(control.right).toBeLessThanOrEqual(page.viewportSize().width - 8);
-      if (page.viewportSize().width >= 390) expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
+      if (page.viewportSize().width >= 1280) expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
       if (i) {
         const previous = controls[i - 1];
         if (Math.abs(control.y - previous.y) < 1) expect(control.x).toBeGreaterThanOrEqual(previous.right - 1);
         else expect(control.y).toBeGreaterThanOrEqual(previous.y + previous.height - 1);
       }
     }
+    for (const label of await page.locator(state.modelName ? '#model-name, #reasoning-value' : '#reasoning-value').all()) {
+      expect(await label.evaluate(node => node.scrollWidth <= node.clientWidth), await label.textContent()).toBe(true);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   };
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
   state.fastMode = true; snapshot();
   await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeVisible();
-  await rowFits();
+  for (const width of [320, 375, 390, 430, 484, 485, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await rowFits();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#model')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('composer-mobile.png') });
   state.status = 'working'; snapshot();
