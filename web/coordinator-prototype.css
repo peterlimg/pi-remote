@@ -1,43 +1,42 @@
-/* Only the two activity additions and separate prototype controls. The composer uses /style.css alone. */
-.coordinator-activity { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.coordinator-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; }
-.coordinator-activity > summary::-webkit-details-marker, .coordinator-task > summary::-webkit-details-marker { display: none; }
-.coordinator-activity > summary::before, .coordinator-task > summary::after { content: ''; width: 6px; height: 6px; flex-shrink: 0; border-top: 1px solid currentColor; border-right: 1px solid currentColor; transform: rotate(45deg); }
-.coordinator-activity[open] > summary::before, .coordinator-task[open] > summary::after { transform: rotate(135deg); }
-.coordinator-activity > .coordinator-task-list { padding-left: 14px; }
-.coordinator-task-list { color: var(--text); }
-.coordinator-task { border-bottom: 1px solid var(--line); font-size: 14px; }
-.coordinator-task > summary { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 0; list-style: none; }
-.coordinator-task > summary::after { color: var(--muted); margin-right: 3px; }
-.coordinator-task-name { font-weight: 500; }
-.coordinator-task-state { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; }
-.coordinator-task[data-state=question] .coordinator-task-state { color: var(--warning); }
-.coordinator-task-body { padding: 4px 0 12px; overflow-wrap: anywhere; }
-.coordinator-task-body p { margin: 0 0 10px; }
-.coordinator-task-actions, .coordinator-task-decisions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-.coordinator-task-actions button, .coordinator-task-decisions button { min-width: 44px; padding-inline: 8px; font-size: 13px; font-weight: 500; }
-.coordinator-task-decisions { margin: 12px 0 4px; }
-.coordinator-task-decisions .coordinator-choice { border: 1px solid var(--line); }
-.coordinator-task-decisions .coordinator-choice:first-child { background: var(--user); }
-.coordinator-task .coordinator-stop { color: var(--error); }
-.coordinator-task-trace { margin: 12px 0; padding-left: 12px; border-left: 1px solid var(--line); }
-.coordinator-task-trace .hint { margin-bottom: 4px; }
-.coordinator-header-activity { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; margin: -6px -10px -6px -4px; padding: 0; border-radius: 22px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
-.shell .conversation-heading:has(.coordinator-header-activity:not([hidden])) { max-width: 100%; }
-.coordinator-sheet { height: auto; max-height: min(80%, 40rem); }
-.coordinator-sheet header { flex-shrink: 0; }
-.coordinator-sheet .coordinator-task-list { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 20px 16px; }
-.coordinator-sheet-copy { padding: 12px 20px; }
-.prototype-tools { position: fixed; z-index: 3; top: calc(56px + env(safe-area-inset-top)); left: 0; width: 56px; min-height: 44px; padding: 6px 0; background: transparent; color: var(--muted); font-size: 10px; line-height: 1.2; font-weight: 400; }
-.prototype-tools span { display: block; }
-.prototype-options { position: fixed; inset: 70px auto auto 12px; width: min(320px, calc(100% - 24px)); max-height: calc(100dvh - 90px); margin: 0; padding: 16px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--composer-bg); color: var(--text); }
-.prototype-options h2 { margin-bottom: 8px; font-size: 16px; }
-.prototype-options fieldset { margin: 12px 0; padding: 0; border: 0; }
-.prototype-options legend { color: var(--muted); font-size: 12px; }
-.prototype-options label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
-.prototype-options input { accent-color: var(--accent); }
-.coordinator-activity > summary:hover, .coordinator-task > summary:hover, .coordinator-task-actions button:hover, .coordinator-task-decisions button:hover, .coordinator-header-activity:hover, .prototype-tools:hover { background: var(--user); }
+/* Story navigation is annotation outside the app, not proposed product chrome. */
+.story-guide { position: fixed; inset: 0 0 auto; height: 112px; padding: 4px 16px 8px; border-bottom: 1px solid var(--line); background: var(--panel); z-index: 3; }
+.story-guide > * { max-width: var(--content-width); margin-inline: auto; }
+.story-guide nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; }
+.story-guide nav button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; padding: 8px; font-size: 12px; font-weight: 500; }
+.story-guide h1 { margin-block: 2px; font-size: 16px; line-height: 22px; font-weight: 600; }
+.story-guide p { margin-block: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+.story-shell { top: 112px; height: calc(var(--shell-height) - 112px); }
+.story-index { position: fixed; inset: 56px 12px auto auto; width: min(360px, calc(100% - 24px)); max-height: calc(100dvh - 80px); margin: 0; padding: 20px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--composer-bg); color: var(--text); }
+.story-index h2 { margin-bottom: 10px; font-size: 18px; }
+.story-index ol { list-style: none; padding: 0; margin: 8px 0; }
+.story-index li + li { border-top: 1px solid var(--line); }
+.story-index li button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font-size: 14px; font-weight: 400; }
+.story-index li button span { color: var(--muted); font-size: 12px; }
+.story-index [aria-current=step] { background: var(--user); font-weight: 600; }
+.story-question { margin-top: 20px; }
+.story-question strong { display: block; margin-bottom: 8px; font-weight: 600; }
+.story-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
+.story-actions button { min-height: 44px; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
+.story-actions .quiet { border: 1px solid var(--line); }
+.story-briefing h2 { margin: 0 0 12px; font-size: 19px; font-weight: 600; }
+.story-briefing h3 { margin: 22px 0 8px; font-size: 16px; font-weight: 600; }
+.story-briefing .story-stopped { color: var(--muted); font-size: 14px; }
+.story-result { margin: 16px 0; }
+.story-result figcaption { padding: 8px 0; color: var(--muted); font: 12px/1.5 var(--mono); }
+.story-result pre { margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 var(--mono); }
+.story-result code { font: inherit; }
+.story-result .removed, .story-result .added { display: block; padding: 4px 0; }
+.story-result .removed { color: var(--muted); }
+.story-result .added { color: var(--accent); background: var(--user); }
+.story-result-note { color: var(--muted); font-size: 12px; }
+.story-source { margin: 12px 0; }
+.story-source summary { min-height: 44px; padding: 10px 0; color: var(--muted); font-size: 13px; }
+.story-source p { color: var(--muted); font-size: 13px; }
+.story-return { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; color: var(--muted); font-size: 12px; }
+.story-return::before, .story-return::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+.story-attachment { height: auto; padding-bottom: 16px; }
+.story-attachment-copy { padding: 8px 20px; }
+.story-guide button:not(:disabled):hover, .story-index button:hover, .story-actions .quiet:hover { background: var(--user); }
 @media (min-width: 701px) {
-  .prototype-tools { top: 10px; left: 332px; }
-  .prototype-options { left: 332px; }
+  .story-guide { padding-left: 340px; padding-right: 20px; }
 }
