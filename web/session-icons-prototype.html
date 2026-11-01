@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#100d10">
-  <title>Dots + bots prototype · Pi Remote</title>
+  <title>Neutral icon study · Pi Remote</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/session-icons-prototype.css">
@@ -12,17 +12,30 @@
 </head>
 <body>
   <main class="page" id="page">
-    <header class="prototype-heading">
-      <h1>Sessions</h1>
-      <button id="play" type="button" class="quiet" aria-pressed="false">Play all bots</button>
-    </header>
-    <p class="note">Prototype only. D follows your reference: two lines, bot just after the details. Arrows compare the earlier options.</p>
-    <div id="list"></div>
+    <h1>Session icons</h1>
+    <p class="note">Prototype only. Same characters and motion, two neutral treatments.</p>
+    <div class="study-controls">
+      <button id="theme" type="button" class="quiet">Preview light theme</button>
+      <button id="motion" type="button" class="quiet" aria-pressed="false">Pause motion</button>
+    </div>
+    <details class="comparison" open>
+      <summary>Compare the icons</summary>
+      <p class="note">Each pair: 28px working, 20px resting. Actual size.</p>
+      <table aria-label="Matte and outline icon comparison">
+        <thead><tr><th scope="col">Character</th><th scope="col"><button type="button" data-style="matte" aria-pressed="true">Matte</button></th><th scope="col"><button type="button" data-style="outline" aria-pressed="false">Outline</button></th></tr></thead>
+        <tbody id="comparison-icons"></tbody>
+      </table>
+    </details>
+    <section class="session-preview-section" aria-label="Session list preview">
+      <h2>In the session list</h2>
+      <p class="note">Sample sessions. Only the icon artwork changes.</p>
+      <div id="list"></div>
+    </section>
   </main>
-  <nav class="switcher" aria-label="Compare prototypes">
-    <button id="prev" type="button" aria-label="Previous design"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+  <nav class="switcher" aria-label="Compare icon styles">
+    <button id="prev" type="button" aria-label="Previous style"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
     <div><strong id="label" aria-live="polite"></strong><small id="description"></small></div>
-    <button id="next" type="button" aria-label="Next design"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+    <button id="next" type="button" aria-label="Next style"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
   </nav>
 </body>
 </html>
