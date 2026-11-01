@@ -1740,7 +1740,8 @@ function updateControls() {
   $('model').disabled = !live || changingReasoning.has(selected);
   $('model').hidden = !state?.model && !pendingModel;
   $('reasoning-control').disabled = !live || changingReasoning.has(selected);
-  $('reasoning-value').textContent = effort;
+  $('reasoning-value').textContent = { Minimal: 'Min', Medium: 'Med', 'Extra high': 'XHigh' }[effort] || effort;
+  $('reasoning-control').title = `Change reasoning effort: ${effort}`;
   $('reasoning-control').hidden = !state?.thinkingLevel;
   if (settingsPicker && !live && settingsPicker.kind !== 'usage') closePicker();
   renderUsageMeter();

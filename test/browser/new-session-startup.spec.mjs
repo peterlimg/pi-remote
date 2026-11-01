@@ -100,7 +100,7 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     await expect(page.locator('#model-name')).toHaveText('First');
     await expect(page.locator('#model')).toBeEnabled();
     await expect(page.locator('#reasoning-control')).toBeVisible();
-    await expect(page.locator('#reasoning-value')).toHaveText('Medium');
+    await expect(page.locator('#reasoning-value')).toHaveText('Med');
     await expect(page.locator('#prompt')).toHaveValue('Draft written during startup');
     await expect(page.locator('#composer-hint')).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath('ready-before-watch.png') });

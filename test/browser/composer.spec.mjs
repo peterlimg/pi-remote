@@ -43,7 +43,8 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await page.getByRole('button', { name: /Review changes/ }).click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
   await expect(page.locator('#model-name')).toHaveText('GPT-6.1 Sol');
-  await expect(page.locator('#reasoning-value')).toHaveText('Extra high');
+  await expect(page.locator('#reasoning-value')).toHaveText('XHigh');
+  await expect(page.locator('#reasoning-control')).toHaveAttribute('title', 'Change reasoning effort: Extra high');
   await expect(page.locator('#reasoning-control')).toBeVisible();
   await expect(page.locator('#prompt')).toHaveAttribute('placeholder', 'Type / for commands');
   await expect(page.locator('#abort')).toBeHidden();
@@ -60,7 +61,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
       expect(control.width).toBeGreaterThanOrEqual(44);
       expect(control.x).toBeGreaterThanOrEqual(8);
       expect(control.right).toBeLessThanOrEqual(page.viewportSize().width - 8);
-      if (page.viewportSize().width >= 1280) expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
+      if (page.viewportSize().width >= 375) expect(Math.abs(control.y - controls[0].y)).toBeLessThan(1);
       if (i) {
         const previous = controls[i - 1];
         if (Math.abs(control.y - previous.y) < 1) expect(control.x).toBeGreaterThanOrEqual(previous.right - 1);
@@ -79,7 +80,14 @@ test('compact composer keeps controls reachable across draft, working and offlin
     await page.setViewportSize({ width, height: 844 });
     await rowFits();
   }
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 375, height: 500 });
+  for (const [thinkingLevel, label] of [['minimal', 'Min'], ['medium', 'Med'], ['xhigh', 'XHigh']]) {
+    state.thinkingLevel = thinkingLevel; snapshot();
+    await expect(page.locator('#reasoning-value')).toHaveText(label);
+    await rowFits();
+  }
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.locator('#prompt').tap();
   await expect(page.locator('#model')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('composer-mobile.png') });
   state.status = 'working'; snapshot();
@@ -99,7 +107,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   delete state.modelName;
   state.model = 'custom/provider/a-very-long-model-name-that-must-not-hide-the-send-button'; state.thinkingLevel = 'xhigh'; snapshot();
   await page.setViewportSize({ width: 320, height: 568 });
-  await expect(page.locator('#reasoning-value')).toHaveText('Extra high');
+  await expect(page.locator('#reasoning-value')).toHaveText('XHigh');
   await rowFits();
   await page.locator('#prompt').fill('');
   await expect(page.locator('#abort')).toBeVisible();
