@@ -2,50 +2,157 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#100d10" media="(prefers-color-scheme: dark)">
-  <title>Coordinator prototypes · Pi Remote</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Coordinator prototype · Pi Remote</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/coordinator-prototype.css">
   <script type="module" src="/coordinator-prototype.js"></script>
 </head>
-<body class="coordinator-prototype">
-  <!-- Three throwaway mobile hierarchies on one route, switchable with ?variant=A/B/C. -->
-  <div class="demo-bar">
-    <div><strong>Prototype</strong><span>Synthetic data · resets on reload</span></div>
-    <button id="reset-demo" type="button" class="text-action">Reset</button>
+<body>
+  <!-- Two additions to the current conversation: inline handoff activity (A), header disclosure (B). -->
+  <div id="app" class="shell viewing">
+    <aside id="sidebar">
+      <header class="brand"><h2>Sessions</h2><p id="connection" role="status" hidden>Connecting…</p><button id="logout" class="quiet">Sign out</button></header>
+      <nav id="sessions" aria-label="Pi sessions"></nav>
+      <div id="recent-filter-menu" popover role="dialog" aria-label="Filter recent sessions">
+        <p>Session status</p>
+        <label><input id="recent-online" type="checkbox" value="online" checked disabled>Online</label>
+        <label><input id="recent-offline" type="checkbox" value="offline">Offline</label>
+      </div>
+      <dialog id="session-collection" class="project-picker" aria-labelledby="session-collection-title" tabindex="-1"><div class="project-sheet session-collection-sheet">
+        <header><h2 id="session-collection-title">Pinned sessions</h2><button id="session-collection-close" type="button" class="search-round" aria-label="Close sessions"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+        <nav id="collection-sessions" aria-label="Session collection"></nav>
+        <div id="collection-feedback"></div>
+      </div></dialog>
+      <div id="session-feedback" class="session-feedback" role="status" hidden></div>
+      <p id="list-empty" class="hint" hidden>No sessions yet. Start Pi with the remote extension loaded.</p>
+      <div class="list-pagination">
+        <span id="list-page" class="hint" role="status">Loading sessions…</span>
+        <button id="list-retry" type="button" class="quiet" hidden>Try again</button>
+      </div>
+      <div id="search-bar" class="search-bar">
+        <button id="search-open" type="button" class="search-round" aria-label="Search sessions" title="Search sessions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <label class="search-field"><span class="sr-only">Search sessions</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Filter sessions" maxlength="500"></label>
+        <button id="search-close" type="button" class="search-round" aria-label="Close search" title="Close search"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+        <button id="new-session" type="button" aria-haspopup="dialog" aria-controls="project-picker"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</button>
+      </div>
+      <dialog id="project-picker" class="project-picker" aria-labelledby="project-picker-title" tabindex="-1"><div class="project-sheet">
+        <header><h2 id="project-picker-title">New session in…</h2><button id="project-close" type="button" class="search-round" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
+        <label class="search-field project-search"><span class="sr-only">Search projects</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="project-search" type="search" placeholder="Search projects" autocomplete="off" spellcheck="false" maxlength="500"></label>
+        <p id="project-status" class="hint" role="status"></p>
+        <div id="project-options"></div>
+        <button id="new-project" type="button"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="m17.5 3.5 3 3L13 14h-3v-3Z"/></svg>Start without a project</button>
+        </div>
+      </dialog>
+    </aside>
+    <main>
+      <header class="conversation-header">
+        <button id="back" class="quiet mobile-only" aria-label="Show sessions" title="Show sessions"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+        <div id="heading" class="conversation-heading"><div class="heading-window"><div id="heading-strip" class="heading-strip">
+          <div id="heading-prev" class="heading-slot" data-side="prev" aria-hidden="true"></div>
+          <div class="heading-slot"><span id="title-kind"></span><div class="heading-text"><h1 id="title">Pi Remote</h1><p id="project-name" hidden></p></div></div>
+          <div id="heading-next" class="heading-slot" data-side="next" aria-hidden="true"></div>
+        </div></div></div>
+        <div id="nearby-sessions" class="nearby-sessions" popover="manual" role="group" aria-label="Nearby sessions"><div id="nearby-list" class="nearby-list"></div><button id="nearby-up" class="nearby-hint up" type="button" hidden></button><button id="nearby-down" class="nearby-hint down" type="button" hidden></button></div>
+        <details class="session-info"><summary aria-label="Session details" title="Session details"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary><div class="session-details">
+          <p id="project">Select a session to see its project directory.</p>
+          <button id="session-pin" type="button" hidden>Pin session</button>
+          <button id="session-close" type="button" hidden>Close session</button>
+          <button id="session-icon-open" type="button" aria-haspopup="dialog" aria-controls="session-icon-picker"><span>Session icon</span><span id="session-icon-current"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        </div></details>
+      </header>
+      <dialog id="session-icon-picker" class="project-picker" aria-labelledby="session-icon-title" tabindex="-1"><div class="project-sheet icon-sheet">
+        <header><h2 id="session-icon-title">Session icon</h2><button id="session-icon-done" type="button" class="quiet">Done</button></header>
+        <div class="icon-sheet-body">
+          <div id="session-kind-options" role="group" aria-label="Kinds"></div>
+          <button id="session-emoji-other" type="button" class="quiet" aria-expanded="false" aria-controls="session-emoji-form">Other emoji…</button>
+          <form id="session-emoji-form" hidden>
+            <label class="sr-only" for="session-custom-icon">Emoji</label><input id="session-custom-icon" type="text" maxlength="32" autocomplete="off" placeholder="Paste an emoji" enterkeyhint="done"><button type="submit">Use emoji</button>
+          </form>
+        </div>
+      </div></dialog>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section id="empty" class="empty" hidden><p>Select a session.</p></section>
+      <span id="copy-status" class="sr-only" role="status"></span>
+      <section id="transcript" aria-label="Conversation" tabindex="0">
+        <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span class="sr-only">Working…</span><span class="activity-text" aria-hidden="true"><span id="activity-label">Working…</span><span id="activity-time" aria-hidden="true" hidden></span></span></div>
+      </section>
+      <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
+      <form id="composer" class="composer" hidden>
+        <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
+        <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
+        <dialog id="settings-dialog" class="settings-dialog" aria-label="Model settings" tabindex="-1" autofocus>
+        <section id="settings-picker" class="command-menu settings-picker" aria-label="Choose a model" hidden>
+          <div class="picker-header">
+            <h2 id="picker-title" hidden>Reasoning effort</h2>
+            <label class="sr-only" for="model-search">Search models</label>
+            <input id="model-search" type="search" placeholder="Search models or providers" autocomplete="off" spellcheck="false">
+            <button id="picker-cancel" type="button" class="quiet" aria-label="Close model picker"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+          </div>
+          <div id="picker-options"></div>
+          <footer><p id="picker-help" class="hint" role="status"></p><button id="model-retry" type="button" class="secondary" hidden>Try again</button></footer>
+        </section>
+        </dialog>
+        <label class="sr-only" for="prompt">Message</label>
+        <div id="command-menu" class="command-menu" hidden>
+          <div id="command-options" role="listbox" aria-label="Pi commands"></div>
+          <p id="command-help" class="hint" role="status"></p>
+        </div>
+        <p id="composer-send-status" class="hint" role="status" hidden></p>
+        <div id="attachments" class="attachments" aria-label="Attached images and videos" hidden></div>
+        <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
+        <div class="composer-toolbar">
+          <button id="attach" type="button" class="quiet" aria-label="Add attachments" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><input id="image-files" type="file" aria-label="Attach images and videos" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple hidden>
+          <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span id="composer-connection-text">Connecting</span></div>
+          <div class="composer-settings">
+            <button id="model" class="setting-control" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-dialog" hidden><span id="model-name"></span></button>
+            <button id="reasoning-control" class="setting-control" type="button" aria-label="Reasoning effort" title="Change reasoning effort" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-dialog" hidden><span id="reasoning-value"></span></button>
+          </div>
+          <svg id="fast-mode" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Fast mode enabled" hidden><title>Fast mode enabled</title><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg>
+          <div class="composer-actions">
+            <button id="usage-meter" type="button" class="quiet" aria-label="Usage" title="Context usage" aria-expanded="false" aria-controls="settings-picker" hidden><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="usage-track" cx="12" cy="12" r="9"/><circle id="usage-arc" cx="12" cy="12" r="9" pathLength="100" stroke="currentColor" stroke-dasharray="0 100" transform="rotate(-90 12 12)"/></svg></button>
+            <button id="commands" type="button" class="quiet" aria-label="Open slash commands" title="Open slash commands" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m15 5-6 14"/></svg></button>
+            <button id="abort" type="button" class="quiet" aria-label="Abort turn" title="Abort this turn. Queued messages may still run."><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+            <button id="send" type="submit" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          </div>
+        </div>
+        <button id="resume" type="button" class="secondary" hidden>Resume session</button>
+        <span id="status" class="sr-only" role="status"></span>
+        <p id="composer-hint" class="hint" hidden></p>
+      </form>
+      <button id="status-line" type="button" title="Usage" hidden></button>
+    </main>
   </div>
-  <div class="coordinator-frame">
-    <header class="coordinator-header">
-      <svg class="pi-logo" viewBox="0 0 470 470" width="28" height="28" role="img" aria-label="Pi Remote">
-        <path fill="#F09082" d="M0 0H352.07V234.71H234.71V117.36H0Z"/>
-        <path fill="#4D9ABF" d="M0 117.36H117.36V234.71H234.71V352.07H117.36V469.43H0Z"/>
-        <path fill="#F1BE58" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"/>
-      </svg>
-      <div><h1>Coordinator</h1><p>pi-remote · Mobile improvements</p></div>
-      <button id="return-coordinator" type="button" class="text-action" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>Coordinator</button>
-    </header>
-    <main id="prototype-view" aria-label="Coordinator prototype"></main>
-    <form id="message-form" class="message-composer">
-      <div class="composer-routing"><label id="composer-target" for="message-input">To Coordinator · new request</label><button id="cancel-reply" class="text-action" type="button" hidden>Cancel reply</button></div>
-      <div class="composer-entry"><textarea id="message-input" rows="1" maxlength="2000" placeholder="Ask for something else…" aria-describedby="composer-note"></textarea><button id="send-message" type="submit" disabled>Send<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></div>
-      <p id="composer-note">Demo only. No agents run; nothing is sent or saved.</p>
-    </form>
+  <button id="prototype-tools" class="prototype-tools" type="button" aria-label="Coordinator prototype A · synthetic data" popovertarget="prototype-options">Prototype<span>A</span></button>
+  <div id="prototype-options" class="prototype-options" popover aria-label="Prototype controls">
+    <h2>Coordinator prototype</h2>
+    <p class="hint">Synthetic, in memory. No agents or saved changes.</p>
+    <fieldset><legend>Discover activity</legend>
+      <label><input type="radio" name="variant" value="A"> A · In the handoff message</label>
+      <label><input type="radio" name="variant" value="B"> B · From the header</label>
+    </fieldset>
+    <label><input id="sample-working" type="checkbox"> Coordinator working</label>
+    <label><input id="sample-footer" type="checkbox" checked> Usage footer</label>
+    <button id="reset-sample" class="quiet" type="button">Reset sample</button>
+    <button type="button" class="quiet" popovertarget="prototype-options" popovertargetaction="hide">Done</button>
   </div>
-  <p id="demo-feedback" class="sr-only" role="status"></p>
-  <nav class="prototype-switcher" aria-label="Compare coordinator layouts">
-    <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
-    <div><span id="variant-label" aria-live="polite">A · Conversation first</span><small id="variant-description">Task updates live in the thread</small></div>
-    <button id="next-variant" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
-  </nav>
-  <dialog id="task-decision" class="task-decision" aria-labelledby="decision-title" aria-describedby="decision-description">
-    <h2 id="decision-title"></h2>
-    <p id="decision-description"></p>
-    <p class="decision-demo">Simulation only. No session or saved data will change.</p>
-    <div id="decision-actions"></div>
+  <dialog id="activity-sheet" class="project-picker" aria-labelledby="activity-title">
+    <div class="project-sheet coordinator-sheet">
+      <header><h2 id="activity-title">Delegated tasks</h2><button type="button" id="activity-close" class="quiet" aria-label="Back to conversation" autofocus>Back</button></header>
+      <div id="sheet-tasks" class="coordinator-task-list"></div>
+    </div>
   </dialog>
-  <noscript><p>Enable JavaScript to compare these prototypes. No real sessions are connected.</p></noscript>
+  <dialog id="sample-attachment" class="project-picker" aria-labelledby="attachment-title">
+    <div class="project-sheet coordinator-sheet">
+      <header><h2 id="attachment-title">Sample attachment</h2><button id="attachment-close" type="button" class="quiet">Cancel</button></header>
+      <p class="coordinator-sheet-copy">Try a sample image. No files are opened or uploaded.</p>
+      <button id="attachment-add" type="button" class="quiet">Add sample image</button>
+    </div>
+  </dialog>
+  <p id="sample-feedback" class="sr-only" role="status"></p>
 </body>
 </html>
