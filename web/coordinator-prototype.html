@@ -2,96 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#100d10" media="(prefers-color-scheme: dark)">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Session orchestration prototype · Pi Remote</title>
-  <link rel="icon" href="/icon.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="light dark">
+  <title>Coordinator workspace · Pi Remote</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/coordinator-prototype.css">
-  <script type="module" src="/coordinator-prototype.js"></script>
+  <script src="/coordinator-prototype.js" type="module"></script>
 </head>
 <body>
-  <!-- Interactive worker-session inspection and routing over six simulated milestones. The production composer is unchanged. -->
-  <header class="story-guide" aria-label="Storyboard navigation">
-    <nav>
-      <button id="story-previous" class="quiet" type="button" aria-label="Previous scene"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
-      <button id="story-position" class="quiet" type="button" popovertarget="story-index" aria-label="Choose storyboard scene">Storyboard · 1 of 6</button>
-      <button id="story-next" class="quiet" type="button" aria-label="Next scene"><span>Next</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
-    </nav>
-    <h1 id="story-title"></h1>
-    <p id="story-caption"></p>
-  </header>
-  <div id="app" class="shell viewing story-shell">
+  <!-- Isolated visual study. All agent activity is simulated; no transport or persistence. -->
+  <div id="app" class="shell viewing workspace-shell">
     <aside id="sidebar">
-      <header class="brand"><h2>Sessions</h2><p id="connection" role="status" hidden>Connecting…</p><button id="logout" class="quiet">Sign out</button></header>
-      <nav id="sessions" aria-label="Pi sessions"></nav>
-      <div id="recent-filter-menu" popover role="dialog" aria-label="Filter recent sessions">
-        <p>Session status</p>
-        <label><input id="recent-online" type="checkbox" value="online" checked disabled>Online</label>
-        <label><input id="recent-offline" type="checkbox" value="offline">Offline</label>
-      </div>
-      <dialog id="session-collection" class="project-picker" aria-labelledby="session-collection-title" tabindex="-1"><div class="project-sheet session-collection-sheet">
-        <header><h2 id="session-collection-title">Pinned sessions</h2><button id="session-collection-close" type="button" class="search-round" aria-label="Close sessions"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
-        <nav id="collection-sessions" aria-label="Session collection"></nav>
-        <div id="collection-feedback"></div>
-      </div></dialog>
-      <div id="session-feedback" class="session-feedback" role="status" hidden></div>
-      <p id="list-empty" class="hint" hidden>No sessions yet. Start Pi with the remote extension loaded.</p>
-      <div class="list-pagination">
-        <span id="list-page" class="hint" role="status">Loading sessions…</span>
-        <button id="list-retry" type="button" class="quiet" hidden>Try again</button>
-      </div>
-      <div id="search-bar" class="search-bar">
-        <button id="search-open" type="button" class="search-round" aria-label="Search sessions" title="Search sessions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-        <label class="search-field"><span class="sr-only">Search sessions</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Filter sessions" maxlength="500"></label>
-        <button id="search-close" type="button" class="search-round" aria-label="Close search" title="Close search"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
-        <button id="new-session" type="button" aria-haspopup="dialog" aria-controls="project-picker"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</button>
-      </div>
-      <dialog id="project-picker" class="project-picker" aria-labelledby="project-picker-title" tabindex="-1"><div class="project-sheet">
-        <header><h2 id="project-picker-title">New session in…</h2><button id="project-close" type="button" class="search-round" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></header>
-        <label class="search-field project-search"><span class="sr-only">Search projects</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="project-search" type="search" placeholder="Search projects" autocomplete="off" spellcheck="false" maxlength="500"></label>
-        <p id="project-status" class="hint" role="status"></p>
-        <div id="project-options"></div>
-        <button id="new-project" type="button"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="m17.5 3.5 3 3L13 14h-3v-3Z"/></svg>Start without a project</button>
-        </div>
-      </dialog>
+      <header class="brand"><h2>Pi Remote</h2></header>
+      <h3 class="workspace-nav-heading">Sessions</h3>
+      <nav id="sessions" aria-label="Sample sessions">
+        <button type="button" class="room-link" data-session="coordinator" aria-current="page">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="6" rx="1"/><path d="M12 8v5M5 13h14M5 13v3m14-3v3"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/></svg>
+          <span><strong>Mobile release</strong><small>Coordinator · 3 workers</small></span>
+        </button>
+      </nav>
+      <p class="workspace-nav-note">Sample workspace<br>No agents are running.</p>
+      <a class="workspace-exit" href="/"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>Back to Pi Remote</a>
     </aside>
     <main>
-      <header class="conversation-header">
-        <button id="back" class="quiet mobile-only" aria-label="Show sessions" title="Show sessions"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
-        <div id="heading" class="conversation-heading"><div class="heading-window"><div id="heading-strip" class="heading-strip">
-          <div id="heading-prev" class="heading-slot" data-side="prev" aria-hidden="true"></div>
-          <div class="heading-slot"><span id="title-kind"></span><div class="heading-text"><h1 id="title">Pi Remote</h1><p id="project-name" hidden></p></div></div>
-          <div id="heading-next" class="heading-slot" data-side="next" aria-hidden="true"></div>
-        </div></div></div>
-        <div id="nearby-sessions" class="nearby-sessions" popover="manual" role="group" aria-label="Nearby sessions"><div id="nearby-list" class="nearby-list"></div><button id="nearby-up" class="nearby-hint up" type="button" hidden></button><button id="nearby-down" class="nearby-hint down" type="button" hidden></button></div>
-        <details class="session-info"><summary aria-label="Session details" title="Session details"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary><div class="session-details">
-          <p id="project">Select a session to see its project directory.</p>
-          <button id="session-pin" type="button" hidden>Pin session</button>
-          <button id="session-close" type="button" hidden>Close session</button>
-          <button id="session-icon-open" type="button" aria-haspopup="dialog" aria-controls="session-icon-picker"><span>Session icon</span><span id="session-icon-current"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
-        </div></details>
+      <header class="workspace-header">
+        <button id="workspace-back" class="quiet workspace-round" type="button" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+        <div class="workspace-heading"><h1 id="title">Mobile release</h1><p id="workspace-subtitle">Coordinator · Sample workspace</p></div>
+        <button class="quiet workspace-round" type="button" aria-label="About this design study" popovertarget="study-info"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg></button>
       </header>
-      <dialog id="session-icon-picker" class="project-picker" aria-labelledby="session-icon-title" tabindex="-1"><div class="project-sheet icon-sheet">
-        <header><h2 id="session-icon-title">Session icon</h2><button id="session-icon-done" type="button" class="quiet">Done</button></header>
-        <div class="icon-sheet-body">
-          <div id="session-kind-options" role="group" aria-label="Kinds"></div>
-          <button id="session-emoji-other" type="button" class="quiet" aria-expanded="false" aria-controls="session-emoji-form">Other emoji…</button>
-          <form id="session-emoji-form" hidden>
-            <label class="sr-only" for="session-custom-icon">Emoji</label><input id="session-custom-icon" type="text" maxlength="32" autocomplete="off" placeholder="Paste an emoji" enterkeyhint="done"><button type="submit">Use emoji</button>
-          </form>
-        </div>
-      </div></dialog>
-      <div id="notice" class="notice" role="status" hidden></div>
-      <section id="empty" class="empty" hidden><p>Select a session.</p></section>
-      <span id="copy-status" class="sr-only" role="status"></span>
-      <section id="transcript" aria-label="Conversation" tabindex="0">
-        <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span class="sr-only">Working…</span><span class="activity-text" aria-hidden="true"><span id="activity-label">Working…</span><span id="activity-time" aria-hidden="true" hidden></span></span></div>
-      </section>
-      <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
-      <form id="composer" class="composer" hidden>
+      <div class="workspace-layout">
+        <section class="team-panel" aria-label="Workers owned by Mobile release">
+          <div class="team-content">
+            <header class="team-heading"><h2>Workers <span>3</span></h2><span>Independent sessions</span></header>
+            <div class="worker-grid">
+              <button class="worker-window" type="button" data-session="navigation" data-state="working" aria-label="Open Navigation worker session">
+                <span class="window-heading"><svg class="window-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V7a3 3 0 0 1 3-3h9M3 17l3 3 3-3M15 1l3 3-3 3"/></svg><strong>Navigation</strong><svg class="window-open" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+                <span class="worker-status"><i aria-hidden="true"></i><span>Working</span></span>
+                <span class="worker-preview">Tracing the back gesture.</span>
+                <span class="worker-detail">nav-gesture</span>
+              </button>
+              <button class="worker-window" type="button" data-session="login" data-state="waiting" aria-label="Open Login copy worker session">
+                <span class="window-heading"><svg class="window-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14M9 6v13m6-13v13M6 19h6m0 0h6"/></svg><strong>Login copy</strong><svg class="window-open" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+                <span class="worker-status"><i aria-hidden="true"></i><span>Needs answer</span></span>
+                <span class="worker-preview">One wording decision.</span>
+                <span class="worker-detail">login-copy</span>
+              </button>
+              <button class="worker-window worker-checks" type="button" data-session="checks" data-state="returned" aria-label="Open Checks worker session">
+                <span class="window-heading"><svg class="window-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8m-8 4h5"/></svg><strong>Checks</strong><svg class="window-open" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+                <span class="worker-status"><i aria-hidden="true"></i><span>Returned</span></span>
+                <span class="worker-preview">Phone layout review</span>
+              </button>
+            </div>
+            <section class="receiving-tray" aria-label="Questions and returned work">
+              <div class="queue-tabs" role="tablist" aria-label="Worker messages">
+                <button id="question-tab" type="button" role="tab" aria-selected="true" aria-controls="question-panel">Question <span>1</span></button>
+                <button id="returned-tab" type="button" role="tab" aria-selected="false" aria-controls="returned-panel" tabindex="-1">Returned <span>1</span></button>
+              </div>
+              <div id="question-panel" class="queue-panel" role="tabpanel" aria-labelledby="question-tab">
+                <p class="route-label"><span>Login copy</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg><span>Mobile release</span></p>
+                <h3>Keep "Private login link" as the label?</h3>
+                <button class="queue-action" type="button" data-session="login" data-reply aria-label="Reply in Login copy">Reply in worker <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+              </div>
+              <div id="returned-panel" class="queue-panel" role="tabpanel" aria-labelledby="returned-tab" hidden>
+                <p class="route-label"><span>Checks</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg><span>Mobile release</span></p>
+                <h3>Phone layout review</h3>
+                <button class="artifact-link" type="button" data-session="checks" aria-label="Open returned viewport review"><svg class="window-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8m-8 4h5"/></svg><span><strong>viewport-review.md</strong><small>Notes ready to inspect</small></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+              </div>
+            </section>
+          </div>
+        </section>
+        <section class="thread-pane" aria-label="Selected session">
+          <header class="thread-heading"><h2 id="thread-title">Conversation</h2><span id="thread-recipient">To Mobile release</span></header>
+          <section id="transcript" aria-label="Conversation" tabindex="0">
+            <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span id="activity-label"></span></div>
+          </section>
+          <form id="composer" class="composer" hidden>
         <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
         <dialog id="settings-dialog" class="settings-dialog" aria-label="Model settings" tabindex="-1" autofocus>
@@ -133,19 +119,21 @@
         <span id="status" class="sr-only" role="status"></span>
         <p id="composer-hint" class="hint" hidden></p>
       </form>
-      <button id="status-line" type="button" title="Usage" hidden></button>
+          <button id="status-line" type="button" title="Usage" hidden></button>
+        </section>
+      </div>
     </main>
   </div>
-  <div id="story-index" class="story-index" popover aria-label="Storyboard scenes">
-    <h2>Sessions and worker orchestration</h2>
-    <p class="hint">No agents run and no changes are applied. Open a worker session, send it a sample instruction, then return to its coordinator. Next changes the simulated milestone.</p>
-    <ol id="story-scenes"></ol>
-    <button type="button" class="quiet" popovertarget="story-index" popovertargetaction="hide">Close</button>
+  <div id="study-info" class="study-info" popover aria-label="About this design study">
+    <h2>Worker workspace study</h2>
+    <p>All sessions, messages, reports, and changes here are simulated. No agents run and nothing is saved.</p>
+    <p>Open a worker to inspect its conversation. The composer always belongs to the selected session.</p>
+    <button type="button" class="quiet" popovertarget="study-info" popovertargetaction="hide">Close</button>
   </div>
   <dialog id="sample-attachment" class="project-picker" aria-labelledby="attachment-title">
-    <div class="project-sheet story-attachment">
+    <div class="project-sheet study-attachment">
       <header><h2 id="attachment-title">Sample attachment</h2><button id="attachment-close" type="button" class="quiet">Cancel</button></header>
-      <p class="story-attachment-copy">Try a sample image. No files are opened or uploaded.</p>
+      <p>Try a sample image. No files are opened or uploaded.</p>
       <button id="attachment-add" type="button" class="quiet">Add sample image</button>
     </div>
   </dialog>
