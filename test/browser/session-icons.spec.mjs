@@ -317,3 +317,41 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   await page.getByRole('button', { name: 'Sign out' }).click();
   expect(await page.evaluate(() => localStorage.getItem('pi-remote-session-icons'))).toBeNull();
 });
+
+test('working character bodies keep their colour while the plain loader pulses', async ({ page }, testInfo) => {
+  const kinds = ['miso', 'build', 'notes'];
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
+  await page.addInitScript(kinds => {
+    localStorage.setItem('pi-remote-session-icons', JSON.stringify([
+      ...kinds.map(type => [type, { type }]), ['plain', { type: 'custom', icon: '🔎' }]
+    ]));
+  }, kinds);
+  const states = [...kinds, 'plain'].map(id => ({ id, title: 'Working ' + id, status: 'working', cwd: '/projects/demo', updatedAt: Date.now(), messages: [] }));
+  await page.routeWebSocket('**/ws', ws => ws.onMessage(raw => {
+    const packet = JSON.parse(raw);
+    if (packet.type === 'auth') {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
+    } else if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+  }));
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session')).toHaveCount(4);
+  const bodies = page.locator('#sessions .session-icon.bot g.bot-body > rect');
+  await expect(bodies).toHaveCount(3);
+  const colours = await bodies.evaluateAll(nodes => nodes.map(node => {
+    // Seek a leaked loader animation to its dim phase, independent of the clock.
+    for (const animation of node.getAnimations().filter(animation => animation.animationName === 'session-brick-step')) {
+      animation.pause();
+      const timing = animation.effect.getTiming();
+      animation.currentTime = timing.delay + timing.duration / 2;
+    }
+    return { kind: node.closest('.bot').dataset.kind, opacity: getComputedStyle(node).opacity };
+  }));
+  await testInfo.attach('working-body-opacity', { body: JSON.stringify(colours), contentType: 'application/json' });
+  for (const { kind, opacity } of colours) expect(opacity, `Working ${kind} keeps its full body colour`).toBe('1');
+  const loader = page.locator('#sessions [data-id=plain] .session-icon');
+  await expect(loader.locator('rect')).toHaveCount(6);
+  await expect(loader.locator('rect').first()).toHaveCSS('animation-name', 'session-brick-step');
+  await page.screenshot({ path: testInfo.outputPath('working-body-colours.png') });
+});
