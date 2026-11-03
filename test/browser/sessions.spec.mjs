@@ -94,7 +94,7 @@ test('sessions sort by your last prompt without jumping during background activi
   await expect(titles).toHaveText(['Task Alpha', 'Task Gamma', 'Task Beta']);
 });
 
-test('compact same-project sessions show tasks, status dots and inline bots without overflowing', async ({ page }, testInfo) => {
+test('compact same-project sessions show tasks and aligned bots without overflowing', async ({ page }, testInfo) => {
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
   const states = [
@@ -146,17 +146,17 @@ test('compact same-project sessions show tasks, status dots and inline bots with
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveCount(0);
   await expect(login.locator('.session-state')).toHaveText('Working');
-  // Active bots lead the title; finishing moves the small bot to the detail line.
+  // The leading bot keeps its size and position when the session finishes.
   const workingIcon = login.locator('.session-indicators .bot');
   await expect(login.locator('.session-kind')).toHaveCount(0);
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
   await expect(workingIcon).toHaveAttribute('aria-label', 'Fix');
-  await expect(workingIcon.locator('svg')).toHaveCSS('width', '28px');
+  await expect(workingIcon.locator('svg')).toHaveCSS('width', '32px');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await expect(workingIcon.locator('.bot-look')).toHaveCSS('animation-name', 'bot-glance');
   expect(Number((await workingIcon.getAttribute('style')).match(/--bot-t: -(\d+)ms/)[1])).toBeLessThan(6000);
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
-  await expect(page.locator('.session-icon[data-status=idle] circle')).toHaveCount(1);
+  await expect(page.locator('.session-icon[data-status=idle]')).toHaveAttribute('data-mood', 'idle');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
   await expect(online.locator('.session-state')).toHaveText(['Needs input', 'Working']);
   await expect(saved.first().locator('.session-preview')).toHaveCount(0);
@@ -216,12 +216,10 @@ test('compact same-project sessions show tasks, status dots and inline bots with
   await page.locator('#back').click();
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
-  await expect(login.locator('.session-icon rect')).toHaveCount(0);
-  await expect(login.locator('.session-icon circle')).toHaveCount(1);
-  await expect(login.locator('.session-kind')).toHaveAttribute('data-kind', 'fix');
-  await expect(login.locator('.session-kind')).toHaveAttribute('data-mood', 'idle');
-  await expect(login.locator('.session-indicators .bot')).toHaveCount(0);
-  await expect(login.locator('.session-kind svg')).toHaveCSS('width', '20px');
+  await expect(login.locator('.session-kind')).toHaveCount(0);
+  await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-kind', 'fix');
+  await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-mood', 'idle');
+  await expect(login.locator('.session-indicators .bot svg')).toHaveCSS('width', '32px');
   await expect(login.locator('.session-preview')).toHaveCount(0);
 });
 

@@ -1,5 +1,24 @@
 # Character icon design: principles and behaviour
 
+## Current brief: 32px session characters
+
+Use small, memorable characters to distinguish sessions. They do not need to depict work types. The latest direction is a random-looking family with plain eyes and a coherent palette, shown in the selected 32px leading layout. Keep the existing bot construction rather than drawing tools with faces.
+
+- A: enlarge resting detail-line bots from 20px to 28px, keeping the current title layout.
+- B: align 32px bots in a consistent leading column, keeping compact single-line resting titles.
+- C: use 40px leading bots and allow two-line titles, accepting fewer visible rows.
+- Keep the 32px layout and the existing bot construction. Preserve pin, unread, working and needs-input cues, animation and selected-row feedback.
+- Follow the supplied dark-list colour reference with off-white, vivid red, orange, green, violet and teal. Use solid white eyes in light mode and solid dark eyes in dark mode, without borders or glossy highlights. Prefer saturated fills to chalky pastels; adapt light-theme fills as needed for contrast. Keep the character drawings unchanged while comparing colour.
+- Use static sample content shaped like the supplied screenshot, without publishing private issue identifiers or reading live sessions.
+- Keep the current Idea, Fix, Build, Notes and Ship artwork and animations. Recolour them to the same palette: orange, red, green, off-white and violet, respectively.
+- Use Pip, Sprout, Bun, Mochi, Pebble and Wisp without job-specific accessories. Sample sessions with the same work type should be able to have different characters.
+- Give each new character a full working loop, not one shared bob: antenna flicks and signals, leaf sway and drifting seeds, ear-led hops, jelly squashes, a rocking orbit, and a floating ghost with a curling tail. Combine body anticipation, face tracking and part follow-through. Keep movement within the row gutters, use the existing clock for continuity, and pause offscreen, when hidden or by request. Reduced motion keeps the characters and status cues still.
+- Show all eleven working loops in the preview lineup. Resting session rows retain their quieter behaviour; the lineup is not a claim that those sessions are running.
+- A character belongs to its session, not its title or status. Default app characters come from a deterministic session-ID hash over the approved eleven. The prototype uses fixed sample assignments. Preserve manual choices, custom emoji and older saved icon types.
+- After comparing B and C, the user returned to B: 32px leading bots and compact single-line resting titles. Custom emoji choices retain their standard status indicator and detail-line emoji.
+
+## Archived lifecycle-first proposal
+
 ## Why the previous attempts missed
 
 The user rejected both the neutral art study and the colourful/warm character comparison. They are asking for an understanding of design patterns, flow and principles, not drawings that resemble Grok or Muse.

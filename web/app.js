@@ -602,7 +602,8 @@ function sessionRow(item) {
   const icon = statusIcon(item.status);
   if (isUnread(item)) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
-  indicators.append(busy ? showSessionKind(icon, item) : icon);
+  indicators.append(kind && !kind.emoji ? showSessionKind(icon, item, 32) : icon);
+  if ('unread' in icon.dataset) indicators.append(el('span', 'New reply', 'sr-only'));
   if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
   button.append(indicators);
   const body = el('div', undefined, 'session-body');
@@ -635,7 +636,7 @@ function sessionRow(item) {
     time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
     meta.append(time);
   }
-  if (kind && !busy) meta.append(dressKind(el('span', undefined, 'session-kind'), kind, 20, item.status));
+  if (kind?.emoji) meta.append(dressKind(el('span', undefined, 'session-kind'), kind, 20, item.status));
   body.append(meta);
   button.append(body);
   // The finger lifting after a swipe must not also open the session.
@@ -859,13 +860,11 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) endRo
 const botStar = (x, y, r) => `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`;
 // [label, body, eyes, behind the body, in front, shown only while working: each bot's own job].
 const sessionKinds = {
-  review: ['Review', '<rect x="4" y="7" width="24" height="21" rx="7"/>', [[11.5, 17], [20.5, 17]], '',
-    '<g class="bot-frame"><circle cx="11.5" cy="17" r="4.6"/><circle cx="20.5" cy="17" r="4.6"/></g>',
-    '<path class="bot-glint" d="M9.3 16.2l3.4-3.4M18.3 16.2l3.4-3.4"/>'],
+  review: ['Review', '<rect x="4" y="7" width="24" height="21" rx="7"/>', [[11.5, 17], [20.5, 17]], ''],
   fix: ['Fix', '<circle cx="16" cy="19" r="11"/>', [[11.5, 19], [20.5, 19]],
     '<g class="bot-antenna"><path class="bot-stalk" d="M11 9 8 3.5"/><circle class="bot-body" cx="8" cy="3.5" r="2"/></g><g class="bot-antenna bot-right"><path class="bot-stalk" d="M21 9l3-5.5"/><circle class="bot-body" cx="24" cy="3.5" r="2"/></g>', '',
     '<path class="bot-spark" d="M4.5 1.5 3 0M5 5H3M27.5 1.5 29 0M27 5h2"/>'],
-  research: ['Research', '<rect x="6" y="4" width="20" height="25" rx="10"/>', [[16, 15, 1.7]], '', '', '<circle class="bot-scan" cx="16" cy="15" r="5.5"/>'],
+  research: ['Research', '<rect x="3" y="8" width="26" height="21" rx="10.5"/>', [[12, 18], [20, 18]], '', '', '<circle class="bot-scan" cx="16" cy="18" r="6"/>'],
   build: ['Build', '<rect x="4" y="11" width="24" height="18" rx="6"/>', [[11.5, 20], [20.5, 20]], '',
     '<path class="bot-accent" d="M7 12a9 8 0 0 1 18 0ZM4.5 11h23a1.5 1.5 0 0 1 0 3h-23a1.5 1.5 0 0 1 0-3Z"/>',
     '<g class="bot-hammer"><path class="bot-handle" d="M28 28 31 18"/><rect class="bot-accent" x="27" y="14" width="7.5" height="4.2" rx="1" transform="rotate(18 30.7 16)"/></g>'],
@@ -896,6 +895,19 @@ const sessionKinds = {
   ops: ['Ops', '<rect x="5" y="9" width="22" height="19" rx="7"/>', [[11.5, 18.5], [20.5, 18.5]], '<path class="bot-headset" d="M6 17v-3a10 10 0 0 1 20 0v3"/>',
     '<rect class="bot-accent" x="2.5" y="14.5" width="4.5" height="7" rx="2"/><rect class="bot-accent" x="25" y="14.5" width="4.5" height="7" rx="2"/><path class="bot-headset" d="M27 21.5c0 3.8-2.8 5.8-6.5 5.8"/><circle class="bot-accent" cx="20" cy="27.3" r="1.5"/>',
     '<g class="bot-gear"><circle class="bot-gear-teeth" cx="4" cy="4.5" r="2.6"/><circle class="bot-gear-hole" cx="4" cy="4.5" r="1"/></g>'],
+  pip: ['Pip', '<rect x="5" y="9" width="22" height="20" rx="8"/>', [[12, 19], [20, 19]],
+    '<g class="character-antenna"><path class="bot-stalk" d="M16 10V7l-5-3.5"/><circle class="bot-body" cx="11" cy="3.5" r="2"/></g>', '',
+    '<path class="character-signal" d="M6 3H4M8 0 7-1M13 0l1-1"/>'],
+  sprout: ['Sprout', '<rect x="4" y="10" width="24" height="19" rx="9"/>', [[12, 19], [20, 19]],
+    '<path class="bot-stalk" d="M16 11V6"/><path class="bot-body character-leaf character-leaf-left" d="M16 7C10 7 7 4 8 1c5 0 8 2 8 6Z"/><path class="bot-accent character-leaf character-leaf-right" d="M16 8c0-5 3-7 8-7 0 4-3 7-8 7Z"/>', '',
+    '<g class="character-seeds"><circle class="character-seed" cx="9" cy="5" r="1"/><circle class="character-seed" cx="23" cy="7" r=".8"/></g>'],
+  bun: ['Bun', '<circle cx="16" cy="20" r="10"/>', [[12, 20], [20, 20]],
+    '<g class="character-ear"><rect class="bot-body" x="8" y="2" width="5" height="13" rx="2.5"/></g><g class="character-ear character-ear-right"><rect class="bot-body" x="19" y="4" width="5" height="11" rx="2.5"/></g>'],
+  mochi: ['Mochi', '<path d="M16 10C8 10 2 16 2 23c0 5 6 7 14 7s14-2 14-7c0-7-6-13-14-13Z"/>', [[11.5, 21], [20.5, 21]], ''],
+  pebble: ['Pebble', '<path d="M12 5h6c3.5 0 5.5 2 7 5l3 9c1.5 5-1.5 10-7 10H10c-5 0-8-4-6.5-9l4-11C8.3 6.5 9.6 5 12 5Z"/>', [[12, 18.5], [20, 18.5]], '', '',
+    '<g class="character-orbit"><circle cx="3" cy="13" r="1"/><circle cx="29" cy="21" r=".8"/></g>'],
+  wisp: ['Wisp', '<path d="M16 5C22.6 5 26 10 26 17v7H6v-7C6 10 9.4 5 16 5Z"/>', [[12, 17.5], [20, 17.5]], '',
+    '<path class="bot-body character-tail" d="M6 23h20v4Q24 31 21 27Q18 32 15 28Q12 32 9 28Q6 31 6 27Z"/>'],
   general: ['Session', '<rect x="5" y="7" width="22" height="21" rx="8"/>', [[12, 17], [20, 17]], ''],
 };
 // The face carries the state: eyes close and z's drift when saved, it smiles at a new reply, and the badge marks what needs you.
@@ -909,37 +921,46 @@ function botSvg(kind, mood, size, unread = mood === 'unread') {
   const zz = mood === 'saved' ? '<g class="bot-zz"><text x="24" y="9">z</text><text x="24" y="9">z</text></g>' : '';
   return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${back}<g class="bot-body">${body}</g><g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}</g>${badge}${zz}</svg>`;
 }
-// Titles are generated verb-first, so the leading verb says what kind of work the session is.
-const autoSessionIcons = [
-  ['review', /^(?:(?:pr|code|pull request)\s+)?(?:re-?)?review\b/i],
-  ['fix', /^(?:fix|debug|diagnose|repair|resolve|stabilize)\b/i],
-  ['test', /^(?:test|testing|verify|validate|reproduce)\b/i],
-  ['research', /^(?:investigate|research|check|find|identify|locate|inspect|audit|evaluate|explore|compare|read|analy[sz]e)\b/i],
-  ['design', /^(?:design|redesign|style|restyle|polish|theme)\b/i],
-  ['idea', /^(?:prototype|propose|suggest|brainstorm|plan|sketch)\b/i],
-  ['notes', /^(?:write|draft|document|summari[sz]e|explain)\b/i],
-  ['ship', /^(?:deploy|release|ship|publish|submit|post|push|merge|launch|roll out)\b/i],
-  ['tidy', /^(?:refactor|clean|simplify|tidy|remove|delete|consolidate|shrink|shorten|reduce|dedupe)\b/i],
-  ['data', /^(?:migrate|query|backup|back up|restore|seed|import|export|sync)\b/i],
-  ['guard', /^(?:secure|harden|protect|sanitize|encrypt|rotate)\b/i],
-  ['chat', /^(?:greet|greeting|hello|respond|reply|answer|ask|assist|chat|clarify|provide)\b/i],
-  ['ops', /^(?:restart|configure|set up|setup|install|run|stop|reboot|provision|upgrade)\b/i],
-  ['build', /^(?:add|build|create|implement|improve|update|show|replace|hide|refine|enable|disable|make|support|keep|move|rename|align|adapt|convert|compress|enlarge|sharpen|smooth|sort|optimize|close|match)\b/i],
-  ['review', /\b(?:re-?)?review\b/i],
-];
-// The session's bot takes the status slot in every state. A custom emoji only shows at rest; None keeps the plain status icon.
+const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
+// shortcut: defaults use this fixed catalogue; persist assignments before changing its order or size if existing sessions must not reshuffle.
+const sessionCharacters = [...personalityKinds, 'idea', 'fix', 'build', 'notes', 'ship'];
+function sessionSeed(id = '') {
+  let seed = 2166136261;
+  for (let index = 0; index < id.length; index++) seed = Math.imul(seed ^ id.charCodeAt(index), 16777619);
+  return seed >>> 0;
+}
+const botObserver = new IntersectionObserver(entries => {
+  for (const { target, isIntersecting } of entries) target.classList.toggle('in-view', isIntersecting);
+});
+let botVisibilityQueued = false;
+function syncBotVisibility() {
+  document.documentElement.classList.toggle('document-hidden', document.hidden);
+  if (botVisibilityQueued) return;
+  botVisibilityQueued = true;
+  queueMicrotask(() => {
+    botVisibilityQueued = false;
+    botObserver.disconnect();
+    document.querySelectorAll('.bot').forEach(node => botObserver.observe(node));
+  });
+}
+document.addEventListener('visibilitychange', syncBotVisibility);
+// Characters take the status slot; custom emoji keep the plain activity indicator.
 function showSessionKind(icon, item, size = 28) {
   const kind = sessionKind(item), unread = 'unread' in icon.dataset;
   if (!kind || kind.emoji && (unread || !['idle', 'saved'].includes(item.status))) return icon;
   return dressKind(icon, kind, size, item.status, unread);
 }
-const autoKind = item => autoSessionIcons.find(([, pattern]) => pattern.test(sessionTitle(item.title, cache.get(item.id)?.messages)))?.[0] || 'general';
+// Session IDs keep the same character across renames, reloads and devices, without storing a new preference.
+const autoKind = item => sessionCharacters[sessionSeed(item.id) % sessionCharacters.length];
 function sessionKind(item) {
-  // Older devices may have saved a 'none' choice; it now falls back to the title's bot.
+  // Older 'none' choices fall back to the session's default character.
   const saved = sessionIcons.get(item.id), choice = saved?.type === 'none' ? undefined : saved;
-  if (!choice) return { type: autoKind(item), label: sessionKinds[autoKind(item)][0], id: item.id };
+  if (!choice) {
+    const type = autoKind(item);
+    return { type, label: sessionKinds[type][0], id: item.id };
+  }
   if (choice.type === 'custom' && choice.icon) return { type: 'custom', emoji: choice.icon, label: `Session icon: ${choice.icon}` };
-  if (sessionKinds[choice.type]) return { type: choice.type, label: sessionKinds[choice.type][0], id: item.id };
+  if (Object.hasOwn(sessionKinds, choice.type)) return { type: choice.type, label: sessionKinds[choice.type][0], id: item.id };
 }
 // Activity outranks a new reply: a working bot keeps moving and wears the unread badge.
 function dressKind(node, kind, size, status, unread = false) {
@@ -947,12 +968,13 @@ function dressKind(node, kind, size, status, unread = false) {
   if (kind.emoji) node.textContent = kind.emoji;
   else {
     const mood = ['working', 'waiting'].includes(status) ? status : unread ? 'unread' : ['saved', 'disconnected'].includes(status) ? 'saved' : 'idle';
-    node.classList.add('bot'); node.dataset.mood = mood;
-    // Rows rebuild on every update; the clock keeps motion in phase, and each session blinks on its own beat.
-    const seed = [...kind.id || ''].reduce((sum, char) => sum + char.charCodeAt(0) * 97, 0);
-    node.style.setProperty('--bot-t', `-${Date.now() % 6000}ms`);
+    node.classList.add('bot'); node.classList.toggle('personality-bot', personalityKinds.includes(kind.type)); node.dataset.mood = mood;
+    // Both clocks are tied to the session, so rebuilding rows never restarts the movement.
+    const seed = sessionSeed(kind.id);
+    node.style.setProperty('--bot-t', `-${(Date.now() + seed) % 6000}ms`);
     node.style.setProperty('--bot-blink', `-${(Date.now() + seed) % 6000}ms`);
     node.innerHTML = botSvg(kind.type, mood, size, unread);
+    syncBotVisibility();
   }
   // The general bot says nothing the status label doesn't.
   if (kind.type === 'general') return node;
@@ -964,16 +986,18 @@ function headingKind(item) {
   const kind = item && sessionKind(item);
   return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 32, item.status)] : [];
 }
-// The picker shows the session's current bot playing its job; picking the title's own bot drops the override.
+// Keep older manual choices available while the picker defaults to the approved family.
 function renderSessionIconChoice() {
   const item = sessions.find(row => row.id === selected) || selectedSummary, kind = item && sessionKind(item);
   $('session-icon-current').textContent = kind?.emoji || (kind?.type === 'general' ? 'Default' : kind?.label || '');
   for (const button of $('session-kind-options').children) {
     const pressed = button.dataset.kind === kind?.type, mood = pressed ? 'working' : 'idle';
+    button.hidden = !sessionCharacters.includes(button.dataset.kind) && !pressed;
     button.setAttribute('aria-pressed', String(pressed));
     button.firstElementChild.dataset.mood = mood; button.firstElementChild.innerHTML = botSvg(button.dataset.kind, mood, 44);
   }
   $('session-emoji-other').textContent = kind?.emoji ? `${kind.emoji}  Other emoji…` : 'Other emoji…';
+  syncBotVisibility();
 }
 function saveSessionIcon(type, icon = '') {
   if (!selected) return;
@@ -983,12 +1007,12 @@ function saveSessionIcon(type, icon = '') {
   localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
   renderSessionIconChoice(); renderList();
 }
-for (const [kind, [name]] of Object.entries(sessionKinds)) {
+for (const kind of new Set([...sessionCharacters, ...Object.keys(sessionKinds)])) {
   if (kind === 'general') continue;
   const button = el('button'), bot = el('span', undefined, 'bot');
   button.type = 'button'; button.dataset.kind = kind;
-  bot.dataset.kind = kind; bot.setAttribute('aria-hidden', 'true');
-  button.append(bot, el('span', name));
+  bot.dataset.kind = kind; bot.classList.toggle('personality-bot', personalityKinds.includes(kind)); bot.setAttribute('aria-hidden', 'true');
+  button.append(bot, el('span', sessionKinds[kind][0]));
   button.addEventListener('click', () => saveSessionIcon(kind));
   $('session-kind-options').append(button);
 }

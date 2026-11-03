@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#100d10">
-  <title>Icon lifecycle storyboard · Pi Remote</title>
+  <meta name="theme-color" content="#f2f3f0">
+  <title>Session layout prototypes · Pi Remote</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/session-icons-prototype.css">
@@ -12,78 +12,25 @@
 </head>
 <body>
   <main class="page" id="page">
-    <h1>Icon lifecycle</h1>
-    <p class="intro">One placeholder mark, followed through a task. All events are simulated; no live sessions change.</p>
-    <div class="preview-options">
-      <button id="theme" type="button" class="quiet">Preview light theme</button>
-      <button id="motion" type="button" class="quiet" aria-pressed="false">Reduce motion</button>
-    </div>
-    <label class="scenario-label" for="scenario">Walkthrough</label>
-    <select id="scenario">
-      <option value="run">A run starts and settles</option>
-      <option value="input">Pause for input, then resume</option>
-      <option value="stop">Stop before the work finishes</option>
-      <option value="unread">A reply arrives while off-screen</option>
-      <option value="reconnect">Lose connection, then reconnect</option>
-    </select>
-    <section class="story-note" aria-labelledby="moment">
-      <p id="story-step" class="hint"></p>
-      <h2 id="moment">Ready</h2>
-      <p id="event-note" role="status">The agent is available. Its working loop has not started.</p>
-    </section>
-    <section class="preview" aria-label="Simulated session context">
-      <div id="session-view">
-        <h2 class="preview-title">Sessions</h2>
-        <div class="session-group">
-          <div class="session neighbour">
-            <span class="session-indicators"><span class="session-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg></span></span>
-            <div class="session-body"><div class="session-top"><strong>Compress video with FFmpeg</strong></div><div class="session-meta"><span class="session-project">pi-remote</span><span class="session-time">12h</span></div></div>
-          </div>
-          <button id="focus-row" type="button" class="session active" aria-label="Open sample conversation: Review reconnect recovery after the phone has been away for a long time">
-            <span class="session-indicators" id="focus-leading">
-              <span id="focus-dot" class="session-icon" data-status="idle" aria-hidden="true"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg></span>
-            </span>
-            <div class="session-body">
-              <div class="session-top"><strong>Review reconnect recovery after the phone has been away for a long time</strong></div>
-              <div class="session-meta" id="focus-meta">
-                <span id="focus-status" class="session-state"></span>
-                <span class="session-project"><span class="session-project-name">pi-remote</span></span><span class="session-time">now</span>
-                <span id="focus-inline" class="session-kind">
-                  <span id="presence-mark" class="presence-mark" data-identity="sample-a" data-phase="ready" data-leading="false" role="img" aria-label="Session A, ready">
-                    <svg viewBox="0 0 32 32" aria-hidden="true"><g class="presence-shell"><rect class="presence-base" x="3" y="3" width="26" height="26" rx="7"/><g class="presence-glyph"><path class="presence-corner" d="M10 22V10h12"/><rect class="presence-cursor" x="18" y="18" width="5" height="5" rx="1"/><path class="presence-wait" d="M18 17v6m5-6v6"/></g></g></svg>
-                  </span>
-                </span>
-              </div>
-            </div>
-          </button>
-          <div class="session neighbour">
-            <span class="session-indicators"><span class="session-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg></span></span>
-            <div class="session-body"><div class="session-top"><strong>Review architecture of web app.js</strong></div><div class="session-meta"><span class="session-project">pi-remote</span><span class="session-time">2d</span></div></div>
-          </div>
-        </div>
-        <p class="context-note">Sample order stays fixed so you can follow the same mark.</p>
+    <header class="preview-header"><h1>Sessions</h1><span>Prototype</span></header>
+    <p id="proposal-note" class="proposal-note" hidden>Six new personalities and five originals, showing their working loops. Session characters stay fixed.</p>
+    <section id="characters" class="character-roster" aria-label="Working animation samples" hidden></section>
+    <div id="list"></div>
+    <p id="selection" class="selection" role="status">Sample sessions. Tap a row to preview selection.</p>
+    <details class="preview-options">
+      <summary>Preview controls</summary>
+      <div class="preview-controls">
+        <button id="theme" type="button" class="quiet">Preview dark theme</button>
+        <button id="motion" type="button" class="quiet" aria-pressed="false">Pause motion</button>
+        <button id="activity" type="button" class="quiet" aria-pressed="false">Show active sessions</button>
       </div>
-      <section id="conversation-view" class="sample-thread" aria-label="Sample conversation" hidden>
-        <button id="back-to-list" type="button" class="quiet">Back to sessions</button>
-        <h2>Review reconnect recovery after the phone has been away for a long time</h2>
-        <p>Sample reply: the investigation has returned a result. Its correctness has not been reviewed.</p>
-        <p class="hint">Reading this sample clears unread. It does not change the agent's activity.</p>
-      </section>
-    </section>
-    <details class="model-details">
-      <summary>State details</summary>
-      <dl id="model-state"></dl>
-    </details>
-    <details class="event-controls">
-      <summary>Try a single event</summary>
-      <p class="hint">Events that do not apply are ignored. Manual exploration resets on reload.</p>
-      <div id="free-events"></div>
+      <p id="preview-hint" class="hint">Existing bots, colours and animation. Only size, placement and title wrapping differ. No live sessions change.</p>
     </details>
   </main>
-  <nav class="story-controls" aria-label="Story controls">
-    <button id="previous" type="button" aria-label="Previous event"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
-    <button id="play" type="button">Play flow</button>
-    <button id="next" type="button">Next: accept request</button>
+  <nav class="switcher" aria-label="Compare session layouts">
+    <button id="previous" type="button" aria-label="Previous layout"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+    <div><strong id="label" aria-live="polite"></strong><small id="description"></small></div>
+    <button id="next" type="button" aria-label="Next layout"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
   </nav>
 </body>
 </html>

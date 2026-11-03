@@ -25,10 +25,13 @@ test('unread dots mark agent replies since the thread was last on screen and sur
   const session = page.locator('.session');
   const dot = session.locator('.session-icon[data-unread]');
   await expect(session).toHaveCount(1);
+  await expect(session.locator('.session-indicators .bot svg')).toHaveCSS('width', '32px');
   await expect(dot).toHaveCount(0); // First sight counts as read.
 
   reply('assistant', 'Done.');
   await expect(dot).toHaveCount(1);
+  await expect(dot.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
+  await expect(session.locator('.sr-only', { hasText: 'New reply' })).toHaveCount(1);
   await page.reload();
   await expect(session).toHaveCount(1);
   await expect(dot).toHaveCount(1);
