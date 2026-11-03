@@ -42,7 +42,7 @@ async function open(page, state) {
 async function capture(page, name) {
   if (!process.env.PI_CODEMODE_LIVE_EVIDENCE) return;
   mkdirSync(process.env.PI_CODEMODE_LIVE_EVIDENCE, { recursive: true });
-  await page.screenshot({ path: join(process.env.PI_CODEMODE_LIVE_EVIDENCE, name + '.png') });
+  await page.screenshot({ path: join(process.env.PI_CODEMODE_LIVE_EVIDENCE, name + '.png'), animations: 'disabled' });
 }
 
 test('codemode work log exposes real output before scripts and preserves focus through streaming', async ({ page }) => {
@@ -154,7 +154,7 @@ test('missing, string and partial inputs remain inspectable without inventing in
   await expect(page.locator('#transcript')).not.toContainText('Read 1 file,');
 });
 
-test('connected work log fits phone, narrow and desktop views in both themes', async ({ page }) => {
+test('compact work log fits phone, narrow and desktop views without shrinking touch targets', async ({ page }) => {
   const state = sample();
   state.messages.push(result('checks', '5 passed.', 3000, 10000)); state.tools = []; state.status = 'idle';
   await open(page, state);
@@ -163,8 +163,13 @@ test('connected work log fits phone, narrow and desktop views in both themes', a
     const group = page.locator('.codemode-activity');
     await group.locator(':scope > summary').scrollIntoViewIfNeeded();
     for (const selector of ['.codemode-activity > summary', '.codemode-tool > summary']) {
-      for (const box of await page.locator(selector).all()) expect((await box.boundingBox()).height).toBeGreaterThanOrEqual(44);
+      for (const box of await page.locator(selector).all()) {
+        const { height } = await box.boundingBox();
+        expect(height).toBeGreaterThanOrEqual(44);
+        expect(height).toBeLessThanOrEqual(52);
+      }
     }
+    expect((await group.boundingBox()).height).toBeLessThanOrEqual(220);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await capture(page, `work-log-${width}-${scheme}`);
