@@ -8,7 +8,7 @@ Use the platform system sans for interface text and the existing monospace stack
 
 ## Themes
 
-Use the production custom properties for text, muted text, backgrounds, panels, lines, selection, accent, and warnings. Follow the device's light/dark preference. Keep status meaning readable without color alone.
+Use the production custom properties for text, muted text, backgrounds, panels, lines, selection, accent, and warnings. Follow the device's light/dark preference until the user chooses a mode with the sun/moon toggle. Remember that choice in the browser, including on the login screen. Keep status meaning readable without color alone.
 
 ## Composer
 

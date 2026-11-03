@@ -11,6 +11,7 @@ A phone connects with a device token, remembers the login after reopening, and c
 - `access-reopen`: open another tab without re-entering the token.
 - `access-logout`: clear authentication across tabs and reloads.
 - `access-invalid`: retain bad credentials and drafts, show a re-pair action, and retry without silently signing out.
+- `access-theme`: switch light/dark mode from the sun/moon button on login or beside Sign out. The device preference is the default; a manual choice persists across tabs, reloads, and sign out.
 
 ## How to get to it (user POV)
 
@@ -32,6 +33,7 @@ Preconditions: fresh owned fixture, Doctor passed, new browser context. Start at
 - **Sign out.** Open another page in the same context at `/`, wait for connection, then `await reopened.getByRole('button', { name: 'Sign out' }).click()`. Require both tabs' `#login` to be visible, `localStorage.getItem('pi-remote-token')` to be null, and login to remain visible after reload.
 - **Invalid.** In a fresh context, open `http://127.0.0.1:8799/#token=invalid-token`. Require `#access-message` to read `This login is no longer valid. Login expired, pair again`, the token to remain saved, and a visible `Pair again` action. That action must expose the code form without deleting the saved login.
 - **Code and reconnect.** Run `PI_REMOTE_TEST_PORT=8811 npm run test:browser -- test/browser/pairing.spec.mjs test/browser/reconnect.spec.mjs --trace on` on a free port. Pairing uses the real host and browser cryptography. The expiry case waits 60 seconds on host time. Reconnect specs include UI-only routed WebSockets.
+- **Theme.** Run `npm run test:browser -- test/browser/theme.spec.mjs --trace on` on a free fixture port. It checks both device defaults, manual overrides, keyboard activation, browser chrome color, small-phone/desktop layouts, reopening, cross-tab updates, and sign-out persistence through the real host with simulated bridge agents.
 - **Regression.** Run `PI_REMOTE_TEST_PORT=8811 npm run test:browser -- test/browser/auth.spec.mjs test/browser/e2e.spec.mjs --trace on` on a free port. The Home Screen cases forward a simulated non-loopback HTTPS origin to the real fixture and cover saved token-only links, pasted complete links, reopening, fragment-only recovery, and key/token isolation. This is mobile Chromium coverage, not a physical iPhone installation test. The legacy existing-tab case sets session storage to model an older client. Treat that case as compatibility testing, not a user login proof.
 
 ## Gotchas

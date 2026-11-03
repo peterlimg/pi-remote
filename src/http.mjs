@@ -29,6 +29,7 @@ const files = new Map([
   ['/session-icons-prototype.js', ['session-icons-prototype.js', 'text/javascript; charset=utf-8']],
   ['/protocol.js', ['protocol.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/theme.js', ['theme.js', 'text/javascript; charset=utf-8']],
   ['/images.js', ['images.js', 'text/javascript; charset=utf-8']],
   ['/videos.js', ['videos.js', 'text/javascript; charset=utf-8']],
   ['/e2e.js', ['e2e.js', 'text/javascript; charset=utf-8']],

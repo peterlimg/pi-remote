@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#100d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#fafaf8">
+  <script src="/theme.js"></script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Pi Remote</title>
   <link rel="manifest" href="/manifest.webmanifest">
@@ -39,6 +39,7 @@
         <path fill="#F1BE58" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"/>
       </svg>
       <div><h1>Pi Remote</h1><p>Connect to Pi on your computer.</p></div>
+      <button type="button" class="quiet theme-toggle" aria-label="Dark mode" aria-pressed="false" title="Switch to dark mode"><svg class="theme-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>
     </header>
     <form id="pair-form">
       <div class="pair-instructions">
@@ -94,7 +95,7 @@
   </dialog>
   <div id="app" class="shell" hidden>
     <aside id="sidebar">
-      <header class="brand"><h2>Sessions</h2><p id="connection" role="status" hidden>Connecting…</p><button id="logout" class="quiet">Sign out</button></header>
+      <header class="brand"><h2>Sessions</h2><p id="connection" role="status" hidden>Connecting…</p><button type="button" class="quiet theme-toggle" aria-label="Dark mode" aria-pressed="false" title="Switch to dark mode"><svg class="theme-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><button id="logout" class="quiet">Sign out</button></header>
       <nav id="sessions" aria-label="Pi sessions"></nav>
       <div id="recent-filter-menu" popover role="dialog" aria-label="Filter recent sessions">
         <p>Session status</p>
