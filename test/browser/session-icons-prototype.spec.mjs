@@ -130,14 +130,15 @@ test('mixed character family preserves original artwork, colours and stable assi
   expect(errors).toEqual([]); expect(sockets).toEqual([]);
 });
 
-test('personalities have distinct multi-part loops and preserve original motion', async ({ page, browserName }, testInfo) => {
+test('all characters have expressive multi-part loops and preserve original motion', async ({ page, browserName }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
   await page.goto(`${route}?variant=leading&icons=more`);
-  const lineup = page.locator('#characters'), personalities = lineup.locator('.personality-bot');
+  const lineup = page.locator('#characters'), personalities = lineup.locator('.personality-bot'), characters = lineup.locator('.bot');
   await expect(personalities).toHaveCount(18);
+  await expect(characters).toHaveCount(23);
   const parts = { pip: '.character-antenna', sprout: '.character-leaf-left', bun: '.character-ear', mochi: '.bot-look', pebble: '.character-orbit', wisp: '.character-tail', miso: '.character-cat-tail', puff: '.character-cloud-puff', moss: '.character-frog-foot', jelly: '.character-tentacle', nim: '.character-wing', zig: '.character-zig-foot', stella: '.character-stardust', luna: '.character-moon-mote', sol: '.character-sun-rays', orbit: '.character-planet-ring', comet: '.character-comet-tail', vega: '.character-vega-motes' };
-  const partAnimations = { pip: 'character-aerial', sprout: 'character-leaf', bun: 'character-ear', mochi: 'character-look', pebble: 'bot-turn', wisp: 'character-tail', miso: 'character-swish', puff: 'character-billow', moss: 'character-kick', jelly: 'character-tentacle', nim: 'character-wing', zig: 'character-step', stella: 'character-stardust', luna: 'character-moon-mote', sol: 'bot-turn', orbit: 'character-ring-tilt', comet: 'character-comet-stream', vega: 'character-vega-motes' };
+  const partAnimations = { pip: 'character-aerial', sprout: 'character-leaf', bun: 'character-ear', mochi: 'character-look', pebble: 'character-pebble-orbit', wisp: 'character-tail', miso: 'character-swish', puff: 'character-billow', moss: 'character-kick', jelly: 'character-tentacle', nim: 'character-wing', zig: 'character-step', stella: 'character-stardust', luna: 'character-moon-mote', sol: 'character-solar-rays', orbit: 'character-ring-tilt', comet: 'character-comet-stream', vega: 'character-vega-motes' };
   for (const [kind, part] of Object.entries(parts)) {
     const bot = lineup.locator(`[data-kind=${kind}]`);
     await expect(bot).toHaveAttribute('data-mood', 'working');
@@ -147,17 +148,21 @@ test('personalities have distinct multi-part loops and preserve original motion'
   }
   for (const [kind, part, animation] of [['idea', '.bot-bulb', 'bot-flicker'], ['fix', '.bot-antenna', 'bot-twitch'], ['build', '.bot-hammer', 'bot-hammer'], ['notes', '.bot-pencil', 'bot-write'], ['ship', '.bot-flame', 'bot-flame']]) {
     await expect(lineup.locator(`[data-kind=${kind}] ${part}`).first()).toHaveCSS('animation-name', animation);
+    await expect(lineup.locator(`[data-kind=${kind}] > svg`)).toHaveCSS('animation-name', `character-${kind}-gesture`);
   }
   await expectOriginalArtwork(page);
   const seen = new Map();
   await expect.poll(async () => {
-    const poses = await personalities.evaluateAll((nodes, parts) => nodes.flatMap(node => ['.bot-figure', parts[node.dataset.kind]].map((selector, index) => [node.dataset.kind + index, getComputedStyle(node.querySelector(selector)).transform])), parts);
+    const poses = await characters.evaluateAll((nodes, parts) => nodes.flatMap(node => {
+      const selectors = parts[node.dataset.kind] ? ['.bot-figure', parts[node.dataset.kind]] : ['svg'];
+      return selectors.map((selector, index) => [node.dataset.kind + index, getComputedStyle(node.querySelector(selector)).transform]);
+    }), parts);
     for (const [key, transform] of poses) {
       if (!seen.has(key)) seen.set(key, new Set());
       seen.get(key).add(transform);
     }
-    return seen.size === 36 && [...seen.values()].every(values => values.size >= 3);
-  }, { timeout: 6000, intervals: [50, 100, 150], message: 'Every new body and its follow-through part should actually move' }).toBe(true);
+    return seen.size === 41 && [...seen.values()].every(values => values.size >= 3);
+  }, { timeout: 6000, intervals: [50, 100, 150], message: 'All 23 characters and the 18 personality follow-through parts should actually move' }).toBe(true);
   await testInfo.attach('observed-motion', { body: JSON.stringify({ browserName, poses: Object.fromEntries([...seen].map(([key, values]) => [key, [...values]])) }), contentType: 'application/json' });
 
   const pip = lineup.locator('[data-kind=pip] .bot-figure');
@@ -182,7 +187,7 @@ test('personalities have distinct multi-part loops and preserve original motion'
   await expect(pip).toHaveCSS('animation-play-state', 'running');
   await page.getByRole('button', { name: 'Pause motion', exact: true }).click();
   await lineup.scrollIntoViewIfNeeded();
-  expect(await personalities.locator('*').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).animationPlayState === 'paused'))).toBe(true);
+  expect(await characters.locator('*').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).animationPlayState === 'paused'))).toBe(true);
   await page.getByRole('button', { name: 'Resume motion', exact: true }).click();
   await lineup.scrollIntoViewIfNeeded();
   await expect(pip).toHaveCSS('animation-play-state', 'running');

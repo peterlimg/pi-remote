@@ -278,6 +278,20 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     await expect(button.locator('.bot')).toHaveClass(/personality-bot/);
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-name', 'character-' + motion);
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-play-state', 'running');
+    if (motion === 'luna') {
+      const figure = button.locator('.bot-figure'), poses = [];
+      await expect(figure).toHaveCSS('animation-duration', '3s');
+      await expect.poll(async () => {
+        poses.push(await figure.evaluate(node => {
+          const matrix = new DOMMatrix(getComputedStyle(node).transform);
+          return { angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI, y: matrix.f };
+        }));
+        return Math.max(...poses.map(pose => pose.angle)) - Math.min(...poses.map(pose => pose.angle));
+      }, { timeout: 5000, intervals: [50], message: 'Luna rocks visibly instead of barely drifting' }).toBeGreaterThan(20);
+      expect(Math.max(...poses.map(pose => pose.y)) - Math.min(...poses.map(pose => pose.y))).toBeGreaterThan(3);
+      await testInfo.attach('luna-working-poses', { body: JSON.stringify(poses), contentType: 'application/json' });
+      await page.screenshot({ path: testInfo.outputPath('luna-picker-working.png') });
+    }
   }
   await backToList();
   await expect(normal.getByRole('img', { name: 'Vega', exact: true })).toBeVisible();
