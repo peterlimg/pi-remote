@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Codemode studies · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/codemode-prototype.css">
+  <link rel="stylesheet" href="/codemode-sol-prototype.css">
+  <link rel="stylesheet" href="/codemode-astra-prototype.css">
+  <script type="module" src="/codemode-prototype.js"></script>
+</head>
+<body>
+  <!-- Throwaway: independent Sol 6.1 Max and Astra 6 High designs, selected with ?variant=sol|astra. No session connection or execution. -->
+  <div class="study-shell">
+    <header class="study-header">
+      <a class="study-back" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
+      <div class="study-title"><h1>Prototype animation ideas</h1><p>pi-remote</p></div>
+      <button class="study-about" type="button" aria-label="About these prototypes" popovertarget="study-info"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+    </header>
+    <div class="study-tools">
+      <span>Prototype · Sample data</span>
+      <label class="sr-only" for="sample-state">Sample run state</label>
+      <select id="sample-state">
+        <option value="done">Completed</option>
+        <option value="working">Running</option>
+        <option value="error">Needs attention</option>
+        <option value="empty">No calls yet</option>
+      </select>
+    </div>
+    <main id="study-thread" aria-label="Sample conversation" tabindex="0"></main>
+    <div class="sample-composer" inert aria-label="Sample composer, not connected">
+      <form id="composer" class="composer" hidden>
+        <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
+        <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
+        <dialog id="settings-dialog" class="settings-dialog" aria-label="Model settings" tabindex="-1" autofocus>
+        <section id="settings-picker" class="command-menu settings-picker" aria-label="Choose a model" hidden>
+          <div class="picker-header">
+            <h2 id="picker-title" hidden>Reasoning effort</h2>
+            <label class="sr-only" for="model-search">Search models</label>
+            <input id="model-search" type="search" placeholder="Search models or providers" autocomplete="off" spellcheck="false">
+            <button id="picker-cancel" type="button" class="quiet" aria-label="Close model picker"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+          </div>
+          <div id="picker-options"></div>
+          <footer><p id="picker-help" class="hint" role="status"></p><button id="model-retry" type="button" class="secondary" hidden>Try again</button></footer>
+        </section>
+        </dialog>
+        <label class="sr-only" for="prompt">Message</label>
+        <div id="command-menu" class="command-menu" hidden>
+          <div id="command-options" role="listbox" aria-label="Pi commands"></div>
+          <p id="command-help" class="hint" role="status"></p>
+        </div>
+        <p id="composer-send-status" class="hint" role="status" hidden></p>
+        <div id="attachments" class="attachments" aria-label="Attached images and videos" hidden></div>
+        <textarea id="prompt" rows="1" placeholder="Type / for commands" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"></textarea>
+        <div class="composer-toolbar">
+          <button id="attach" type="button" class="quiet" aria-label="Add attachments" title="Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each. Original videos are uploaded to your computer."><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><input id="image-files" type="file" aria-label="Attach images and videos" accept="image/jpeg,image/png,image/gif,image/webp,video/*" multiple hidden>
+          <div id="composer-connection" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span id="composer-connection-text">Connecting</span></div>
+          <div class="composer-settings">
+            <button id="model" class="setting-control" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-dialog" hidden><span id="model-name"></span></button>
+            <button id="reasoning-control" class="setting-control" type="button" aria-label="Reasoning effort" title="Change reasoning effort" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-dialog" hidden><span id="reasoning-value"></span></button>
+          </div>
+          <svg id="fast-mode" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Fast mode enabled" hidden><title>Fast mode enabled</title><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg>
+          <div class="composer-actions">
+            <button id="usage-meter" type="button" class="quiet" aria-label="Usage" title="Context usage" aria-expanded="false" aria-controls="settings-picker" hidden><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="usage-track" cx="12" cy="12" r="9"/><circle id="usage-arc" cx="12" cy="12" r="9" pathLength="100" stroke="currentColor" stroke-dasharray="0 100" transform="rotate(-90 12 12)"/></svg></button>
+            <button id="commands" type="button" class="quiet" aria-label="Open slash commands" title="Open slash commands" aria-haspopup="listbox" aria-controls="command-options" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m15 5-6 14"/></svg></button>
+            <button id="abort" type="button" class="quiet" aria-label="Abort turn" title="Abort this turn. Queued messages may still run."><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+            <button id="send" type="submit" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          </div>
+        </div>
+        <button id="resume" type="button" class="secondary" hidden>Resume session</button>
+        <span id="status" class="sr-only" role="status"></span>
+        <p id="composer-hint" class="hint" hidden></p>
+      </form>
+
+    </div>
+    <p class="study-caption" id="variant-description"></p>
+  </div>
+  <nav class="study-switcher" aria-label="Compare codemode prototypes">
+    <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+    <span id="variant-label" aria-live="polite"></span>
+    <button id="next-variant" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+  </nav>
+  <div id="study-info" popover>
+    <h2>Codemode UI studies</h2>
+    <p>Compare independent designs by Sol 6.1 Max and Astra 6 High using the same five sample runs. Nothing connects to a session or executes code.</p>
+    <p>Run names and nested tool steps are illustrative. The current app has codemode scripts and output, not a structured stream of inner tool calls. Reliable nested progress would need that data.</p>
+    <p>The composer is the existing Pi Remote composer, disabled for this study. Use the arrows below to compare layouts.</p>
+    <button type="button" popovertarget="study-info" popovertargetaction="hide">Got it</button>
+  </div>
+  <noscript>Enable JavaScript to compare these sample layouts.</noscript>
+</body>
+</html>
