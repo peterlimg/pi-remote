@@ -516,6 +516,39 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
+.codemode-activity { margin-block: 24px; border-block: 1px solid var(--line); }
+.codemode-activity > summary { align-items: flex-start; gap: 10px; padding-block: 14px; }
+.codemode-activity > summary::after { margin-top: 5px; }
+.codemode-mark { display: grid; place-items: center; flex-shrink: 0; width: 20px; padding-top: 1px; color: var(--accent); }
+.codemode-title { color: var(--text); font: 500 15px/1.45 var(--sans); overflow-wrap: anywhere; }
+.codemode-activity > summary .codemode-title { font-weight: 600; }
+.codemode-activity .tool-activity-text { flex: 1; gap: 3px; }
+.codemode-activity .tool-activity-label { white-space: normal; font-size: 12px; }
+.codemode-activity .tool-activity-time { margin-left: 0; font-size: 12px; }
+.codemode-activity[data-status=error] > summary .tool-activity-label { color: var(--error); }
+.codemode-activity[open] > summary :is(.tool-activity-line, .tool-activity-progress) { display: none; }
+.codemode-tool { position: relative; margin: 0; background: transparent; color: var(--text); font-family: var(--sans); }
+.codemode-tool:not(:last-child)::before { content: ''; position: absolute; top: 30px; bottom: -15px; left: 9.5px; border-left: 1px solid var(--line); pointer-events: none; }
+.codemode-tool > summary { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 12px; align-items: start; gap: 10px; min-height: 66px; padding: 10px 0; list-style: none; }
+.codemode-tool > summary::-webkit-details-marker, .codemode-script > summary::-webkit-details-marker { display: none; }
+.codemode-tool > summary::after, .codemode-script > summary::after { content: ''; width: 7px; height: 7px; margin-top: 5px; border-top: 1.5px solid var(--muted); border-right: 1.5px solid var(--muted); transform: rotate(45deg); }
+.codemode-tool > summary::after { grid-column: 4; }
+.codemode-tool[open] > summary::after, .codemode-script[open] > summary::after { transform: rotate(135deg); }
+.codemode-marker { position: relative; display: grid; place-items: center; width: 20px; height: 24px; background: var(--bg); color: var(--accent); }
+.codemode-tool .tool-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; width: auto; }
+.codemode-meta { color: var(--muted); font: 12px/1.5 var(--sans); }
+.codemode-meta code { font: 11.5px/1.5 var(--mono); }
+.codemode-tool .tool-status { padding-top: 2px; color: var(--muted); font: 12px/1.5 var(--mono); }
+.codemode-tool[data-status=working] :is(.codemode-marker, .codemode-state) { color: var(--warning); }
+.codemode-tool[data-status=pending] .codemode-marker { color: var(--muted); }
+.codemode-tool[data-status=error] :is(.codemode-marker, .codemode-state) { color: var(--error); }
+.codemode-tool > :is(.codemode-output-heading, .tool-output, .codemode-script, .hint) { position: relative; margin: 0 0 0 30px; background: var(--panel); }
+.codemode-output-heading { padding: 12px 12px 0; border-radius: 8px 8px 0 0; color: var(--text); font: 600 13px/1.5 var(--sans); }
+.codemode-tool > :last-child:not(summary) { margin-bottom: 14px; border-radius: 0 0 8px 8px; }
+.codemode-script > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 10px 12px; border-top: 1px solid var(--line); color: var(--muted); font: 13px/1.5 var(--sans); list-style: none; }
+.codemode-script .tool-input { border: 0; }
+.codemode-tool .hint { padding-block: 8px; }
+@media (hover: hover) { .codemode-activity > summary:hover, .codemode-tool > summary:hover { background: var(--panel); } }
 .composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
 #agent-activity { display: flex; align-items: center; gap: 10px; max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-text { min-width: 0; }

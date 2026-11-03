@@ -14,6 +14,10 @@ Use the production custom properties for text, muted text, backgrounds, panels, 
 
 The production composer is an invariant in the coordinator study. Copy its exact markup and load the production stylesheet without overriding its subtree. Session identity and recipient information belong outside it. Attachments, drafts, model settings, and Stop belong to the selected session.
 
+## Codemode work log
+
+Codemode activity uses Sol's connected work-log layout. Show each run's status and recorded duration, reveal output before the script, and preserve disclosure state during streaming. A leading script comment supplies the run title; otherwise use a numbered JavaScript run. Do not infer executed inner tools or successful checks from source code.
+
 ## Coordinator study boundary
 
 The workspace exploration lives only at `/coordinator-prototype.html`. Its route-specific direction contract is `.impeccable/surfaces/web-coordinator-prototype-html.md`. It uses bounded worker windows and a separate receiving tray. Opening a worker retains an explicit return to the coordinator. The study's data is simulated and does not establish production capabilities or design acceptance.

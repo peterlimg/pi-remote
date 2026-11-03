@@ -1423,17 +1423,56 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     detail.dataset.toolId = id; detail.dataset.status = status;
     detail.dataset.disclosureId = 'tool:' + id;
     detail.open = expanded.get(detail.dataset.disclosureId) ?? false;
-    const toolName = name || live?.name || 'Tool';
+    const toolName = name || live?.name || 'Tool', codemode = toolName === 'codemode';
+    if (activity && activity.codemode !== codemode) activity = undefined;
     if (!activity) {
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
       node.dataset.disclosureId = 'activity:' + id; node.dataset.scrollKey = node.dataset.disclosureId;
-      node.open = expanded.get(node.dataset.disclosureId) ?? false;
+      node.open = expanded.get(node.dataset.disclosureId) ?? codemode;
+      if (codemode) node.classList.add('codemode-activity');
       node.append(summary); fragment.append(node);
-      activity = { node, summary, tools: [] }; activityGroups.push(activity);
+      activity = { node, summary, tools: [], codemode }; activityGroups.push(activity);
     }
     const entry = { name: toolName, status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp }; activity.tools.push(entry);
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
+    // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
+    const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
+    entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
+    if (codemode) {
+      const code = typeof args?.code === 'string' ? args.code : typeof args === 'string' ? args : undefined;
+      const first = code?.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('// @options:'));
+      const title = first?.startsWith('// ') && first.slice(3).trim() ? first.slice(3).trim().slice(0, 120) : `JavaScript run ${activity.tools.length}`;
+      const statusText = ({ done: 'Complete', working: 'Running', pending: 'Pending', error: 'Failed' })[status] || status;
+      entry.line = 'codemode · ' + title;
+      detail.classList.add('codemode-tool');
+      detail.open = expanded.get(detail.dataset.disclosureId) ?? ['working', 'error'].includes(status);
+      const summary = el('summary'), marker = el('span', undefined, 'codemode-marker');
+      marker.setAttribute('aria-hidden', 'true');
+      const path = status === 'done' ? '<path d="m5 12 4 4L19 6"/>' : status === 'error'
+        ? '<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>'
+        : '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
+      marker.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+      const heading = el('span', undefined, 'tool-heading'), meta = el('span', undefined, 'codemode-meta');
+      heading.append(el('span', title, 'codemode-title'));
+      meta.append(el('code', 'codemode'), el('span', ' · ' + statusText, 'codemode-state')); heading.append(meta);
+      summary.append(marker, heading);
+      if (timed) {
+        const time = el('span', formatToolDuration(durationMs), 'tool-status');
+        time.setAttribute('aria-label', 'Execution time: ' + time.textContent); summary.append(time);
+      }
+      detail.append(summary, el('p', 'Output', 'codemode-output-heading'));
+      if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : status === 'pending' ? 'Waiting to run…' : 'No output.'), 'tool-output'));
+      if (input) {
+        const script = el('details', undefined, 'codemode-script');
+        script.dataset.disclosureId = 'script:' + id;
+        script.open = expanded.get(script.dataset.disclosureId) ?? false;
+        script.append(el('summary', code === undefined ? 'Input' : 'Script'), el('pre', displayPaths(code ?? input), 'tool-input'));
+        detail.append(script);
+      }
+      if (result?.truncated) detail.append(el('p', 'Output shortened for mobile.', 'hint'));
+      activity.node.append(detail); return;
+    }
     let context = typeof args?.path === 'string' ? args.path : typeof args?.command === 'string' ? args.command : '';
     if (typeof args?.path === 'string') {
       const prefix = state.cwd?.replace(/[\\/]$/, '') + (state.cwd?.includes('\\') ? '\\' : '/');
@@ -1465,9 +1504,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     }
     statusLabel.hidden = status === 'done' && !timed;
     heading.append(statusLabel); summary.append(heading);
-    // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
-    const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
-    entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
     detail.append(summary);
     if (input) detail.append(el('pre', displayPaths(input), 'tool-input'));
     if (output || !result?.images?.length) detail.append(el('pre', output || (status === 'working' ? 'Running…' : 'No output.'), 'tool-output'));
@@ -1576,11 +1612,24 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     const running = group.tools.findLast(tool => tool.status === 'working' && tool.preview) || group.tools.findLast(tool => tool.status === 'working');
     const recent = running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
       ? group.tools.findLast(tool => ['done', 'error'].includes(tool.status)) : undefined);
-    if (recent) {
-      const context = (running ? '' : 'Last: ') + recent.line;
-      const text = el('span', undefined, 'tool-activity-text'), line = el('span', context, 'tool-activity-line');
-      line.title = context; text.append(label, line);
-      if (recent.preview && (running || recent.name !== 'read' || recent.status === 'error')) text.append(el('span', recent.preview, 'tool-activity-progress'));
+    if (group.codemode) {
+      label.textContent = [['done', 'complete'], ['working', 'running'], ['pending', 'pending'], ['error', 'failed']]
+        .map(([status, text]) => { const count = group.tools.filter(tool => tool.status === status).length; return count ? `${count} ${text}` : ''; }).filter(Boolean).join(' · ');
+      label.title = label.textContent;
+      group.node.dataset.status = group.tools.some(tool => tool.status === 'error') ? 'error' : running ? 'working' : group.tools.some(tool => tool.status === 'pending') ? 'pending' : 'done';
+      const mark = el('span', undefined, 'codemode-mark'); mark.setAttribute('aria-hidden', 'true');
+      mark.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/></svg>';
+      group.summary.append(mark);
+    }
+    if (recent || group.codemode) {
+      const text = el('span', undefined, 'tool-activity-text');
+      if (group.codemode) text.append(el('span', 'Codemode', 'codemode-title'));
+      text.append(label);
+      if (recent) {
+        const context = (running ? '' : 'Last: ') + recent.line, line = el('span', context, 'tool-activity-line');
+        line.title = context; text.append(line);
+        if (recent.preview && (running || recent.name !== 'read' || recent.status === 'error')) text.append(el('span', recent.preview, 'tool-activity-progress'));
+      }
       group.summary.append(text);
     } else group.summary.append(label);
     let elapsed;
@@ -1595,11 +1644,13 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (Number.isFinite(elapsed)) {
       const time = el('span', formatToolDuration(elapsed), 'tool-activity-time');
       time.setAttribute('aria-label', 'Elapsed time: ' + time.textContent);
-      time.title = `Elapsed time: ${elapsed} ms`; group.summary.append(time);
+      time.title = `Elapsed time: ${elapsed} ms`;
+      if (group.codemode) { time.textContent += ' elapsed'; group.summary.querySelector('.tool-activity-text').append(time); }
+      else group.summary.append(time);
     }
     for (const [status, text] of [['pending', 'pending']]) {
       const count = group.tools.filter(tool => tool.status === status).length;
-      if (count) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
+      if (count && !group.codemode) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
   updateActivity();
