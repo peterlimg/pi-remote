@@ -20,4 +20,4 @@ Codemode activity uses Sol's connected work-log layout. Show each run's status a
 
 ## Coordinator study boundary
 
-The workspace exploration lives only at `/coordinator-prototype.html`. Its route-specific direction contract is `.impeccable/surfaces/web-coordinator-prototype-html.md`. It uses bounded worker windows and a separate receiving tray. Opening a worker retains an explicit return to the coordinator. The study's data is simulated and does not establish production capabilities or design acceptance.
+The workspace exploration lives only at `/coordinator-prototype.html`. Its route-specific direction contract is `.impeccable/surfaces/web-coordinator-prototype-html.md`. The current study compares a plain worker list, inline details, and a coordinator/worker session tree above the composer. Opening a worker retains an explicit return to the coordinator. Earlier worker-window studies remain in Git. The study's data is simulated and does not establish production capabilities or design acceptance.

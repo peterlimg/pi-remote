@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node bin/pi-remote.mjs serve",
+    "prototype:workers": "PI_REMOTE_TEST_PORT=8815 node test/browser-server.mjs",
     "relay": "node bin/pi-remote.mjs relay",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "check": "tsc --noEmit && node scripts/check.mjs",
