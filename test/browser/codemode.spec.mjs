@@ -170,6 +170,10 @@ test('compact work log fits phone, narrow and desktop views without shrinking to
       }
     }
     expect((await group.boundingBox()).height).toBeLessThanOrEqual(220);
+    const iconBounds = await group.locator('.codemode-mark path').evaluate(path => {
+      const { y, height } = path.getBBox(); return { y, height };
+    });
+    expect(iconBounds).toEqual({ y: 6, height: 12 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await capture(page, `work-log-${width}-${scheme}`);
