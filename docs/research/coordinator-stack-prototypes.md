@@ -10,7 +10,9 @@ Open `/coordinator-prototype.html?variant=A` and use the prototype arrows to com
 | B · Inline details | Stable worker list plus a question/result area | Inspect first, then enter the worker |
 | C · Session tree | Coordinator parent and indented worker children | Switch recipients without losing ownership |
 
-All variants keep the production composer unchanged, use the same sample conversations and states, and preserve session-specific drafts and sample attachments. The bottom switcher changes the URL and supports arrow keys outside input fields. The header menu explains the study and exposes the sample state.
+All variants keep the production composer unchanged, use the same sample conversations and states, and preserve session-specific drafts and sample attachments. Tap the Workers row to collapse or expand any stack. The collapsed row keeps working, question, and result counts visible. Collapse does not stop workers, change recipients, or discard drafts and attachments. The choice lasts while switching variants or sessions, and resets on reload.
+
+The bottom switcher changes the URL and supports arrow keys outside input fields. The header menu explains the study and exposes the sample state.
 
 This route has no storage, transport, model calls, real uploads, or real Stop. Sample actions do not prove orchestration behavior. The live UI is unchanged by the study, and no variant is an accepted design.
 

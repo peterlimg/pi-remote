@@ -11,9 +11,11 @@ Operate mode. Isolated, throwaway UI study using sample data. No production conv
 
 Compare three structures immediately above the unchanged production composer:
 
-- A: a full-width, always-visible worker list with direct conversation navigation.
-- B: all worker names remain listed, with an inline question or result below the rows.
-- C: a coordinator/worker session tree that remains visible when changing recipients.
+- A: a full-width worker list with direct conversation navigation.
+- B: all expanded worker names remain listed, with an inline question or result below the rows.
+- C: a coordinator/worker session tree available when changing recipients.
+
+Each stack collapses into a 44px Workers row with working, question, and result counts. Native disclosure controls support touch and keyboard. Collapsing changes only navigation visibility, not the selected recipient, drafts, attachments, or worker activity. Keep the disclosure choice while switching variants or sessions in the page, without persisting it.
 
 Use Pi Remote's typography, themes, hairlines, and touch targets. No worker cards, tinted tiles, pill containers, or clipped one-line name strips. Preserve the exact production composer markup and load its stylesheet without prototype overrides.
 

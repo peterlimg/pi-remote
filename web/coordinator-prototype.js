@@ -31,7 +31,7 @@ let preview = innerHeight >= 600 ? 'recovery' : undefined, attached = false;
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 const feedback = text => { $('sample-feedback').textContent = text; surfaceState(); };
 function surfaceState() {
-  $('prototype-state').textContent = JSON.stringify({ variant, selected, preview, sessions }, null, 2);
+  $('prototype-state').textContent = JSON.stringify({ variant, selected, preview, expanded: $('worker-stack').open, sessions }, null, 2);
 }
 function updateURL() {
   const url = new URL(location.href); url.searchParams.set('study', 'stacks'); url.searchParams.set('variant', variant); url.searchParams.delete('scene');
@@ -56,18 +56,13 @@ function row(id, mode = 'open') {
   arrow.innerHTML = '<path d="m9 5 7 7-7 7"/>'; button.append(arrow);
   return button;
 }
-function heading(text, meta) {
-  const node = el('div', undefined, 'roster-heading'); node.append(el('h2', text), el('span', meta)); return node;
-}
 function VariantA() {
   const node = el('div', undefined, 'plain-stack');
-  node.append(heading('Workers', '3 sessions'));
   for (const id of workers) node.append(row(id));
   return node;
 }
 function VariantB() {
   const node = el('div', undefined, 'details-stack');
-  node.append(heading('Workers', 'Tap to inspect'));
   for (const id of workers) node.append(row(id, selected === 'coordinator' ? 'preview' : 'open'));
   if (preview && selected === 'coordinator') {
     const ui = sessions[preview], detail = el('section', undefined, 'stack-detail');
@@ -90,7 +85,13 @@ function VariantC() {
   node.append(children); return node;
 }
 function renderDock() {
-  $('stack-dock').replaceChildren(({ A: VariantA, B: VariantB, C: VariantC })[variant]());
+  $('worker-stack-content').replaceChildren(({ A: VariantA, B: VariantB, C: VariantC })[variant]());
+  const summary = [];
+  for (const [state, label] of [['working', 'working'], ['waiting', 'needs answer'], ['reported', 'ready']]) {
+    const count = workers.filter(id => sessions[id].state === state).length;
+    if (count) summary.push(count + ' ' + label);
+  }
+  $('worker-stack-summary').textContent = summary.join(' · ') || 'No active work';
   $('app').dataset.variant = variant;
   $('variant-label').textContent = 'Prototype ' + variant + ' · ' + variants[variant].name;
   $('variant-description').textContent = variants[variant].description;
@@ -133,6 +134,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('[data-session]');
   if (button) selectSession(button.dataset.session, button.hasAttribute('data-reply'));
 });
+$('worker-stack').ontoggle = surfaceState;
 $('study-back').onclick = () => selected === 'coordinator' ? location.assign('/') : selectSession('coordinator');
 $('variant-prev').onclick = () => switchVariant(-1); $('variant-next').onclick = () => switchVariant(1);
 document.addEventListener('keydown', event => {

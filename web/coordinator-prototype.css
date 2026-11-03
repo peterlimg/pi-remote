@@ -14,9 +14,13 @@
 .stack-study .message-text p:last-child { margin-bottom: 0; }
 .stack-route { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
 .stack-dock { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); max-height: min(36dvh, 280px); margin: 0 auto 8px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); }
-.roster-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; }
-.roster-heading h2 { margin: 0; font-size: 13px; font-weight: 500; }
-.roster-heading span { color: var(--muted); font-size: 11px; font-weight: 400; }
+#worker-stack > summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; background: var(--bg); }
+#worker-stack > summary::-webkit-details-marker { display: none; }
+#worker-stack > summary:focus-visible { outline-offset: -2px; }
+.stack-summary-title { flex-shrink: 0; font-size: 13px; font-weight: 500; }
+#worker-stack-summary { margin-left: auto; color: var(--muted); font-size: 11px; text-align: right; }
+#worker-stack > summary > svg { flex-shrink: 0; color: var(--muted); }
+#worker-stack[open] > summary > svg { transform: rotate(90deg); }
 .stack-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-weight: 400; }
 .stack-row + .stack-row { border-top: 1px solid var(--line); }
 .stack-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; }
@@ -58,7 +62,6 @@
 }
 @media (max-height: 600px) {
   .stack-dock { max-height: 156px; }
-  .roster-heading { padding-top: 4px; }
 }
 @media (hover: hover) {
   .stack-row:hover .stack-name { text-decoration: underline; text-underline-offset: 4px; }

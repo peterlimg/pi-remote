@@ -69,7 +69,7 @@ async function fits(page) {
     const rect = id => { const r = document.getElementById(id).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
     return { overflow: document.documentElement.scrollWidth > innerWidth, scroll: scrollY, height: innerHeight,
       transcript: rect('transcript'), dock: rect('stack-dock'), composer: rect('composer'),
-      controls: [...document.querySelectorAll('.stack-row, .prototype-switcher button')].map(node => {
+      controls: [...document.querySelectorAll('#worker-stack > summary, .stack-row, .prototype-switcher button')].filter(node => node.checkVisibility()).map(node => {
         const r = node.getBoundingClientRect(), style = getComputedStyle(node);
         return { width: r.width, height: r.height, background: style.backgroundColor, radius: style.borderRadius, row: node.classList.contains('stack-row') };
       }) };
@@ -151,6 +151,40 @@ test('sample worker navigation keeps drafts, attachments and Stop scoped without
   isolated();
 });
 
+test('collapsing each stack preserves status, recipient, drafts and attachments', async ({ page }) => {
+  const isolated = await observe(page), disclosure = page.locator('#worker-stack'), toggle = disclosure.locator('summary');
+  for (const variant of ['A', 'B', 'C']) {
+    await page.goto(route + '?variant=' + variant);
+    await page.locator('#prompt').fill('Keep my coordinator draft.');
+    const expandedHeight = await page.locator('#transcript').evaluate(node => node.clientHeight);
+    await toggle.click();
+    await expect(disclosure).toHaveJSProperty('open', false);
+    await expect(page.locator('#stack-dock .stack-row:visible')).toHaveCount(0);
+    await expect(toggle).toContainText('1 working · 1 needs answer · 1 ready');
+    await expect.poll(() => page.locator('#transcript').evaluate(node => node.clientHeight)).toBeGreaterThan(expandedHeight + 88);
+    await page.getByRole('button', { name: 'Next prototype' }).click();
+    await expect(disclosure).toHaveJSProperty('open', false);
+    await expect(page.locator('#title')).toHaveText('Mobile review');
+    await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
+    await toggle.focus(); await page.keyboard.press('Space');
+    await expect(disclosure).toHaveJSProperty('open', true);
+    await expect(toggle).toBeFocused();
+  }
+  await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
+  await page.getByRole('button', { name: 'Open Messaging, Working', exact: true }).click();
+  await toggle.click(); await page.locator('#abort').click();
+  await expect(page.locator('#title')).toHaveText('Messaging');
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await expect(toggle).toContainText('1 needs answer · 1 ready');
+  await expect(toggle).not.toContainText('working');
+  await page.getByRole('button', { name: 'Return to Mobile review coordinator' }).click();
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
+  await expect(page.locator('#attachments img')).toBeVisible();
+  await expect(page.locator('#prototype-state')).toContainText('"expanded": false');
+  isolated();
+});
+
 test('stack variants preserve exact production composer source and appearance without prototype CSS overrides', async ({ page, context }) => {
   test.setTimeout(60000);
   const composer = source => source.match(/<form id="composer"[\s\S]*?<\/form>/)[0];
@@ -190,6 +224,10 @@ test('stack prototypes fit phone, narrow, short and desktop views in one capture
         await page.setViewportSize(view); await page.emulateMedia({ colorScheme: theme });
         await page.goto(route + '?variant=' + variant); await fits(page);
         if (view.name === 'phone' || theme === 'light') await page.screenshot({ path: join(evidence, variant + '-' + view.name + '-' + theme + '.png'), fullPage: true });
+        await page.locator('#worker-stack > summary').click();
+        await expect(page.locator('#worker-stack')).toHaveJSProperty('open', false);
+        await fits(page);
+        if (view.name === 'phone' || theme === 'light') await page.screenshot({ path: join(evidence, variant + '-' + view.name + '-' + theme + '-collapsed.png'), fullPage: true });
       }
     }
   }
