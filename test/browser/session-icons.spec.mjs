@@ -204,6 +204,8 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     expect((await page.locator('.session-details').boundingBox()).height).toBeLessThan(160);
     await page.getByRole('button', { name: /^Session icon / }).click();
     await expect(picker).toBeVisible();
+    const header = await page.locator('.conversation-header').boundingBox(), overlay = await picker.boundingBox();
+    expect(overlay.y, 'Icon picker leaves the current session header uncovered').toBeGreaterThanOrEqual(header.y + header.height);
     await expect(page.getByLabel('Emoji', { exact: true })).toBeHidden();
     expect(await page.evaluate(() => document.activeElement.tagName)).not.toBe('INPUT');
   };
@@ -212,10 +214,11 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     await page.getByRole('button', { name: 'Show sessions' }).click();
   };
   await openSettings(saved);
-  await page.screenshot({ path: testInfo.outputPath('icon-picker-mobile.png') });
-  // A centred card of bots only: the current one is pressed and plays its job.
-  const card = await page.locator('.icon-sheet').boundingBox(), viewport = page.viewportSize();
-  expect(Math.abs(card.y + card.height / 2 - viewport.height / 2)).toBeLessThan(2);
+  expect(await picker.evaluate(node => getComputedStyle(node, '::backdrop').backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  await page.screenshot({ path: testInfo.outputPath('icon-picker-mobile.png'), animations: 'disabled' });
+  // Centre the card below the session header; the current bot is pressed and plays its job.
+  const card = await page.locator('.icon-sheet').boundingBox(), overlay = await picker.boundingBox();
+  expect(Math.abs(card.y + card.height / 2 - overlay.y - overlay.height / 2)).toBeLessThan(2);
   await expect(picker.getByRole('button', { name: /Automatic|None/ })).toHaveCount(0);
   await expect(picker.getByRole('button', { name: 'Review', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(picker.locator('#session-kind-options > button:not([hidden])')).toHaveCount(24);
@@ -309,8 +312,10 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   await page.setViewportSize({ width: 320, height: 640 });
   expect(await page.locator('.icon-sheet').evaluate(node => {
     const box = node.getBoundingClientRect();
-    return box.x >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth;
+    const header = document.querySelector('.conversation-header').getBoundingClientRect();
+    return box.y >= header.bottom + 8 && box.x >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth;
   })).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('icon-picker-short-mobile-dark.png'), animations: 'disabled' });
   await page.mouse.click(10, 10); // Tap outside the sheet.
   await expect(picker).toBeHidden();
   await backToList();
