@@ -511,7 +511,6 @@ function logout() {
   localStorage.removeItem('pi-remote-seen'); seen = {}; localStorage.removeItem('pi-remote-pins'); pinnedProjects = [];
   projectList = undefined; renderProjects();
   $('session-icon-picker').close();
-  localStorage.removeItem('pi-remote-session-icons'); sessionIcons.clear();
   resetScrollback();
   drafts.clear(); cache.clear(); commandCatalog.clear(); modelLists.clear(); newSessionProfiles.clear(); usageSummaries.clear(); usageDetails.clear(); usageTotals.clear(); usageTurns.clear(); selected = undefined; selectedSummary = undefined; sessions = [];
   clearTimeout(searchTimer); $('search').value = ''; $('search-bar').classList.remove('open'); listLimit = 20; searchQuery = ''; listMatched = 0; listLoading = true; listError = '';
@@ -953,9 +952,7 @@ function botSvg(kind, mood, size, unread = mood === 'unread') {
   return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${back}<g class="bot-body">${body}</g><g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}</g>${badge}${zz}</svg>`;
 }
 const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'miso', 'puff', 'moss', 'jelly', 'nim', 'zig', 'stella', 'luna', 'sol', 'orbit', 'comet', 'vega'];
-// shortcut: defaults use this fixed catalogue; persist assignments before changing its order or size if existing sessions must not reshuffle.
-const defaultSessionCharacters = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'idea', 'fix', 'build', 'notes', 'ship'];
-const sessionCharacters = [...new Set([...defaultSessionCharacters, ...personalityKinds])];
+const sessionCharacters = [...new Set(['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'idea', 'fix', 'build', 'notes', 'ship', ...personalityKinds])];
 function sessionSeed(id = '') {
   let seed = 2166136261;
   for (let index = 0; index < id.length; index++) seed = Math.imul(seed ^ id.charCodeAt(index), 16777619);
@@ -982,14 +979,13 @@ function showSessionKind(icon, item, size = 28) {
   if (!kind || kind.emoji && (unread || !['idle', 'saved'].includes(item.status))) return icon;
   return dressKind(icon, kind, size, item.status, unread);
 }
-// Session IDs keep the same character across renames, reloads and devices, without storing a new preference.
-const autoKind = item => defaultSessionCharacters[sessionSeed(item.id) % defaultSessionCharacters.length];
 function sessionKind(item) {
-  // Older 'none' choices fall back to the session's default character.
-  const saved = sessionIcons.get(item.id), choice = saved?.type === 'none' ? undefined : saved;
-  if (!choice) {
-    const type = autoKind(item);
-    return { type, label: sessionKinds[type][0], id: item.id };
+  let choice = sessionIcons.get(item.id);
+  if (!choice || choice.type === 'none') {
+    // Save the first draw so rerenders and catalogue additions cannot reroll it.
+    choice = { type: sessionCharacters[Math.floor(Math.random() * sessionCharacters.length)] };
+    sessionIcons.set(item.id, choice);
+    localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
   }
   if (choice.type === 'custom' && choice.icon) return { type: 'custom', emoji: choice.icon, label: `Session icon: ${choice.icon}` };
   if (Object.hasOwn(sessionKinds, choice.type)) return { type: choice.type, label: sessionKinds[choice.type][0], id: item.id };
@@ -1033,9 +1029,7 @@ function renderSessionIconChoice() {
 }
 function saveSessionIcon(type, icon = '') {
   if (!selected) return;
-  const item = sessions.find(row => row.id === selected) || selectedSummary;
-  if (type !== 'custom' && item && type === autoKind(item)) sessionIcons.delete(selected);
-  else sessionIcons.set(selected, { type, icon });
+  sessionIcons.set(selected, { type, icon });
   localStorage.setItem('pi-remote-session-icons', JSON.stringify([...sessionIcons]));
   renderSessionIconChoice(); renderList();
 }

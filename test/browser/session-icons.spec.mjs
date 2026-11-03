@@ -28,7 +28,7 @@ test('approved characters have readable theme-aware colours and working motion i
     vega: [[0, 155, 87], [0, 200, 117]],
   };
   const states = Object.keys(samples).map((id, index) => ({ id, title: 'Character ' + id, status: 'idle', cwd: '/projects/pi-remote', updatedAt: Date.now() - index * 1000, messages: [] }));
-  // Existing stored choices make every approved drawing visible without relying on hash collisions.
+  // Stored choices make every approved drawing visible without depending on random picks.
   await page.addInitScript(kinds => {
     if (!localStorage.getItem('pi-remote-session-icons')) localStorage.setItem('pi-remote-session-icons', JSON.stringify(kinds.map(type => [type, { type }])));
   }, Object.keys(samples));
@@ -102,8 +102,12 @@ test('approved characters have readable theme-aware colours and working motion i
   await expect(pip.locator('.character-antenna')).toHaveCSS('animation-name', 'none');
 });
 
-test('default characters belong to session IDs and survive renamed titles, activity and reloads', async ({ page }) => {
+test('characters are randomly assigned once and persist until manually changed', async ({ page }) => {
   const states = Array.from({ length: 18 }, (_, index) => ({ id: 'identity-' + index, title: 'Review the same task', status: 'idle', cwd: '/projects/demo', updatedAt: Date.now() - index * 1000, messages: [] }));
+  await page.addInitScript(() => {
+    let draw = localStorage.getItem('pi-remote-session-icons') ? 1 : 0;
+    Math.random = () => [.99999, 0, .5][draw++ % 3];
+  });
   let client;
   const publish = () => client.send(JSON.stringify({ type: 'sessions', sessions: states }));
   await page.routeWebSocket('**/ws', ws => {
@@ -111,18 +115,20 @@ test('default characters belong to session IDs and survive renamed titles, activ
     ws.onMessage(raw => {
       const packet = JSON.parse(raw);
       if (packet.type === 'auth') { ws.send(JSON.stringify({ type: 'ready' })); publish(); }
-      else if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+      else if (packet.id) {
+        if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: packet.sessionId, version: 0, state: states.find(state => state.id === packet.sessionId) }));
+        ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+      }
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await expect(page.locator('#sessions .session')).toHaveCount(18);
   const assignments = () => page.locator('#sessions .session').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.dataset.id, node.querySelector('.bot').dataset.kind])));
+  const stored = () => page.evaluate(() => Object.fromEntries(JSON.parse(localStorage.getItem('pi-remote-session-icons') || '[]').map(([id, choice]) => [id, choice.type])));
   const original = await assignments();
-  // Expanding the picker must not reshuffle the original ID-based defaults.
-  expect(states.map(({ id }) => original[id])).toEqual(['pebble', 'wisp', 'bun', 'mochi', 'build', 'notes', 'idea', 'fix', 'sprout', 'bun', 'ship', 'notes', 'sprout', 'pip', 'mochi', 'bun', 'wisp', 'pebble']);
-  const approved = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'idea', 'fix', 'build', 'notes', 'ship'];
-  expect(Object.values(original).every(kind => approved.includes(kind))).toBe(true);
-  expect(new Set(Object.values(original)).size).toBeGreaterThan(5);
+  // Controlled entropy samples the first, middle and last entries of the full 23-character pool.
+  expect(states.map(({ id }) => original[id])).toEqual(states.map((_, index) => ['vega', 'pip', 'miso'][index % 3]));
+  expect(await stored()).toEqual(original);
   states.forEach((state, index) => { state.title = index % 2 ? 'Deploy a different task' : 'Write a new draft'; });
   states[0].status = 'working'; publish();
   await expect(page.locator('#sessions [data-id=identity-0] .bot')).toHaveAttribute('data-mood', 'working');
@@ -130,16 +136,38 @@ test('default characters belong to session IDs and survive renamed titles, activ
   states[0].status = 'waiting'; publish();
   await expect(page.locator('#sessions [data-id=identity-0] .bot')).toHaveAttribute('data-mood', 'waiting');
   expect(await assignments()).toEqual(original);
-  await page.reload();
+  await page.reload(); // Reload changes the random sequence; saved icons must not follow it.
   await expect(page.locator('#sessions .session')).toHaveCount(18);
   expect(await assignments()).toEqual(original);
-  expect(await page.evaluate(() => localStorage.getItem('pi-remote-session-icons'))).toBeNull();
+  states.push({ id: 'brand-new', title: 'A newly created session', status: 'idle', cwd: '/projects/demo', updatedAt: Date.now(), messages: [] }); publish();
+  await expect(page.locator('#sessions [data-id=brand-new] .bot')).toHaveAttribute('data-kind', 'pip');
+  const expected = { ...original, 'brand-new': 'pip' };
+  expect(await assignments()).toEqual(expected);
+  expect(await stored()).toEqual(expected);
+  await page.locator('#sessions [data-id=identity-0]').click();
+  await page.getByLabel('Session details', { exact: true }).click();
+  await page.getByRole('button', { name: /^Session icon / }).click();
+  const picker = page.getByRole('dialog', { name: 'Session icon', exact: true });
+  await picker.getByRole('button', { name: 'Stella', exact: true }).click();
+  await picker.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.locator('#title-kind .bot')).toHaveAttribute('data-kind', 'stella');
+  expected['identity-0'] = 'stella';
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await page.reload();
+  await expect(page.locator('#sessions .session')).toHaveCount(19);
+  expect(await assignments()).toEqual(expected);
+  expect(await stored()).toEqual(expected);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  expect(await stored()).toEqual(expected);
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await expect(page.locator('#sessions .session')).toHaveCount(19);
+  expect(await assignments()).toEqual(expected);
 });
 
 test('32px bots stay aligned across session states and preserve icon and emoji choices', async ({ page }, testInfo) => {
   // Reopen a legacy manual icon from the previous catalogue.
   await page.addInitScript(() => {
-    if (!localStorage.getItem('pi-remote-session-icons')) localStorage.setItem('pi-remote-session-icons', JSON.stringify([['saved', { type: 'review' }]]));
+    if (!localStorage.getItem('pi-remote-session-icons')) localStorage.setItem('pi-remote-session-icons', JSON.stringify([['saved', { type: 'review' }], ['normal', { type: 'mochi' }]]));
   });
   const states = [
     { id: 'review', title: 'Review betting legacy removal PR #28', status: 'waiting', cwd: '/projects/primezero', updatedAt: Date.now(), preview: 'Which branch should I review?', previewRole: 'assistant', messages: [] },
@@ -165,7 +193,7 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   const normal = page.locator('.session', { hasText: states[1].title });
   const saved = page.locator('.session', { hasText: states[2].title });
   await expect(saved.locator('.session-indicators').getByRole('img', { name: 'Review', exact: true })).toBeVisible();
-  // The session ID, not a verb or a review mentioned in the title, picks the default.
+  // A stored character stays independent of the session's title.
   await expect(normal.locator('.session-indicators').getByRole('img', { name: 'Mochi', exact: true })).toBeVisible();
   expect((await normal.locator('.session-indicators .bot svg').boundingBox()).width).toBe(32);
   await expect(page.locator('.session-indicators .bot')).toHaveCount(3);
@@ -229,11 +257,11 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   await expect(saved.getByRole('img', { name: 'Fix', exact: true })).toBeVisible();
   await page.reload();
   await expect(saved.getByRole('img', { name: 'Fix', exact: true })).toBeVisible();
-  // Picking the session's ID-based default drops the override.
+  // A manual choice stays saved even when it matches the former automatic default.
   await openSettings(saved);
   await expect(picker.getByRole('button', { name: 'Review', exact: true })).toBeHidden();
   await picker.getByRole('button', { name: 'Pip', exact: true }).click();
-  expect(await page.evaluate(() => localStorage.getItem('pi-remote-session-icons'))).toBe('[]');
+  expect(await page.evaluate(() => new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons'))).get('saved'))).toEqual({ type: 'pip', icon: '' });
   await backToList();
   await expect(saved.getByRole('img', { name: 'Pip', exact: true })).toBeVisible();
 
@@ -320,7 +348,7 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   await expect(picker).toBeHidden();
   await backToList();
   await page.getByRole('button', { name: 'Sign out' }).click();
-  expect(await page.evaluate(() => localStorage.getItem('pi-remote-session-icons'))).toBeNull();
+  expect(await page.evaluate(() => new Map(JSON.parse(localStorage.getItem('pi-remote-session-icons'))).get('normal'))).toEqual({ type: 'custom', icon: '🔎' });
 });
 
 test('working character bodies keep their colour while the plain loader pulses', async ({ page }, testInfo) => {

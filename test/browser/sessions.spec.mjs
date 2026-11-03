@@ -95,6 +95,7 @@ test('sessions sort by your last prompt without jumping during background activi
 });
 
 test('compact same-project sessions show tasks and aligned bots without overflowing', async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem('pi-remote-session-icons', JSON.stringify([['login', { type: 'fix' }]])));
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
   const states = [
@@ -108,7 +109,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true, coordination: { taskForSession: () => undefined } });
   let scroll, failList = false;
   const requests = [];
   // Mirrors the host channel: whole pages until the phone scrolls or searches, then diffs.
