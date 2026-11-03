@@ -12,7 +12,7 @@ Worker questions and reports return to their owning coordinator. Opening a worke
 
 ## How to get to it (user POV)
 
-Tap a named worker in the coordinator chat's **Workers** section to open it directly. Its heading's **Background tasks** button opens details with **Reply in worker** for a question and **Open worker** for inspection, **Accept result** for a returned report, or **Stop task** for active work. A worker's visible **Return to coordinator** control returns to its parent.
+Tap a named worker in the coordinator chat's compact worker row to open it directly. **Tasks** at the end of the row opens details with **Reply in worker** for a question and **Open worker** for inspection, **Accept result** for a returned report, or **Stop task** for active work. A worker's visible **Return to coordinator** control returns to its parent.
 
 ## Driving it with Playwright
 

@@ -175,9 +175,14 @@ if (process.argv[2] === 'doctor') {
         const rect = id => { const box = document.getElementById(id).getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height }; };
         return { workers: rect('coordinator-context'), transcript: rect('transcript'), composer: rect('composer'),
           overflow: document.documentElement.scrollWidth > innerWidth,
+          namesReadable: [...document.querySelectorAll('#coordinator-worker-links strong')].every(node => node.scrollWidth <= node.clientWidth + 1),
+          unboxed: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => {
+            const style = getComputedStyle(node); return style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderRadius === '0px' && style.boxShadow === 'none';
+          }),
           targets: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => { const box = node.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; }) };
       });
-      assert(!measured.overflow && measured.targets && measured.transcript.height >= 80);
+      assert(!measured.overflow && measured.targets && measured.unboxed && measured.namesReadable && measured.transcript.height >= 80);
+      assert(measured.workers.height <= 64, 'Workers must be a compact text row, not cards');
       assert(measured.transcript.bottom <= measured.workers.top + 1 && measured.workers.bottom <= measured.composer.top + 1);
       assert(measured.composer.top - measured.workers.bottom <= 12 && measured.composer.bottom <= height + 1);
       layout.push({ name, width, height, colorScheme, ...measured }); await snapshot(name);

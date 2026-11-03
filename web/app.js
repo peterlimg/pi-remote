@@ -1839,12 +1839,7 @@ function renderCoordinator(state) {
     button.dataset.workerId = task.id; button.dataset.state = task.state; button.disabled = !connected;
     button.setAttribute('aria-label', task.title + ', ' + (labels[task.state] || task.state));
     const name = el('strong', task.title); name.title = task.title;
-    const arrow = el('span', undefined, 'coordinator-worker-arrow'); arrow.setAttribute('aria-hidden', 'true');
-    arrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>';
-    button.append(name, el('span', labels[task.state] || task.state, 'coordinator-worker-state'), arrow);
-    if (task.state === 'waiting' && task.question) {
-      const preview = el('span', task.question, 'coordinator-worker-preview'); preview.title = task.question; button.append(preview);
-    }
+    button.append(name, el('span', labels[task.state] || task.state, 'coordinator-worker-state'));
     button.addEventListener('click', () => { void selectSession(task.sessionId); }); links.append(button);
     if (focused === task.id) button.focus({ preventScroll: true });
   }

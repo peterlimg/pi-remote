@@ -54,9 +54,9 @@ The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 39
 2. Open **Coordinator verification project**.
 3. Open **Session details → Start read-only coordinator**.
 4. Send `Investigate both fixture files.` using the normal Message field and Send message control.
-5. In the visible **Workers** section immediately above the composer, **First inspection** asks a question while **Second inspection** remains working. Neither worker appears in global session sections, even if pinned. Explicit search still finds them.
-6. Tap **First inspection** directly in Workers, send `Keep the original identifier.`, then **Return to coordinator**.
-7. Open **Background tasks** from the Workers heading, inspect and **Accept result** for First inspection. **Stop task** for Second inspection.
+5. In the compact, unboxed worker row immediately above the composer, **First inspection** asks a question while **Second inspection** remains working. Neither worker appears in global session sections, even if pinned. Explicit search still finds them.
+6. Tap **First inspection** directly in the worker row, send `Keep the original identifier.`, then **Return to coordinator**.
+7. Open **Tasks** at the end of the worker row, inspect and **Accept result** for First inspection. **Stop task** for Second inspection.
 8. Reload and reselect the coordinator to read the persisted result.
 
 The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.

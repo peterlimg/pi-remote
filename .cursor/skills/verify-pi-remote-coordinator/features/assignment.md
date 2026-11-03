@@ -12,7 +12,7 @@ A user starts a read-only coordinator for the current project and gives it work 
 
 ## How to get to it (user POV)
 
-Open a project session, then **Session details → Start read-only coordinator**. Send an investigation through the normal composer. The visible **Workers** section immediately above the composer shows each worker's name and current state. Tap a worker directly, or use its heading's **Background tasks** button for assignments, questions, and reports.
+Open a project session, then **Session details → Start read-only coordinator**. Send an investigation through the normal composer. The compact, unboxed worker row immediately above the composer shows each worker's name and current state. Tap a name directly, or use **Tasks** at the end of the row for assignments, questions, and reports.
 
 ## Driving it with Playwright
 
@@ -22,7 +22,7 @@ Preconditions: baseline fixture, passing Doctor, manual login, no existing coord
 - Open `page.getByLabel('Session details', { exact: true })`, then click **Start read-only coordinator**. Require `#title` to read **Coordinator · project** and the **Read-only coordinator** introduction.
 - Fill `#prompt` with `Investigate both fixture files.` and click **Send message**.
 - Open **Background tasks**. Require list items **First inspection** and **Second inspection**, backed by distinct Pi session files and PIDs. The first reaches **Needs answer**; the second remains **Working**.
-- Close with **Done**. Require a visible **Workers** region containing buttons **First inspection, Needs answer** and **Second inspection, Working** without opening Session details. Check normal, narrow, short, and desktop viewports with readable names, 44-pixel touch targets, and room left for the transcript and composer. Require the order conversation → workers → composer, with at most 12 pixels between workers and composer. In the short viewport, scroll up and check that **Go to thread bottom** clears the workers and still returns to the latest messages.
+- Close with **Done**. Require a visible **Workers** region containing buttons **First inspection, Needs answer** and **Second inspection, Working** without opening Session details. Check normal, narrow, short, and desktop viewports with readable names, 44-pixel touch targets, and room left for the transcript and composer. Require a row at most 64 pixels tall and transparent, square-cornered worker links with no card shadows. Require the order conversation → workers → composer, with at most 12 pixels between workers and composer. In the short viewport, scroll up and check that **Go to thread bottom** clears the workers and still returns to the latest messages.
 - Return to the global list and require neither worker there. At the real list interface, check unsectioned, overview, Now, and Pinned lists, including a deliberately pinned worker. The coordinator must remain visible, and explicit name search must still find the worker. Repeat after reload and host restart.
 - Send `Which tasks are still open?`, and require the reply to describe Second inspection as working without stopping it.
 - A third assignment while both tasks are active must return a bounded error without another worker. The full proof exercises this at the production scoped coordination interface and checks that the task count stays two. It also fills both slots again and verifies that neither a coordinator follow-up nor a direct human reply can reactivate an accepted worker as a third active task.
