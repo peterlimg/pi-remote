@@ -178,8 +178,19 @@ if (process.argv[2] === 'doctor') {
           targets: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => { const box = node.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; }) };
       });
       assert(!measured.overflow && measured.targets && measured.transcript.height >= 80);
-      assert(measured.workers.bottom <= measured.transcript.top + 1 && measured.composer.bottom <= height + 1);
+      assert(measured.transcript.bottom <= measured.workers.top + 1 && measured.workers.bottom <= measured.composer.top + 1);
+      assert(measured.composer.top - measured.workers.bottom <= 12 && measured.composer.bottom <= height + 1);
       layout.push({ name, width, height, colorScheme, ...measured }); await snapshot(name);
+      if (height < 600) {
+        await page.locator('#transcript').evaluate(node => node.scrollTo(0, 0));
+        await check(page.getByRole('button', { name: 'Go to thread bottom', exact: true })).toBeVisible();
+        const jump = await page.locator('#scroll-bottom').boundingBox(), dock = await workers.boundingBox();
+        assert(jump.y + jump.height <= dock.y, 'Go to thread bottom must not cover the worker controls');
+        await snapshot('workers-short-scrolled');
+        await page.getByRole('button', { name: 'Go to thread bottom', exact: true }).click();
+        await check(page.locator('#scroll-bottom')).toBeHidden();
+        record('floating scroll control clears the worker dock and still reaches latest messages');
+      }
     }
     save('worker-layout.json', layout);
     await page.locator('#prompt').blur(); await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });

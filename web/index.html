@@ -163,13 +163,6 @@
         <p id="coordinator-feedback" role="alert" hidden></p>
         <div id="coordinator-task-list" role="list" aria-label="Coordinator tasks"></div>
       </div></dialog>
-      <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
-        <div id="coordinator-workers" hidden>
-          <div class="coordinator-workers-heading"><h2>Workers <span id="coordinator-worker-count"></span></h2><button id="coordinator-view-tasks" type="button" class="quiet">Background tasks</button></div>
-          <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
-        </div>
-        <button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator" hidden></button>
-      </section>
       <div id="notice" class="notice" role="status" hidden></div>
       <section id="empty" class="empty"><p>Select a session.</p></section>
       <span id="copy-status" class="sr-only" role="status"></span>
@@ -177,6 +170,13 @@
         <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span class="sr-only">Working…</span><span class="activity-text" aria-hidden="true"><span id="activity-label">Working…</span><span id="activity-time" aria-hidden="true" hidden></span></span></div>
       </section>
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
+      <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
+        <div id="coordinator-workers" hidden>
+          <div class="coordinator-workers-heading"><h2>Workers <span id="coordinator-worker-count"></span></h2><button id="coordinator-view-tasks" type="button" class="quiet">Background tasks</button></div>
+          <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
+        </div>
+        <button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator" hidden></button>
+      </section>
       <form id="composer" class="composer" hidden>
         <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>

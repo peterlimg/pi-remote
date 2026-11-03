@@ -54,6 +54,10 @@ const transcriptObserver = new ResizeObserver(() => {
 });
 transcriptObserver.observe($('transcript'));
 transcriptObserver.observe(activityIndicator);
+new ResizeObserver(([{ target }]) => {
+  const height = target.getBoundingClientRect().height;
+  document.querySelector('main').style.setProperty('--coordinator-height', `${height ? height + parseFloat(getComputedStyle(target).marginBottom) : 0}px`);
+}).observe($('coordinator-context'));
 $('scroll-bottom').addEventListener('click', () => {
   if (historyWindow) showLatest();
   $('transcript').scrollTop = $('transcript').scrollHeight;
