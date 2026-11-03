@@ -126,6 +126,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let supportsCoordinator = false, creatingCoordinator = false, coordinatorRenderKey;
 let supportsSessionSections = false, supportsRecentAvailability = false, recentAvailability = 'online', supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, renders: 0, renderAt: 0,
   last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
@@ -294,7 +295,7 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer'].includes(op)
+    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer', 'newCoordinator', 'taskAction'].includes(op)
       ? { op: 'commandResult', id, sessionId: op === 'newProject' ? 'new-project' : extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
     transmit(socket, { op, id, ...extra });
@@ -408,6 +409,7 @@ function connect() {
       supportsSessionClosing = packet.supportsSessionClosing === true;
       supportsNewPreparation = packet.supportsNewPreparation === true;
       supportsActivityDebug = packet.supportsActivityDebug === true;
+      supportsCoordinator = packet.supportsCoordinator === true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -1110,7 +1112,7 @@ async function selectSession(id, keepOrder = false) {
   $('transcript').replaceChildren();
   updateScrollButton();
   document.querySelector('.session-info').open = false;
-  $('session-icon-picker').close();
+  $('session-icon-picker').close(); $('coordinator-sheet').close(); coordinatorRenderKey = undefined;
   renderSessionIconChoice();
   renderProject(selectedSummary?.cwd, selectedSummary);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
@@ -1423,6 +1425,11 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
+  if (state.coordination?.role === 'coordinator' && !messages.length) {
+    const intro = el('section', undefined, 'coordinator-intro');
+    intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Open Background tasks to inspect their questions and results.'));
+    fragment.append(intro);
+  }
   const playing = [...threadVideos.values()].filter(video => video.player && !video.player.paused);
   const matched = [];
   for (const outgoing of submissions.values()) {
@@ -1784,10 +1791,98 @@ function restartStalledDots() {
   dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
 }
 setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
+const coordinatorActions = new Set();
+function coordinatorFeedback(text = '') {
+  $('coordinator-feedback').textContent = text; $('coordinator-feedback').hidden = !text;
+}
+function renderCoordinator(state) {
+  const role = state?.coordination, available = supportsCoordinator && !!state && !state.creation;
+  $('coordinator-start').hidden = !available || !!role;
+  $('coordinator-start').disabled = !connected || creatingCoordinator;
+  $('coordinator-tasks').hidden = !available || role?.role !== 'coordinator';
+  $('coordinator-parent').hidden = !available || role?.role !== 'worker';
+  $('coordinator-tasks').disabled = !connected; $('coordinator-parent').disabled = !connected;
+  const context = $('coordinator-context');
+  context.hidden = !available || !role;
+  if (!context.hidden) {
+    const worker = role.role === 'worker', questions = role.tasks?.filter(task => task.state === 'waiting').length || 0;
+    context.textContent = worker ? 'Read-only worker · Return to ' + role.coordinatorTitle
+      : 'Background tasks · ' + role.tasks.length + (questions ? ' · ' + questions + ' needs answer' : '');
+    context.setAttribute('aria-label', worker ? 'Return to coordinator' : 'Background tasks');
+  }
+  if (!$('coordinator-sheet').open || role?.role !== 'coordinator') return;
+  const key = JSON.stringify([state.id, role.tasks, connected, [...coordinatorActions]]);
+  if (key === coordinatorRenderKey) return;
+  coordinatorRenderKey = key;
+  const list = $('coordinator-task-list'); list.replaceChildren();
+  if (!role.tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
+  const labels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
+    stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
+  for (const task of role.tasks) {
+    const row = el('article', undefined, 'coordinator-task'); row.setAttribute('role', 'listitem');
+    row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
+    const heading = el('header'); heading.append(el('h3', task.title), el('span', labels[task.state] || task.state));
+    const assignment = el('details'); assignment.append(el('summary', 'Assignment'), el('p', task.instruction));
+    row.append(heading, assignment);
+    if (task.state === 'waiting' && task.question) {
+      const question = el('section'); question.append(el('h4', 'Question for coordinator'), el('p', task.question)); row.append(question);
+    }
+    if (task.result) {
+      const report = el('details'); report.open = task.state === 'reported';
+      report.append(el('summary', task.state === 'reported' ? 'Returned result' : 'Last result'), el('p', task.result)); row.append(report);
+    }
+    if (task.error) row.append(el('p', task.error, 'coordinator-task-warning'));
+    if (task.delivery === 'unknown') row.append(el('p', 'Notification delivery is uncertain. Inspect the worker before repeating an action.', 'coordinator-task-warning'));
+    const actions = el('div', undefined, 'coordinator-task-actions');
+    const open = el('button', task.state === 'waiting' ? 'Reply in worker' : 'Open worker', 'quiet'); open.type = 'button';
+    open.disabled = !connected; open.addEventListener('click', () => { $('coordinator-sheet').close(); void selectSession(task.sessionId); }); actions.append(open);
+    const addAction = (name, action) => {
+      const button = el('button', name, 'quiet'); button.type = 'button';
+      button.disabled = !connected || coordinatorActions.has(task.id);
+      button.addEventListener('click', async () => {
+        const ownerId = state.id;
+        coordinatorActions.add(task.id); coordinatorFeedback(); renderCoordinator(cache.get(selected));
+        try { await request('taskAction', { sessionId: ownerId, action: { action, taskId: task.id } }); }
+        catch (error) { if (selected === ownerId) coordinatorFeedback(error.message); }
+        finally { coordinatorActions.delete(task.id); renderCoordinator(cache.get(selected)); }
+      });
+      actions.append(button);
+    };
+    if (['starting', 'working', 'waiting'].includes(task.state)) addAction('Stop task', 'stop');
+    if (task.state === 'reported') addAction('Accept result', 'accept');
+    row.append(actions); list.append(row);
+  }
+}
+function openCoordinatorTasks() {
+  document.querySelector('.session-info').open = false;
+  coordinatorFeedback(); coordinatorRenderKey = undefined;
+  $('coordinator-sheet').showModal(); renderCoordinator(cache.get(selected));
+}
+function returnToCoordinator() {
+  const owner = cache.get(selected)?.coordination?.coordinatorId;
+  if (owner) void selectSession(owner);
+}
+$('coordinator-context').addEventListener('click', () => cache.get(selected)?.coordination?.role === 'worker' ? returnToCoordinator() : openCoordinatorTasks());
+$('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
+$('coordinator-parent').addEventListener('click', returnToCoordinator);
+$('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
+$('coordinator-sheet').addEventListener('click', event => { if (event.target === $('coordinator-sheet')) $('coordinator-sheet').close(); });
+$('coordinator-start').addEventListener('click', async () => {
+  const source = selected; creatingCoordinator = true; document.querySelector('.session-info').open = false; updateControls();
+  notice('Starting a read-only coordinator…');
+  try {
+    const created = await request('newCoordinator', { sessionId: source });
+    cache.set(created.sessionId, created.state);
+    if (selected === source) await selectSession(created.sessionId);
+  } catch (error) { if (selected === source) notice(error.message); }
+  finally { creatingCoordinator = false; updateControls(); }
+});
+
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
   $('session-close').disabled = !connected;
   const state = cache.get(selected);
+  renderCoordinator(state);
   const summary = sessions.find(item => item.id === selected) || selectedSummary;
   $('session-pin').hidden = !selected || !!state?.creation;
   $('session-pin').disabled = !connected;

@@ -30,6 +30,7 @@ export async function startHost(options = {}) {
     relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
     busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
+    if (req.url === '/_pi/coordinator') { void service.coordination.handle(req, res); return; }
     if (!['/_pi/remote', '/_pi/pair', '/_pi/handoff'].includes(req.url)) { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Connection', 'close');
@@ -105,6 +106,7 @@ export async function startHost(options = {}) {
   try {
     await new Promise((resolve, reject) => { http.once('error', reject); http.listen(port, '127.0.0.1', resolve); });
     const actualPort = http.address().port;
+    service.coordination.origin = 'http://127.0.0.1:' + actualPort;
     const locks = join(dir, 'locks');
     const claim = () => acquireLock(locks, 'service', { kind: 'service', port: actualPort });
     try { lock = claim(); }

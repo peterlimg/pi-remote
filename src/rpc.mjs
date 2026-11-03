@@ -22,8 +22,8 @@ export class JsonLines {
 export class RpcWorker extends EventEmitter {
   constructor(file, cwd, options = {}) {
     super(); this.pending = new Map(); this.stderr = '';
-    this.process = spawn(options.bin || process.env.PI_REMOTE_PI_BIN || 'pi', [...(options.prefix || []), '--mode', 'rpc', ...(file ? ['--session', file] : ['--session-dir', options.sessionDir])],
-      { cwd, env: { ...process.env, PI_REMOTE_WORKER: '1' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+    this.process = spawn(options.bin || process.env.PI_REMOTE_PI_BIN || 'pi', [...(options.prefix || []), ...(options.args || []), '--mode', 'rpc', ...(file ? ['--session', file] : ['--session-dir', options.sessionDir])],
+      { cwd, env: { ...process.env, PI_REMOTE_COORDINATOR_ROLE: '', PI_REMOTE_COORDINATOR_URL: '', PI_REMOTE_COORDINATOR_TOKEN: '', ...options.env, PI_REMOTE_WORKER: '1' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
     this.exited = new Promise(resolve => this.process.once('close', resolve));
     this.process.stdin.on('error', () => {});
     const parser = new RpcEvents(value => {
@@ -113,6 +113,10 @@ export class RpcWorker extends EventEmitter {
     try { return await this.usageQuery; } finally { this.usageQuery = undefined; }
   }
   async command(command) {
+    if (command.type === 'taskEvent') {
+      const data = await this.request('prompt', { message: command.text, streamingBehavior: 'followUp' });
+      return { accepted: true, disposition: data?.disposition };
+    }
     if (command.type === 'getUsage') {
       const stats = await this.request('get_session_stats');
       const contextUsage = stats.contextUsage, totals = stats.tokens && { ...stats.tokens, cost: stats.cost };

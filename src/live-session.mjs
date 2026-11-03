@@ -97,7 +97,7 @@ export class WorkerSession extends LiveSession {
     const worker = this.worker;
     if (this.handingOff) throw new Error('This session is moving to a Pi terminal. Try again shortly.');
     if (!worker) throw new Error('Session is not connected. Resume a saved session first.');
-    if (['prompt', 'steer', 'followUp'].includes(command.type) && !command.text.trimStart().startsWith('/')) {
+    if (['prompt', 'steer', 'followUp', 'taskEvent'].includes(command.type) && !command.text.trimStart().startsWith('/')) {
       this.advance({ type: 'request_started' });
     }
     try { return await worker.command(command); }

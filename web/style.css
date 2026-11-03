@@ -847,4 +847,26 @@ pre.message-text { white-space: pre-wrap; }
   .notice { padding: 12px 16px; }
   .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
+.session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
+.coordinator-context { display: block; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); min-height: 44px; margin: var(--conversation-header-height) auto 0; padding: 10px 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--muted); text-align: left; font-size: 13px; font-weight: 500; }
+main:has(#coordinator-context:not([hidden])) #transcript { --conversation-header-height: 0px; }
+main:has(#coordinator-context:not([hidden])) #notice { margin-top: 0; }
+.coordinator-intro { max-width: var(--content-width); margin: 0 auto 24px; }
+.coordinator-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; }
+.coordinator-intro p { max-width: 65ch; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.coordinator-help { margin: 0; padding: 4px 20px 16px; color: var(--muted); font-size: 13px; }
+#coordinator-feedback { flex-shrink: 0; margin: 0; padding: 0 20px 12px; color: var(--error); }
+#coordinator-task-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
+.coordinator-task { padding: 18px 0; border-top: 1px solid var(--line); }
+.coordinator-task > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0; border: 0; }
+.coordinator-task h3 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.coordinator-task > header > span { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.coordinator-task:is([data-state=waiting], [data-state=unknown]) > header > span { color: var(--warning); }
+.coordinator-task p { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; }
+.coordinator-task summary { min-height: 44px; padding: 10px 0; color: var(--muted); font-size: 13px; }
+.coordinator-task h4 { margin: 14px 0 4px; font-size: 14px; font-weight: 600; }
+.coordinator-task .coordinator-task-warning { color: var(--warning); font-size: 13px; }
+.coordinator-task-actions { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
+.coordinator-task-actions button { min-height: 44px; padding: 8px 0; font-size: 13px; }
+@media (max-width: 700px) { .coordinator-context { width: calc(100% - 32px); } }
 .boot-status { display: flex; align-items: center; gap: 10px; }

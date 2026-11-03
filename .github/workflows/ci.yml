@@ -53,6 +53,24 @@ jobs:
       - run: npm install --no-save @earendil-works/pi-coding-agent@0.85.1
       - run: node test/pi-smoke.mjs
       - run: node test/terminal-handoff-e2e.mjs
+  coordinator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --ignore-scripts
+      - run: npm install --no-save @earendil-works/pi-coding-agent@1.4.0
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:coordinator
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: coordinator-proof
+          path: ${{ runner.temp }}/pi-coordinator-proof-*/
   claude-sdk-provider:
     runs-on: ubuntu-latest
     defaults:

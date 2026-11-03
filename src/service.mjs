@@ -10,6 +10,7 @@ import { sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { HistoryReader } from './history.mjs';
 import { WorkerSession, BridgeSession } from './live-session.mjs';
+import { Coordinators } from './coordinator.mjs';
 
 function inside(file, dir) {
   const rel = relative(canonical(dir), canonical(file));
@@ -38,6 +39,7 @@ export class SessionService extends EventEmitter {
     catch { this.pins = new Set(); }
     try { this.closedSessions = new Set(JSON.parse(readFileSync(join(dir, 'closed-sessions.json'), 'utf8')).filter(id => typeof id === 'string')); }
     catch { this.closedSessions = new Set(); }
+    this.coordination = new Coordinators(this);
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -162,7 +164,7 @@ export class SessionService extends EventEmitter {
   }
   read(id) {
     const item = this.live.get(id);
-    if (item) return item.read(() => {
+    if (item) return this.coordination.decorate(item.read(() => {
       const { file } = item.state;
       if (!isInside(file, this.roots)) return undefined;
       let saved = this.catalog.get(id);
@@ -170,11 +172,11 @@ export class SessionService extends EventEmitter {
         saved = readSession(file); this.catalog.set(id, saved);
       }
       return saved;
-    });
+    }));
     const saved = this.catalog.get(id);
     if (!saved) throw new Error('Session not found');
     if (!isInside(saved.file, this.roots)) throw new Error('Session is outside configured roots');
-    return readSession(saved.file);
+    return this.coordination.decorate(readSession(saved.file));
   }
   async view(id) {
     const state = this.read(id);
@@ -227,9 +229,16 @@ export class SessionService extends EventEmitter {
   }
   result(socket, response) { this.bridges.get(socket)?.result(response); }
   changed(id) { this.emit('state', id); this.emit('list'); }
-  async command(id, requestId, input) {
+  async command(id, requestId, input, { taskInternal = false } = {}) {
     const command = validateCommand(input);
-    return this.journal.execute(id, requestId, command, () => this.dispatch(id, requestId, command));
+    return this.journal.execute(id, requestId, command, async () => {
+      const task = this.coordination.beforeCommand(id, command);
+      try {
+        const value = await this.dispatch(id, requestId, command);
+        this.coordination.afterCommand(task, command, !taskInternal);
+        return value;
+      } catch (error) { this.coordination.failedCommand(task); throw error; }
+    });
   }
   async getModels(id) {
     const result = await this.dispatch(id, randomUUID(), { type: 'getModels' });
@@ -264,12 +273,13 @@ export class SessionService extends EventEmitter {
   }
   workerSession(meta, options, discardEmpty = false) {
     return new WorkerSession(meta, {
-      dir: this.dir, workerOptions: options, changed: id => { if (this.live.has(id)) this.changed(id); },
+      dir: this.dir, workerOptions: this.coordination.options(meta, options), changed: id => { if (this.live.has(id)) this.changed(id); },
       started: item => { if (!item.prepared) this.live.set(item.state.id, item); },
       lifecycle: event => this.emit('lifecycle', event),
       exited: item => {
         if (item.prepared) return;
         const { id } = item.state;
+        this.coordination.exited(id);
         this.scan();
         if (discardEmpty && this.live.get(id) === item && !this.catalog.has(id)) this.live.delete(id);
       },
