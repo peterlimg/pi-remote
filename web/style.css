@@ -280,6 +280,18 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .personality-bot[data-kind=mochi] { --character-motion: character-mochi; }
 .personality-bot[data-kind=pebble] { --character-motion: character-pebble; }
 .personality-bot[data-kind=wisp] { --character-motion: character-wisp; }
+.personality-bot[data-kind=miso] { --character-motion: character-miso; }
+.personality-bot[data-kind=puff] { --character-motion: character-puff; }
+.personality-bot[data-kind=moss] { --character-motion: character-moss; }
+.personality-bot[data-kind=jelly] { --character-motion: character-jelly; }
+.personality-bot[data-kind=nim] { --character-motion: character-nim; }
+.personality-bot[data-kind=zig] { --character-motion: character-zig; }
+.character-cat-ear, .character-frog-foot, .character-zig-foot { transform-box: fill-box; transform-origin: 50% 100%; }
+.character-cat-tail { fill: none; stroke: var(--kind); stroke-width: 3.2; stroke-linecap: round; transform-box: view-box; transform-origin: 24px 26px; }
+.character-cloud-puff { transform-box: fill-box; transform-origin: center; }
+.character-tentacle { fill: none; stroke: var(--kind); stroke-width: 3; stroke-linecap: round; transform-box: fill-box; transform-origin: 50% 0%; }
+.character-wing { transform-box: fill-box; transform-origin: 100% 50%; }
+.character-wing-right { transform-origin: 0% 50%; }
 .character-antenna { transform-box: view-box; transform-origin: 16px 10px; }
 .character-leaf { transform-box: view-box; transform-origin: 16px 7px; }
 .character-leaf-right { transform-origin: 16px 8px; }
@@ -303,6 +315,20 @@ a { color: var(--accent); text-underline-offset: 3px; }
   .personality-bot[data-mood=working] .character-ear-right { animation-delay: calc(var(--t) + .12s); }
   .personality-bot[data-mood=working] .character-orbit { animation: bot-turn 3s linear var(--t) infinite; }
   .personality-bot[data-mood=working] .character-tail { animation: character-tail 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-cat-ear { animation: character-perk 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-cat-ear-right { animation-delay: calc(var(--t) - .3s); animation-direction: reverse; }
+  .personality-bot[data-mood=working] .character-cat-tail { animation: character-swish 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-cloud-puff { animation: character-billow 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-cloud-puff-right { animation-direction: reverse; }
+  .personality-bot[data-mood=working] .character-frog-foot { animation: character-kick 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-frog-foot-right { animation-direction: reverse; }
+  .personality-bot[data-mood=working] .character-tentacle { animation: character-tentacle 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-tentacle-middle { animation-delay: calc(var(--t) - 1s); }
+  .personality-bot[data-mood=working] .character-tentacle-right { animation-delay: calc(var(--t) - 2s); }
+  .personality-bot[data-mood=working] .character-wing { animation: character-wing .6s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-wing-right { animation-name: character-wing-right; }
+  .personality-bot[data-mood=working] .character-zig-foot { animation: character-step 1.5s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-zig-foot-right { animation-delay: calc(var(--t) - .75s); }
 }
 @keyframes character-pip { 0%, 12%, 65%, 100% { transform: none; } 24% { transform: translateY(-1px) rotate(-5deg); } 38% { transform: rotate(4deg); } 52% { transform: rotate(-2deg); } }
 @keyframes character-sprout { 0%, 100% { transform: none; } 25% { transform: rotate(-4deg) scale(.98, 1.03); } 50% { transform: rotate(4deg) scale(1.02, .98); } 75% { transform: rotate(-2deg); } }
@@ -317,6 +343,20 @@ a { color: var(--accent); text-underline-offset: 3px; }
 @keyframes character-seed { 0%, 100% { opacity: 0; transform: none; } 15% { opacity: .9; } 65%, 99% { opacity: 0; transform: translateY(-6px); } }
 @keyframes character-ear { 0%, 20%, 66%, 100% { transform: none; } 28% { transform: rotate(-14deg); } 40% { transform: rotate(8deg); } 52% { transform: rotate(-5deg); } }
 @keyframes character-tail { 0%, 100% { transform: skewX(-8deg); } 50% { transform: skewX(8deg); } }
+@keyframes character-miso { 0%, 12%, 84%, 100% { transform: none; } 26% { transform: rotate(-7deg) translateY(-1px); } 42% { transform: rotate(4deg); } 58% { transform: rotate(-3deg); } 72% { transform: scale(1.03, .97); } }
+@keyframes character-puff { 0%, 100% { transform: none; } 22% { transform: scale(1.08, .94); } 46% { transform: translateY(-2px) scale(.95, 1.06); } 72% { transform: translateX(1px) scale(1.03, .98); } }
+@keyframes character-moss { 0%, 12%, 58%, 100% { transform: none; } 22% { transform: scale(1.12, .84); } 34% { transform: translateY(-4px) scale(.94, 1.06); } 46% { transform: scale(1.08, .92); } 70% { transform: scale(1.05, .93); } 80% { transform: translateY(-2px) scale(.97, 1.03); } 90% { transform: scale(1.04, .97); } }
+@keyframes character-jelly { 0%, 100% { transform: none; } 18% { transform: scale(1.09, .91); } 38% { transform: translateY(-3px) scale(.94, 1.06); } 64% { transform: translate(1px, -1px) rotate(3deg); } 82% { transform: rotate(-2deg); } }
+@keyframes character-nim { 0%, 100% { transform: none; } 20% { transform: translate(-1px, -2px) rotate(-6deg); } 44% { transform: translate(1px, -3px) rotate(6deg); } 68% { transform: translateY(-1px) rotate(-3deg); } 84% { transform: translateX(1px); } }
+@keyframes character-zig { 0%, 50%, 100% { transform: none; } 16% { transform: translateX(-1px) rotate(-8deg); } 32% { transform: rotate(3deg) scale(1.04, .96); } 66% { transform: translateX(1px) rotate(8deg); } 82% { transform: rotate(-3deg) scale(.98, 1.02); } }
+@keyframes character-perk { 0%, 16%, 72%, 100% { transform: none; } 30% { transform: rotate(-16deg); } 44% { transform: rotate(10deg); } 58% { transform: rotate(-6deg); } }
+@keyframes character-swish { 0%, 100% { transform: rotate(-12deg); } 28% { transform: rotate(18deg); } 50% { transform: rotate(-18deg); } 74% { transform: rotate(8deg); } }
+@keyframes character-billow { 0%, 100% { transform: none; } 30% { transform: translateX(-1px) scale(1.25, .9); } 62% { transform: translateY(-1px) scale(.9, 1.15); } }
+@keyframes character-kick { 0%, 14%, 58%, 100% { transform: none; } 24% { transform: rotate(-20deg) scaleX(1.12); } 36% { transform: rotate(18deg) scaleX(.9); } 48% { transform: rotate(-8deg); } 78% { transform: rotate(12deg); } }
+@keyframes character-tentacle { 0%, 100% { transform: skewX(-12deg); } 32% { transform: skewX(15deg) scaleY(.88); } 68% { transform: skewX(-5deg) scaleY(1.03); } }
+@keyframes character-wing { 0%, 100% { transform: rotate(-14deg) scaleX(.65); } 50% { transform: rotate(12deg); } }
+@keyframes character-wing-right { 0%, 100% { transform: rotate(14deg) scaleX(.65); } 50% { transform: rotate(-12deg); } }
+@keyframes character-step { 0%, 60%, 100% { transform: none; } 24% { transform: translateY(-2px) rotate(-18deg); } 42% { transform: rotate(10deg); } }
 .document-hidden .bot *, .bot:not(.in-view) * { animation-play-state: paused !important; }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
 .heading-kind { display: grid; place-items: center; flex-shrink: 0; font-size: 24px; line-height: 1; }
@@ -324,15 +364,15 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #title-kind:empty { display: none; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
 [data-kind=review] { --kind: light-dark(#a8532b, #edb58d); }
-[data-kind=fix], [data-kind=bun] { --kind: #ff2345; }
+[data-kind=fix], [data-kind=bun], [data-kind=nim] { --kind: #ff2345; }
 [data-kind=research] { --kind: light-dark(#117c83, #70cad0); }
-[data-kind=build], [data-kind=sprout] { --kind: light-dark(#009b57, #00c875); }
-[data-kind=idea], [data-kind=mochi] { --kind: light-dark(#c97400, #ff9f00); }
-[data-kind=notes], [data-kind=pip] { --kind: light-dark(#888888, #f5f5f5); }
+[data-kind=build], [data-kind=sprout], [data-kind=moss] { --kind: light-dark(#009b57, #00c875); }
+[data-kind=idea], [data-kind=mochi], [data-kind=miso] { --kind: light-dark(#c97400, #ff9f00); }
+[data-kind=notes], [data-kind=pip], [data-kind=puff] { --kind: light-dark(#888888, #f5f5f5); }
 [data-kind=general] { --kind: var(--muted); }
 [data-kind=test] { --kind: light-dark(#0f766e, #5fd4c4); }
-[data-kind=ship], [data-kind=pebble] { --kind: #9254ff; }
-[data-kind=wisp] { --kind: light-dark(#00998a, #00b9a4); }
+[data-kind=ship], [data-kind=pebble], [data-kind=zig] { --kind: #9254ff; }
+[data-kind=wisp], [data-kind=jelly] { --kind: light-dark(#00998a, #00b9a4); }
 [data-kind=tidy] { --kind: light-dark(#be185d, #f9a8d4); }
 [data-kind=data] { --kind: light-dark(#4338ca, #a5b4fc); }
 [data-kind=guard] { --kind: light-dark(#4d7c0f, #bef264); }

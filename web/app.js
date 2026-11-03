@@ -908,6 +908,18 @@ const sessionKinds = {
     '<g class="character-orbit"><circle cx="3" cy="13" r="1"/><circle cx="29" cy="21" r=".8"/></g>'],
   wisp: ['Wisp', '<path d="M16 5C22.6 5 26 10 26 17v7H6v-7C6 10 9.4 5 16 5Z"/>', [[12, 17.5], [20, 17.5]], '',
     '<path class="bot-body character-tail" d="M6 23h20v4Q24 31 21 27Q18 32 15 28Q12 32 9 28Q6 31 6 27Z"/>'],
+  miso: ['Miso', '<rect x="5" y="10" width="22" height="19" rx="8"/>', [[12, 19], [20, 19]],
+    '<path class="character-cat-tail" d="M24 26c10 1 8-10 3-7"/><g class="character-cat-ear"><path class="bot-body" d="M6 14 5 3Q7 1 13 10Z"/></g><g class="character-cat-ear character-cat-ear-right"><path class="bot-body" d="m19 10 6-8q3 1 1 12Z"/></g>'],
+  puff: ['Puff', '<path d="M8 28C3 28 1 24 3 20C0 15 5 10 9 11C10 4 20 3 23 10C29 9 32 15 28 20C31 24 28 28 24 28Z"/>', [[12, 20], [20, 20]],
+    '<g class="character-cloud-puff"><circle class="bot-body" cx="5" cy="20" r="4"/></g><g class="character-cloud-puff character-cloud-puff-right"><circle class="bot-body" cx="27" cy="21" r="3.5"/></g>'],
+  moss: ['Moss', '<path d="M3 20Q2 9 8 8Q13 6 16 12Q19 6 24 8Q30 9 29 20Q32 30 16 30Q0 30 3 20Z"/>', [[10, 15.5], [22, 15.5]],
+    '<g class="character-frog-foot"><ellipse class="bot-body" cx="6" cy="29.5" rx="4" ry="2"/></g><g class="character-frog-foot character-frog-foot-right"><ellipse class="bot-body" cx="26" cy="29.5" rx="4" ry="2"/></g>'],
+  jelly: ['Jelly', '<path d="M4 20C4 10 8 4 16 4s12 6 12 16Q22 23 16 21Q10 23 4 20Z"/>', [[12, 15], [20, 15]],
+    '<path class="character-tentacle" d="M9 19v5q-4 4 0 7"/><path class="character-tentacle character-tentacle-middle" d="M16 20v6q4 2 0 5"/><path class="character-tentacle character-tentacle-right" d="M23 19v6q-4 2 0 6"/>'],
+  nim: ['Nim', '<ellipse cx="16" cy="19" rx="8" ry="10"/>', [[12.5, 18], [19.5, 18]],
+    '<g class="character-wing"><path class="bot-accent" d="M10 18C2 10-1 13 2 21c-3 5 2 8 8 3Z"/></g><g class="character-wing character-wing-right"><path class="bot-accent" d="M22 18c8-8 11-5 8 3 3 5-2 8-8 3Z"/></g><path class="bot-stalk" d="m13 10-2-5m8 5 2-5"/>'],
+  zig: ['Zig', '<path d="M16 5q2 0 4 4l8 15q2 5-3 5H7q-5 0-3-5l8-15q2-4 4-4Z"/>', [[12, 21], [20, 21]],
+    '<g class="character-zig-foot"><rect class="bot-body" x="7" y="26" width="7" height="5" rx="2"/></g><g class="character-zig-foot character-zig-foot-right"><rect class="bot-body" x="18" y="26" width="7" height="5" rx="2"/></g>'],
   general: ['Session', '<rect x="5" y="7" width="22" height="21" rx="8"/>', [[12, 17], [20, 17]], ''],
 };
 // The face carries the state: eyes close and z's drift when saved, it smiles at a new reply, and the badge marks what needs you.
@@ -921,9 +933,10 @@ function botSvg(kind, mood, size, unread = mood === 'unread') {
   const zz = mood === 'saved' ? '<g class="bot-zz"><text x="24" y="9">z</text><text x="24" y="9">z</text></g>' : '';
   return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${back}<g class="bot-body">${body}</g><g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}</g>${badge}${zz}</svg>`;
 }
-const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
+const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'miso', 'puff', 'moss', 'jelly', 'nim', 'zig'];
 // shortcut: defaults use this fixed catalogue; persist assignments before changing its order or size if existing sessions must not reshuffle.
-const sessionCharacters = [...personalityKinds, 'idea', 'fix', 'build', 'notes', 'ship'];
+const defaultSessionCharacters = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'idea', 'fix', 'build', 'notes', 'ship'];
+const sessionCharacters = [...new Set([...defaultSessionCharacters, ...personalityKinds])];
 function sessionSeed(id = '') {
   let seed = 2166136261;
   for (let index = 0; index < id.length; index++) seed = Math.imul(seed ^ id.charCodeAt(index), 16777619);
@@ -951,7 +964,7 @@ function showSessionKind(icon, item, size = 28) {
   return dressKind(icon, kind, size, item.status, unread);
 }
 // Session IDs keep the same character across renames, reloads and devices, without storing a new preference.
-const autoKind = item => sessionCharacters[sessionSeed(item.id) % sessionCharacters.length];
+const autoKind = item => defaultSessionCharacters[sessionSeed(item.id) % defaultSessionCharacters.length];
 function sessionKind(item) {
   // Older 'none' choices fall back to the session's default character.
   const saved = sessionIcons.get(item.id), choice = saved?.type === 'none' ? undefined : saved;

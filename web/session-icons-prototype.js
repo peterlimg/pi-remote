@@ -1,7 +1,7 @@
 // Session bot studies. Static examples only; no app transport or storage.
 const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
-// Original drawings match production; the six new personalities get their own motion parts.
+// Drawings match production; each personality gets its own motion parts.
 const sessionKinds = {
   review: ['Review', '<rect x="4" y="7" width="24" height="21" rx="7"/>', [[11.5, 17], [20.5, 17]], ''],
   fix: ['Fix', '<circle cx="16" cy="19" r="11"/>', [[11.5, 19], [20.5, 19]],
@@ -32,6 +32,18 @@ const sessionKinds = {
     '<g class="character-orbit"><circle cx="3" cy="13" r="1"/><circle cx="29" cy="21" r=".8"/></g>'],
   wisp: ['Wisp', '<path d="M16 5C22.6 5 26 10 26 17v7H6v-7C6 10 9.4 5 16 5Z"/>', [[12, 17.5], [20, 17.5]], '',
     '<path class="bot-body character-tail" d="M6 23h20v4Q24 31 21 27Q18 32 15 28Q12 32 9 28Q6 31 6 27Z"/>'],
+  miso: ['Miso', '<rect x="5" y="10" width="22" height="19" rx="8"/>', [[12, 19], [20, 19]],
+    '<path class="character-cat-tail" d="M24 26c10 1 8-10 3-7"/><g class="character-cat-ear"><path class="bot-body" d="M6 14 5 3Q7 1 13 10Z"/></g><g class="character-cat-ear character-cat-ear-right"><path class="bot-body" d="m19 10 6-8q3 1 1 12Z"/></g>'],
+  puff: ['Puff', '<path d="M8 28C3 28 1 24 3 20C0 15 5 10 9 11C10 4 20 3 23 10C29 9 32 15 28 20C31 24 28 28 24 28Z"/>', [[12, 20], [20, 20]],
+    '<g class="character-cloud-puff"><circle class="bot-body" cx="5" cy="20" r="4"/></g><g class="character-cloud-puff character-cloud-puff-right"><circle class="bot-body" cx="27" cy="21" r="3.5"/></g>'],
+  moss: ['Moss', '<path d="M3 20Q2 9 8 8Q13 6 16 12Q19 6 24 8Q30 9 29 20Q32 30 16 30Q0 30 3 20Z"/>', [[10, 15.5], [22, 15.5]],
+    '<g class="character-frog-foot"><ellipse class="bot-body" cx="6" cy="29.5" rx="4" ry="2"/></g><g class="character-frog-foot character-frog-foot-right"><ellipse class="bot-body" cx="26" cy="29.5" rx="4" ry="2"/></g>'],
+  jelly: ['Jelly', '<path d="M4 20C4 10 8 4 16 4s12 6 12 16Q22 23 16 21Q10 23 4 20Z"/>', [[12, 15], [20, 15]],
+    '<path class="character-tentacle" d="M9 19v5q-4 4 0 7"/><path class="character-tentacle character-tentacle-middle" d="M16 20v6q4 2 0 5"/><path class="character-tentacle character-tentacle-right" d="M23 19v6q-4 2 0 6"/>'],
+  nim: ['Nim', '<ellipse cx="16" cy="19" rx="8" ry="10"/>', [[12.5, 18], [19.5, 18]],
+    '<g class="character-wing"><path class="bot-accent" d="M10 18C2 10-1 13 2 21c-3 5 2 8 8 3Z"/></g><g class="character-wing character-wing-right"><path class="bot-accent" d="M22 18c8-8 11-5 8 3 3 5-2 8-8 3Z"/></g><path class="bot-stalk" d="m13 10-2-5m8 5 2-5"/>'],
+  zig: ['Zig', '<path d="M16 5q2 0 4 4l8 15q2 5-3 5H7q-5 0-3-5l8-15q2-4 4-4Z"/>', [[12, 21], [20, 21]],
+    '<g class="character-zig-foot"><rect class="bot-body" x="7" y="26" width="7" height="5" rx="2"/></g><g class="character-zig-foot character-zig-foot-right"><rect class="bot-body" x="18" y="26" width="7" height="5" rx="2"/></g>'],
 };
 function botSvg(kind, mood, size, unread = mood === 'unread') {
   const [, body, eyes, back, front = '', work = ''] = sessionKinds[kind];
@@ -48,7 +60,7 @@ const variants = [
   { key: 'leading', name: 'B · Aligned avatars', description: '32px at the left. Keep compact, single-line titles.', size: 32, leading: true },
   { key: 'roomy', name: 'C · Larger + two lines', description: '40px at the left. More title, fewer rows at once.', size: 40, leading: true },
 ];
-const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
+const personalityKinds = ['miso', 'puff', 'moss', 'jelly', 'nim', 'zig', 'pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
 const keptKinds = ['idea', 'fix', 'build', 'notes', 'ship'];
 // Sample characters belong to the session, not its task or title.
 const sessions = [

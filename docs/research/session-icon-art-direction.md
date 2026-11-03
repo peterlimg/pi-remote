@@ -12,9 +12,10 @@ Use small, memorable characters to distinguish sessions. They do not need to dep
 - Use static sample content shaped like the supplied screenshot, without publishing private issue identifiers or reading live sessions.
 - Keep the current Idea, Fix, Build, Notes and Ship artwork and animations. Recolour them to the same palette: orange, red, green, off-white and violet, respectively.
 - Use Pip, Sprout, Bun, Mochi, Pebble and Wisp without job-specific accessories. Sample sessions with the same work type should be able to have different characters.
+- Add Miso, Puff, Moss, Jelly, Nim and Zig: a cat with ear perks and tail swishes, a billowing cloud, a double-hopping frog, a pulsing jellyfish with trailing tentacles, a fluttering winged bug, and a stepping triangle. Keep their own body rhythms and follow-through parts.
 - Give each new character a full working loop, not one shared bob: antenna flicks and signals, leaf sway and drifting seeds, ear-led hops, jelly squashes, a rocking orbit, and a floating ghost with a curling tail. Combine body anticipation, face tracking and part follow-through. Keep movement within the row gutters, use the existing clock for continuity, and pause offscreen, when hidden or by request. Reduced motion keeps the characters and status cues still.
-- Show all eleven working loops in the preview lineup. Resting session rows retain their quieter behaviour; the lineup is not a claim that those sessions are running.
-- A character belongs to its session, not its title or status. Default app characters come from a deterministic session-ID hash over the approved eleven. The prototype uses fixed sample assignments. Preserve manual choices, custom emoji and older saved icon types.
+- Show all seventeen working loops in the preview lineup. Resting session rows retain their quieter behaviour; the lineup is not a claim that those sessions are running.
+- A character belongs to its session, not its title or status. Default app characters come from a deterministic session-ID hash over the original eleven. The picker offers all seventeen; adding choices must not reshuffle existing defaults. The prototype uses fixed sample assignments. Preserve manual choices, custom emoji and older saved icon types.
 - After comparing B and C, the user returned to B: 32px leading bots and compact single-line resting titles. Custom emoji choices retain their standard status indicator and detail-line emoji.
 
 ## Archived lifecycle-first proposal
