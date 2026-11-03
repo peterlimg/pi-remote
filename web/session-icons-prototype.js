@@ -44,6 +44,19 @@ const sessionKinds = {
     '<g class="character-wing"><path class="bot-accent" d="M10 18C2 10-1 13 2 21c-3 5 2 8 8 3Z"/></g><g class="character-wing character-wing-right"><path class="bot-accent" d="M22 18c8-8 11-5 8 3 3 5-2 8-8 3Z"/></g><path class="bot-stalk" d="m13 10-2-5m8 5 2-5"/>'],
   zig: ['Zig', '<path d="M16 5q2 0 4 4l8 15q2 5-3 5H7q-5 0-3-5l8-15q2-4 4-4Z"/>', [[12, 21], [20, 21]],
     '<g class="character-zig-foot"><rect class="bot-body" x="7" y="26" width="7" height="5" rx="2"/></g><g class="character-zig-foot character-zig-foot-right"><rect class="bot-body" x="18" y="26" width="7" height="5" rx="2"/></g>'],
+  stella: ['Stella', '<path d="M14.3 3.9Q16 1 17.7 3.9l3.4 6.5 7.2 1Q31.5 12 29 14.5l-5.3 5.1 1.3 7.3Q25.6 30.5 22.5 29L16 25.6 9.5 29Q6.4 30.5 7 26.9l1.3-7.3L3 14.5Q.5 12 3.7 11.4l7.2-1Z"/>', [[12, 18], [20, 18]], '', '',
+    '<g class="character-stardust"><path d="M3 2v4M1 4h4M29 26v4M27 28h4"/></g>'],
+  luna: ['Luna', '<path d="M25 3C17 1 8 4 4 12C0 22 7 30 16 30C22 30 27 27 30 22C20 26 13 20 13 12C13 7 18 3 25 3Z"/>', [[7.5, 20, .9], [12.5, 21, .9]], '', '',
+    '<path class="character-moon-mote" d="M25 7q0 4 4 4-4 0-4 4 0-4-4-4 4 0 4-4Z"/>'],
+  sol: ['Sol', '<circle cx="16" cy="17" r="9"/>', [[12, 17], [20, 17]],
+    '<g class="character-sun-rays"><path d="M16 2v3M16 29v3M1 17h3M28 17h3M5 6l2 2M25 26l2 2M5 28l2-2M25 8l2-2"/></g>'],
+  orbit: ['Orbit', '<circle cx="16" cy="16" r="10"/>', [[12, 13.5], [20, 13.5]],
+    '<g class="character-planet-ring"><ellipse class="character-ring-back" cx="16" cy="17" rx="15" ry="5" transform="rotate(-22 16 17)"/></g>',
+    '<g class="character-planet-ring"><path class="character-ring-front" d="M2 22C8 29 28 20 30 12"/></g>'],
+  comet: ['Comet', '<circle cx="19" cy="14" r="9.5"/>', [[16, 13], [23, 13]],
+    '<g class="character-comet-tail"><path class="bot-accent" d="M16 17Q8 18 3 29Q14 28 22 21Z"/><path class="bot-body" d="M13 14Q6 16 2 23Q10 23 18 19Z"/><path class="bot-body" d="M20 20Q15 28 9 31Q10 24 16 18Z"/></g>'],
+  vega: ['Vega', '<path d="M16 2Q18 12 29 16Q18 19 16 30Q13 19 3 16Q13 13 16 2Z"/>', [[12.5, 16], [19.5, 16]], '', '',
+    '<g class="character-vega-motes"><circle cx="4" cy="4" r="1.1"/><circle cx="28" cy="28" r=".8"/></g>'],
 };
 function botSvg(kind, mood, size, unread = mood === 'unread') {
   const [, body, eyes, back, front = '', work = ''] = sessionKinds[kind];
@@ -60,7 +73,7 @@ const variants = [
   { key: 'leading', name: 'B · Aligned avatars', description: '32px at the left. Keep compact, single-line titles.', size: 32, leading: true },
   { key: 'roomy', name: 'C · Larger + two lines', description: '40px at the left. More title, fewer rows at once.', size: 40, leading: true },
 ];
-const personalityKinds = ['miso', 'puff', 'moss', 'jelly', 'nim', 'zig', 'pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
+const personalityKinds = ['stella', 'luna', 'sol', 'orbit', 'comet', 'vega', 'miso', 'puff', 'moss', 'jelly', 'nim', 'zig', 'pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp'];
 const keptKinds = ['idea', 'fix', 'build', 'notes', 'ship'];
 // Sample characters belong to the session, not its task or title.
 const sessions = [

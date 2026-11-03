@@ -286,6 +286,19 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .personality-bot[data-kind=jelly] { --character-motion: character-jelly; }
 .personality-bot[data-kind=nim] { --character-motion: character-nim; }
 .personality-bot[data-kind=zig] { --character-motion: character-zig; }
+.personality-bot[data-kind=stella] { --character-motion: character-stella; }
+.personality-bot[data-kind=luna] { --character-motion: character-luna; }
+.personality-bot[data-kind=sol] { --character-motion: character-sol; }
+.personality-bot[data-kind=orbit] { --character-motion: character-orbit; }
+.personality-bot[data-kind=comet] { --character-motion: character-comet; }
+.personality-bot[data-kind=vega] { --character-motion: character-vega; }
+.character-stardust { fill: none; stroke: var(--kind); stroke-width: 1.3; stroke-linecap: round; transform-box: view-box; transform-origin: 16px 16px; }
+.character-moon-mote, .character-vega-motes { fill: var(--kind); transform-box: view-box; transform-origin: 16px 16px; }
+.character-sun-rays { fill: none; stroke: var(--kind); stroke-width: 2.2; stroke-linecap: round; transform-box: view-box; transform-origin: 16px 17px; }
+.character-planet-ring { transform-box: view-box; transform-origin: 16px 17px; }
+.character-ring-back, .character-ring-front { fill: none; stroke: var(--kind); stroke-width: 1.9; stroke-linecap: round; }
+.character-ring-front { stroke: var(--bot-dark); }
+.character-comet-tail { transform-box: view-box; transform-origin: 19px 14px; }
 .character-cat-ear, .character-frog-foot, .character-zig-foot { transform-box: fill-box; transform-origin: 50% 100%; }
 .character-cat-tail { fill: none; stroke: var(--kind); stroke-width: 3.2; stroke-linecap: round; transform-box: view-box; transform-origin: 24px 26px; }
 .character-cloud-puff { transform-box: fill-box; transform-origin: center; }
@@ -303,7 +316,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 /* Body and follow-through share the existing 6s clock, so row rebuilds keep their phase. */
 @media (prefers-reduced-motion: no-preference) {
   .personality-bot[data-mood=working] .bot-figure { transform-box: view-box; transform-origin: 16px 29px; animation: var(--character-motion) 3s ease-in-out var(--t) infinite; }
-  .personality-bot[data-kind=wisp][data-mood=working] .bot-figure { animation-duration: 6s; }
+  .personality-bot:is([data-kind=wisp], [data-kind=luna], [data-kind=orbit])[data-mood=working] .bot-figure { animation-duration: 6s; }
   .personality-bot[data-mood=working] .bot-look { animation: character-look 3s ease-in-out var(--t) infinite; }
   .personality-bot[data-mood=working] .character-antenna { animation: character-aerial 3s ease-in-out var(--t) infinite; }
   .personality-bot[data-mood=working] .character-signal { animation: character-signal 3s linear var(--t) infinite; }
@@ -329,6 +342,12 @@ a { color: var(--accent); text-underline-offset: 3px; }
   .personality-bot[data-mood=working] .character-wing-right { animation-name: character-wing-right; }
   .personality-bot[data-mood=working] .character-zig-foot { animation: character-step 1.5s ease-in-out var(--t) infinite; }
   .personality-bot[data-mood=working] .character-zig-foot-right { animation-delay: calc(var(--t) - .75s); }
+  .personality-bot[data-mood=working] .character-stardust { animation: character-stardust 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-moon-mote { animation: character-moon-mote 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-sun-rays { animation: bot-turn 6s linear var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-planet-ring { animation: character-ring-tilt 3s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-comet-tail { animation: character-comet-stream 1.5s ease-in-out var(--t) infinite; }
+  .personality-bot[data-mood=working] .character-vega-motes { animation: character-vega-motes 3s ease-in-out var(--t) infinite; }
 }
 @keyframes character-pip { 0%, 12%, 65%, 100% { transform: none; } 24% { transform: translateY(-1px) rotate(-5deg); } 38% { transform: rotate(4deg); } 52% { transform: rotate(-2deg); } }
 @keyframes character-sprout { 0%, 100% { transform: none; } 25% { transform: rotate(-4deg) scale(.98, 1.03); } 50% { transform: rotate(4deg) scale(1.02, .98); } 75% { transform: rotate(-2deg); } }
@@ -357,6 +376,17 @@ a { color: var(--accent); text-underline-offset: 3px; }
 @keyframes character-wing { 0%, 100% { transform: rotate(-14deg) scaleX(.65); } 50% { transform: rotate(12deg); } }
 @keyframes character-wing-right { 0%, 100% { transform: rotate(14deg) scaleX(.65); } 50% { transform: rotate(-12deg); } }
 @keyframes character-step { 0%, 60%, 100% { transform: none; } 24% { transform: translateY(-2px) rotate(-18deg); } 42% { transform: rotate(10deg); } }
+@keyframes character-stella { 0%, 12%, 100% { transform: none; } 28% { transform: translateY(-2px) rotate(12deg) scale(.98, 1.04); } 48% { transform: rotate(-10deg) scale(1.04, .97); } 68% { transform: rotate(5deg); } 84% { transform: rotate(-3deg); } }
+@keyframes character-luna { 0%, 100% { transform: rotate(-5deg); } 18% { transform: translate(-1px, -2px) rotate(-1deg); } 42% { transform: translate(1px, -3px) rotate(4deg); } 68% { transform: translate(-1px, -1px) rotate(-3deg); } 86% { transform: translateY(-2px) rotate(1deg); } }
+@keyframes character-sol { 0%, 100% { transform: none; } 18% { transform: scale(1.05, .95); } 36% { transform: translateY(-2px) rotate(-4deg); } 56% { transform: rotate(4deg) scale(.98, 1.02); } 78% { transform: translateY(-1px); } }
+@keyframes character-orbit { 0%, 100% { transform: rotate(-4deg); } 24% { transform: translateY(-2px) rotate(4deg); } 48% { transform: translateX(1px) rotate(-2deg); } 72% { transform: translate(-1px, -1px) rotate(3deg); } }
+@keyframes character-comet { 0%, 14%, 100% { transform: none; } 26% { transform: translate(2px, -3px) rotate(7deg); } 44% { transform: translate(1px, -1px) rotate(-4deg); } 64% { transform: rotate(3deg); } 82% { transform: translate(-1px, 1px) scale(1.03, .97); } }
+@keyframes character-vega { 0%, 100% { transform: none; } 20% { transform: scale(.92, 1.1) rotate(-5deg); } 40% { transform: scale(1.1, .92) rotate(8deg); } 60% { transform: scale(.97, 1.03); } 80% { transform: rotate(-3deg); } }
+@keyframes character-stardust { 0%, 100% { opacity: .25; transform: rotate(-12deg) scale(.85); } 35% { opacity: 1; transform: rotate(24deg); } 70% { opacity: .5; transform: rotate(65deg) scale(.92); } }
+@keyframes character-moon-mote { 0%, 100% { opacity: .5; transform: rotate(-8deg) scale(.85); } 42% { opacity: 1; transform: translateY(-1px) rotate(8deg); } 72% { opacity: .7; transform: rotate(-3deg) scale(.92); } }
+@keyframes character-ring-tilt { 0%, 100% { transform: rotate(-6deg) skewY(-3deg); } 50% { transform: rotate(6deg) skewY(3deg); } }
+@keyframes character-comet-stream { 0%, 100% { transform: skewX(-8deg) scale(.85, 1); } 40% { transform: skewX(8deg) scale(1.05, .95); } 70% { transform: skewX(-3deg); } }
+@keyframes character-vega-motes { 0%, 100% { opacity: .3; transform: rotate(-22deg) scale(.7); } 38% { opacity: 1; transform: rotate(15deg); } 70% { opacity: .6; transform: rotate(35deg) scale(.85); } }
 .document-hidden .bot *, .bot:not(.in-view) * { animation-play-state: paused !important; }
 :is(.session-icon, .heading-kind)[data-kind] { color: var(--kind, var(--muted)); }
 .heading-kind { display: grid; place-items: center; flex-shrink: 0; font-size: 24px; line-height: 1; }
@@ -364,15 +394,15 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #title-kind:empty { display: none; }
 .session-icon[data-kind=custom] { font-size: 14px; line-height: 1; }
 [data-kind=review] { --kind: light-dark(#a8532b, #edb58d); }
-[data-kind=fix], [data-kind=bun], [data-kind=nim] { --kind: #ff2345; }
+[data-kind=fix], [data-kind=bun], [data-kind=nim], [data-kind=sol] { --kind: #ff2345; }
 [data-kind=research] { --kind: light-dark(#117c83, #70cad0); }
-[data-kind=build], [data-kind=sprout], [data-kind=moss] { --kind: light-dark(#009b57, #00c875); }
-[data-kind=idea], [data-kind=mochi], [data-kind=miso] { --kind: light-dark(#c97400, #ff9f00); }
-[data-kind=notes], [data-kind=pip], [data-kind=puff] { --kind: light-dark(#888888, #f5f5f5); }
+[data-kind=build], [data-kind=sprout], [data-kind=moss], [data-kind=vega] { --kind: light-dark(#009b57, #00c875); }
+[data-kind=idea], [data-kind=mochi], [data-kind=miso], [data-kind=stella] { --kind: light-dark(#c97400, #ff9f00); }
+[data-kind=notes], [data-kind=pip], [data-kind=puff], [data-kind=luna] { --kind: light-dark(#888888, #f5f5f5); }
 [data-kind=general] { --kind: var(--muted); }
 [data-kind=test] { --kind: light-dark(#0f766e, #5fd4c4); }
-[data-kind=ship], [data-kind=pebble], [data-kind=zig] { --kind: #9254ff; }
-[data-kind=wisp], [data-kind=jelly] { --kind: light-dark(#00998a, #00b9a4); }
+[data-kind=ship], [data-kind=pebble], [data-kind=zig], [data-kind=orbit] { --kind: #9254ff; }
+[data-kind=wisp], [data-kind=jelly], [data-kind=comet] { --kind: light-dark(#00998a, #00b9a4); }
 [data-kind=tidy] { --kind: light-dark(#be185d, #f9a8d4); }
 [data-kind=data] { --kind: light-dark(#4338ca, #a5b4fc); }
 [data-kind=guard] { --kind: light-dark(#4d7c0f, #bef264); }

@@ -20,6 +20,12 @@ test('approved characters have readable theme-aware colours and working motion i
     jelly: [[0, 153, 138], [0, 185, 164]],
     nim: [[255, 35, 69], [255, 35, 69]],
     zig: [[146, 84, 255], [146, 84, 255]],
+    stella: [[201, 116, 0], [255, 159, 0]],
+    luna: [[136, 136, 136], [245, 245, 245]],
+    sol: [[255, 35, 69], [255, 35, 69]],
+    orbit: [[146, 84, 255], [146, 84, 255]],
+    comet: [[0, 153, 138], [0, 185, 164]],
+    vega: [[0, 155, 87], [0, 200, 117]],
   };
   const states = Object.keys(samples).map((id, index) => ({ id, title: 'Character ' + id, status: 'idle', cwd: '/projects/pi-remote', updatedAt: Date.now() - index * 1000, messages: [] }));
   // Existing stored choices make every approved drawing visible without relying on hash collisions.
@@ -40,13 +46,22 @@ test('approved characters have readable theme-aware colours and working motion i
     await page.setViewportSize({ width: theme === 'light' ? 320 : 390, height: 844 });
     await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
     await page.goto('/#token=browser-test-token-only-123456789012345');
-    await expect(page.locator('#sessions .session')).toHaveCount(17);
+    await expect(page.locator('#sessions .session').first()).toBeVisible();
+    await page.locator('#sessions .session').last().scrollIntoViewIfNeeded();
+    await expect(page.locator('#sessions .session')).toHaveCount(23);
     for (const [kind, colours] of Object.entries(samples)) {
       const bot = page.locator(`#sessions [data-id=${kind}] .session-icon.bot`);
       await expect(bot).toHaveAttribute('data-kind', kind);
       await expect(bot).toHaveCSS('width', '32px');
       await expect(bot.locator('g.bot-body')).toHaveCSS('fill', `rgb(${colours[index].join(', ')})`);
       await expect(bot.locator('.bot-eye')).toHaveCount(2);
+      expect(await bot.evaluate(node => {
+        const body = node.querySelector('g.bot-body').firstElementChild;
+        return [...node.querySelectorAll('.bot-eye')].every(eye => [[0, 0], [-1, 0], [1, -.5]].every(([dx, dy]) => Array.from({ length: 16 }, (_, index) => {
+          const angle = index * Math.PI / 8;
+          return body.isPointInFill(new DOMPoint(eye.cx.baseVal.value + dx + eye.rx.baseVal.value * Math.cos(angle), eye.cy.baseVal.value + dy + eye.ry.baseVal.value * Math.sin(angle)));
+        }).every(Boolean)));
+      }), `${kind} eyes fit inside the body`).toBe(true);
       await expect(bot.locator('.bot-frame, .bot-glint')).toHaveCount(0);
       expect(await bot.locator('.bot-eye').evaluateAll((nodes, theme) => nodes.every(node => {
         const style = getComputedStyle(node);
@@ -75,6 +90,7 @@ test('approved characters have readable theme-aware colours and working motion i
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   states[0].status = 'working'; publish();
   const pip = page.locator('#sessions [data-id=pip] .bot');
+  await pip.scrollIntoViewIfNeeded();
   await expect(pip.locator('.bot-figure')).toHaveCSS('animation-name', 'character-pip');
   await expect(pip.locator('.character-antenna')).toHaveCSS('animation-name', 'character-aerial');
   await expect(pip.locator('.character-antenna')).toHaveCSS('animation-play-state', 'running');
@@ -202,7 +218,7 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
   expect(Math.abs(card.y + card.height / 2 - viewport.height / 2)).toBeLessThan(2);
   await expect(picker.getByRole('button', { name: /Automatic|None/ })).toHaveCount(0);
   await expect(picker.getByRole('button', { name: 'Review', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(picker.locator('#session-kind-options > button:not([hidden])')).toHaveCount(18);
+  await expect(picker.locator('#session-kind-options > button:not([hidden])')).toHaveCount(24);
   await expect(picker.locator('[aria-pressed=true] .bot')).toHaveAttribute('data-mood', 'working');
   await expect(picker.locator('[aria-pressed=true] svg')).toHaveAttribute('width', '44');
   await picker.getByRole('button', { name: 'Fix', exact: true }).click();
@@ -220,12 +236,12 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
 
   await openSettings(normal);
   await expect(picker.getByRole('button', { name: 'Mochi', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(picker.locator('#session-kind-options > button:not([hidden])')).toHaveCount(17);
+  await expect(picker.locator('#session-kind-options > button:not([hidden])')).toHaveCount(23);
   // The header shows the kind next to the project, and follows a new choice straight away.
   await expect(page.locator('#project-name')).toHaveText('pi-remote');
   await expect(page.locator('#title-kind').getByRole('img', { name: 'Mochi', exact: true })).toBeVisible();
   await page.locator('.conversation-header').screenshot({ path: testInfo.outputPath('header-kind.png') });
-  for (const [name, motion] of [['Pip', 'pip'], ['Sprout', 'sprout'], ['Bun', 'bun'], ['Mochi', 'mochi'], ['Pebble', 'pebble'], ['Wisp', 'wisp'], ['Miso', 'miso'], ['Puff', 'puff'], ['Moss', 'moss'], ['Jelly', 'jelly'], ['Nim', 'nim'], ['Zig', 'zig']]) {
+  for (const [name, motion] of [['Pip', 'pip'], ['Sprout', 'sprout'], ['Bun', 'bun'], ['Mochi', 'mochi'], ['Pebble', 'pebble'], ['Wisp', 'wisp'], ['Miso', 'miso'], ['Puff', 'puff'], ['Moss', 'moss'], ['Jelly', 'jelly'], ['Nim', 'nim'], ['Zig', 'zig'], ['Stella', 'stella'], ['Luna', 'luna'], ['Sol', 'sol'], ['Orbit', 'orbit'], ['Comet', 'comet'], ['Vega', 'vega']]) {
     const button = picker.getByRole('button', { name, exact: true });
     await button.click();
     await expect(button.locator('.bot')).toHaveClass(/personality-bot/);
@@ -233,9 +249,9 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-play-state', 'running');
   }
   await backToList();
-  await expect(normal.getByRole('img', { name: 'Zig', exact: true })).toBeVisible();
+  await expect(normal.getByRole('img', { name: 'Vega', exact: true })).toBeVisible();
   await page.reload();
-  await expect(normal.getByRole('img', { name: 'Zig', exact: true })).toBeVisible();
+  await expect(normal.getByRole('img', { name: 'Vega', exact: true })).toBeVisible();
   await openSettings(normal);
   await picker.getByRole('button', { name: 'Idea', exact: true }).tap();
   await expect(picker.getByRole('button', { name: 'Idea', exact: true })).toHaveAttribute('aria-pressed', 'true');
