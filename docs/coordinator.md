@@ -8,9 +8,11 @@ Requires Pi 1.4 or newer and a native Pi model. Custom provider extensions such 
 
 1. Open a session in the project and choose **Session details → Start read-only coordinator**.
 2. Ask for an investigation. The coordinator can assign up to two active tasks and continue answering you while they run.
-3. Open **Background tasks** below the conversation header to inspect assignments, questions, and reports.
-4. **Reply in worker** opens the worker's normal conversation. Your coordinator draft stays in its own session. The worker's **Return to coordinator** control returns you.
+3. The **Workers** section below the conversation header shows worker names and live task states. Tap a worker to open its conversation directly. **Background tasks** in the same section opens assignments, questions, and reports.
+4. Your coordinator draft stays in its own session. The worker's **Return to coordinator** control returns you.
 5. **Stop task** stops only that worker. **Accept result** records a reviewed result separately from the worker's report.
+
+Only independent conversations, including coordinators, appear in the default global session list. Workers stay under their coordinator, including when working or pinned. Explicit search and the coordinator's worker controls still reach their transcripts.
 
 The composer is unchanged. Its Send and Stop controls still belong to the selected session. Stopping a coordinator response does not stop its workers.
 

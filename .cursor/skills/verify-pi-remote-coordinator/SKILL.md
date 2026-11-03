@@ -54,16 +54,16 @@ The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 39
 2. Open **Coordinator verification project**.
 3. Open **Session details → Start read-only coordinator**.
 4. Send `Investigate both fixture files.` using the normal Message field and Send message control.
-5. Open **Background tasks**. **First inspection** asks a question while **Second inspection** remains working.
-6. **Reply in worker**, send `Keep the original identifier.`, then **Return to coordinator**.
-7. Inspect and **Accept result** for First inspection. **Stop task** for Second inspection.
+5. In the visible **Workers** section below the chat header, **First inspection** asks a question while **Second inspection** remains working. Neither worker appears in global session sections, even if pinned. Explicit search still finds them.
+6. Tap **First inspection** directly in Workers, send `Keep the original identifier.`, then **Return to coordinator**.
+7. Open **Background tasks** from the Workers heading, inspect and **Accept result** for First inspection. **Stop task** for Second inspection.
 8. Reload and reselect the coordinator to read the persisted result.
 
 The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.
 
 ## Evidence
 
-The full proof retains Doctor results, action records, screenshots and ARIA snapshots, browser WebSocket frames, native provider/tool audit, public task results, host logs, the verdict, and cleanup confirmation outside the disposable scratch directory.
+The full proof retains Doctor results, root-only list checks, phone/narrow/short/desktop worker navigation captures, action records, screenshots and ARIA snapshots, browser WebSocket frames, native provider/tool audit, public task results, host logs, the verdict, and cleanup confirmation outside the disposable scratch directory.
 
 Exercise visible controls. Never populate internal application state, storage, or task records to make an assertion pass. Verify mutations with a second user-facing read and the persisted task record. The fixture's seed files and deterministic model are setup at existing external seams, not substitutes for the host or Pi tool runtime.
 

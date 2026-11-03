@@ -878,7 +878,22 @@ pre.message-text { white-space: pre-wrap; }
   .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
 .session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
-.coordinator-context { display: block; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); min-height: 44px; margin: var(--conversation-header-height) auto 0; padding: 10px 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--muted); text-align: left; font-size: 13px; font-weight: 500; }
+.coordinator-context { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: var(--conversation-header-height) auto 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.coordinator-workers-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.coordinator-workers-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+#coordinator-worker-count { margin-left: 4px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.coordinator-workers-heading button { padding: 8px 0; font-size: 12px; }
+.coordinator-worker-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 176px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; margin-inline: -2px; }
+.coordinator-worker-links > .hint { grid-column: 1 / -1; margin: 0; padding-block: 4px; }
+.coordinator-worker { display: grid; grid-template-columns: minmax(0, 1fr) 16px; align-content: start; gap: 2px 8px; min-width: 0; min-height: 60px; padding: 8px 12px; border-radius: 8px; background: var(--panel); color: var(--text); text-align: left; font-weight: 400; }
+.coordinator-worker:hover { background: var(--user); }
+.coordinator-worker:active { background: var(--selection); }
+.coordinator-worker > strong { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.coordinator-worker-state { grid-column: 1; color: var(--muted); font-size: 12px; }
+.coordinator-worker:is([data-state=waiting], [data-state=unknown]) .coordinator-worker-state { color: var(--warning); }
+.coordinator-worker-arrow { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--muted); }
+.coordinator-worker-preview { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+#coordinator-return { display: block; width: 100%; padding: 8px 0; text-align: left; font-size: 13px; }
 main:has(#coordinator-context:not([hidden])) #transcript { --conversation-header-height: 0px; }
 main:has(#coordinator-context:not([hidden])) #notice { margin-top: 0; }
 .coordinator-intro { max-width: var(--content-width); margin: 0 auto 24px; }
@@ -899,4 +914,8 @@ main:has(#coordinator-context:not([hidden])) #notice { margin-top: 0; }
 .coordinator-task-actions { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
 .coordinator-task-actions button { min-height: 44px; padding: 8px 0; font-size: 13px; }
 @media (max-width: 700px) { .coordinator-context { width: calc(100% - 32px); } }
+@media (max-height: 600px) {
+  .coordinator-worker-links { max-height: 64px; }
+  .coordinator-worker-preview { display: none; }
+}
 .boot-status { display: flex; align-items: center; gap: 10px; }

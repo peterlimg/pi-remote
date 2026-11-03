@@ -163,7 +163,13 @@
         <p id="coordinator-feedback" role="alert" hidden></p>
         <div id="coordinator-task-list" role="list" aria-label="Coordinator tasks"></div>
       </div></dialog>
-      <button id="coordinator-context" type="button" class="coordinator-context" hidden></button>
+      <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
+        <div id="coordinator-workers" hidden>
+          <div class="coordinator-workers-heading"><h2>Workers <span id="coordinator-worker-count"></span></h2><button id="coordinator-view-tasks" type="button" class="quiet">Background tasks</button></div>
+          <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
+        </div>
+        <button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator" hidden></button>
+      </section>
       <div id="notice" class="notice" role="status" hidden></div>
       <section id="empty" class="empty"><p>Select a session.</p></section>
       <span id="copy-status" class="sr-only" role="status"></span>

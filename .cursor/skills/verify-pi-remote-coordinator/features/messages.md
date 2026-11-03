@@ -12,14 +12,14 @@ Worker questions and reports return to their owning coordinator. Opening a worke
 
 ## How to get to it (user POV)
 
-Open the coordinator's **Background tasks**. Use **Reply in worker** for a question, **Open worker** for inspection, **Accept result** for a returned report, or **Stop task** for active work. A worker's visible **Return to coordinator** control returns to its parent.
+Tap a named worker in the coordinator chat's **Workers** section to open it directly. Its heading's **Background tasks** button opens details with **Reply in worker** for a question and **Open worker** for inspection, **Accept result** for a returned report, or **Stop task** for active work. A worker's visible **Return to coordinator** control returns to its parent.
 
 ## Driving it with Playwright
 
 Preconditions: First inspection needs an answer and Second inspection is working.
 
 - Fill the coordinator's `#prompt` with `Keep my coordinator draft.` without sending it.
-- In `page.getByRole('listitem', { name: 'First inspection', exact: true })`, click **Reply in worker**. Require the title **First inspection**, an empty prompt, and the visible **Return to coordinator** control.
+- In `page.getByRole('region', { name: 'Workers', exact: true })`, click the button **First inspection, Needs answer** directly, without Session details or the task sheet. Require the title **First inspection**, an empty prompt, and the visible **Return to coordinator** control.
 - Send `Keep the original identifier.`. Return to the coordinator and require the unsent coordinator draft to remain unchanged.
 - Reopen **Background tasks**, inspect **Returned result**, and require `ALPHA_VALUE=stable`. Click **Accept result** and require **Accepted** in a second view.
 - In Second inspection's list item, click **Stop task**. Require **Stopped** there while First inspection stays **Accepted**. The native provider audit must show that only the held worker request was aborted.

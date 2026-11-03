@@ -114,14 +114,14 @@ export class SessionService extends EventEmitter {
     return { sessions: [...highlights, ...rows], total, matched: matches.length, loaded: rows.length, offset, requestOffset, query, section, availability, groups,
       warnings: this.warnings, allowResume: this.allowResume };
   }
-  // Helpers stay searchable; only the default browsing list hides them.
+  // Child sessions stay searchable and directly addressable, but are not independent conversations.
   matches(query = '', includeHelpers = false) {
     if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid session page');
     query = query.trim().toLowerCase();
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && item.resumable, pinned: this.pins.has(id) });
     const visible = [...all.values()].filter(item => includeHelpers || query || !this.closedSessions.has(item.id) &&
-      !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
+      !this.coordination.taskForSession(item.id) && !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
     for (const item of visible) if (this.closedSessions.has(item.id)) item.closed = true;
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));

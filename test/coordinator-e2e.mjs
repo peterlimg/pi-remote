@@ -97,6 +97,31 @@ if (process.argv[2] === 'doctor') {
   };
   const openTasks = async () => { await page.getByRole('button', { name: 'Background tasks', exact: true }).click(); await check(page.locator('#coordinator-sheet')).toBeVisible(); };
   const closeTasks = () => page.getByRole('button', { name: 'Done', exact: true }).click();
+  const assertHierarchy = async () => {
+    const client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
+    try {
+      const tasks = ledger().tasks, workers = new Set(tasks.map(task => task.sessionId));
+      assert.equal((await client.request('pin', { sessionId: tasks[0].sessionId, pinned: true })).ok, true);
+      const roots = [];
+      for (const section of [undefined, 'overview', 'now', 'pinned']) {
+        const response = await client.request('list', { limit: 100, section, availability: 'all' });
+        const rows = response.value.sessions || response.value.changes;
+        roots.push({ section: section || 'all', onlyRoots: !rows.some(row => workers.has(row.id)) });
+        if (!section) assert(rows.some(row => row.id === owner().id), 'The coordinator must remain a top-level session');
+      }
+      const search = await client.request('list', { limit: 100, query: 'First inspection' });
+      assert((search.value.sessions || search.value.changes).some(row => row.id === tasks[0].sessionId), 'Workers must remain searchable');
+      await client.request('pin', { sessionId: tasks[0].sessionId, pinned: false });
+      const region = page.getByRole('region', { name: 'Workers', exact: true });
+      const hierarchy = {
+        globalListHasOnlyRoots: roots.every(result => result.onlyRoots),
+        workersVisibleInChat: await region.count() === 1 && (await region.innerText()).includes('First inspection') && (await region.innerText()).includes('Second inspection')
+      };
+      save('hierarchy.json', { ...hierarchy, sections: roots });
+      assert.deepEqual(hierarchy, { globalListHasOnlyRoots: true, workersVisibleInChat: true });
+      record('workers belong to their coordinator, not global list sections');
+    } finally { client.ws.terminate(); }
+  };
   const send = async text => { record('send', { text }); await page.locator('#prompt').fill(text); await page.getByRole('button', { name: 'Send message', exact: true }).click(); };
   const restoreCoordinator = async () => {
     await page.reload();
@@ -134,16 +159,46 @@ if (process.argv[2] === 'doctor') {
     await check(taskRow('Second inspection')).toContainText('Working');
     await check(page.locator('#coordinator-task-list').getByRole('listitem')).toHaveCount(2);
     await snapshot('assignment-and-question'); record('two independent tasks', { states: ledger().tasks.map(({ title, state }) => ({ title, state })) });
+    await closeTasks();
+    await assertHierarchy();
+    const layout = [];
+    for (const [name, width, height, colorScheme] of [
+      ['workers-phone-light', 390, 844, 'light'], ['workers-phone-dark', 390, 844, 'dark'],
+      ['workers-narrow', 320, 740, 'light'], ['workers-short', 390, 510, 'light'], ['workers-desktop', 1440, 900, 'light']
+    ]) {
+      await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
+      if (height < 600) await page.locator('#prompt').focus(); else await page.locator('#prompt').blur();
+      const workers = page.getByRole('region', { name: 'Workers', exact: true });
+      await check(workers.getByRole('button', { name: 'First inspection, Needs answer', exact: true })).toBeVisible();
+      await check(workers.getByRole('button', { name: 'Second inspection, Working', exact: true })).toBeVisible();
+      const measured = await page.evaluate(() => {
+        const rect = id => { const box = document.getElementById(id).getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height }; };
+        return { workers: rect('coordinator-context'), transcript: rect('transcript'), composer: rect('composer'),
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          targets: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => { const box = node.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; }) };
+      });
+      assert(!measured.overflow && measured.targets && measured.transcript.height >= 80);
+      assert(measured.workers.bottom <= measured.transcript.top + 1 && measured.composer.bottom <= height + 1);
+      layout.push({ name, width, height, colorScheme, ...measured }); await snapshot(name);
+    }
+    save('worker-layout.json', layout);
+    await page.locator('#prompt').blur(); await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
+    await page.locator('#back').click();
+    await check(page.locator('#sessions .session').filter({ hasText: 'First inspection' })).toHaveCount(0);
+    await check(page.locator('#sessions .session').filter({ hasText: 'Second inspection' })).toHaveCount(0);
+    await snapshot('global-roots-only');
+    await page.locator('#sessions').getByRole('button', { name: /Coordinator · project/ }).click();
     const overLimit = await api(owner().token, { action: 'assign', title: 'Unwanted third task', instruction: 'This must not be dispatched.', requestId: hash(randomUUID()) });
     assert.equal(overLimit.body.ok, false); assert.equal(ledger().tasks.length, 2); record('third active task refused without dispatch');
-    await closeTasks(); await send('Which tasks are still open?');
+    await send('Which tasks are still open?');
     await check(page.locator('#transcript')).toContainText('Second inspection is working');
     assert.equal(ledger().tasks.find(task => task.title === 'Second inspection').state, 'working'); record('coordinator responds while worker remains active');
     await check(page.locator('#transcript .message.user').filter({ hasText: '[Pi Remote task events]' })).toHaveCount(0);
     await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'Prompted by an extension' }).first()).toBeVisible();
     record('internal wake-up instructions stay in collapsed activity rather than user bubbles');
     await page.locator('#prompt').fill('Keep my coordinator draft.');
-    await openTasks(); await taskRow('First inspection').getByRole('button', { name: 'Reply in worker', exact: true }).click();
+    await page.getByRole('region', { name: 'Workers', exact: true }).getByRole('button', { name: 'First inspection, Needs answer', exact: true }).click();
+    record('open worker directly from coordinator chat');
     await check(page.locator('#title')).toHaveText('First inspection'); await check(page.locator('#prompt')).toHaveValue('');
     await check(page.getByRole('button', { name: 'Return to coordinator', exact: true })).toBeVisible();
     await send('Keep the original identifier.');
@@ -158,7 +213,7 @@ if (process.argv[2] === 'doctor') {
     await check(taskRow('Second inspection')).toContainText('Stopped');
     assert.equal(ledger().tasks.find(task => task.title === 'First inspection').state, 'completed');
     record('accepted one result and stopped only its sibling'); await page.emulateMedia({ colorScheme: 'dark' }); await snapshot('result-and-scoped-stop');
-    await closeTasks(); await restoreCoordinator(); await openTasks();
+    await closeTasks(); await restoreCoordinator(); await assertHierarchy(); await openTasks();
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
     await taskRow('First inspection').getByText('Last result', { exact: true }).click(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
     record('reload preserves task ownership and report'); await closeTasks();
@@ -178,7 +233,7 @@ if (process.argv[2] === 'doctor') {
       await delay(20);
     } while (Date.now() < deadline);
     assert(restored.busyWorkers === 0 && restored.managedSessions.length >= 4, 'All four native sessions must finish restoring before the no-replay check');
-    await restoreCoordinator(); await openTasks();
+    await restoreCoordinator(); await assertHierarchy(); await openTasks();
     await check(taskRow('Interrupted inspection')).toContainText('Needs inspection');
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
     for (const task of ledger().tasks) assert.equal(entries(task.file).filter(entry => entry.message.role === 'user').length, promptsBefore[task.id], 'Restart must not replay a task instruction');
@@ -234,7 +289,7 @@ if (process.argv[2] === 'doctor') {
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'two real Pi workers', 'two-task limit', 'coordinator stays responsive', 'question/reply', 'draft isolation', 'explicit report acceptance', 'scoped Stop', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
+      checks: ['manual login and doctor', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'question/reply', 'draft isolation', 'explicit report acceptance', 'scoped Stop', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
       excluded: ['paid-model judgment', 'code-writing workers', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));

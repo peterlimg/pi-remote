@@ -1816,20 +1816,38 @@ function renderCoordinator(state) {
   $('coordinator-tasks').disabled = !connected; $('coordinator-parent').disabled = !connected;
   const context = $('coordinator-context');
   context.hidden = !available || !role;
-  if (!context.hidden) {
-    const worker = role.role === 'worker', questions = role.tasks?.filter(task => task.state === 'waiting').length || 0;
-    context.textContent = worker ? 'Read-only worker · Return to ' + role.coordinatorTitle
-      : 'Background tasks · ' + role.tasks.length + (questions ? ' · ' + questions + ' needs answer' : '');
-    context.setAttribute('aria-label', worker ? 'Return to coordinator' : 'Background tasks');
-  }
-  if (!$('coordinator-sheet').open || role?.role !== 'coordinator') return;
-  const key = JSON.stringify([state.id, role.tasks, connected, [...coordinatorActions]]);
+  if (context.hidden) return;
+  const worker = role.role === 'worker';
+  context.setAttribute('aria-label', worker ? 'Coordinator' : 'Workers');
+  $('coordinator-workers').hidden = worker; $('coordinator-return').hidden = !worker;
+  if (worker) { $('coordinator-return').textContent = 'Return to ' + role.coordinatorTitle; return; }
+  const key = JSON.stringify([state.id, role.tasks, connected, [...coordinatorActions], $('coordinator-sheet').open]);
   if (key === coordinatorRenderKey) return;
   coordinatorRenderKey = key;
-  const list = $('coordinator-task-list'); list.replaceChildren();
-  if (!role.tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
   const labels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
     stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
+  const links = $('coordinator-worker-links'), focused = links.querySelector('button:focus')?.dataset.workerId;
+  links.replaceChildren(); $('coordinator-worker-count').textContent = role.tasks.length;
+  const active = new Set(['starting', 'working', 'waiting', 'stopping']);
+  const ordered = [...role.tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)));
+  for (const task of ordered) {
+    const button = el('button', undefined, 'coordinator-worker'); button.type = 'button';
+    button.dataset.workerId = task.id; button.dataset.state = task.state; button.disabled = !connected;
+    button.setAttribute('aria-label', task.title + ', ' + (labels[task.state] || task.state));
+    const name = el('strong', task.title); name.title = task.title;
+    const arrow = el('span', undefined, 'coordinator-worker-arrow'); arrow.setAttribute('aria-hidden', 'true');
+    arrow.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>';
+    button.append(name, el('span', labels[task.state] || task.state, 'coordinator-worker-state'), arrow);
+    if (task.state === 'waiting' && task.question) {
+      const preview = el('span', task.question, 'coordinator-worker-preview'); preview.title = task.question; button.append(preview);
+    }
+    button.addEventListener('click', () => { void selectSession(task.sessionId); }); links.append(button);
+    if (focused === task.id) button.focus({ preventScroll: true });
+  }
+  if (!role.tasks.length) links.append(el('p', 'Your workers will appear here when you assign an investigation.', 'hint'));
+  if (!$('coordinator-sheet').open) return;
+  const list = $('coordinator-task-list'); list.replaceChildren();
+  if (!role.tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
   for (const task of role.tasks) {
     const row = el('article', undefined, 'coordinator-task'); row.setAttribute('role', 'listitem');
     row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
@@ -1874,7 +1892,8 @@ function returnToCoordinator() {
   const owner = cache.get(selected)?.coordination?.coordinatorId;
   if (owner) void selectSession(owner);
 }
-$('coordinator-context').addEventListener('click', () => cache.get(selected)?.coordination?.role === 'worker' ? returnToCoordinator() : openCoordinatorTasks());
+$('coordinator-view-tasks').addEventListener('click', openCoordinatorTasks);
+$('coordinator-return').addEventListener('click', returnToCoordinator);
 $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
 $('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
