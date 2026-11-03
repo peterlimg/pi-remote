@@ -1503,7 +1503,6 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       const statusText = ({ done: 'Complete', working: 'Running', pending: 'Pending', error: 'Failed' })[status] || status;
       entry.line = 'codemode · ' + title;
       detail.classList.add('codemode-tool');
-      detail.open = expanded.get(detail.dataset.disclosureId) ?? ['working', 'error'].includes(status);
       const summary = el('summary'), marker = el('span', undefined, 'codemode-marker');
       marker.setAttribute('aria-hidden', 'true');
       const path = status === 'done' ? '<path d="m5 12 4 4L19 6"/>' : status === 'error'
@@ -1685,7 +1684,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (recent) {
         const context = (running ? '' : 'Last: ') + recent.line, line = el('span', context, 'tool-activity-line');
         line.title = context; text.append(line);
-        if (recent.preview && (running || recent.name !== 'read' || recent.status === 'error')) text.append(el('span', recent.preview, 'tool-activity-progress'));
+        if (!group.codemode && recent.preview && (running || recent.name !== 'read' || recent.status === 'error')) text.append(el('span', recent.preview, 'tool-activity-progress'));
       }
       group.summary.append(text);
     } else group.summary.append(label);

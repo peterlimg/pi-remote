@@ -45,7 +45,7 @@ async function capture(page, name) {
   await page.screenshot({ path: join(process.env.PI_CODEMODE_LIVE_EVIDENCE, name + '.png'), animations: 'disabled' });
 }
 
-test('codemode work log exposes real output before scripts and preserves focus through streaming', async ({ page }) => {
+test('codemode output stays opt-in and preserves manual expansion through streaming and completion', async ({ page }) => {
   const state = sample(), publish = await open(page, state);
   const group = page.locator('.codemode-activity'), summary = group.locator(':scope > summary');
   const read = page.locator('[data-tool-id="read"]'), checks = page.locator('[data-tool-id="checks"]');
@@ -54,10 +54,17 @@ test('codemode work log exposes real output before scripts and preserves focus t
   await expect(group.locator('.tool')).toHaveCount(3);
   await expect(read.locator('.codemode-title')).toHaveText('Read the icon components');
   await expect(read.locator('.tool-output')).toBeHidden();
-  await expect(checks).toHaveAttribute('open', '');
+  await expect(checks).not.toHaveAttribute('open', '');
+  await expect(checks.locator('.tool-output')).toBeHidden();
   await expect(checks.locator('.codemode-state')).toHaveText(' · Running');
   await expect(checks.locator('.tool-status')).toHaveCount(0);
+  state.tools[0].text = 'Streaming output before any tap'; publish();
+  await expect(checks.locator('.tool-output')).toHaveText('Streaming output before any tap');
+  await expect(checks.locator('.tool-output')).toBeHidden();
+  await expect(group.locator('.tool-activity-progress')).toHaveCount(0);
   await capture(page, 'phone-working');
+  await checks.locator(':scope > summary').focus(); await page.keyboard.press('Enter');
+  await expect(checks.locator('.tool-output')).toBeVisible();
   await read.locator(':scope > summary').focus();
   await page.keyboard.press('Enter');
   await expect(read.locator('.tool-output')).toHaveText('Read two files.');
@@ -72,10 +79,17 @@ test('codemode work log exposes real output before scripts and preserves focus t
   await expect(script).toHaveAttribute('open', '');
   await expect(script.locator('summary')).toBeFocused();
   await expect(checks.locator('.tool-output')).toHaveText('Checking rename\n2 passed');
+  await expect(checks.locator('.tool-output')).toBeVisible();
+  await checks.locator(':scope > summary').click();
+  state.tools[0].text = 'More output after closing the run'; publish();
+  await expect(checks.locator('.tool-output')).toHaveText('More output after closing the run');
+  await expect(checks.locator('.tool-output')).toBeHidden();
+  await checks.locator(':scope > summary').click();
   await summary.click();
   state.tools[0].text = '<img src=x onerror=window.injected=1>\n3 passed'; publish();
   await expect(group).not.toHaveAttribute('open', '');
-  await expect(summary.locator('.tool-activity-progress')).toHaveText('<img src=x onerror=window.injected=1>\n3 passed');
+  await expect(summary.locator('.tool-activity-progress')).toHaveCount(0);
+  await expect(checks.locator('.tool-output')).toBeHidden();
   await expect(page.locator('#transcript img')).toHaveCount(0);
   expect(await page.evaluate(() => window.injected)).toBeUndefined();
   state.messages.push(result('checks', 'All browser checks passed.', 3000, 10000));
@@ -87,12 +101,15 @@ test('codemode work log exposes real output before scripts and preserves focus t
   await summary.focus(); await page.keyboard.press('Enter');
   await expect(script).toHaveAttribute('open', '');
   await expect(checks.locator('.tool-status')).toHaveText('3.0s');
+  await expect(checks.locator('.tool-output')).toBeVisible();
   await expect(group.locator('.tool')).toHaveCount(3);
   state.messages.push({ id: 'retry', role: 'assistant', toolCalls: [call('failed', '// Check rename assertion\nthrow new Error("rename");')] },
     result('failed', 'Expected the same character after rename. 1 failed, 4 passed.', 0, 11000, true));
   publish();
   const failed = page.locator('[data-tool-id="failed"]');
   await expect(group.locator('.tool-activity-label')).toHaveText('3 complete · 1 failed');
+  await expect(failed.locator('.tool-output')).toBeHidden();
+  await failed.locator(':scope > summary').click();
   await expect(failed.locator('.tool-output')).toBeVisible();
   await expect(failed.locator('.codemode-state')).toHaveText(' · Failed');
   await expect(failed.locator('.tool-status')).toHaveText('0ms');
