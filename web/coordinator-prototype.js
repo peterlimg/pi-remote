@@ -1,9 +1,10 @@
-// Three UI-only worker stacks on this prototype route, selected with ?variant=A|B|C.
+// UI-only coordinator studies on this route, selected with ?variant=A|B|C|D.
 const $ = id => document.getElementById(id);
 const variants = {
   A: { name: 'Plain list', description: 'A full-width worker list. Tap a worker to inspect its read-only log. All input stays in the coordinator.' },
   B: { name: 'Inline details', description: 'Inspect worker status without leaving the main conversation. Questions and instructions go through the coordinator.' },
-  C: { name: 'Session tree', description: 'Keep the main conversation and its read-only worker logs together. The coordinator is the only recipient of user input.' }
+  C: { name: 'Session tree', description: 'Keep the main conversation and its read-only worker logs together. The coordinator is the only recipient of user input.' },
+  D: { name: 'Working answer', description: 'A versioned working answer with source citations. New worker findings wait for you to review them; instructions stay with the coordinator.' }
 };
 const sessions = {
   coordinator: { name: 'Mobile review', state: 'idle', draft: '', attached: false, messages: [
@@ -30,15 +31,132 @@ const instructions = new Map([
   ['stop messaging', { worker: 'messaging', state: 'stopped', detail: 'Stopped by the coordinator at your request.', receipt: 'I stopped Messaging at your request. Recovery and Layout review are unchanged.' }]
 ]);
 const workers = ['messaging', 'recovery', 'review'];
-const labels = { working: 'Working', waiting: 'Needs answer', reported: 'Result ready', stopped: 'Stopped' };
+const labels = { working: 'Working', waiting: 'Needs answer', reported: 'Result ready', stopped: 'Stopped', completed: 'Reviewed' };
 const params = new URL(location.href).searchParams;
 let variant = Object.hasOwn(variants, params.get('variant')) ? params.get('variant') : 'A';
 let selected = Object.hasOwn(sessions, params.get('session')) ? params.get('session') : 'coordinator';
 let preview = innerHeight >= 600 ? 'recovery' : undefined, attached = false;
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 const feedback = text => { $('sample-feedback').textContent = text; surfaceState(); };
+const workingAnswer = {
+  visited: false, safari: false, choice: null, checked: false, pending: null, scroll: 0, receipt: '', revisions: [],
+  sources: {
+    messaging: { name: 'Messaging', state: 'working', messages: [
+      { role: 'coordinator', route: 'Assignment from Mobile review', text: 'Trace send and reconnect delivery. Return evidence without changing files.' },
+      { text: 'Sample trace: the initial message reached the host. Reconnect delivery is still being checked.' }
+    ] },
+    recovery: { name: 'Recovery', state: 'waiting', messages: [
+      { role: 'coordinator', route: 'Assignment from Mobile review', text: 'Investigate draft recovery. Escalate product decisions, not investigation order.' },
+      { route: 'Decision raised with Mobile review', text: 'Should drafts stay on this phone or follow the user across devices?' }
+    ] },
+    review: { name: 'Layout review', state: 'reported', messages: [
+      { text: 'Sample notes: preserve the existing composer, keep sources inspectable, and do not replace text while the user is reading.' }
+    ] }
+  }
+};
+function answerSnapshot(reason, instruction = '') {
+  const delivery = workingAnswer.checked
+    ? workingAnswer.safari ? 'The Safari sample trace reaches Pi after reconnect. Delivery passed the simulated check.' : 'The sample trace reaches Pi after reconnect. Delivery passed the simulated check.'
+    : workingAnswer.safari ? 'Earlier delivery evidence was not Safari-specific. It needs rechecking before I can rely on it here.' : 'The sample send trace reaches the host. Reconnect delivery is still being checked.';
+  const recovery = workingAnswer.choice
+    ? workingAnswer.choice === 'local' ? 'Drafts should stay on this phone. Recovery is checking reload behavior against that decision.' : 'Drafts should follow you across devices. Recovery is investigating the privacy and recovery trade-offs.'
+    : 'Reload recovery remains unverified. One product decision affects the proposed solution.';
+  workingAnswer.revisions.push({ number: workingAnswer.revisions.length + 1, reason, instruction,
+    scope: workingAnswer.safari ? 'Safari only · Read-only' : 'Mobile flow · Read-only',
+    delivery, recovery, choice: workingAnswer.choice, receipt: workingAnswer.receipt });
+}
+answerSnapshot('Working draft', 'Review mobile message delivery and draft recovery. Return findings without changing files.');
+function sessionFor(id) { return variant === 'D' && id !== 'coordinator' ? workingAnswer.sources[id] : sessions[id]; }
+function VariantD() {
+  const snapshot = workingAnswer.revisions.at(-1), article = el('article', undefined, 'answer-document');
+  article.setAttribute('aria-label', 'Working answer');
+  const heading = el('h2', 'Mobile login review'); heading.id = 'answer-heading';
+  article.append(heading, el('p', 'Revision ' + snapshot.number + ' · ' + snapshot.scope, 'answer-meta'));
+  for (const [id, text] of [['messaging', snapshot.delivery], ['recovery', snapshot.recovery]]) {
+    const section = el('section', undefined, 'answer-finding'), finding = el('p', text);
+    finding.id = 'answer-' + id;
+    const source = el('button', sessionFor(id).name, 'quiet answer-citation');
+    source.type = 'button'; source.dataset.session = id; source.setAttribute('aria-label', 'Inspect ' + sessionFor(id).name + ' source');
+    section.append(finding, source); article.append(section);
+  }
+  if (!snapshot.choice) {
+    const decision = el('section', undefined, 'answer-decision');
+    decision.setAttribute('aria-label', 'Decision for you');
+    decision.append(el('h3', 'One decision'), el('p', 'Should drafts stay on this phone or follow you across devices?'));
+    const actions = el('div', undefined, 'coordinator-actions');
+    for (const text of ['Keep on phone', 'Across devices']) {
+      const button = el('button', text, 'quiet'); button.type = 'button'; button.dataset.instruction = text; actions.append(button);
+    }
+    decision.append(actions); article.append(decision);
+  }
+  if (snapshot.receipt) {
+    const receipt = el('p', snapshot.receipt, 'answer-receipt'); receipt.id = 'answer-receipt'; receipt.setAttribute('role', 'status'); article.append(receipt);
+  }
+  return article;
+}
+function queueAnswerFinding() {
+  if (workingAnswer.pending || workingAnswer.checked) { feedback('This sample finding is already available or reviewed. Change the scope to try a recheck.'); return; }
+  const source = workingAnswer.sources.messaging;
+  if (source.state === 'stopped') { feedback('Messaging is stopped. No new sample report was accepted.'); return; }
+  source.state = 'completed';
+  source.messages.push({ text: workingAnswer.safari ? 'Sample report: the Safari reconnect trace reaches Pi.' : 'Sample report: the reconnect trace reaches Pi.' },
+    { role: 'coordinator', route: 'Reviewed by Mobile review', text: 'Evidence accepted for the current scope. An answer revision is ready when the reader chooses to review it.' });
+  workingAnswer.pending = { safari: workingAnswer.safari };
+  renderDock(); updateControls(); feedback('New sample findings are waiting. The answer and your reading position have not been replaced.');
+}
+function reviewAnswerFinding() {
+  if (!workingAnswer.pending) return;
+  workingAnswer.checked = true; workingAnswer.pending = null; workingAnswer.scroll = 0;
+  workingAnswer.receipt = 'I reviewed the Messaging report and updated the delivery finding. Recovery is unchanged.';
+  answerSnapshot('Delivery finding reviewed');
+  if (selected !== 'coordinator') selectSession('coordinator'); else renderSelected();
+}
+function steerWorkingAnswer(text) {
+  const command = text.toLowerCase().replace(/[.!?]+$/, '');
+  let reason = 'Instruction received';
+  if (command === 'ignore desktop. focus on safari' || command === 'focus on safari') {
+    const changed = !workingAnswer.safari, discarded = changed && !!workingAnswer.pending;
+    reason = changed ? 'Scope changed to Safari' : 'Safari scope confirmed';
+    if (changed) {
+      workingAnswer.safari = true; workingAnswer.checked = false; workingAnswer.pending = null;
+      workingAnswer.sources.messaging.state = 'working';
+      workingAnswer.sources.messaging.messages.push({ role: 'coordinator', route: 'Instruction from Mobile review', text: 'Ignore desktop. Recheck the delivery evidence for Safari only.' });
+      workingAnswer.sources.recovery.messages.push({ role: 'coordinator', route: 'Instruction from Mobile review', text: 'Focus the recovery investigation on Safari. Existing product decisions still apply.' });
+    }
+    workingAnswer.receipt = changed ? 'I redirected Messaging and Recovery to Safari. Delivery evidence must be checked for this scope.' + (discarded ? ' Older queued findings were set aside.' : '') : 'Safari remains the scope. Current findings and queued evidence are unchanged.';
+  } else if (command === 'keep on phone' || command === 'across devices') {
+    reason = 'Draft recovery decision';
+    workingAnswer.choice = command === 'keep on phone' ? 'local' : 'synced';
+    workingAnswer.sources.recovery.state = 'working';
+    workingAnswer.sources.recovery.messages.push({ role: 'coordinator', route: 'Instruction from Mobile review', text });
+    workingAnswer.receipt = 'I relayed your draft recovery decision to Recovery. Messaging and Layout review are unchanged.';
+  } else if (command === 'stop messaging') {
+    reason = 'Messaging stopped';
+    workingAnswer.sources.messaging.state = 'stopped';
+    workingAnswer.sources.messaging.messages.push({ role: 'coordinator', route: 'Instruction from Mobile review', text });
+    workingAnswer.receipt = 'I stopped Messaging at your request. Recovery and Layout review are unchanged.';
+  } else {
+    workingAnswer.receipt = 'Instruction recorded in the main session. This sample only routes the labeled decisions, “Ignore desktop. Focus on Safari.”, and “Stop Messaging”. No other worker action was inferred.';
+  }
+  answerSnapshot(reason, text);
+  $('prompt').value = ''; sessions.coordinator.draft = ''; attached = false; sessions.coordinator.attached = false;
+  workingAnswer.scroll = 0; closeCommands(); renderSelected();
+}
+function renderAnswerHistory() {
+  $('answer-history-list').replaceChildren();
+  for (const revision of workingAnswer.revisions.toReversed()) {
+    const detail = el('details'), summary = el('summary', 'Revision ' + revision.number + ' · ' + revision.reason);
+    detail.append(summary, el('p', revision.scope, 'answer-meta'));
+    if (revision.instruction) detail.append(el('p', 'Your instruction: ' + revision.instruction, 'answer-history-instruction'));
+    detail.append(el('p', revision.delivery), el('p', revision.recovery));
+    if (!revision.choice) detail.append(el('p', 'Open decision: keep drafts on this phone or follow you across devices?'));
+    if (revision.receipt) detail.append(el('p', revision.receipt));
+    $('answer-history-list').append(detail);
+  }
+}
+
 function surfaceState() {
-  $('prototype-state').textContent = JSON.stringify({ variant, selected, recipient: 'coordinator', preview, expanded: $('worker-stack').open, sessions }, null, 2);
+  $('prototype-state').textContent = JSON.stringify({ variant, selected, recipient: 'coordinator', preview, expanded: $('worker-stack').open, sessions, workingAnswer: variant === 'D' ? workingAnswer : undefined }, null, 2);
 }
 function updateURL() {
   const url = new URL(location.href); url.searchParams.set('study', 'stacks'); url.searchParams.set('variant', variant); url.searchParams.delete('scene');
@@ -46,7 +164,7 @@ function updateURL() {
   history.replaceState(null, '', url);
 }
 function row(id, mode = 'open') {
-  const ui = sessions[id], button = el('button', undefined, 'stack-row');
+  const ui = sessionFor(id), button = el('button', undefined, 'stack-row');
   button.type = 'button'; button.dataset.state = ui.state;
   button.setAttribute('aria-label', id === 'coordinator' ? 'Return to Mobile review main conversation' : (mode === 'preview' ? 'Inspect ' + ui.name : 'View ' + ui.name + ' log') + ', ' + labels[ui.state]);
   if (id === selected) button.setAttribute('aria-current', 'page');
@@ -95,13 +213,17 @@ function VariantC() {
   node.append(children); return node;
 }
 function renderDock() {
-  $('worker-stack-content').replaceChildren(({ A: VariantA, B: VariantB, C: VariantC })[variant]());
+  if (variant === 'D' && !workingAnswer.visited) { $('worker-stack').open = false; workingAnswer.visited = true; }
+  $('worker-stack-content').replaceChildren(({ A: VariantA, B: VariantB, C: VariantC, D: VariantA })[variant]());
+  document.querySelector('.stack-summary-title').textContent = variant === 'D' ? 'Sources · 3' : 'Workers · 3';
+  $('answer-changes').hidden = variant !== 'D'; $('answer-demo-tools').hidden = variant !== 'D';
+  $('answer-new-findings').hidden = variant !== 'D' || !workingAnswer.pending;
   const summary = [];
   for (const [state, label] of [['working', 'working'], ['waiting', 'needs answer'], ['reported', 'ready']]) {
-    const count = workers.filter(id => sessions[id].state === state).length;
+    const count = workers.filter(id => sessionFor(id).state === state).length;
     if (count) summary.push(count + ' ' + label);
   }
-  $('worker-stack-summary').textContent = summary.join(' · ') || 'No active work';
+  $('worker-stack-summary').textContent = variant === 'D' ? workingAnswer.choice ? 'Read-only logs' : '1 needs you' : summary.join(' · ') || 'No active work';
   $('app').dataset.variant = variant;
   $('variant-label').textContent = 'Prototype ' + variant + ' · ' + variants[variant].name;
   $('variant-description').textContent = variants[variant].description;
@@ -109,7 +231,7 @@ function renderDock() {
 }
 function addMessage(message) {
   const article = el('article', undefined, 'message ' + (message.role || 'assistant'));
-  article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'coordinator' ? 'Mobile review coordinator' : sessions[selected].name);
+  article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'coordinator' ? 'Mobile review coordinator' : sessionFor(selected).name);
   const body = el('div', undefined, 'message-text');
   if (message.route) body.append(el('p', message.route, 'stack-route'));
   body.append(el('p', message.text));
@@ -124,26 +246,34 @@ function addMessage(message) {
   article.append(body); $('agent-activity').before(article);
 }
 function renderSelected() {
-  for (const node of $('transcript').querySelectorAll('.message')) node.remove();
-  for (const message of sessions[selected].messages) addMessage(message);
-  $('title').textContent = sessions[selected].name;
-  $('study-subtitle').textContent = selected === 'coordinator' ? 'Coordinator · Sample' : 'Worker log · Read-only';
+  for (const node of $('transcript').querySelectorAll('.message, .answer-document')) node.remove();
+  if (variant === 'D' && selected === 'coordinator') $('agent-activity').before(VariantD());
+  else for (const message of sessionFor(selected).messages) addMessage(message);
+  $('title').textContent = sessionFor(selected).name;
+  $('study-subtitle').textContent = selected === 'coordinator' ? variant === 'D' ? 'Working answer · Sample' : 'Coordinator · Sample' : 'Worker log · Read-only';
   $('study-back').setAttribute('aria-label', selected === 'coordinator' ? 'Back to Pi Remote' : 'Return to Mobile review coordinator');
   $('composer').hidden = selected !== 'coordinator'; $('status-line').hidden = selected !== 'coordinator';
   $('worker-inspection').hidden = selected === 'coordinator';
   $('prompt').value = sessions.coordinator.draft; attached = sessions.coordinator.attached;
-  renderAttachment(); renderDock(); updateControls(); $('stack-dock').scrollTop = 0; $('transcript').scrollTop = $('transcript').scrollHeight;
+  renderAttachment(); renderDock(); updateControls(); $('stack-dock').scrollTop = 0; $('transcript').scrollTop = variant === 'D' && selected === 'coordinator' ? workingAnswer.scroll : $('transcript').scrollHeight;
 }
 function selectSession(id, focusInput = false) {
-  if (selected === 'coordinator') { sessions.coordinator.draft = $('prompt').value; sessions.coordinator.attached = attached; }
+  if (selected === 'coordinator') {
+    sessions.coordinator.draft = $('prompt').value; sessions.coordinator.attached = attached;
+    if (variant === 'D') workingAnswer.scroll = $('transcript').scrollTop;
+  }
   closeCommands(); if ($('settings-dialog').open) $('settings-dialog').close();
   $('prompt').blur(); selected = id; renderSelected();
   (focusInput && id === 'coordinator' ? $('prompt') : $('transcript')).focus({ preventScroll: true });
   feedback(id === 'coordinator' ? 'Main conversation. All instructions go to Mobile review.' : 'Read-only ' + sessions[id].name + ' log. Give instructions in the main conversation.');
 }
 function switchVariant(direction) {
+  const wasAnswer = variant === 'D';
+  if (wasAnswer && selected === 'coordinator') workingAnswer.scroll = $('transcript').scrollTop;
+  $('answer-history').hidePopover();
   const keys = Object.keys(variants); variant = keys[(keys.indexOf(variant) + direction + keys.length) % keys.length];
-  renderDock(); feedback('Prototype ' + variant + ': ' + variants[variant].description);
+  if (wasAnswer || variant === 'D') renderSelected(); else renderDock();
+  feedback('Prototype ' + variant + ': ' + variants[variant].description);
 }
 document.addEventListener('click', event => {
   const instruction = event.target.closest('[data-instruction]');
@@ -160,11 +290,14 @@ document.addEventListener('click', event => {
   const button = event.target.closest('[data-session]');
   if (button) selectSession(button.dataset.session, button.hasAttribute('data-focus-input'));
 });
+$('answer-sample-update').onclick = () => { $('study-info').hidePopover(); queueAnswerFinding(); };
+$('answer-new-findings').onclick = reviewAnswerFinding;
+$('answer-changes').onclick = renderAnswerHistory;
 $('worker-stack').ontoggle = surfaceState;
 $('study-back').onclick = () => selected === 'coordinator' ? location.assign('/') : selectSession('coordinator');
 $('variant-prev').onclick = () => switchVariant(-1); $('variant-next').onclick = () => switchVariant(1);
 document.addEventListener('keydown', event => {
-  if (event.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  if (event.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open], [popover]:popover-open')) return;
   if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); switchVariant(event.key === 'ArrowLeft' ? -1 : 1); }
 });
 $('prototype-theme').onclick = () => {
@@ -179,7 +312,7 @@ function updateScrollButton() { const box = $('transcript'); $('scroll-bottom').
 function updateControls() {
   const working = selected === 'coordinator' && sessions.coordinator.state === 'working', hasDraft = !!$('prompt').value.trim() || attached;
   $('abort').hidden = !working || hasDraft; $('send').hidden = working && !hasDraft;
-  $('agent-activity').hidden = sessions[selected].state !== 'working'; $('activity-label').textContent = sessions[selected].name + ' is working';
+  $('agent-activity').hidden = sessionFor(selected).state !== 'working'; $('activity-label').textContent = sessionFor(selected).name + ' is working';
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
   $('status').textContent = working ? 'working' : 'idle'; resizePrompt(); updateScrollButton(); surfaceState();
 }
@@ -199,6 +332,7 @@ $('usage-arc').setAttribute('stroke-dasharray', '12 100');
 $('status-line').innerHTML = '<span data-level="normal">12%/200k</span>';
 $('composer').addEventListener('mousedown', event => { if (event.target.closest('button')) event.preventDefault(); });
 function sendToCoordinator(text) {
+  if (variant === 'D') { steerWorkingAnswer(text); return; }
   const user = { role: 'user', text: text || 'Sample image attached.' };
   const instruction = instructions.get(text.toLowerCase().replace(/[.!?]+$/, ''));
   let reply = 'Sample instruction received by Mobile review. No worker action was inferred and no real agent ran.';

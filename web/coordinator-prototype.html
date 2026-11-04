@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="color-scheme" content="light dark">
-  <title>Worker stack prototypes · Pi Remote</title>
+  <title>Coordinator prototypes · Pi Remote</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/coordinator-prototype.css">
   <script src="/coordinator-prototype.js" type="module"></script>
 </head>
 <body>
-  <!-- Three UI-only stack variants on this existing prototype route. Nothing is sent or saved. -->
+  <!-- UI-only coordinator studies on this existing prototype route. Nothing is sent or saved. -->
   <div id="app" class="shell viewing stack-study">
     <aside id="sidebar">
       <header class="brand"><h2>Sessions</h2></header>
       <nav aria-label="Sample sessions"><button class="study-session" type="button" data-session="coordinator"><strong>Mobile review</strong><span>Coordinator · 3 sample workers</span></button></nav>
-      <p class="study-sidebar-note">Worker stack prototypes.<br>No agents are running.</p>
+      <p class="study-sidebar-note">Coordinator prototypes.<br>No agents are running.</p>
       <a class="study-exit" href="/">Back to Pi Remote</a>
     </aside>
     <main>
@@ -26,11 +26,13 @@
         <button class="prototype-about" type="button" aria-label="About this design study" popovertarget="study-info"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
       </header>
       <section id="transcript" aria-label="Conversation" tabindex="0"><div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span id="activity-label"></span></div></section>
-      <section id="stack-dock" class="stack-dock" aria-label="Workers owned by Mobile review">
+      <section id="stack-dock" class="stack-dock" aria-label="Sources owned by Mobile review">
+        <button id="answer-new-findings" class="quiet" type="button" aria-label="Review new findings" hidden>New findings · Review</button>
         <details id="worker-stack" open>
           <summary><span class="stack-summary-title">Workers · 3</span><span id="worker-stack-summary"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary>
           <div id="worker-stack-content"></div>
         </details>
+        <button id="answer-changes" class="quiet" type="button" popovertarget="answer-history" hidden>Changes</button>
       </section>
       <div id="worker-inspection" class="worker-inspection" hidden><p>Read-only worker log. Give instructions to Mobile review in the main conversation.</p><button class="quiet" type="button" data-session="coordinator">Back to main conversation</button></div>
       <form id="composer" class="composer" hidden>
@@ -83,11 +85,13 @@
     <span id="variant-label" role="status"></span>
     <button id="variant-next" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
   </nav>
-  <div id="study-info" class="prototype-info" popover aria-label="About the worker stack prototypes">
-    <h2>Worker stack prototypes</h2>
+  <div id="answer-history" class="prototype-info answer-history" popover aria-label="Working answer history"><header><h2>Changes</h2><button class="quiet" type="button" popovertarget="answer-history" popovertargetaction="hide">Close changes</button></header><p>Sample revisions and instructions. Earlier versions remain unchanged.</p><div id="answer-history-list"></div></div>
+  <div id="study-info" class="prototype-info" popover aria-label="About the coordinator prototypes">
+    <h2>Coordinator prototypes</h2>
     <p>Sample sessions only. No agents run, no commands execute, and nothing is saved. The labeled sample instructions use canned responses, not a model or natural-language router.</p>
     <p id="variant-description"></p>
-    <p>All user input goes through the coordinator. It presents questions and reports, then relays your instructions. Worker logs are read-only. Use the arrows to compare A, B and C, and tap Workers to collapse the stack.</p>
+    <section id="answer-demo-tools" hidden><h3>Try the working answer</h3><p>Type “Ignore desktop. Focus on Safari.” in the composer, or choose a draft recovery option. Receive a sample finding to see updates wait until you review them.</p><button id="answer-sample-update" class="quiet" type="button">Receive sample finding</button></section>
+    <p>All user input goes through the coordinator. It presents questions and reports, then relays your instructions. Worker logs are read-only. Use the arrows to compare A, B, C and D. Tap Workers or Sources to collapse the stack.</p>
     <button id="prototype-theme" class="quiet" type="button">Switch theme</button>
     <details><summary>Sample state</summary><pre id="prototype-state"></pre></details>
     <button class="quiet" type="button" popovertarget="study-info" popovertargetaction="hide">Close</button>

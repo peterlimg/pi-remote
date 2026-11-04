@@ -5,15 +5,16 @@ primary_target: "web/coordinator-prototype.html"
 related_targets: ["web/coordinator-prototype.css", "web/coordinator-prototype.js"]
 ---
 
-# Stacked worker list comparisons
+# Coordinator interaction studies
 
 Operate mode. Isolated, throwaway UI study using sample data. No production conversation or backend changes.
 
-Compare three structures immediately above the unchanged production composer:
+A, B and C compare worker navigation immediately above the unchanged production composer:
 
 - A: a full-width worker list opening read-only logs.
 - B: all expanded worker names remain listed, with inline status details and a return to the main input.
 - C: a coordinator/worker tree distinguishing the main conversation from read-only worker logs.
+- D: a working answer with source citations, an inline product decision, and immutable revision history. Sources collapse into a stacked list above the composer. Changes opens a read-only history popover.
 
 The coordinator is the only recipient of human input. It raises questions, summarizes reports, relays instructions, and confirms the affected worker in the main conversation. Workers are optional inspection views with no composer, direct replies, or direct Stop. Preserve the coordinator draft and attachments while inspecting logs. Sample instruction handling is canned UI behavior, not a model or permission boundary.
 
@@ -21,6 +22,8 @@ Each stack collapses into a 44px Workers row with working, question, and result 
 
 Use Pi Remote's typography, themes, hairlines, and touch targets. No worker cards, tinted tiles, pill containers, or clipped one-line name strips. Preserve the exact production composer markup and load its stylesheet without prototype overrides.
 
-The floating A/B/C switcher is prototype tooling, not a proposed product control. All actions are local samples. A rendered variation or passing browser check is not user approval.
+D is a pinned exploration of the user's working-answer direction, not approval of its finished UI. User instructions create a new revision and mark scope-dependent evidence for rechecking. Incoming sample evidence does not rewrite the answer or move the current paragraph; it waits behind New findings. Explicit review reveals the revised answer. Returning from a source log restores the coordinator draft, attachments, and reading position. This study has separate in-memory source fixtures and no production routing.
+
+The floating A/B/C/D switcher is prototype tooling, not a proposed product control. All actions are local samples. A rendered variation or passing browser check is not user approval.
 
 The rejected worker-window study is preserved in Git at `6f3d0ee`.

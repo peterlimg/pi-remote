@@ -110,6 +110,8 @@ test('three stack prototypes differ structurally and keep the variant URL sharea
   await expect(page.locator('.stack-tree-children .stack-row')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Return to Mobile review main conversation', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.reload(); await expect(page.locator('#variant-label')).toHaveText('Prototype C · Session tree');
+  await page.getByRole('button', { name: 'Next prototype' }).click(); await expect(page).toHaveURL(/variant=D/);
+  await expect(page.getByRole('article', { name: 'Working answer', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next prototype' }).click(); await expect(page).toHaveURL(/variant=A/);
   await page.locator('#prompt').fill('Keep this draft.'); await page.keyboard.press('ArrowLeft'); await expect(page).toHaveURL(/variant=A/);
   await page.locator('#variant-next').focus(); await page.keyboard.press('ArrowRight'); await expect(page).toHaveURL(/variant=B/);
@@ -208,6 +210,7 @@ test('collapsing each stack preserves inspection state and the coordinator draft
     await toggle.focus(); await page.keyboard.press('Space');
     await expect(disclosure).toHaveJSProperty('open', true); await expect(toggle).toBeFocused();
   }
+  await page.getByRole('button', { name: 'Next prototype' }).click();
   await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
   await page.getByRole('button', { name: 'View Messaging log, Working', exact: true }).click();
   await toggle.click(); await expect(page.locator('#composer')).toBeHidden();
@@ -232,7 +235,7 @@ test('stack variants preserve exact production composer source and appearance wi
   const isolated = await observe(page);
   for (const view of [{ width: 390, height: 844 }, { width: 320, height: 740 }, { width: 390, height: 510 }]) {
     for (const target of [real, page]) await target.setViewportSize(view);
-    await page.goto(route + '?variant=C');
+    await page.goto(route + '?variant=D');
     for (const draft of ['', 'Keep the format.\nOnly review the behavior.']) {
       for (const target of [real, page]) {
         await target.locator('#prompt').fill(draft);
@@ -248,6 +251,115 @@ test('stack variants preserve exact production composer source and appearance wi
     return rules(sheet.cssRules).filter(selector => [root, ...root.querySelectorAll('*')].some(node => node.matches(selector)));
   });
   expect(selectors).toEqual([]); isolated(); await real.close();
+});
+
+test('working answer queues findings without replacing the text being read and retains previous revisions', async ({ page }) => {
+  const isolated = await observe(page); await page.setViewportSize({ width: 390, height: 510 });
+  await page.goto(route + '?variant=D');
+  const document = page.getByRole('article', { name: 'Working answer', exact: true });
+  await expect(page.locator('#worker-stack')).toHaveJSProperty('open', false);
+  await expect(page.locator('.stack-summary-title')).toHaveText('Sources · 3');
+  await page.locator('#prompt').fill('Keep my unfinished instruction.');
+  await page.locator('#transcript').hover(); await page.mouse.wheel(0, 120);
+  await expect.poll(() => page.locator('#transcript').evaluate(node => node.scrollTop)).toBeGreaterThan(20);
+  const before = { text: await document.innerText(), scroll: await page.locator('#transcript').evaluate(node => node.scrollTop),
+    top: await page.locator('#answer-messaging').evaluate(node => node.getBoundingClientRect().top) };
+  await page.getByRole('button', { name: 'About this design study' }).click();
+  await page.getByRole('button', { name: 'Receive sample finding', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Review new findings', exact: true })).toBeVisible();
+  expect(await document.innerText()).toBe(before.text);
+  expect(await page.locator('#transcript').evaluate(node => node.scrollTop)).toBe(before.scroll);
+  expect(await page.locator('#answer-messaging').evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(before.top, 0);
+  await expect(page.locator('#prompt')).toHaveValue('Keep my unfinished instruction.');
+  await page.getByRole('button', { name: 'Changes', exact: true }).click();
+  await expect(page.locator('#answer-history-list details')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Close changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Review new findings', exact: true }).click();
+  await expect(page.locator('#answer-messaging')).toContainText('Delivery passed the simulated check');
+  await expect(page.getByRole('button', { name: 'Review new findings', exact: true })).toBeHidden();
+  await expect(page.locator('#prompt')).toHaveValue('Keep my unfinished instruction.');
+  await page.getByRole('button', { name: 'Changes', exact: true }).click();
+  await expect(page.locator('#answer-history-list details')).toHaveCount(2);
+  const original = page.locator('#answer-history-list details').last();
+  await original.locator('summary').click();
+  await expect(original.getByText('The sample send trace reaches the host. Reconnect delivery is still being checked.', { exact: true })).toBeVisible();
+  await page.keyboard.press('ArrowLeft'); await expect(page).toHaveURL(/variant=D/);
+  await page.keyboard.press('Escape');
+  await page.locator('#transcript').hover(); await page.mouse.wheel(0, 200);
+  await expect.poll(() => page.locator('#transcript').evaluate(node => node.scrollTop)).toBeGreaterThan(50);
+  const readingPosition = await page.locator('#transcript').evaluate(node => node.scrollTop);
+  await page.getByRole('button', { name: 'Inspect Recovery source', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to main conversation', exact: true }).click();
+  await expect.poll(() => page.locator('#transcript').evaluate(node => node.scrollTop)).toBe(readingPosition);
+  isolated();
+});
+
+test('working answer decisions and scope changes stay in the main session with inspectable source evidence', async ({ page }) => {
+  const isolated = await observe(page); await page.goto(route + '?variant=D');
+  await page.getByRole('button', { name: 'Keep on phone', exact: true }).click();
+  await expect(page.locator('#answer-recovery')).toContainText('Drafts should stay on this phone');
+  await expect(page.getByRole('region', { name: 'Decision for you', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'About this design study' }).click();
+  await page.getByRole('button', { name: 'Receive sample finding', exact: true }).click();
+  await page.locator('#prompt').fill('Ignore desktop. Focus on Safari.'); await page.locator('#send').click();
+  await expect(page.locator('.answer-meta').first()).toContainText('Safari only');
+  await expect(page.locator('#answer-messaging')).toContainText('needs rechecking');
+  await expect(page.locator('#answer-receipt')).toContainText('Older queued findings were set aside');
+  await expect(page.getByRole('button', { name: 'Review new findings', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'About this design study' }).click();
+  await page.getByRole('button', { name: 'Receive sample finding', exact: true }).click();
+  await page.locator('#prompt').fill('Focus on Safari.'); await page.locator('#send').click();
+  await expect(page.locator('#answer-receipt')).toContainText('queued evidence are unchanged');
+  await expect(page.getByRole('button', { name: 'Review new findings', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Review new findings', exact: true }).click();
+  await expect(page.locator('#answer-messaging')).toContainText('Safari sample trace');
+  await page.locator('#prompt').fill('Keep this draft while I inspect.');
+  await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
+  await page.getByRole('button', { name: 'Inspect Messaging source', exact: true }).click();
+  await expect(page.locator('#composer')).toBeHidden();
+  await expect(page.locator('textarea:visible, input:visible')).toHaveCount(0);
+  await expect(page.locator('#transcript')).toContainText('Recheck the delivery evidence for Safari only');
+  await expect(page.locator('#transcript .message.user')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to main conversation', exact: true }).click();
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft while I inspect.');
+  await expect(page.locator('#attachments img')).toBeVisible();
+  await page.goto(route + '?variant=D');
+  await page.locator('#prompt').fill('Stop Messaging'); await page.locator('#send').click();
+  await page.getByRole('button', { name: 'About this design study' }).click();
+  await page.getByRole('button', { name: 'Receive sample finding', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Review new findings', exact: true })).toBeHidden();
+  await expect(page.locator('#sample-feedback')).toContainText('No new sample report was accepted');
+  isolated();
+});
+
+test('working answer fits phone, narrow, short and desktop views with source logs and revision history', async ({ page }, testInfo) => {
+  test.setTimeout(60000);
+  const isolated = await observe(page), evidence = process.env.PI_COORDINATOR_EVIDENCE || testInfo.outputPath('answer');
+  mkdirSync(evidence, { recursive: true });
+  for (const view of [{ name: 'phone', width: 390, height: 844 }, { name: 'narrow', width: 320, height: 740 },
+    { name: 'short', width: 390, height: 510 }, { name: 'desktop', width: 1440, height: 900 }]) {
+    for (const theme of ['light', 'dark']) {
+      await page.setViewportSize(view); await page.emulateMedia({ colorScheme: theme });
+      await page.goto(route + '?variant=D'); await fits(page);
+      await expect(page.getByRole('heading', { name: 'Mobile login review', exact: true })).toBeVisible();
+      if (view.name === 'phone') expect(await page.getByRole('button', { name: 'Keep on phone', exact: true }).evaluate(node => node.getBoundingClientRect().bottom <= document.getElementById('transcript').getBoundingClientRect().bottom - 32)).toBe(true);
+      const capture = async state => { if (view.name === 'phone' || theme === 'light') await page.screenshot({ path: join(evidence, 'D-' + view.name + '-' + theme + '-' + state + '.png'), fullPage: true }); };
+      await capture('answer');
+      await page.locator('#worker-stack > summary').click(); await fits(page);
+      expect(await page.locator('#worker-stack .stack-name').evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth))).toBe(true);
+      await capture('sources'); await page.locator('#worker-stack > summary').click();
+      await page.getByRole('button', { name: 'About this design study' }).click();
+      await page.getByRole('button', { name: 'Receive sample finding', exact: true }).click();
+      await fits(page); await capture('pending');
+      await page.getByRole('button', { name: 'Changes', exact: true }).click();
+      const box = await page.locator('#answer-history').boundingBox();
+      expect(box.y).toBeGreaterThanOrEqual(0); expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+      await capture('history'); await page.getByRole('button', { name: 'Close changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Inspect Recovery source', exact: true }).click();
+      await expect(page.locator('#composer')).toBeHidden(); await fits(page); await capture('source-log');
+    }
+  }
+  isolated();
 });
 
 test('stack prototypes fit phone, narrow, short and desktop views in one capture batch', async ({ page }, testInfo) => {
