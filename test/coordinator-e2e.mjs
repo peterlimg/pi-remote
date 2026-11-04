@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { chromium, devices, expect } from '@playwright/test';
 import { socket, until, delay } from './helpers.mjs';
+import { sessionCapability } from '../src/locks.mjs';
 
 const clientToken = 'browser-test-token-only-123456789012345';
 const bridgeToken = 'coordinator-bridge-fixture-only-123456789012345';
@@ -79,9 +80,9 @@ if (process.argv[2] === 'doctor') {
     const timer = setTimeout(() => instance.child.kill('SIGKILL'), 10000);
     try { return await instance.stopped; } finally { clearTimeout(timer); }
   };
-    const api = async (token, input, origin) => {
+    const api = async (token, input, origin, headers = {}) => {
       const response = await fetch(url + '/_pi/coordinator', { method: input ? 'POST' : 'GET',
-        headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(origin ? { Origin: origin } : {}), ...(input ? { 'Content-Type': 'application/json' } : {}) },
+        headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(origin ? { Origin: origin } : {}), ...(input ? { 'Content-Type': 'application/json' } : {}), ...headers },
         ...(input ? { body: JSON.stringify(input) } : {}) });
       return { status: response.status, body: await response.json() };
     };
@@ -129,7 +130,7 @@ if (process.argv[2] === 'doctor') {
   const restoreCoordinator = async () => {
     await page.reload();
     await check(page.locator('#connection')).toHaveText('Computer connected');
-    await page.getByRole('button', { name: /Coordinator · project/ }).click();
+    await page.getByRole('button', { name: /Coordinator verification project/ }).click();
     await check(page.locator('#coordinator-context')).toBeVisible();
   };
   const interrupt = () => { process.exitCode = 130; void browser?.close(); running?.child.kill('SIGTERM'); };
@@ -156,14 +157,23 @@ if (process.argv[2] === 'doctor') {
     await page.getByLabel('Private login link').fill(clientToken); await page.getByRole('button', { name: 'Connect to computer' }).click();
     await check(page.locator('#connection')).toHaveText('Computer connected'); record('manual login');
     await page.getByRole('button', { name: /Coordinator verification project/ }).click();
-    await page.getByLabel('Session details', { exact: true }).click();
-    record('start coordinator'); await page.getByRole('button', { name: 'Start read-only coordinator', exact: true }).click();
-    await check(page.locator('#title')).toHaveText('Coordinator · project');
-    await check(page.getByRole('heading', { name: 'Read-only coordinator', exact: true })).toBeVisible();
+    const source = initial.sources.find(source => source.title === 'Coordinator verification project');
+    const existingHistory = readFileSync(source.file, 'utf8');
+    await check(page.locator('#title')).toHaveText(source.title);
+    await check(page.locator('#transcript')).toContainText('Existing conversation note.');
+    await check(page.getByRole('button', { name: 'Start read-only coordinator', exact: true })).toHaveCount(0);
+    await check(page.locator('#coordinator-context')).toBeHidden();
+    await send('Read alpha before delegating.');
+    await check(page.locator('#transcript')).toContainText('No workers were started.');
+    assert(!existsSync(join(root, 'host', 'coordinator-tasks.json')) || ledger().coordinators.length === 0 && ledger().tasks.length === 0, 'Ordinary conversation must not create coordinator membership');
     await send('Investigate both fixture files.'); await openTasks();
     await check(taskRow('First inspection')).toContainText('Needs answer');
     await check(taskRow('Second inspection')).toContainText('Working');
     await check(page.locator('#coordinator-task-list').getByRole('listitem')).toHaveCount(2);
+    assert.equal(owner().id, source.id); assert.equal(owner().file, source.file); assert.equal(owner().mode, 'session');
+    assert(readFileSync(source.file, 'utf8').startsWith(existingHistory), 'Delegation must append to the original conversation, not replace it');
+    assert.equal(readdirSync(join(root, 'sessions')).filter(name => name.startsWith('pi-remote-coordinator-')).length, 0);
+    record('ordinary session coordinates in place with its original history and full tool set');
     await snapshot('assignment-and-question'); record('two independent tasks', { states: ledger().tasks.map(({ title, state }) => ({ title, state })) });
     await closeTasks();
     await check(page.locator('#transcript')).toContainText('Should I keep the original identifier in alpha.txt?');
@@ -236,7 +246,7 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#sessions .session').filter({ hasText: 'First inspection' })).toHaveCount(0);
     await check(page.locator('#sessions .session').filter({ hasText: 'Second inspection' })).toHaveCount(0);
     await snapshot('global-roots-only');
-    await page.locator('#sessions').getByRole('button', { name: /Coordinator · project/ }).click();
+    await page.locator('#sessions').getByRole('button', { name: /Coordinator verification project/ }).click();
     const overLimit = await api(owner().token, { action: 'assign', title: 'Unwanted third task', instruction: 'This must not be dispatched.', requestId: hash(randomUUID()) });
     assert.equal(overLimit.body.ok, false); assert.equal(ledger().tasks.length, 2); record('third active task refused without dispatch');
     await send('Which tasks are still open?');
@@ -277,7 +287,7 @@ if (process.argv[2] === 'doctor') {
     const control = await context.newPage(); observe(control);
     try {
       await control.goto(url); await check(control.locator('#connection')).toHaveText('Computer connected');
-      await control.getByRole('button', { name: /Coordinator · project/ }).click();
+      await control.getByRole('button', { name: /Coordinator verification project/ }).click();
       await control.locator('#prompt').fill('Stop Second inspection.');
       await control.getByRole('button', { name: 'Send message', exact: true }).click();
       await check(control.locator('#transcript')).toContainText('I stopped Second inspection only');
@@ -301,6 +311,7 @@ if (process.argv[2] === 'doctor') {
     const before = ledger(), main = owner(), first = before.tasks.find(task => task.title === 'First inspection');
     const promptsBefore = Object.fromEntries(before.tasks.map(task => [task.id, entries(task.file).filter(entry => entry.message.role === 'user').length]));
     const eventsBefore = eventCount(main.file), oldPid = running.child.pid;
+    const oldScope = sessionCapability(bridgeToken, main.id, json(join(root, 'host', 'locks', main.id + '.json')).nonce);
     record('stop owned fixture host during active work', { pid: oldPid }); await stop();
     const requestsBefore = lines(join(root, 'provider.jsonl')).filter(event => event.kind === 'request').length;
     const restarted = await start(); assert.notEqual(restarted.pid, oldPid); save('restart-doctor.json', await doctor(restarted.pid, url));
@@ -320,19 +331,12 @@ if (process.argv[2] === 'doctor') {
     assert.equal(lines(join(root, 'provider.jsonl')).filter(event => event.kind === 'request').length, requestsBefore, 'Restore must not invoke the model again');
     await snapshot('recovery-without-replay'); record('new host restores ownership and exposes interrupted work without replay', { previousPid: oldPid, pid: restarted.pid });
     assert.equal((await api()).status, 403);
+    assert.equal((await api(oldScope, undefined, undefined, { 'X-Pi-Remote-Session': main.id })).status, 403, 'A previous process ownership capability must expire');
     assert.equal((await api(main.token, undefined, 'https://untrusted.invalid')).status, 403);
     const second = ledger().tasks.find(task => task.title === 'Second inspection');
     assert.equal((await api(second.token, { requestId: hash(randomUUID()), action: 'list' })).status, 403);
     const late = await api(second.token, { requestId: hash(randomUUID()), kind: 'result', text: 'A stopped task must not accept this report.' });
     assert.equal(late.body.ok, false); assert.equal(ledger().tasks.find(task => task.id === second.id).state, 'stopped');
-    const client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
-    try {
-      const created = await client.request('newCoordinator', { sessionId: restarted.sources.find(source => source.title === 'Other verification project').id });
-      assert.equal(created.ok, true); assert.notEqual(created.value?.ok, false);
-      const other = ledger().coordinators.find(candidate => candidate.cwd === join(root, 'other-project'));
-      const denied = await api(other.token, { action: 'inspect', taskId: first.id, requestId: hash(randomUUID()) });
-      assert.equal(denied.body.ok, false); assert(denied.status >= 400);
-    } finally { client.ws.terminate(); }
     for (const title of ['Capacity A', 'Capacity B']) assert.equal((await api(main.token, {
       action: 'assign', title, instruction: 'Inspect beta.txt and keep investigating until stopped.', requestId: hash(randomUUID())
     })).body.ok, true);
@@ -358,8 +362,55 @@ if (process.argv[2] === 'doctor') {
     assert.equal((await api(first.token, { ...report.arguments, requestId: hash(report.id) })).body.ok, true);
     assert.equal(ledger().tasks.length, taskCount); assert.equal(ledger().tasks.reduce((count, task) => count + task.events.length, 0), eventTotal);
     assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed'); record('scope checks and idempotent assignment/report retries');
+    const freshFrames = frames.length;
+    await send('/new');
+    const created = await until(() => {
+      const creation = frames.slice(freshFrames).find(({ direction, packet }) => direction === 'sent' && packet.op === 'new')?.packet;
+      return creation && frames.find(({ direction, packet }) => direction === 'received' && packet.type === 'response' && packet.id === creation.id)?.packet;
+    }, 30000);
+    await check(page.locator('#coordinator-context')).toBeHidden();
+    await check(page.locator('#prompt')).toBeEnabled();
+    assert.equal(created.ok, true); assert.equal(created.value.ok, true);
+    const fresh = created.value.value;
+    assert.notEqual(fresh.sessionId, main.id); assert.equal(fresh.state.cwd, join(root, 'project'));
+    assert(!ledger().coordinators.some(owner => owner.id === fresh.sessionId));
+    const scope = sessionCapability(bridgeToken, main.id, json(join(root, 'host', 'locks', main.id + '.json')).nonce);
+    assert.equal((await api(scope, undefined, undefined, { 'X-Pi-Remote-Session': fresh.sessionId })).status, 403);
+    await send('Start independent inspection.');
+    await check(page.locator('#transcript')).toContainText('Should I keep the original identifier in alpha.txt?');
+    const freshOwner = ledger().coordinators.find(owner => owner.id === fresh.sessionId);
+    assert(freshOwner); assert.notEqual(freshOwner.id, main.id); assert.equal(freshOwner.file, fresh.state.file);
+    const independent = ledger().tasks.find(task => task.coordinatorId === freshOwner.id);
+    assert(independent); assert.equal(ledger().tasks.filter(task => task.coordinatorId === main.id).length, taskCount);
+    const denied = await api(freshOwner.token, { action: 'inspect', taskId: first.id, requestId: hash(randomUUID()) });
+    assert.equal(denied.body.ok, false); assert(denied.status >= 400);
+    assert.equal(lines(freshOwner.file).findLast(entry => entry.type === 'model_change').modelId, 'fixture');
+    record('a fresh session delegates independently in the same project; its model and identity stay unchanged');
+    await snapshot('fresh-session-coordinates');
+    const terminal = restarted.sources.find(source => source.title === 'Terminal verification project');
+    await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+    await page.locator('#sessions').getByRole('button', { name: /Terminal verification project/ }).click();
+    await check(page.locator('#prompt')).toBeEnabled();
+    await check(page.locator('#transcript')).toContainText('Existing conversation note.');
+    await send('Start independent inspection.');
+    await check(page.locator('#transcript')).toContainText('Should I keep the original identifier in alpha.txt?');
+    await check(page.getByRole('article', { name: 'You', exact: true }).filter({ hasText: 'Start independent inspection.' })).toHaveCount(1);
+    await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'Prompted by an extension' })).toHaveCount(1);
+    const terminalOwner = ledger().coordinators.find(owner => owner.id === terminal.id);
+    assert(terminalOwner); assert.equal(terminalOwner.file, terminal.file); assert.equal(terminalOwner.mode, 'session');
+    assert(ledger().tasks.some(task => task.coordinatorId === terminal.id && task.state === 'waiting'));
+    assert.equal(ledger().tasks.filter(task => task.coordinatorId === main.id).length, taskCount);
+    await check(page.locator('#coordinator-owner')).toHaveAttribute('aria-current', 'page');
+    record('a terminal-owned session delegates in place and receives its worker question through the real bridge');
+    await snapshot('terminal-session-coordinates');
     const audit = lines(join(root, 'provider.jsonl')), requests = audit.filter(event => event.kind === 'request');
-    for (const request of requests) assert.deepEqual([...request.tools].sort(), request.role === 'coordinator' ? ['remote_tasks'] : ['find', 'grep', 'ls', 'read', 'task_report']);
+    for (const request of requests) {
+      if (request.purpose === 'session-title') assert.deepEqual(request.tools, [], 'Title generation intentionally has no agent tools');
+      else if (request.role === 'worker') assert.deepEqual([...request.tools].sort(), ['find', 'grep', 'ls', 'read', 'task_report']);
+      else if (request.role === 'coordinator') assert.deepEqual(request.tools, ['remote_tasks']);
+      else for (const name of ['read', 'bash', 'edit', 'write', 'remote_tasks']) assert(request.tools.includes(name), 'Normal sessions must retain ' + name);
+      assert.equal(new Set(request.tools).size, request.tools.length);
+    }
     const results = requests.filter(event => event.role === 'worker').flatMap(event => event.results);
     assert(results.filter(result => result.name === 'read' && result.isError).length >= 2, 'Outside paths and escaping symlinks must be denied');
     for (const name of ['write', 'bash']) assert(results.some(result => result.name === name && result.isError), name + ' must be unavailable');
@@ -368,14 +419,14 @@ if (process.argv[2] === 'doctor') {
     assert.deepEqual(['alpha.txt', 'beta.txt'].map(file => hash(readFileSync(join(root, 'project', file)))), original);
     assert.deepEqual(readdirSync(join(root, 'project')).sort(), ['alpha.txt', 'beta.txt', 'escape.txt']);
     assert.equal(statSync(join(root, 'host', 'coordinator-tasks.json')).mode & 0o777, 0o600);
-    for (const record of [...ledger().coordinators, ...ledger().tasks]) assert(!JSON.stringify(frames).includes(record.token), 'Private capabilities must not enter browser state');
+    for (const token of [oldScope, scope, bridgeToken, ...ledger().coordinators.map(record => record.token), ...ledger().tasks.map(record => record.token)]) assert(!JSON.stringify(frames).includes(token), 'Private capabilities must not enter browser state');
     const workerIds = new Set(ledger().tasks.map(task => task.sessionId));
     assert(!frames.some(({ direction, packet }) => direction === 'sent' && ['command', 'answer', 'taskAction'].includes(packet.op) && workerIds.has(packet.sessionId)), 'Browser input must never target a worker');
     assert.deepEqual(errors, []);
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'live sibling tree updates', 'collapsible C tree', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
+      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'live sibling tree updates', 'collapsible C tree', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
       excluded: ['paid-model judgment', 'code-writing workers', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));

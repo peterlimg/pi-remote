@@ -1,6 +1,6 @@
 import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { ensureDir } from './config.mjs';
 
 export function canonical(file) {
@@ -14,6 +14,7 @@ export function canonical(file) {
   }
 }
 export function sessionKey(file) { return createHash('sha256').update(canonical(file)).digest('hex'); }
+export function sessionCapability(key, id, nonce) { return createHmac('sha256', key).update(id + ':' + nonce).digest('hex'); }
 export function processExists(pid) {
   if (!Number.isInteger(pid) || pid < 1) return true; // malformed owners fail closed
   try { process.kill(pid, 0); return true; } catch (e) { return e.code !== 'ESRCH'; }

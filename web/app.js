@@ -130,7 +130,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsCoordinator = false, creatingCoordinator = false, coordinatorRenderKey;
+let supportsCoordinator = false, coordinatorRenderKey;
 let supportsSessionSections = false, supportsRecentAvailability = false, recentAvailability = 'online', supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, renders: 0, renderAt: 0,
   last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
@@ -1437,7 +1437,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
-  if (state.coordination?.role === 'coordinator' && !messages.length) {
+  if (state.coordination?.role === 'coordinator' && state.coordination.readOnly && !messages.length) {
     const intro = el('section', undefined, 'coordinator-intro');
     intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Give all replies and instructions in this conversation. Expand Workers to inspect their read-only logs.'));
     fragment.append(intro);
@@ -1811,13 +1811,11 @@ const coordinatorExpanded = new Map();
 function renderCoordinator(state) {
   const role = state?.coordination, available = supportsCoordinator && !!state && !state.creation;
   const worker = role?.role === 'worker';
-  $('coordinator-start').hidden = !available || !!role;
-  $('coordinator-start').disabled = !connected || creatingCoordinator;
-  $('coordinator-tasks').hidden = !available || role?.role !== 'coordinator';
+  $('coordinator-tasks').hidden = !available || role?.role !== 'coordinator' || !role.tasks.length;
   $('coordinator-parent').hidden = !available || !worker;
   $('coordinator-tasks').disabled = !connected; $('coordinator-parent').disabled = !connected;
   const context = $('coordinator-context');
-  context.hidden = !available || !role;
+  context.hidden = !available || !role || role.role === 'coordinator' && !role.tasks.length;
   $('coordinator-inspection').hidden = !available || !worker;
   if (context.hidden) return;
   const ownerId = worker ? role.coordinatorId : state.id;
@@ -1905,16 +1903,6 @@ $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
 $('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
 $('coordinator-sheet').addEventListener('click', event => { if (event.target === $('coordinator-sheet')) $('coordinator-sheet').close(); });
-$('coordinator-start').addEventListener('click', async () => {
-  const source = selected; creatingCoordinator = true; document.querySelector('.session-info').open = false; updateControls();
-  notice('Starting a read-only coordinator…');
-  try {
-    const created = await request('newCoordinator', { sessionId: source });
-    cache.set(created.sessionId, created.state);
-    if (selected === source) await selectSession(created.sessionId);
-  } catch (error) { if (selected === source) notice(error.message); }
-  finally { creatingCoordinator = false; updateControls(); }
-});
 
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;

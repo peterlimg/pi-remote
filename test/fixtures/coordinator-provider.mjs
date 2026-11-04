@@ -6,7 +6,7 @@ import { getCurrentTools } from '@earendil-works/pi-ai';
 export default function verificationProvider(pi) {
   const root = process.env.PI_COORDINATOR_FIXTURE_ROOT;
   if (!root || JSON.parse(readFileSync(join(root, '.coordinator-fixture.json'), 'utf8')).version !== 1) throw new Error('An isolated coordinator fixture is required.');
-  const role = process.env.PI_REMOTE_COORDINATOR_ROLE;
+  const role = process.env.PI_REMOTE_COORDINATOR_ROLE || 'session';
   const audit = value => appendFileSync(join(root, 'provider.jsonl'), JSON.stringify({ ...value, pid: process.pid, role, at: Date.now() }) + '\n');
   const text = message => typeof message?.content === 'string' ? message.content : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
   let sequence = 0;
@@ -18,13 +18,23 @@ export default function verificationProvider(pi) {
     streamSimple(model, context, options = {}) {
       const messages = context.messages, index = messages.findLastIndex(message => message.role === 'user');
       const input = text(messages[index]), results = messages.slice(index + 1).filter(message => message.role === 'toolResult');
-      audit({ kind: 'request', input, tools: getCurrentTools(context.messages).map(tool => tool.name),
+      const naming = messages.some(message => message.role === 'system' && text(message).startsWith('Name this coding session from the first user request'));
+      audit({ kind: 'request', purpose: naming ? 'session-title' : 'agent', input, tools: getCurrentTools(context.messages).map(tool => tool.name),
         results: results.map(message => ({ name: message.toolName, isError: !!message.isError, text: text(message) })) });
       const call = (name, args) => ({ type: 'toolCall', id: 'fixture-' + process.pid + '-' + (++sequence), name, arguments: args });
       const words = value => [{ type: 'text', text: value }];
       const decoded = message => { try { return JSON.parse(text(message)); } catch { return {}; } };
       const choose = async () => {
-        if (role === 'coordinator') {
+        if (naming) return words('Independent inspection session');
+        if (role !== 'worker') {
+          if (input === 'Read alpha before delegating.') {
+            if (!results.length) return [call('read', { path: 'alpha.txt' })];
+            return words('Read ALPHA_VALUE=stable in this existing conversation. No workers were started.');
+          }
+          if (input === 'Start independent inspection.') {
+            if (!results.length) return [call('remote_tasks', { action: 'assign', title: 'Independent inspection', instruction: 'Inspect alpha.txt and ask whether to keep its original identifier.', model: 'coordinator-fixture/fixture' })];
+            return words('Started an independent worker under this conversation.');
+          }
           if (input === 'Investigate both fixture files.') {
             if (!results.length) return [
               call('remote_tasks', { action: 'assign', title: 'First inspection', instruction: 'Inspect alpha.txt and ask whether to keep its original identifier.' }),

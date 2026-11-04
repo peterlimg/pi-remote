@@ -20,6 +20,7 @@ export async function startHost(options = {}) {
   let lock;
   const pairing = createPairing(config);
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions });
+  service.coordination.bridgeToken = config.bridgeToken;
   let closing;
   const logStop = message => {
     const line = `${new Date().toISOString()} Pi Remote host ${process.pid}: ${message.replace(/[\r\n]+/g, ' ')}\n`;

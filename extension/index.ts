@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, dataDir, send, parseObject, saveConnection } from '../src/config.mjs';
 import { acquireSessionLock, sessionKey } from '../src/locks.mjs';
-import { branchMessages, lastPromptTime, omittedMessages, usageTotals, EXTENSION_INPUT } from '../src/catalog.mjs';
+import { registerSessionCoordinator } from './coordinator.mjs';
+import { branchMessages, lastPromptTime, omittedMessages, usageTotals, EXTENSION_INPUT, takeText } from '../src/catalog.mjs';
 import { initialState, applyEvent, noteExtensionInput } from '../src/state.mjs';
 import { sessionTitle, registerSessionTitles } from '../src/session-title.mjs';
 import { CommandJournal, validateCommand, commandList, modelList } from '../src/commands.mjs';
@@ -17,7 +18,7 @@ export default function remoteExtension(pi: any) {
   let ctx: any, socket: any, state: any, lock: any;
   let retry: any, flush: any, generation = 0, stopped = true, enabled = false;
   let journal: any;
-  const instanceId = randomUUID();
+  const instanceId = randomUUID(), remoteInputs: string[] = [];
   let controlling = false;
   const resetHistory = () => {
     if (!state || !ctx) return;
@@ -56,7 +57,8 @@ export default function remoteExtension(pi: any) {
   });
   // Only the input event tells an extension's prompt from the user's; record it for saved history.
   pi.on('input', (event: any, context: any) => {
-    if (event.source !== 'extension') return;
+    if (event.source === 'extension' && takeText(remoteInputs, event.text)) return;
+    if (event.source !== 'extension' && !event.text.startsWith('[Pi Remote task events]\n')) return;
     pi.appendEntry(EXTENSION_INPUT, { text: event.text });
     // A host worker has no bridge socket; RPC status updates are its channel to the host.
     if (process.env.PI_REMOTE_WORKER === '1') {
@@ -86,6 +88,8 @@ export default function remoteExtension(pi: any) {
       return { systemPrompt: event.systemPrompt + '\n\n<pi_remote_progress>\n' + guidance + '\n</pi_remote_progress>' };
     }
   });
+  pi.on('agent_end', (_event: any, context: any) => { if (!context.hasQueuedMessages?.()) remoteInputs.length = 0; });
+  registerSessionCoordinator(pi);
   if (process.env.PI_REMOTE_WORKER === '1') return;
   const connect = (epoch: number) => {
     if (stopped || !enabled || generation !== epoch) return;
@@ -149,6 +153,12 @@ export default function remoteExtension(pi: any) {
           } });
           return;
         }
+        if (message.command?.type === 'taskEvent') {
+          if (typeof message.command.text !== 'string' || message.command.text.length > 50000 || !message.command.text.startsWith('[Pi Remote task events]\n')) throw new Error('Invalid task notification');
+          pi.sendUserMessage(message.command.text, { deliverAs: 'followUp', expandPromptTemplates: false });
+          send(ws, { type: 'result', id: message.id, ok: true, value: { accepted: true } });
+          return;
+        }
         const command = validateCommand(message.command);
         const result = await journal.execute(state.id, message.requestId, command, async () => {
           if (stopped || generation !== epoch) throw new Error('Session changed');
@@ -174,8 +184,15 @@ export default function remoteExtension(pi: any) {
           } else if (command.type === 'abort') {
             // ExtensionContext has no queue-clearing API. Abort only the current operation.
             ctx.abort();
-          } else pi.sendUserMessage(command.images?.length ? [...(command.text.trim() ? [{ type: 'text', text: command.text }] : []), ...command.images] : command.text,
-            { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer', expandPromptTemplates: true });
+          } else {
+            const text = command.images?.length && !command.text.trim() ? '' : command.text;
+            // shortcut: match phone input text until Pi exposes an origin tag; earlier input transforms can change the match.
+            remoteInputs.push(text);
+            try {
+              pi.sendUserMessage(command.images?.length ? [...(command.text.trim() ? [{ type: 'text', text: command.text }] : []), ...command.images] : command.text,
+                { deliverAs: command.type === 'followUp' ? 'followUp' : 'steer', expandPromptTemplates: true });
+            } catch (error) { takeText(remoteInputs, text); throw error; }
+          }
           return { accepted: true };
         });
         send(ws, { type: 'result', id: message.id, ...result });
@@ -200,6 +217,7 @@ export default function remoteExtension(pi: any) {
     context.ui.setStatus('pi-remote', value ? 'remote connecting' : 'remote off');
   };
   const cleanup = () => {
+    remoteInputs.length = 0;
     stopped = true; enabled = false; generation++;
     clearTimeout(retry); clearTimeout(flush); flush = undefined;
     if (socket) { socket.removeAllListeners('close'); socket.close(); socket = undefined; }

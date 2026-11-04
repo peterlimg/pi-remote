@@ -23,6 +23,7 @@ Preconditions: First inspection needs an answer and Second inspection is working
 - Expand Workers. Keep an unsent coordinator draft and attach the fixture PNG. Open **First inspection, Accepted**. Require a read-only explanation, no visible composer, model controls, or permission input, and no apparent human bubbles for task instructions.
 - In a second browser tab, open the coordinator and send `Stop Second inspection.`. Require its reply and the first tab's sibling tree to show **Stopped** while First inspection stays **Accepted**. The native provider audit must show that only the held worker request was aborted.
 - Return to the coordinator and require its unsent draft and attachment unchanged. Browser command frames must target only the coordinator, never a worker.
+- Repeat delegation in the terminal-owned session. Phone submissions must remain **You** messages, while the internal worker wake-up appears as **Prompted by an extension**. Require a returned worker question in that same main conversation.
 - Inspect the matching command and report frames plus persisted task IDs. The full proof exercises these paths.
 
 ## Gotchas

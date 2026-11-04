@@ -20,7 +20,7 @@ Codemode activity uses Sol's connected work-log layout. Show each run's status a
 
 ## Coordinator interaction
 
-The user selected C for production: a collapsible coordinator/worker tree immediately above the composer. All instructions and replies remain in the main coordinator conversation. Worker logs and task details are read-only, retain the same tree, and offer an explicit return. Keep sibling states current during inspection. The existing composer remains unchanged for normal and coordinator sessions; worker inspection hides it.
+Any ordinary session coordinates workers when asked, without setup, a separate conversation, or reduced parent permissions. Preserve its identity, history, model, and tools. The user selected C for production: a collapsible coordinator/worker tree immediately above the composer, visible once workers exist. All instructions and replies remain in the main coordinator conversation. Worker logs and task details are read-only, retain the same tree, and offer an explicit return. Keep sibling states current during inspection. The existing composer remains unchanged for normal and coordinator sessions; worker inspection hides it.
 
 ## Coordinator study boundary
 

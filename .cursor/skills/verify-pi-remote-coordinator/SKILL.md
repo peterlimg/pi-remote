@@ -1,6 +1,6 @@
 ---
 name: verify-pi-remote-coordinator
-description: Verify Pi Remote project coordinators through the phone web UI, real Pi RPC processes, durable task files, scoped replies and Stop, read-only permissions, and host restart recovery. Use after coordinator or task-routing changes.
+description: Verify implicit worker coordination in ordinary Pi Remote sessions through the phone web UI, real Pi RPC processes, durable task files, scoped replies and Stop, read-only permissions, and host restart recovery. Use after coordinator or task-routing changes.
 ---
 
 # Verify Pi Remote coordinators
@@ -19,7 +19,7 @@ This command refuses an occupied port, launches `test/coordinator-server.mjs`, r
 
 The host and Pi RPC processes are real. Only the model provider is deterministic, supplied by `test/fixtures/coordinator-provider.mjs` through Pi's provider extension interface. It attempts allowed reads and forbidden operations, asks a question, returns a report, and holds another worker until Stop. It makes no paid model requests.
 
-The fixture creates two pinned source sessions, **Coordinator verification project** and **Other verification project**, in temporary projects. The first project contains `alpha.txt`, `beta.txt`, and an escaping symlink. Private fixture data and session files are outside that project. It never uses the real Pi Remote data directory or relay.
+The fixture creates three pinned source sessions, **Coordinator verification project**, **Other verification project**, and **Terminal verification project**, in temporary projects. The first is an ordinary host-managed session; a separate real Pi process owns the terminal bridge. The first project contains `alpha.txt`, `beta.txt`, and an escaping symlink. Private fixture data and session files are outside that project. It never uses the real Pi Remote data directory or relay.
 
 For a manual drive of one feature:
 
@@ -52,14 +52,14 @@ The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 39
 
 1. **Paste a private link instead**, fill **Private login link** with `browser-test-token-only-123456789012345`, then **Connect to computer**.
 2. Open **Coordinator verification project**.
-3. Open **Session details → Start read-only coordinator**.
-4. Send `Investigate both fixture files.` using the normal Message field and Send message control.
+3. Require the original title and existing conversation note, no coordinator setup button, and no Workers tree. Send `Read alpha before delegating.` and require an ordinary read with no coordinator membership or workers.
+4. Send `Investigate both fixture files.` using the normal Message field and Send message control. Require the same parent ID, file, history prefix, model, and full ordinary tools. No separate coordinator file may appear.
 5. In C's collapsible **Workers** tree immediately above the composer, **First inspection** needs an answer while **Second inspection** remains working. The main conversation presents the question. Neither worker appears in global session sections, even if pinned; explicit search still finds them.
 6. Send `Keep the original identifier.` in the coordinator. Require a task-addressed reply and a returned report. Send `Review and accept the first result.` in the same conversation.
 7. Inspect First inspection's read-only log. Require no composer or permission inputs, and preserve the main draft and attachment. From a second coordinator tab send `Stop Second inspection.`. Require the inspected worker's sibling tree to update live, then **Return to coordinator**.
 8. Use **Session details → Background tasks** for read-only task records. Reload and reselect the coordinator to read the persisted accepted and stopped states. Native touch and keyboard disclosure controls must preserve their choice during status updates and inspection.
 
-The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.
+The proof also creates an ordinary fresh session through **/new**, asks `Start independent inspection.`, and requires separate ownership despite sharing the first session's project. It repeats that prompt in **Terminal verification project** and requires the worker question to arrive through the real terminal bridge. The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.
 
 ## Evidence
 

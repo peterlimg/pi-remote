@@ -4,9 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { secret, equalSecret } from './config.mjs';
 import { readSession } from './catalog.mjs';
-import { sessionKey } from './locks.mjs';
+import { sessionKey, sessionCapability } from './locks.mjs';
 
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
+const sessionExtension = fileURLToPath(new URL('../extension/index.ts', import.meta.url));
 const active = new Set(['starting', 'working', 'waiting', 'stopping']);
 const publicError = (message, status = 400) => Object.assign(new Error(message), { public: true, status });
 const text = (value, name, max) => {
@@ -65,7 +66,7 @@ export class Coordinators {
   describe(id, concise = false) {
     if (this.error) return undefined;
     const owner = this.owners.get(id);
-    if (owner) return { role: 'coordinator', readOnly: true, tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
+    if (owner) return { role: 'coordinator', readOnly: owner.mode !== 'session', tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
     const task = this.taskForSession(id);
     if (task) return { role: 'worker', readOnly: true, coordinatorId: task.coordinatorId,
       coordinatorTitle: this.owners.get(task.coordinatorId).title, task: this.publicTask(task),
@@ -75,9 +76,9 @@ export class Coordinators {
   decorate(state) { const coordination = this.describe(state.id); return coordination ? { ...state, coordination } : state; }
   options(meta, options) {
     const owner = this.owners.get(meta.id), task = this.taskForSession(meta.id), record = owner || task;
-    if (!record) {
-      if (/^pi-remote-(coordinator|task)-/.test(basename(meta.file || ''))) throw publicError('Coordinator ownership is unavailable. This session will not start.', 503);
-      return options;
+    if (!record || owner?.mode === 'session') {
+      if (!record && /^pi-remote-(coordinator|task)-/.test(basename(meta.file || ''))) throw publicError('Coordinator ownership is unavailable. This session will not start.', 503);
+      return { ...options, args: [...(options.args || []), '-e', sessionExtension], env: { ...options.env, PI_REMOTE_HOME: this.service.dir } };
     }
     this.check();
     if (!this.origin) throw publicError('The coordinator host is not ready.', 503);
@@ -99,13 +100,13 @@ export class Coordinators {
       });
     } catch (error) { throw safe(error); }
   }
-  createFile(source, role, title) {
-    const id = randomUUID(), file = join(dirname(source.file), `pi-remote-${role}-${id}.jsonl`), timestamp = new Date().toISOString();
+  createTaskFile(source, title) {
+    const id = randomUUID(), file = join(dirname(source.file), `pi-remote-task-${id}.jsonl`), timestamp = new Date().toISOString();
     const entries = [{ type: 'session', version: 3, id, timestamp, cwd: source.cwd },
       { type: 'session_info', id: randomUUID(), parentId: null, timestamp, name: title }];
     if (source.model) {
       const slash = source.model.indexOf('/');
-      if (slash < 1) throw publicError('Select a Pi model before starting a coordinator.');
+      if (slash < 1) throw publicError('Select a native Pi model for the worker.');
       entries.push({ type: 'model_change', id: randomUUID(), parentId: entries.at(-1).id, timestamp, provider: source.model.slice(0, slash), modelId: source.model.slice(slash + 1) });
     }
     if (source.thinkingLevel) entries.push({ type: 'thinking_level_change', id: randomUUID(), parentId: entries.at(-1).id, timestamp, thinkingLevel: source.thinkingLevel });
@@ -113,22 +114,22 @@ export class Coordinators {
     writeFileSync(file, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n', { flag: 'wx', mode: 0o600 });
     return { file, sessionId: sessionKey(file), token: secret(), cwd: source.cwd };
   }
+  adopt(id) {
+    this.check();
+    if (this.taskForSession(id)) throw publicError('Workers cannot create other workers.', 403);
+    let owner = this.owners.get(id);
+    if (!owner) {
+      this.service.freshSource(id);
+      const source = this.service.read(id);
+      owner = { id, file: source.file, token: secret(), cwd: source.cwd, title: source.title, mode: 'session' };
+      this.owners.set(id, owner); this.changed(id);
+    }
+    return owner;
+  }
   create(sourceId, requestId) {
-    return this.operation(sourceId, requestId, { type: 'createCoordinator' }, async () => {
-      this.service.freshSource(sourceId);
-      const source = this.service.read(sourceId);
-      if (!source.model || source.model.startsWith('claude-sdk/')) throw publicError('This first coordinator version requires a native Pi model. Select one in the source session first.');
-      let owner = [...this.owners.values()].find(item => item.cwd === source.cwd);
-      if (!owner) {
-        const record = this.createFile(source, 'coordinator', 'Coordinator · ' + basename(source.cwd));
-        owner = { id: record.sessionId, file: record.file, token: record.token, cwd: record.cwd, title: 'Coordinator · ' + basename(source.cwd) };
-        this.owners.set(owner.id, owner); this.save();
-        this.service.catalog.set(owner.id, readSession(owner.file));
-      }
-      if (this.service.closedSessions.has(owner.id)) this.service.setClosed(owner.id, false);
-      try { await this.service.startWorker(owner.id); }
-      catch (error) { console.error('Coordinator startup failed:', error); throw publicError('Could not start the coordinator. Pi 1.4 or newer and a native Pi model are required. Check the host log before retrying.'); }
-      return { sessionId: owner.id, state: this.service.read(owner.id) };
+    return this.operation(sourceId, requestId, { type: 'createCoordinator' }, () => {
+      this.adopt(sourceId);
+      return { sessionId: sourceId, state: this.service.read(sourceId) };
     });
   }
   owned(ownerId, taskId) {
@@ -138,16 +139,20 @@ export class Coordinators {
   }
   action(ownerId, requestId, input, human = false) {
     this.check();
-    if (!this.owners.has(ownerId)) throw publicError('Select the owning coordinator first.');
+    if (this.taskForSession(ownerId)) throw publicError('Workers cannot control coordinator tasks.', 403);
+    if (!this.owners.has(ownerId) && (human || !['list', 'assign'].includes(input?.action))) throw publicError('This session has no worker tasks.');
     const actions = human ? ['stop', 'accept'] : ['list', 'assign', 'inspect', 'message', 'stop', 'accept'];
     if (!input || !actions.includes(input.action)) throw publicError('Unsupported coordinator action.');
     const command = { action: input.action };
-    if (input.action === 'assign') { command.title = text(input.title, 'Task title', 120); command.instruction = text(input.instruction, 'Task instruction', 8000); }
+    if (input.action === 'assign') {
+      command.title = text(input.title, 'Task title', 120); command.instruction = text(input.instruction, 'Task instruction', 8000);
+      if (input.model !== undefined) command.model = text(input.model, 'Worker model', 500);
+    }
     else if (input.action !== 'list') command.taskId = text(input.taskId, 'Task ID', 100);
     if (input.action === 'message') command.text = text(input.text, 'Message', 10000);
     return this.operation(ownerId, requestId, command, async () => {
-      if (command.action === 'list') return this.describe(ownerId, true);
-      if (command.action === 'assign') return this.assign(ownerId, command);
+      if (command.action === 'list') return this.describe(ownerId, true) || { role: 'coordinator', readOnly: false, tasks: [] };
+      if (command.action === 'assign') { this.adopt(ownerId); return this.assign(ownerId, command); }
       const task = this.owned(ownerId, command.taskId);
       if (command.action === 'inspect') return this.publicTask(task);
       if (command.action === 'accept') {
@@ -161,7 +166,9 @@ export class Coordinators {
   async assign(ownerId, command) {
     const owner = this.owners.get(ownerId);
     if ([...this.tasks.values()].filter(task => task.coordinatorId === ownerId && active.has(task.state)).length >= 2) throw publicError('Two tasks are already active. Finish or stop one before assigning another.');
-    const source = this.service.read(ownerId), record = this.createFile(source, 'task', command.title);
+    const source = this.service.read(ownerId), model = command.model || source.model;
+    if (!model || model.startsWith('claude-sdk/') || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Read-only workers require a native Pi model. Specify an available native provider/model for the worker; your session model stays unchanged.');
+    const record = this.createTaskFile({ ...source, model }, command.title);
     const task = { ...record, id: randomUUID(), coordinatorId: ownerId, title: command.title, instruction: command.instruction,
       state: 'starting', events: [], updatedAt: Date.now() };
     this.tasks.set(task.id, task); this.changed(ownerId);
@@ -242,7 +249,8 @@ export class Coordinators {
   }
   async wake(ownerId) {
     const item = this.service.live.get(ownerId);
-    if (this.service.stopping || this.waking.has(ownerId) || !item?.managed?.restartSafe) return;
+    if (this.service.stopping || this.waking.has(ownerId) || !item || item.resumable || item.state.dialog || item.state.compacting ||
+      (item.managed ? !item.managed.restartSafe : item.state.status !== 'idle')) return;
     const events = [...this.tasks.values()].filter(task => task.coordinatorId === ownerId)
       .flatMap(task => task.events.filter(event => event.delivery === 'pending').map(event => ({ task, event })));
     if (!events.length) return;
@@ -266,10 +274,15 @@ export class Coordinators {
     try {
       this.check();
       const bearer = req.headers.authorization?.slice(7);
-      const owner = [...this.owners.values()].find(record => equalSecret(record.token, bearer));
-      const task = !owner && [...this.tasks.values()].find(record => equalSecret(record.token, bearer));
-      if (req.headers.origin || !req.headers.authorization?.startsWith('Bearer ') || !owner && !task) throw publicError('Forbidden', 403);
-      if (req.method === 'GET') { respond(200, { ok: true, value: owner ? this.describe(owner.id, true) : this.publicTask(task) }); return; }
+      const id = req.headers['x-pi-remote-session'], live = typeof id === 'string' && this.service.live.get(id);
+      const lock = live && (live.lock?.owner || live.owner);
+      const session = live && !live.resumable && lock?.nonce && this.bridgeToken && !this.taskForSession(id) &&
+        equalSecret(bearer, sessionCapability(this.bridgeToken, id, lock.nonce)) ? id : undefined;
+      const owner = !session && [...this.owners.values()].find(record => equalSecret(record.token, bearer));
+      const task = !session && !owner && [...this.tasks.values()].find(record => equalSecret(record.token, bearer));
+      if (req.headers.origin || !req.headers.authorization?.startsWith('Bearer ') || !session && !owner && !task) throw publicError('Forbidden', 403);
+      const actorId = session || owner?.id;
+      if (req.method === 'GET') { respond(200, { ok: true, value: actorId ? this.describe(actorId, true) || { role: 'coordinator', readOnly: false, tasks: [] } : this.publicTask(task) }); return; }
       if (req.method !== 'POST') throw publicError('Method not allowed', 405);
       let size = 0, chunks = [];
       for await (const chunk of req) {
@@ -281,7 +294,7 @@ export class Coordinators {
       try { input = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw publicError('Expected a JSON request.'); }
       if (!input || typeof input !== 'object' || Array.isArray(input) || typeof input.requestId !== 'string' || !/^[a-f0-9]{64}$/.test(input.requestId)) throw publicError('Invalid coordinator request.');
       if (task && input.action !== undefined) throw publicError('Workers cannot control coordinator tasks.', 403);
-      const result = owner ? await this.action(owner.id, input.requestId, input) : await this.report(task, input.requestId, input);
+      const result = actorId ? await this.action(actorId, input.requestId, input) : await this.report(task, input.requestId, input);
       respond(result.ok ? 200 : 400, result);
     } catch (error) {
       const failure = safe(error);

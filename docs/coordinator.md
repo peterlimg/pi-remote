@@ -1,39 +1,38 @@
-# Project coordinators
+# Workers in ordinary sessions
 
-A coordinator keeps the conversation separate from background investigations. It creates ordinary host-managed Pi sessions and tracks their assignments, questions, and results on the local computer.
+Every Pi Remote session can coordinate background investigations. Ask for workers in your current conversation. There is no setup button, coordinator mode, or replacement conversation. The session keeps its history, model, instructions, extensions, and usual tools.
 
-## Start and use one
+## Use workers
 
-Requires Pi 1.4 or newer and a native Pi model. Custom provider extensions such as the Claude SDK provider are not loaded in restricted coordinator sessions.
+Requires Pi 1.4 or newer. Workers need a native Pi model because their restricted processes exclude custom provider extensions. They inherit the parent's native model by default. A parent using an extension-only provider can specify an available native worker model without changing its own model; the assistant must ask before choosing a different model unless you already authorized it.
 
-1. Open a session in the project and choose **Session details → Start read-only coordinator**.
-2. Ask for an investigation. The coordinator can assign up to two active tasks and continue answering you while they run.
-3. The collapsible **Workers** tree immediately above the composer shows the main conversation and its worker logs, without cards. Tap a worker to inspect it; the same tree remains available while you read.
-4. Give every reply and command in the main conversation. The coordinator presents decisions, relays answers to the intended task, reviews reports, and summarizes the findings. For example, tell it to stop a named investigation without stopping its siblings. It must clarify ambiguous references.
-5. Worker logs have no input controls. **Return to coordinator** restores your main draft and attachments. **Session details → Background tasks** opens read-only assignments, questions, and reports. Returned and accepted results remain distinct.
+1. Ask your current session to delegate independent investigations. It can assign up to two active tasks and continue answering while they run. Ordinary messages do not create workers or coordinator records.
+2. The collapsible **Workers** tree immediately above the composer shows this conversation and its worker logs. It appears only after workers exist. Different conversations in the same project own separate workers.
+3. Give every reply and command in this main conversation. The assistant presents decisions, relays answers to the intended task, reviews reports, and summarizes findings. It must clarify ambiguous references.
+4. Worker logs have no input controls. **Return to coordinator** restores your main draft and attachments. **Session details → Background tasks** opens read-only assignments, questions, and reports. Returned and accepted results remain distinct.
 
-Only independent conversations, including coordinators, appear in the default global session list. Workers stay under their coordinator, including when working or pinned. Explicit search and the coordinator's worker controls still reach their transcripts.
+This works for host-managed sessions and sessions connected through the terminal bridge. Only independent conversations appear in the default global session list. Workers remain children, including when working or pinned. Explicit search and the worker tree still reach their transcripts.
 
-The composer is unchanged for normal and coordinator sessions and is hidden during worker inspection. Stopping a coordinator response does not stop its workers. Ask the coordinator to stop a specific task. The tree preserves its open/closed choice while you switch between owner and child and while live task states change.
+The composer is unchanged and hides only during worker inspection. Stopping the main response does not stop workers. Ask the assistant to stop a specific task. The tree preserves its disclosure choice during navigation and live updates.
 
-## Read-only scope
+## Worker permissions
 
-This version supports investigation, not code changes or shell execution. Workers have only `read`, `grep`, `find`, `ls`, and `task_report`. File paths must resolve inside the selected project and outside private host data. Symlink targets outside the project are rejected. The coordinator has only `remote_tasks`.
+Workers support investigation, not code changes or shell execution. They have only `read`, `grep`, `find`, `ls`, and `task_report`. Paths must resolve inside their project and outside private host data. Escaping symlinks are rejected. Delegating does not remove shell or editing tools from the parent conversation.
 
-Restricted sessions load the coordination extension explicitly and exclude other extensions, MCP servers, skills, prompt templates, and project instructions. Assignments must carry the user's relevant constraints. These are model-tool restrictions in host-managed processes, not an operating-system sandbox against malicious installed code. Ordinary Pi terminal resumes do not carry these restrictions; keep coordinator work in Pi Remote.
+Restricted workers explicitly load the coordination extension and exclude other extensions, MCP servers, skills, prompt templates, and project instructions. Assignments must carry relevant constraints. These are model-tool restrictions in trusted host processes, not an operating-system sandbox. Ordinary Pi terminal resumes of worker files do not retain them. Legacy restricted coordinator files retain their previous permissions; new delegations never create one.
 
-Worker `task_report` calls explicitly record a question or result and end the turn. Idle by itself does not mark a task complete. Direct client prompts, steering, follow-ups, aborts, model changes, compaction, and dialog responses to workers are rejected. Only trusted coordinator operations may deliver task instructions and scoped Stop. These are local host input boundaries, not an operating-system sandbox.
+Worker `task_report` calls persist a question or result and end the turn. Idle alone does not mark completion. The host rejects direct client prompts, steering, follow-ups, aborts, model changes, compaction, and dialog responses to workers. Only trusted task-addressed operations can deliver instructions and Stop.
 
 ## Ownership and recovery
 
-`coordinator-tasks.json` in the private Pi Remote data directory stores coordinator membership, worker session paths, scoped capability tokens, task states, and notification records. Tokens never appear in browser task state. Each worker can report only its own task; coordinator operations address only owned tasks.
+`coordinator-tasks.json` in the private Pi Remote directory stores membership, worker paths, scoped capabilities, states, and notifications. The first assignment records the existing parent session, without creating another conversation. Normal-session tool requests authenticate against that process's current session ownership lock. Their capabilities expire when ownership changes. Workers can report only their own task; parents can address only their own workers. No capabilities enter browser task state.
 
-Assignments and commands use the existing command journal. A retry with the same request ID does not create another task or repeat an acknowledged command. Notification intent is saved before sending it to the coordinator.
+Assignments and commands use the existing command journal. A retry with the same request ID does not repeat work. Notification intent is saved before delivery. Questions and reports wake an idle parent, including a terminal-owned parent, without becoming apparent human input.
 
-On restart, interrupted work and notification delivery become **unknown** instead of being replayed. Inspect the existing worker and give an explicit continuation. Questions and reports remain available. A notification marked sent means Pi acknowledged its input; it does not prove that the user has read a summary. The task sheet remains the durable record if a queued notification is lost during a restart.
+On restart, interrupted work and notification delivery become **unknown** instead of being replayed. Inspect existing work before explicitly continuing it. A sent notification means Pi accepted input, not that the human read a summary. The task inspector retains the record if a queued notification is lost during restart.
 
-Finished workers remain ordinary open Pi sessions for follow-ups. This first version has no idle process eviction, automatic merge, recursive delegation, cross-project routing, or cloud execution. Work does not continue while the local computer is asleep.
+Finished workers remain open Pi sessions for follow-ups. There is no idle process eviction, automatic merge, recursive delegation, cross-project routing, or cloud execution. Work stops while the computer sleeps.
 
 ## Verification
 
-Run `/skill:verify-pi-remote-coordinator` or `npm run test:coordinator` for an isolated end-to-end proof. Its model responses are deterministic fixtures; the host, Pi processes, tools, files, browser, and recovery paths are real. A fixture proof does not establish paid-model planning quality or physical iPhone behavior.
+Run `/skill:verify-pi-remote-coordinator` or `npm run test:coordinator`. The isolated proof drives ordinary existing and new sessions, the real terminal bridge, Pi processes, tools, files, browser, and recovery. Only model responses are deterministic. It does not establish paid-model judgment or physical iPhone behavior.
