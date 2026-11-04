@@ -894,25 +894,39 @@ pre.message-text { white-space: pre-wrap; }
   .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
 .session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
-.coordinator-context { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto 8px; padding-top: 8px; border-top: 1px solid var(--line); }
-#coordinator-workers { display: flex; align-items: center; gap: 8px; }
-.coordinator-workers-heading { flex: none; }
-.coordinator-workers-heading button { min-width: 44px; padding: 8px 0; font-size: 12px; }
-.coordinator-worker-links { display: flex; flex: 1; min-width: 0; gap: 8px; overflow-x: auto; overscroll-behavior: contain; padding: 2px; margin-inline: -2px; }
-.coordinator-worker-links > .hint { margin: 0; padding-block: 4px; }
-.coordinator-worker { display: flex; flex: 0 0 calc((100% - 8px) / 2); flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 0; min-height: 44px; padding: 4px 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; white-space: nowrap; font-weight: 400; }
-.coordinator-worker:only-child { flex-basis: 100%; }
-.coordinator-worker > strong { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
-.coordinator-worker:hover > strong { color: var(--accent); }
-.coordinator-worker:active > strong { text-decoration-thickness: 2px; }
-.coordinator-worker-state { flex: none; color: var(--muted); font-size: 11px; }
+.coordinator-context { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); max-height: min(36dvh, 280px); margin: 0 auto 8px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); }
+#coordinator-workers > summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; background: var(--bg); font-size: 13px; font-weight: 500; }
+#coordinator-workers > summary::-webkit-details-marker { display: none; }
+#coordinator-workers > summary:focus-visible { outline-offset: -2px; }
+#coordinator-workers > summary > span:first-child { flex-shrink: 0; }
+#coordinator-worker-summary { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; text-align: right; }
+#coordinator-workers > summary > svg { flex-shrink: 0; color: var(--muted); }
+#coordinator-workers[open] > summary > svg { transform: rotate(90deg); }
+.coordinator-worker-links { margin-left: 11px; padding-left: 18px; border-left: 1px solid var(--line); }
+.coordinator-worker-links > .hint { margin: 0; padding-block: 8px; font-size: 13px; }
+.coordinator-worker { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-weight: 400; }
+.coordinator-worker + .coordinator-worker { border-top: 1px solid var(--line); }
+.coordinator-worker-links .coordinator-worker::before { content: ''; position: absolute; left: -18px; top: 50%; width: 12px; border-top: 1px solid var(--line); }
+.coordinator-worker > strong { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.coordinator-worker[aria-current=page] > strong { font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+.coordinator-worker:hover > strong { text-decoration: underline; text-underline-offset: 4px; }
+.coordinator-worker > svg { flex-shrink: 0; color: var(--muted); }
+.coordinator-worker-state { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.coordinator-worker-state i { width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; }
+.coordinator-worker:is([data-state=starting], [data-state=working], [data-state=stopping]) .coordinator-worker-state i { background: currentColor; }
 .coordinator-worker:is([data-state=waiting], [data-state=unknown]) .coordinator-worker-state { color: var(--warning); }
-#coordinator-return { display: block; width: 100%; padding: 8px 0; text-align: left; font-size: 13px; }
+.coordinator-worker[data-state=waiting] .coordinator-worker-state i { border-radius: 1px; }
+.coordinator-worker:is([data-state=reported], [data-state=completed]) .coordinator-worker-state i { width: 5px; height: 8px; margin: -3px 1px 0; border-width: 0 1.5px 1.5px 0; border-radius: 0; transform: rotate(45deg); }
+.coordinator-tree-root > strong { font-size: 13px; }
+.coordinator-tree-root .coordinator-worker-state { font-size: 11px; }
+.coordinator-inspection { flex-shrink: 0; width: calc(100% - 32px); max-width: var(--content-width); margin: 0 auto 8px; padding: 8px 0; }
+.coordinator-inspection p, .coordinator-instruction-label { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.coordinator-instruction-label { margin-bottom: 10px; }
+#coordinator-return { display: block; min-height: 44px; padding: 8px 0; text-align: left; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
 .coordinator-intro { max-width: var(--content-width); margin: 0 auto 24px; }
 .coordinator-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; }
 .coordinator-intro p { max-width: 65ch; color: var(--muted); font-size: 16px; line-height: 1.7; }
 .coordinator-help { margin: 0; padding: 4px 20px 16px; color: var(--muted); font-size: 13px; }
-#coordinator-feedback { flex-shrink: 0; margin: 0; padding: 0 20px 12px; color: var(--error); }
 #coordinator-task-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
 .coordinator-task { padding: 18px 0; border-top: 1px solid var(--line); }
 .coordinator-task > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0; border: 0; }
@@ -925,5 +939,5 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-task .coordinator-task-warning { color: var(--warning); font-size: 13px; }
 .coordinator-task-actions { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
 .coordinator-task-actions button { min-height: 44px; padding: 8px 0; font-size: 13px; }
-@media (max-width: 700px) { .coordinator-context { width: calc(100% - 16px); } }
+@media (max-width: 700px) { .coordinator-context { width: calc(100% - 32px); } }
 .boot-status { display: flex; align-items: center; gap: 10px; }

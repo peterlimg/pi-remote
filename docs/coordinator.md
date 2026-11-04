@@ -8,13 +8,13 @@ Requires Pi 1.4 or newer and a native Pi model. Custom provider extensions such 
 
 1. Open a session in the project and choose **Session details → Start read-only coordinator**.
 2. Ask for an investigation. The coordinator can assign up to two active tasks and continue answering you while they run.
-3. The compact worker row immediately above the composer shows names and live task states without cards. Tap a name to open its conversation directly. **Tasks** at the end of the row opens assignments, questions, and reports.
-4. Your coordinator draft stays in its own session. The worker's **Return to coordinator** control returns you.
-5. **Stop task** stops only that worker. **Accept result** records a reviewed result separately from the worker's report.
+3. The collapsible **Workers** tree immediately above the composer shows the main conversation and its worker logs, without cards. Tap a worker to inspect it; the same tree remains available while you read.
+4. Give every reply and command in the main conversation. The coordinator presents decisions, relays answers to the intended task, reviews reports, and summarizes the findings. For example, tell it to stop a named investigation without stopping its siblings. It must clarify ambiguous references.
+5. Worker logs have no input controls. **Return to coordinator** restores your main draft and attachments. **Session details → Background tasks** opens read-only assignments, questions, and reports. Returned and accepted results remain distinct.
 
 Only independent conversations, including coordinators, appear in the default global session list. Workers stay under their coordinator, including when working or pinned. Explicit search and the coordinator's worker controls still reach their transcripts.
 
-The composer is unchanged. Its Send and Stop controls still belong to the selected session. Stopping a coordinator response does not stop its workers.
+The composer is unchanged for normal and coordinator sessions and is hidden during worker inspection. Stopping a coordinator response does not stop its workers. Ask the coordinator to stop a specific task. The tree preserves its open/closed choice while you switch between owner and child and while live task states change.
 
 ## Read-only scope
 
@@ -22,7 +22,7 @@ This version supports investigation, not code changes or shell execution. Worker
 
 Restricted sessions load the coordination extension explicitly and exclude other extensions, MCP servers, skills, prompt templates, and project instructions. Assignments must carry the user's relevant constraints. These are model-tool restrictions in host-managed processes, not an operating-system sandbox against malicious installed code. Ordinary Pi terminal resumes do not carry these restrictions; keep coordinator work in Pi Remote.
 
-Worker `task_report` calls explicitly record a question or result and end the turn. Idle by itself does not mark a task complete. Human instructions sent directly to a worker update the durable task and notify its coordinator.
+Worker `task_report` calls explicitly record a question or result and end the turn. Idle by itself does not mark a task complete. Direct client prompts, steering, follow-ups, aborts, model changes, compaction, and dialog responses to workers are rejected. Only trusted coordinator operations may deliver task instructions and scoped Stop. These are local host input boundaries, not an operating-system sandbox.
 
 ## Ownership and recovery
 

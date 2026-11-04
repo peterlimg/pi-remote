@@ -159,8 +159,7 @@
       </div></dialog>
       <dialog id="coordinator-sheet" class="project-picker" aria-labelledby="coordinator-title" tabindex="-1"><div class="project-sheet coordinator-sheet">
         <header><h2 id="coordinator-title">Background tasks</h2><button id="coordinator-done" type="button" class="quiet">Done</button></header>
-        <p class="coordinator-help">Workers inspect this project without editing files or running commands. A returned result still needs review.</p>
-        <p id="coordinator-feedback" role="alert" hidden></p>
+        <p class="coordinator-help">Read-only task details. Give replies and commands to the coordinator in the main conversation. Returned results remain separate from accepted results.</p>
         <div id="coordinator-task-list" role="list" aria-label="Coordinator tasks"></div>
       </div></dialog>
       <div id="notice" class="notice" role="status" hidden></div>
@@ -171,12 +170,13 @@
       </section>
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
       <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
-        <div id="coordinator-workers" hidden>
+        <details id="coordinator-workers" open>
+          <summary><span>Workers · <span id="coordinator-worker-count">0</span></span><span id="coordinator-worker-summary"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary>
+          <button id="coordinator-owner" class="coordinator-worker coordinator-tree-root" type="button"><strong></strong><span class="coordinator-worker-state">Main conversation</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
           <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
-          <div class="coordinator-workers-heading"><h2 class="sr-only">Workers <span id="coordinator-worker-count"></span></h2><button id="coordinator-view-tasks" type="button" class="quiet" aria-label="Background tasks">Tasks</button></div>
-        </div>
-        <button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator" hidden></button>
+        </details>
       </section>
+      <div id="coordinator-inspection" class="coordinator-inspection" hidden><p id="coordinator-inspection-note"></p><button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator"></button></div>
       <form id="composer" class="composer" hidden>
         <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>

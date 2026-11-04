@@ -29,7 +29,7 @@ test('activity groups follow message boundaries, count each call once and keep d
   await expect(groups).toHaveCount(2);
   await expect(groups.first().locator('.tool-activity-label')).toHaveText('Read 1 file');
   await expect(group.locator('.tool')).toHaveCount(4);
-  await expect(group.locator('.tool-activity-label')).toHaveText('Running 3 commands, read 1 file');
+  await expect(group.locator('.tool-activity-label')).toHaveText('Running 2 commands, bash failed 1 time, read 1 file');
   await expect(group.locator('.tool-activity-error')).toHaveCount(0);
   await expect(group.locator('.tool-activity-working')).toHaveCount(0);
   await expect(group.locator('.tool-context').first()).toBeHidden();
@@ -40,21 +40,21 @@ test('activity groups follow message boundaries, count each call once and keep d
   await page.keyboard.press('Enter');
   await expect(group).toHaveAttribute('open', '');
   state.messages.push(result('c', 'bash')); state.tools[0].status = 'done'; snapshot();
-  await expect(group.locator('.tool-activity-label')).toHaveText('Ran 3 commands, read 1 file');
+  await expect(group.locator('.tool-activity-label')).toHaveText('Ran 2 commands, bash failed 1 time, read 1 file');
   await expect(summary).toBeFocused();
   await expect(group.locator('.tool-activity-working')).toHaveCount(0);
   await expect(group.locator('.tool')).toHaveCount(4);
   await page.keyboard.press('Enter');
   state.messages.push({ id: 'more', role: 'assistant', toolCalls: [call('e', 'edit')] }, result('e', 'edit')); snapshot();
-  await expect(group.locator('.tool-activity-label')).toHaveText('Ran 3 commands, read 1 file, edited 1 file');
+  await expect(group.locator('.tool-activity-label')).toHaveText('Ran 2 commands, bash failed 1 time, read 1 file, edited 1 file');
   await expect(group).not.toHaveAttribute('open', '');
   await expect(summary).toBeFocused();
   state.messages.push({ id: 'reply', role: 'assistant', text: 'I found the failure.' },
-    { id: 'custom', role: 'assistant', toolCalls: [call('f', 'constructor'), call('g', 'write')] }, result('f', 'constructor'), result('g', 'write'),
+    { id: 'custom', role: 'assistant', toolCalls: [call('f', 'constructor'), call('g', 'write')] }, result('f', 'constructor'), result('g', 'write', true),
     { id: 'next', role: 'user', text: 'Try again.' }, result('later', 'bash'));
   state.status = 'saved'; snapshot();
   await expect(groups).toHaveCount(4);
-  await expect(groups.nth(2).locator('.tool-activity-label')).toHaveText('Used constructor 1 time, wrote 1 file');
+  await expect(groups.nth(2).locator('.tool-activity-label')).toHaveText('Used constructor 1 time, write failed 1 time');
   await expect(groups.nth(3).locator('.tool-activity-label')).toHaveText('Ran 1 command');
   await expect(page.locator('#agent-activity')).toBeHidden();
   expect(await page.locator('#transcript').evaluate(node => [...node.children].filter(child => child.id !== 'agent-activity').map(child =>

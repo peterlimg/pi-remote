@@ -232,10 +232,10 @@ export class SessionService extends EventEmitter {
   async command(id, requestId, input, { taskInternal = false } = {}) {
     const command = validateCommand(input);
     return this.journal.execute(id, requestId, command, async () => {
-      const task = this.coordination.beforeCommand(id, command);
+      const task = this.coordination.beforeCommand(id, command, taskInternal);
       try {
         const value = await this.dispatch(id, requestId, command);
-        this.coordination.afterCommand(task, command, !taskInternal);
+        this.coordination.afterCommand(task, command);
         return value;
       } catch (error) { this.coordination.failedCommand(task); throw error; }
     });
@@ -466,6 +466,7 @@ export class SessionService extends EventEmitter {
   }
   async answer(id, requestId, answer) {
     return this.journal.execute(id, requestId, { type: 'answer', answer }, async () => {
+      this.coordination.beforeCommand(id, { type: 'answer' });
       const item = this.live.get(id);
       if (!item) throw new Error('Dialog is no longer active');
       return item.answer(answer);

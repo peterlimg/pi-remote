@@ -9,6 +9,7 @@ Reloading or restarting preserves task ownership and reports. Interrupted work b
 - `unknown`: interrupted work requires inspection and explicit continuation.
 - `idempotence`: the same assignment or report request ID does not duplicate work.
 - `scope`: coordinator and worker capabilities cannot address unrelated tasks.
+- `input-boundary`: direct client worker commands and dialog answers fail without dispatch or task-state changes.
 - `readonly`: project-only reads and no write or shell tools.
 
 ## How to get to it (user POV)
@@ -25,6 +26,7 @@ Preconditions: passing coordinator proof through result acceptance and scoped St
 - Reload and reopen tasks. Require **Needs inspection** for interrupted work. Compare persisted user-prompt counts, coordinator event markers, and native provider request counts before and after restart. None may increase just because recovery ran.
 - At the production scoped HTTP interface, replay the original assignment and report with their original request IDs. Require the same task count, event count, and accepted result. A fresh late report from the stopped worker must fail.
 - Use a second fixture project's coordinator capability to inspect the first project's task. Require rejection. A worker capability attempting coordinator actions and a cross-origin request must also fail.
+- Through the real client socket, send prompt, steering, follow-up, abort, model, reasoning, compaction, and dialog-answer attempts directly to a worker. Require the exact safe read-only error, unchanged task state, and no new worker prompt. Test again after restart and at capacity. The actual serialized response, not just a status flag, is the proof.
 - Check real Pi tool results for denied outside and symlink reads and unavailable write/bash. Verify original project hashes, unchanged directory entries, private state mode 0600, and absence of capability tokens in browser frames. The full proof performs these checks.
 
 ## Gotchas

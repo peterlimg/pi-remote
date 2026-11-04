@@ -54,10 +54,10 @@ The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 39
 2. Open **Coordinator verification project**.
 3. Open **Session details → Start read-only coordinator**.
 4. Send `Investigate both fixture files.` using the normal Message field and Send message control.
-5. In the compact, unboxed worker row immediately above the composer, **First inspection** asks a question while **Second inspection** remains working. Neither worker appears in global session sections, even if pinned. Explicit search still finds them.
-6. Tap **First inspection** directly in the worker row, send `Keep the original identifier.`, then **Return to coordinator**.
-7. Open **Tasks** at the end of the worker row, inspect and **Accept result** for First inspection. **Stop task** for Second inspection.
-8. Reload and reselect the coordinator to read the persisted result.
+5. In C's collapsible **Workers** tree immediately above the composer, **First inspection** needs an answer while **Second inspection** remains working. The main conversation presents the question. Neither worker appears in global session sections, even if pinned; explicit search still finds them.
+6. Send `Keep the original identifier.` in the coordinator. Require a task-addressed reply and a returned report. Send `Review and accept the first result.` in the same conversation.
+7. Inspect First inspection's read-only log. Require no composer or permission inputs, and preserve the main draft and attachment. From a second coordinator tab send `Stop Second inspection.`. Require the inspected worker's sibling tree to update live, then **Return to coordinator**.
+8. Use **Session details → Background tasks** for read-only task records. Reload and reselect the coordinator to read the persisted accepted and stopped states. Native touch and keyboard disclosure controls must preserve their choice during status updates and inspection.
 
 The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.
 
@@ -67,7 +67,7 @@ The full proof retains Doctor results, root-only list checks, phone/narrow/short
 
 Exercise visible controls. Never populate internal application state, storage, or task records to make an assertion pass. Verify mutations with a second user-facing read and the persisted task record. The fixture's seed files and deterministic model are setup at existing external seams, not substitutes for the host or Pi tool runtime.
 
-Require evidence that project file hashes and directory contents are unchanged, outside reads and symlinks are blocked, write/bash are unavailable, private capability tokens never enter browser state, replies and Stop reach only their addressed task, and an actual host process restart does not repeat a task prompt or notification. Notification acknowledgement is not proof that the human read a summary.
+Require evidence that project file hashes and directory contents are unchanged, outside reads and symlinks are blocked, write/bash are unavailable, private capability tokens never enter browser state, main-session replies and Stop reach only their addressed task, and an actual host process restart does not repeat a task prompt or notification. Notification acknowledgement is not proof that the human read a summary.
 
 The proof records actions, protocol frames, screenshots, and native tool results instead of a trace ZIP. Do not infer physical iPhone keyboard or Safari behavior from Chromium. Do not infer real-model planning quality from the deterministic provider.
 

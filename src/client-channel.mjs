@@ -65,7 +65,7 @@ export function attachClient(socket, service, { pairing } = {}) {
     }, 150);
   };
   const onState = id => {
-    if (selected === id && previous && !stateTimer) stateTimer = setTimeout(() => {
+    if ((selected === id || previous?.coordination?.role === 'worker' && previous.coordination.coordinatorId === id) && previous && !stateTimer) stateTimer = setTimeout(() => {
       stateTimer = undefined;
       if (closed || !selected) return;
       try {

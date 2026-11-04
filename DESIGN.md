@@ -18,6 +18,10 @@ The production composer is an invariant in the coordinator study. Copy its exact
 
 Codemode activity uses Sol's connected work-log layout. Show each run's status and recorded duration, reveal output before the script, and preserve disclosure state during streaming. A leading script comment supplies the run title; otherwise use a numbered JavaScript run. Do not infer executed inner tools or successful checks from source code.
 
+## Coordinator interaction
+
+The user selected C for production: a collapsible coordinator/worker tree immediately above the composer. All instructions and replies remain in the main coordinator conversation. Worker logs and task details are read-only, retain the same tree, and offer an explicit return. Keep sibling states current during inspection. The existing composer remains unchanged for normal and coordinator sessions; worker inspection hides it.
+
 ## Coordinator study boundary
 
 The workspace exploration lives only at `/coordinator-prototype.html`. Its route-specific direction contract is `.impeccable/surfaces/web-coordinator-prototype-html.md`. The study compares a plain worker list, inline details, and a coordinator/worker session tree above the composer. Variant D explores a working answer with cited source logs, inline decisions, and immutable revisions. Incoming findings wait for an explicit display update rather than rewriting text while it is being read. The coordinator is the only recipient of human input in this study. It presents questions, relays instructions, and confirms their destination in the main conversation. Worker logs are read-only and retain an explicit return to the coordinator. Earlier worker-window studies remain in Git. The study's data is simulated and does not establish production capabilities or design acceptance.

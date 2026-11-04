@@ -32,6 +32,19 @@ export default function verificationProvider(pi) {
             ];
             return words('Started two independent read-only investigations. You can keep talking here.');
           }
+          if (['Keep the original identifier.', 'Review and accept the first result.', 'Stop Second inspection.'].includes(input)) {
+            if (!results.length) return [call('remote_tasks', { action: 'list' })];
+            const latest = decoded(results.at(-1));
+            if (Array.isArray(latest.tasks)) {
+              const task = latest.tasks.find(task => task.title === (input === 'Stop Second inspection.' ? 'Second inspection' : 'First inspection'));
+              return [call('remote_tasks', { taskId: task.id, ...(input === 'Keep the original identifier.'
+                ? { action: 'message', text: input } : { action: input === 'Stop Second inspection.' ? 'stop' : 'inspect' }) })];
+            }
+            if (input === 'Review and accept the first result.' && latest.state === 'reported') return [call('remote_tasks', { action: 'accept', taskId: latest.id })];
+            return words(input === 'Keep the original identifier.' ? 'I sent your answer to First inspection. Second inspection is unchanged.'
+              : input === 'Stop Second inspection.' ? 'I stopped Second inspection only. First inspection is unchanged.'
+              : 'I reviewed and accepted First inspection: ALPHA_VALUE=stable. The original identifier is preserved.');
+          }
           if (input === 'Start an interrupted task.') {
             if (!results.length) return [call('remote_tasks', { action: 'assign', title: 'Interrupted inspection', instruction: 'Inspect beta.txt and keep investigating until stopped.' })];
             return words('Started the interrupted-work inspection.');

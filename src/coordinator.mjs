@@ -68,7 +68,9 @@ export class Coordinators {
     if (owner) return { role: 'coordinator', readOnly: true, tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
     const task = this.taskForSession(id);
     if (task) return { role: 'worker', readOnly: true, coordinatorId: task.coordinatorId,
-      coordinatorTitle: this.owners.get(task.coordinatorId).title, task: this.publicTask(task) };
+      coordinatorTitle: this.owners.get(task.coordinatorId).title, task: this.publicTask(task),
+      tasks: [...this.tasks.values()].filter(item => item.coordinatorId === task.coordinatorId)
+        .map(({ id, sessionId, title, state }) => ({ id, sessionId, title, state })) };
   }
   decorate(state) { const coordination = this.describe(state.id); return coordination ? { ...state, coordination } : state; }
   options(meta, options) {
@@ -173,9 +175,11 @@ export class Coordinators {
     }
     return this.publicTask(task, true);
   }
-  beforeCommand(sessionId, command) {
+  beforeCommand(sessionId, command, internal = false) {
     const task = this.taskForSession(sessionId);
-    if (!task || !['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) return;
+    if (!task) return;
+    if (!internal) throw publicError('Worker logs are read-only. Send instructions to the coordinator.', 403);
+    if (!['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) return;
     this.check();
     if (command.type !== 'abort' && !active.has(task.state) && [...this.tasks.values()].filter(item => item.coordinatorId === task.coordinatorId && active.has(item.state)).length >= 2) {
       throw publicError('Two tasks are already active. Finish or stop one before continuing another.');
@@ -184,12 +188,11 @@ export class Coordinators {
     if (command.type !== 'abort' && task.question) task.answer = command.text;
     delete task.error; this.changed(task.coordinatorId); return task;
   }
-  afterCommand(task, command, human = false) {
+  afterCommand(task, command) {
     if (!task) return;
     task.dispatch = 'accepted';
     if (command.type === 'abort') task.state = 'stopped';
     task.updatedAt = Date.now();
-    if (human && command.type !== 'abort') task.events.push({ id: randomUUID(), kind: 'intervention', text: command.text, delivery: 'pending' });
     this.changed(task.coordinatorId); this.observe(task.sessionId); this.schedule(task.coordinatorId);
   }
   failedCommand(task) {

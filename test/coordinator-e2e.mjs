@@ -95,7 +95,10 @@ if (process.argv[2] === 'doctor') {
     save(name + '.aria.txt', await page.locator('body').ariaSnapshot());
     record('capture', { name });
   };
-  const openTasks = async () => { await page.getByRole('button', { name: 'Background tasks', exact: true }).click(); await check(page.locator('#coordinator-sheet')).toBeVisible(); };
+  const openTasks = async () => {
+    await page.getByLabel('Session details', { exact: true }).click();
+    await page.getByRole('button', { name: 'Background tasks', exact: true }).click(); await check(page.locator('#coordinator-sheet')).toBeVisible();
+  };
   const closeTasks = () => page.getByRole('button', { name: 'Done', exact: true }).click();
   const assertHierarchy = async () => {
     const client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
@@ -132,6 +135,13 @@ if (process.argv[2] === 'doctor') {
   const interrupt = () => { process.exitCode = 130; void browser?.close(); running?.child.kill('SIGTERM'); };
   process.once('SIGTERM', interrupt); process.once('SIGINT', interrupt);
   const errors = [], frames = [];
+  const observe = view => {
+    view.on('pageerror', error => errors.push(error.message));
+    view.on('websocket', ws => {
+      ws.on('framesent', ({ payload }) => { const packet = JSON.parse(payload.toString()); if (packet.type !== 'auth') frames.push({ direction: 'sent', packet }); });
+      ws.on('framereceived', ({ payload }) => frames.push({ direction: 'received', packet: JSON.parse(payload.toString()) }));
+    });
+  };
   try {
     const initial = await start();
     save('run.json', { feature: 'coordinator', entry: 'phone conversation', version, pid: initial.pid, url,
@@ -141,11 +151,7 @@ if (process.argv[2] === 'doctor') {
     const original = ['alpha.txt', 'beta.txt'].map(file => hash(readFileSync(join(root, 'project', file))));
     browser = await chromium.launch();
     context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
-    page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
-    page.on('websocket', ws => {
-      ws.on('framesent', ({ payload }) => { const packet = JSON.parse(payload.toString()); if (packet.type !== 'auth') frames.push({ direction: 'sent', packet }); });
-      ws.on('framereceived', ({ payload }) => frames.push({ direction: 'received', packet: JSON.parse(payload.toString()) }));
-    });
+    page = await context.newPage(); observe(page);
     await page.goto(url); await page.getByText('Paste a private link instead', { exact: true }).click();
     await page.getByLabel('Private login link').fill(clientToken); await page.getByRole('button', { name: 'Connect to computer' }).click();
     await check(page.locator('#connection')).toHaveText('Computer connected'); record('manual login');
@@ -160,7 +166,25 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#coordinator-task-list').getByRole('listitem')).toHaveCount(2);
     await snapshot('assignment-and-question'); record('two independent tasks', { states: ledger().tasks.map(({ title, state }) => ({ title, state })) });
     await closeTasks();
+    await check(page.locator('#transcript')).toContainText('Should I keep the original identifier in alpha.txt?');
     await assertHierarchy();
+    const deniedClient = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
+    try {
+      const first = ledger().tasks.find(task => task.title === 'First inspection');
+      const prompts = entries(first.file).filter(entry => entry.message.role === 'user').length;
+      for (const command of [
+        ...['prompt', 'steer', 'followUp'].map(type => ({ type, text: 'Do not deliver this direct input.' })), { type: 'abort' },
+        { type: 'setModel', provider: 'coordinator-fixture', modelId: 'fixture' }, { type: 'setThinkingLevel', level: 'max' }, { type: 'compact' }
+      ]) {
+        const response = await deniedClient.request('command', { sessionId: first.sessionId, command });
+        assert.equal(response.value?.ok, false); assert.equal(response.value.error, 'Worker logs are read-only. Send instructions to the coordinator.');
+      }
+      const answer = await deniedClient.request('answer', { sessionId: first.sessionId, answer: { dialogId: 'no-dialog', value: 'Do not deliver this.' } });
+      assert.equal(answer.value?.ok, false); assert.equal(answer.value.error, 'Worker logs are read-only. Send instructions to the coordinator.');
+      assert.equal(entries(first.file).filter(entry => entry.message.role === 'user').length, prompts);
+      assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'waiting');
+      record('worker input, dialog responses, model changes, compaction and abort rejected at the serialized client boundary');
+    } finally { deniedClient.ws.terminate(); }
     const layout = [];
     for (const [name, width, height, colorScheme] of [
       ['workers-phone-light', 390, 844, 'light'], ['workers-phone-dark', 390, 844, 'dark'],
@@ -182,10 +206,19 @@ if (process.argv[2] === 'doctor') {
           targets: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => { const box = node.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; }) };
       });
       assert(!measured.overflow && measured.targets && measured.unboxed && measured.namesReadable && measured.transcript.height >= 80);
-      assert(measured.workers.height <= 64, 'Workers must be a compact text row, not cards');
+      assert(measured.workers.height <= Math.min(height * .36, 280) + 1, 'The session tree must stay bounded');
+      assert.equal(await page.locator('#coordinator-worker-links').evaluate(node => getComputedStyle(node).borderLeftWidth), '1px');
+      await check(page.locator('#coordinator-owner')).toHaveAttribute('aria-current', 'page');
       assert(measured.transcript.bottom <= measured.workers.top + 1 && measured.workers.bottom <= measured.composer.top + 1);
       assert(measured.composer.top - measured.workers.bottom <= 12 && measured.composer.bottom <= height + 1);
       layout.push({ name, width, height, colorScheme, ...measured }); await snapshot(name);
+      const disclosure = page.locator('#coordinator-workers'), toggle = disclosure.locator('summary');
+      await toggle.click(); await check(disclosure).toHaveJSProperty('open', false);
+      await check(page.locator('#coordinator-worker-links button:visible')).toHaveCount(0);
+      await check(page.locator('#coordinator-worker-summary')).toHaveText('1 working · 1 needs answer');
+      assert((await workers.boundingBox()).height <= 48, 'Collapsed workers must fit one touch-height row');
+      await snapshot(name + '-collapsed');
+      await toggle.focus(); await page.keyboard.press('Space'); await check(disclosure).toHaveJSProperty('open', true);
       if (height < 600) {
         await page.locator('#transcript').evaluate(node => node.scrollTo(0, 0));
         await check(page.getByRole('button', { name: 'Go to thread bottom', exact: true })).toBeVisible();
@@ -212,23 +245,53 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#transcript .message.user').filter({ hasText: '[Pi Remote task events]' })).toHaveCount(0);
     await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'Prompted by an extension' }).first()).toBeVisible();
     record('internal wake-up instructions stay in collapsed activity rather than user bubbles');
-    await page.locator('#prompt').fill('Keep my coordinator draft.');
-    await page.getByRole('region', { name: 'Workers', exact: true }).getByRole('button', { name: 'First inspection, Needs answer', exact: true }).click();
-    record('open worker directly from coordinator chat');
-    await check(page.locator('#title')).toHaveText('First inspection'); await check(page.locator('#prompt')).toHaveValue('');
-    await check(page.getByRole('button', { name: 'Return to coordinator', exact: true })).toBeVisible();
+    await page.locator('#coordinator-workers > summary').click();
     await send('Keep the original identifier.');
     await until(() => ledger().tasks.find(task => task.title === 'First inspection').state === 'reported', 30000);
+    await check(page.locator('#transcript')).toContainText('I sent your answer to First inspection');
+    await check(page.locator('#coordinator-workers')).toHaveJSProperty('open', false);
+    record('coordinator relays the main-session answer while the tree stays collapsed');
+    await openTasks(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
+    await check(page.getByRole('button', { name: /Reply in worker|Accept result|Stop task/ })).toHaveCount(0);
+    await snapshot('returned-result'); await closeTasks();
+    await send('Review and accept the first result.');
+    await until(() => ledger().tasks.find(task => task.title === 'First inspection').state === 'completed', 30000);
+    await check(page.locator('#transcript')).toContainText('I reviewed and accepted First inspection: ALPHA_VALUE=stable');
+    await page.locator('#coordinator-workers > summary').click();
+    await page.locator('#prompt').fill('Keep my coordinator draft.');
+    await page.locator('#image-files').setInputFiles({ name: 'draft.png', mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9X8AAAAASUVORK5CYII=', 'base64') });
+    await check(page.locator('#attachments img')).toBeVisible();
+    await page.getByRole('region', { name: 'Workers', exact: true }).getByRole('button', { name: 'First inspection, Accepted', exact: true }).click();
+    record('inspect worker through the selected C tree');
+    await check(page.locator('#title')).toHaveText('First inspection');
+    await check(page.locator('#composer')).toBeHidden(); await check(page.locator('#status-line')).toBeHidden();
+    await check(page.locator('#coordinator-inspection-note')).toContainText('Read-only worker log');
+    await check(page.locator('textarea:visible, input:visible')).toHaveCount(0);
+    await check(page.locator('#transcript .message.user')).toHaveCount(0);
+    await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'write failed 1 time' })).toHaveCount(1);
+    assert(!/wrote/i.test((await page.locator('#transcript .tool-activity-label').allTextContents()).join(' ')), 'Blocked writes must not look like successful file changes');
+    await check(page.locator('#coordinator-owner')).not.toHaveAttribute('aria-current', 'page');
+    await check(page.getByRole('button', { name: 'Second inspection, Working', exact: true })).toBeVisible();
+    await snapshot('worker-read-only');
+    const control = await context.newPage(); observe(control);
+    try {
+      await control.goto(url); await check(control.locator('#connection')).toHaveText('Computer connected');
+      await control.getByRole('button', { name: /Coordinator · project/ }).click();
+      await control.locator('#prompt').fill('Stop Second inspection.');
+      await control.getByRole('button', { name: 'Send message', exact: true }).click();
+      await check(control.locator('#transcript')).toContainText('I stopped Second inspection only');
+      await check(page.getByRole('button', { name: 'Second inspection, Stopped', exact: true })).toBeVisible();
+      record('main-session Stop from another tab updates the inspected worker sibling tree');
+    } finally { await control.close(); }
     await page.getByRole('button', { name: 'Return to coordinator', exact: true }).click();
     await check(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
-    await page.locator('#prompt').fill(''); record('worker reply and coordinator draft preserved');
-    await openTasks(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
-    await taskRow('First inspection').getByRole('button', { name: 'Accept result', exact: true }).click();
-    await check(taskRow('First inspection')).toContainText('Accepted');
-    await taskRow('Second inspection').getByRole('button', { name: 'Stop task', exact: true }).click();
-    await check(taskRow('Second inspection')).toContainText('Stopped');
+    await check(page.locator('#attachments img')).toBeVisible();
+    await page.locator('#attachments button').click(); await page.locator('#prompt').fill('');
+    await openTasks(); await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
     assert.equal(ledger().tasks.find(task => task.title === 'First inspection').state, 'completed');
-    record('accepted one result and stopped only its sibling'); await page.emulateMedia({ colorScheme: 'dark' }); await snapshot('result-and-scoped-stop');
+    record('coordinator accepts the result and stops only the addressed sibling; draft and attachment survive log inspection');
+    await page.emulateMedia({ colorScheme: 'dark' }); await snapshot('result-and-scoped-stop');
     await closeTasks(); await restoreCoordinator(); await assertHierarchy(); await openTasks();
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
     await taskRow('First inspection').getByText('Last result', { exact: true }).click(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
@@ -276,11 +339,16 @@ if (process.argv[2] === 'doctor') {
     const promptsAtCapacity = entries(first.file).filter(entry => entry.message.role === 'user').length;
     const overCapacity = await api(main.token, { action: 'message', taskId: first.id, text: 'Keep the original identifier.', requestId: hash(randomUUID()) });
     assert.equal(overCapacity.body.ok, false); assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed');
-    await taskRow('First inspection').getByRole('button', { name: 'Open worker', exact: true }).click();
-    await send('Keep the original identifier.'); await check(page.locator('#notice')).toContainText('Two tasks are already active');
+    const directClient = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
+    try {
+      const denied = await directClient.request('command', { sessionId: first.sessionId, command: { type: 'prompt', text: 'Keep the original identifier.' } });
+      assert.equal(denied.value?.ok, false); assert.equal(denied.value.error, 'Worker logs are read-only. Send instructions to the coordinator.');
+    } finally { directClient.ws.terminate(); }
+    await taskRow('First inspection').getByRole('button', { name: 'View worker log', exact: true }).click();
+    await check(page.locator('#composer')).toBeHidden();
     assert.equal(entries(first.file).filter(entry => entry.message.role === 'user').length, promptsAtCapacity);
     assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed');
-    record('task limit applies to both coordinator follow-ups and direct human worker replies');
+    record('task capacity enforced for coordinator follow-ups; direct worker input remains refused');
     await page.getByRole('button', { name: 'Return to coordinator', exact: true }).click();
     const toolCalls = file => entries(file).flatMap(entry => Array.isArray(entry.message.content) ? entry.message.content : []).filter(block => block.type === 'toolCall');
     const assign = toolCalls(main.file).find(call => call.name === 'remote_tasks' && call.arguments?.action === 'assign' && call.arguments.title === 'First inspection');
@@ -301,11 +369,13 @@ if (process.argv[2] === 'doctor') {
     assert.deepEqual(readdirSync(join(root, 'project')).sort(), ['alpha.txt', 'beta.txt', 'escape.txt']);
     assert.equal(statSync(join(root, 'host', 'coordinator-tasks.json')).mode & 0o777, 0o600);
     for (const record of [...ledger().coordinators, ...ledger().tasks]) assert(!JSON.stringify(frames).includes(record.token), 'Private capabilities must not enter browser state');
+    const workerIds = new Set(ledger().tasks.map(task => task.sessionId));
+    assert(!frames.some(({ direction, packet }) => direction === 'sent' && ['command', 'answer', 'taskAction'].includes(packet.op) && workerIds.has(packet.sessionId)), 'Browser input must never target a worker');
     assert.deepEqual(errors, []);
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'question/reply', 'draft isolation', 'explicit report acceptance', 'scoped Stop', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
+      checks: ['manual login and doctor', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'live sibling tree updates', 'collapsible C tree', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
       excluded: ['paid-model judgment', 'code-writing workers', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));
@@ -328,5 +398,5 @@ if (process.argv[2] === 'doctor') {
     }
   }
   for (const file of ['doctor.json', 'restart-doctor.json', 'result.json', 'cleanup.json', 'actions.jsonl', 'provider-audit.json', 'assignment-and-question.png', 'result-and-scoped-stop.png', 'recovery-without-replay.png']) assert(existsSync(join(evidence, file)), 'Missing proof: ' + file);
-  console.log('PASS: coordinator workflow, native Pi workers, scoped replies/Stop, readonly enforcement and durable recovery; fixture cleaned, evidence retained.');
+  console.log('PASS: C session tree, coordinator-only input, native Pi workers, scoped replies/Stop, readonly enforcement and durable recovery; fixture cleaned, evidence retained.');
 }

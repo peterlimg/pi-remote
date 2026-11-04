@@ -1107,6 +1107,7 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 async function selectSession(id, keepOrder = false) {
+  const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   if (!keepOrder) switchOrder = undefined;
   $('nearby-sessions').hidePopover();
@@ -1150,7 +1151,7 @@ async function selectSession(id, keepOrder = false) {
     const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-hidden', 'true'); loading.prepend(spinner);
     $('transcript').replaceChildren(loading); $('transcript').setAttribute('aria-busy', 'true');
     $('transcript').hidden = false; $('empty').hidden = true;
-    $('composer').hidden = false; updateControls();
+    $('composer').hidden = !!worker; updateControls();
   }
   resizePrompt();
   if (state?.creation) return;
@@ -1438,7 +1439,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
   if (state.coordination?.role === 'coordinator' && !messages.length) {
     const intro = el('section', undefined, 'coordinator-intro');
-    intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Open Background tasks to inspect their questions and results.'));
+    intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Give all replies and instructions in this conversation. Expand Workers to inspect their read-only logs.'));
     fragment.append(intro);
   }
   const playing = [...threadVideos.values()].filter(video => video.player && !video.player.paused);
@@ -1596,9 +1597,11 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (message.text || message.images?.length || message.role === 'user' || failed) {
       activity = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
-      const article = el('article', undefined, 'message ' + (message.role === 'user' ? 'user' : 'assistant'));
+      const workerInstruction = state.coordination?.role === 'worker' && message.role === 'user';
+      const article = el('article', undefined, 'message ' + (message.role === 'user' && !workerInstruction ? 'user' : 'assistant'));
+      if (workerInstruction) article.append(el('p', 'Instruction to worker', 'coordinator-instruction-label'));
       article.dataset.messageId = message.id; article.dataset.scrollKey = message.liveId || message.id;
-      article.setAttribute('aria-label', message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
+      article.setAttribute('aria-label', workerInstruction ? 'Instruction to worker' : message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Pi' : message.role);
       const body = el('div', undefined, 'message-text');
       if (message.role === 'user') {
         const { text, paths } = splitVideoMessage(userMessageText(message));
@@ -1656,12 +1659,15 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       grep: ['Searched', 'Searching', 'time'], find: ['Searched', 'Searching', 'time'],
       ffgrep: ['Searched', 'Searching', 'time'], fffind: ['Searched', 'Searching', 'time'],
       ls: ['Listed', 'Listing', 'directory', 'directories'] };
-    const labels = [...counts].map(([name, count], index) => {
+    const labels = [...counts].flatMap(([name, count]) => {
+      const failed = group.tools.filter(tool => tool.name === name && tool.status === 'error').length, nonFailed = count - failed;
       const [past, present, noun, plural] = Object.hasOwn(actions, name) ? actions[name] : ['Used ' + name, 'Using ' + name, 'time'];
       const active = group.tools.some(tool => tool.name === name && ['working', 'pending'].includes(tool.status));
-      const verb = active ? present : past;
-      return `${index ? verb[0].toLowerCase() + verb.slice(1) : verb} ${count} ${count === 1 ? noun : plural || noun + 's'}`;
-    });
+      const phrases = [];
+      if (nonFailed) phrases.push(`${active ? present : past} ${nonFailed} ${nonFailed === 1 ? noun : plural || noun + 's'}`);
+      if (failed) phrases.push(`${name} failed ${failed} ${failed === 1 ? 'time' : 'times'}`);
+      return phrases;
+    }).map((label, index) => (index ? label[0].toLowerCase() : label[0].toUpperCase()) + label.slice(1));
     const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
     const running = group.tools.findLast(tool => tool.status === 'working' && tool.preview) || group.tools.findLast(tool => tool.status === 'working');
     const recent = running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
@@ -1801,47 +1807,65 @@ function restartStalledDots() {
   dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
 }
 setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
-const coordinatorActions = new Set();
-function coordinatorFeedback(text = '') {
-  $('coordinator-feedback').textContent = text; $('coordinator-feedback').hidden = !text;
-}
+const coordinatorExpanded = new Map();
 function renderCoordinator(state) {
   const role = state?.coordination, available = supportsCoordinator && !!state && !state.creation;
+  const worker = role?.role === 'worker';
   $('coordinator-start').hidden = !available || !!role;
   $('coordinator-start').disabled = !connected || creatingCoordinator;
   $('coordinator-tasks').hidden = !available || role?.role !== 'coordinator';
-  $('coordinator-parent').hidden = !available || role?.role !== 'worker';
+  $('coordinator-parent').hidden = !available || !worker;
   $('coordinator-tasks').disabled = !connected; $('coordinator-parent').disabled = !connected;
   const context = $('coordinator-context');
   context.hidden = !available || !role;
+  $('coordinator-inspection').hidden = !available || !worker;
   if (context.hidden) return;
-  const worker = role.role === 'worker';
-  context.setAttribute('aria-label', worker ? 'Coordinator' : 'Workers');
-  $('coordinator-workers').hidden = worker; $('coordinator-return').hidden = !worker;
-  if (worker) { $('coordinator-return').textContent = 'Return to ' + role.coordinatorTitle; return; }
-  const key = JSON.stringify([state.id, role.tasks, connected, [...coordinatorActions], $('coordinator-sheet').open]);
+  const ownerId = worker ? role.coordinatorId : state.id;
+  const ownerTitle = worker ? role.coordinatorTitle : state.title;
+  const tasks = worker ? role.tasks || cache.get(ownerId)?.coordination?.tasks || [role.task] : role.tasks;
+  if (context.dataset.coordinatorId !== ownerId) {
+    context.dataset.coordinatorId = ownerId;
+    $('coordinator-workers').open = coordinatorExpanded.get(ownerId) ?? true;
+  }
+  $('coordinator-inspection-note').textContent = worker ? 'Read-only worker log. Give instructions to ' + ownerTitle + ' in the main conversation.' : '';
+  $('coordinator-return').textContent = 'Return to ' + ownerTitle;
+  $('coordinator-return').disabled = !connected && !cache.has(ownerId);
+  const parent = $('coordinator-owner'); parent.disabled = !connected && !cache.has(ownerId);
+  parent.setAttribute('aria-label', 'Return to ' + ownerTitle + ' main conversation');
+  parent.querySelector('strong').textContent = ownerTitle;
+  if (worker) parent.removeAttribute('aria-current'); else parent.setAttribute('aria-current', 'page');
+  const key = JSON.stringify([state.id, ownerId, tasks, connected, $('coordinator-sheet').open]);
   if (key === coordinatorRenderKey) return;
   coordinatorRenderKey = key;
   const labels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
     stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
   const links = $('coordinator-worker-links'), focused = links.querySelector('button:focus')?.dataset.workerId;
-  links.replaceChildren(); $('coordinator-worker-count').textContent = role.tasks.length;
+  links.replaceChildren(); $('coordinator-worker-count').textContent = tasks.length;
+  const summary = [];
+  for (const [states, label] of [[['starting', 'working', 'stopping'], 'working'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
+    const count = tasks.filter(task => states.includes(task.state)).length;
+    if (count) summary.push(count + ' ' + label);
+  }
+  $('coordinator-worker-summary').textContent = summary.join(' · ') || 'No active work';
   const active = new Set(['starting', 'working', 'waiting', 'stopping']);
-  const ordered = [...role.tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)));
+  const ordered = [...tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)));
   for (const task of ordered) {
     const button = el('button', undefined, 'coordinator-worker'); button.type = 'button';
     button.dataset.workerId = task.id; button.dataset.state = task.state; button.disabled = !connected;
     button.setAttribute('aria-label', task.title + ', ' + (labels[task.state] || task.state));
+    if (task.sessionId === selected) button.setAttribute('aria-current', 'page');
     const name = el('strong', task.title); name.title = task.title;
-    button.append(name, el('span', labels[task.state] || task.state, 'coordinator-worker-state'));
+    const status = el('span', undefined, 'coordinator-worker-state'), marker = el('i'); marker.setAttribute('aria-hidden', 'true');
+    status.append(marker, el('span', labels[task.state] || task.state));
+    button.append(name, status, $('coordinator-workers').querySelector('summary svg').cloneNode(true));
     button.addEventListener('click', () => { void selectSession(task.sessionId); }); links.append(button);
     if (focused === task.id) button.focus({ preventScroll: true });
   }
-  if (!role.tasks.length) links.append(el('p', 'Your workers will appear here when you assign an investigation.', 'hint'));
-  if (!$('coordinator-sheet').open) return;
+  if (!tasks.length) links.append(el('p', 'Your workers will appear here when you assign an investigation.', 'hint'));
+  if (!$('coordinator-sheet').open || worker) return;
   const list = $('coordinator-task-list'); list.replaceChildren();
-  if (!role.tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
-  for (const task of role.tasks) {
+  if (!tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
+  for (const task of tasks) {
     const row = el('article', undefined, 'coordinator-task'); row.setAttribute('role', 'listitem');
     row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
     const heading = el('header'); heading.append(el('h3', task.title), el('span', labels[task.state] || task.state));
@@ -1857,35 +1881,25 @@ function renderCoordinator(state) {
     if (task.error) row.append(el('p', task.error, 'coordinator-task-warning'));
     if (task.delivery === 'unknown') row.append(el('p', 'Notification delivery is uncertain. Inspect the worker before repeating an action.', 'coordinator-task-warning'));
     const actions = el('div', undefined, 'coordinator-task-actions');
-    const open = el('button', task.state === 'waiting' ? 'Reply in worker' : 'Open worker', 'quiet'); open.type = 'button';
+    const open = el('button', 'View worker log', 'quiet'); open.type = 'button';
     open.disabled = !connected; open.addEventListener('click', () => { $('coordinator-sheet').close(); void selectSession(task.sessionId); }); actions.append(open);
-    const addAction = (name, action) => {
-      const button = el('button', name, 'quiet'); button.type = 'button';
-      button.disabled = !connected || coordinatorActions.has(task.id);
-      button.addEventListener('click', async () => {
-        const ownerId = state.id;
-        coordinatorActions.add(task.id); coordinatorFeedback(); renderCoordinator(cache.get(selected));
-        try { await request('taskAction', { sessionId: ownerId, action: { action, taskId: task.id } }); }
-        catch (error) { if (selected === ownerId) coordinatorFeedback(error.message); }
-        finally { coordinatorActions.delete(task.id); renderCoordinator(cache.get(selected)); }
-      });
-      actions.append(button);
-    };
-    if (['starting', 'working', 'waiting'].includes(task.state)) addAction('Stop task', 'stop');
-    if (task.state === 'reported') addAction('Accept result', 'accept');
     row.append(actions); list.append(row);
   }
 }
 function openCoordinatorTasks() {
   document.querySelector('.session-info').open = false;
-  coordinatorFeedback(); coordinatorRenderKey = undefined;
+  coordinatorRenderKey = undefined;
   $('coordinator-sheet').showModal(); renderCoordinator(cache.get(selected));
 }
 function returnToCoordinator() {
   const owner = cache.get(selected)?.coordination?.coordinatorId;
   if (owner) void selectSession(owner);
 }
-$('coordinator-view-tasks').addEventListener('click', openCoordinatorTasks);
+$('coordinator-owner').addEventListener('click', () => { void selectSession($('coordinator-context').dataset.coordinatorId); });
+$('coordinator-workers').addEventListener('toggle', () => {
+  const owner = $('coordinator-context').dataset.coordinatorId;
+  if (owner) coordinatorExpanded.set(owner, $('coordinator-workers').open);
+});
 $('coordinator-return').addEventListener('click', returnToCoordinator);
 $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
@@ -1905,13 +1919,14 @@ $('coordinator-start').addEventListener('click', async () => {
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;
   $('session-close').disabled = !connected;
-  const state = cache.get(selected);
+  const state = cache.get(selected), inspectingWorker = state?.coordination?.role === 'worker';
   renderCoordinator(state);
+  if (state) $('composer').hidden = inspectingWorker;
   const summary = sessions.find(item => item.id === selected) || selectedSummary;
   $('session-pin').hidden = !selected || !!state?.creation;
   $('session-pin').disabled = !connected;
   $('session-pin').textContent = summary?.pinned ? 'Unpin session' : 'Pin session';
-  const live = connected && state && ['idle', 'working', 'waiting'].includes(state.status);
+  const live = !inspectingWorker && connected && state && ['idle', 'working', 'waiting'].includes(state.status);
   const working = state && ['working', 'waiting'].includes(state.status);
   const hasDraft = !!$('prompt').value.trim() || !!imageDrafts.get(selected)?.length;
   const outgoing = sending.get(selected), imageCount = outgoing?.attachments.length || 0;
@@ -1926,7 +1941,7 @@ function updateControls() {
   for (const button of $('attachments').querySelectorAll('button')) button.disabled = sending.has(selected);
   $('abort').disabled = !live;
   $('abort').hidden = !working || hasDraft;
-  $('prompt').disabled = !selected;
+  $('prompt').disabled = !selected || inspectingWorker;
   $('status').textContent = !connected ? 'Disconnected' : state?.status || 'Loading…';
   $('composer-connection').hidden = connected || !selected || manualClose;
   updateActivity(); debugActivity();
@@ -2510,6 +2525,7 @@ async function closeUsage(usage, id) {
   }
 }
 function renderDialog(state) {
+  if (state.coordination?.role === 'worker') { $('dialog').hidden = true; lastDialog = undefined; return; }
   const dialog = state.dialog;
   if (!dialog || isUsageDialog(dialog)) {
     if ($('dialog').contains(document.activeElement)) $('transcript').focus({ preventScroll: true });
@@ -3245,7 +3261,7 @@ $('attach').addEventListener('click', () => {
 $('image-files').addEventListener('change', () => {
   const files = [...$('image-files').files], images = imageDrafts.get(selected) || [];
   $('image-files').value = '';
-  if (!selected || sending.has(selected) || !files.length) return;
+  if (!selected || cache.get(selected)?.coordination?.role === 'worker' || sending.has(selected) || !files.length) return;
   const allFiles = [...images.map(image => image.file), ...files];
   if (allFiles.length > MAX_IMAGES || files.some(file => !file.size || (isVideo(file) ? file.size > MAX_VIDEO_BYTES : !IMAGE_TYPES.includes(file.type))) ||
     allFiles.filter(file => !isVideo(file)).reduce((sum, file) => sum + file.size, 0) > MAX_IMAGE_BYTES) {
@@ -3273,7 +3289,7 @@ $('composer').addEventListener('submit', event => {
 });
 async function sendMessage() {
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
-  if ((!text.trim() && !attachments.length) || !id || $('send').disabled || sending.has(id)) return;
+  if ((!text.trim() && !attachments.length) || !id || cache.get(id)?.coordination?.role === 'worker' || $('send').disabled || sending.has(id)) return;
   if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
   if (historyWindow) showLatest();
