@@ -32,6 +32,7 @@
           <div id="worker-stack-content"></div>
         </details>
       </section>
+      <div id="worker-inspection" class="worker-inspection" hidden><p>Read-only worker log. Give instructions to Mobile review in the main conversation.</p><button class="quiet" type="button" data-session="coordinator">Back to main conversation</button></div>
       <form id="composer" class="composer" hidden>
         <div id="session-swipe" class="session-swipe" aria-hidden="true" hidden><div id="session-dots" class="session-dots"></div></div>
         <button id="scroll-bottom" type="button" aria-label="Go to thread bottom" title="Go to thread bottom" aria-controls="transcript" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button>
@@ -84,9 +85,9 @@
   </nav>
   <div id="study-info" class="prototype-info" popover aria-label="About the worker stack prototypes">
     <h2>Worker stack prototypes</h2>
-    <p>Sample sessions only. No agents run, no commands execute, and nothing is saved.</p>
+    <p>Sample sessions only. No agents run, no commands execute, and nothing is saved. The labeled sample instructions use canned responses, not a model or natural-language router.</p>
     <p id="variant-description"></p>
-    <p>Use the arrows below to compare A, B and C. Tap the Workers row to collapse or expand the stack. Collapsing does not stop workers or change the selected conversation.</p>
+    <p>All user input goes through the coordinator. It presents questions and reports, then relays your instructions. Worker logs are read-only. Use the arrows to compare A, B and C, and tap Workers to collapse the stack.</p>
     <button id="prototype-theme" class="quiet" type="button">Switch theme</button>
     <details><summary>Sample state</summary><pre id="prototype-state"></pre></details>
     <button class="quiet" type="button" popovertarget="study-info" popovertargetaction="hide">Close</button>

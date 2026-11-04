@@ -63,13 +63,19 @@ async function composerAppearance(page) {
 
 
 async function fits(page) {
-  for (const id of ['attach', 'model', 'reasoning-control', 'usage-meter', 'commands']) await expect(page.locator('#' + id)).toBeVisible();
-  await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
+  const main = await page.locator('#composer').isVisible();
+  if (main) {
+    for (const id of ['attach', 'model', 'reasoning-control', 'usage-meter', 'commands']) await expect(page.locator('#' + id)).toBeVisible();
+    await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
+  } else {
+    await expect(page.locator('#worker-inspection')).toBeVisible();
+    await expect(page.locator('textarea:visible, input:visible')).toHaveCount(0);
+  }
   const bounds = await page.evaluate(() => {
     const rect = id => { const r = document.getElementById(id).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
     return { overflow: document.documentElement.scrollWidth > innerWidth, scroll: scrollY, height: innerHeight,
-      transcript: rect('transcript'), dock: rect('stack-dock'), composer: rect('composer'),
-      controls: [...document.querySelectorAll('#worker-stack > summary, .stack-row, .prototype-switcher button')].filter(node => node.checkVisibility()).map(node => {
+      transcript: rect('transcript'), dock: rect('stack-dock'), composer: rect('composer'), inspection: rect('worker-inspection'),
+      controls: [...document.querySelectorAll('#worker-stack > summary, .stack-row, .prototype-switcher button, .coordinator-actions button, #worker-inspection button')].filter(node => node.checkVisibility()).map(node => {
         const r = node.getBoundingClientRect(), style = getComputedStyle(node);
         return { width: r.width, height: r.height, background: style.backgroundColor, radius: style.borderRadius, row: node.classList.contains('stack-row') };
       }) };
@@ -77,8 +83,9 @@ async function fits(page) {
   expect(bounds.overflow).toBe(false); expect(bounds.scroll).toBe(0);
   expect(bounds.transcript.height).toBeGreaterThanOrEqual(44);
   expect(bounds.transcript.bottom).toBeLessThanOrEqual(bounds.dock.top + 1);
-  expect(bounds.dock.bottom).toBeLessThanOrEqual(bounds.composer.top + 1);
-  expect(bounds.composer.bottom).toBeLessThan(bounds.height - 44);
+  const footer = main ? bounds.composer : bounds.inspection;
+  expect(bounds.dock.bottom).toBeLessThanOrEqual(footer.top + 1);
+  expect(footer.bottom).toBeLessThan(bounds.height - 44);
   for (const control of bounds.controls) {
     expect(control.width).toBeGreaterThanOrEqual(44); expect(control.height).toBeGreaterThanOrEqual(44);
     if (control.row) { expect(control.background).toBe('rgba(0, 0, 0, 0)'); expect(control.radius).toBe('0px'); }
@@ -94,14 +101,14 @@ test('three stack prototypes differ structurally and keep the variant URL sharea
   await expect(page.getByRole('region', { name: 'Recovery details' })).toContainText('browser reload or host restart');
   await page.getByRole('button', { name: 'Inspect Layout review, Result ready', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Layout review details' })).toContainText('Sample notes');
-  await page.getByRole('button', { name: 'Open Layout review', exact: true }).click();
+  await page.getByRole('button', { name: 'View Layout review log', exact: true }).click();
   await expect(page.locator('#title')).toHaveText('Layout review');
   await expect(page.locator('#transcript')).toContainText('not an executed review');
   await page.getByRole('button', { name: 'Return to Mobile review coordinator' }).click();
   await page.getByRole('button', { name: 'Next prototype' }).click();
   await expect(page).toHaveURL(/variant=C/);
   await expect(page.locator('.stack-tree-children .stack-row')).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Open Mobile review, coordinator', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: 'Return to Mobile review main conversation', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.reload(); await expect(page.locator('#variant-label')).toHaveText('Prototype C · Session tree');
   await page.getByRole('button', { name: 'Next prototype' }).click(); await expect(page).toHaveURL(/variant=A/);
   await page.locator('#prompt').fill('Keep this draft.'); await page.keyboard.press('ArrowLeft'); await expect(page).toHaveURL(/variant=A/);
@@ -110,7 +117,9 @@ test('three stack prototypes differ structurally and keep the variant URL sharea
   await page.setViewportSize({ width: 390, height: 510 }); await page.goto(route + '?variant=B');
   await expect(page.getByRole('region', { name: 'Recovery details' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspect Recovery, Needs answer', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Reply in Recovery', exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Answer in main chat', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: 'Answer in main chat', exact: true }).click();
+  await expect(page.locator('#title')).toHaveText('Mobile review'); await expect(page.locator('#prompt')).toBeFocused();
   await page.getByRole('button', { name: 'About this design study' }).click();
   await expect(page.locator('#study-info')).toContainText('No agents run'); await page.keyboard.press('Escape');
   for (const suffix of ['html', 'css', 'js']) {
@@ -120,38 +129,68 @@ test('three stack prototypes differ structurally and keep the variant URL sharea
   isolated();
 });
 
-test('sample worker navigation keeps drafts, attachments and Stop scoped without touching real capabilities', async ({ page }) => {
+test('the coordinator presents questions and relays all input while worker logs stay read-only', async ({ page }) => {
+  const isolated = await observe(page);
+  for (const variant of ['A', 'B', 'C']) {
+    await page.goto(route + '?variant=' + variant);
+    await expect(page.getByText('Recovery needs a choice before it can continue. Should it check browser reload or host restart first?', { exact: true })).toBeInViewport();
+    await page.locator('#prompt').fill('Host restart first.'); await page.locator('#send').click();
+    await expect(page.locator('#title')).toHaveText('Mobile review');
+    await expect(page.locator('#transcript')).toContainText('I relayed your choice to Recovery: host restart first. Other workers are unchanged.');
+    await expect(page.locator('#worker-stack-summary')).toHaveText('2 working · 1 ready');
+    await expect(page.getByRole('button', { name: 'Host restart first', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Stop Messaging', exact: true }).click();
+    await expect(page.locator('#transcript')).toContainText('I stopped Messaging at your request. Recovery and Layout review are unchanged.');
+    await expect(page.locator('#worker-stack-summary')).toHaveText('1 working · 1 ready');
+    await page.locator('[data-session="recovery"]').last().click();
+    await expect(page.locator('#title')).toHaveText('Recovery');
+    await expect(page.locator('#transcript')).toContainText('Instruction from Mobile review');
+    await expect(page.locator('#transcript')).toContainText('Host restart first.');
+    await expect(page.locator('#transcript .message.user')).toHaveCount(0);
+    await expect(page.locator('#composer')).toBeHidden(); await expect(page.locator('#status-line')).toBeHidden();
+    await expect(page.locator('textarea:visible, input:visible')).toHaveCount(0);
+    await expect(page.locator('#worker-inspection')).toContainText('Read-only worker log');
+    await page.getByRole('button', { name: 'Back to main conversation', exact: true }).click();
+    await expect(page.locator('#composer')).toBeVisible();
+    await expect(page.locator('#transcript .message.user')).toHaveCount(3);
+    await expect(page.locator('#prototype-state')).toContainText('"recipient": "coordinator"');
+  }
+  isolated();
+});
+
+test('inspection preserves the coordinator draft and attachments without exposing direct worker controls', async ({ page }) => {
   const isolated = await observe(page); await page.goto(route + '?variant=A');
   await page.locator('#prompt').fill('Keep my coordinator draft.');
   await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
-  await page.getByRole('button', { name: 'Open Messaging, Working', exact: true }).click();
-  await expect(page.locator('#study-subtitle')).toHaveText('Mobile review · Worker');
-  await expect(page.locator('#prompt')).toHaveValue(''); await expect(page.locator('#attachments')).toBeHidden();
-  await page.locator('#abort').click();
-  await expect(page.getByRole('button', { name: 'Open Messaging, Stopped', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open Recovery, Needs answer', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open Layout review, Result ready', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Recovery, Needs answer', exact: true }).click();
-  const text = '<img src=x onerror=alert(1)>';
-  await page.locator('#prompt').fill(text); await page.locator('#send').click();
-  await expect(page.locator('#transcript .message.user').last()).toHaveText(text);
-  await expect(page.locator('#transcript img, #transcript script')).toHaveCount(0);
-  await expect(page.locator('#transcript')).toContainText('received by Recovery only');
-  await page.getByRole('button', { name: 'Return to Mobile review coordinator' }).click();
-  await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
-  await expect(page.locator('#attachments img')).toBeVisible();
+  await page.getByRole('button', { name: 'Stop Messaging', exact: true }).click();
+  await expect(page.locator('#sample-feedback')).toContainText('Send or clear your current draft');
+  await expect(page.locator('#worker-stack-summary')).toHaveText('1 working · 1 needs answer · 1 ready');
+  for (const name of ['Messaging', 'Recovery', 'Layout review']) {
+    await page.getByRole('button', { name: new RegExp('^View ' + name + ' log,') }).click();
+    await expect(page.locator('#study-subtitle')).toHaveText('Worker log · Read-only');
+    await expect(page.locator('#composer')).toBeHidden(); await expect(page.locator('#abort')).toBeHidden();
+    await page.getByRole('button', { name: 'Back to main conversation', exact: true }).click();
+    await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
+    await expect(page.locator('#attachments img')).toBeVisible();
+  }
   await page.getByRole('button', { name: 'Remove sample image' }).click();
+  for (const text of ['<img src=x onerror=alert(1)>', '__proto__']) {
+    await page.locator('#prompt').fill(text); await page.locator('#send').click();
+    await expect(page.locator('#transcript .message.user').last()).toHaveText(text);
+    await expect(page.locator('#transcript img, #transcript script')).toHaveCount(0);
+    await expect(page.locator('#transcript .message.assistant').last()).toContainText('No worker action was inferred');
+  }
   for (const id of ['model', 'reasoning-control', 'usage-meter']) {
     await page.locator('#' + id).click(); await expect(page.locator('#settings-picker')).toBeVisible(); await page.keyboard.press('Escape');
   }
   await page.locator('#commands').click(); await page.getByRole('option', { name: /\/model/ }).click();
   await page.locator('#send').click(); await expect(page.locator('#settings-picker')).toBeVisible(); await page.keyboard.press('Escape');
-  await page.goto(route + '?variant=C&session=recovery'); await expect(page.locator('#title')).toHaveText('Recovery');
-  await page.reload(); await expect(page.locator('#title')).toHaveText('Recovery');
+  await page.goto(route + '?variant=C&session=recovery');
+  await page.reload(); await expect(page.locator('#title')).toHaveText('Recovery'); await expect(page.locator('#composer')).toBeHidden();
   isolated();
 });
 
-test('collapsing each stack preserves status, recipient, drafts and attachments', async ({ page }) => {
+test('collapsing each stack preserves inspection state and the coordinator draft', async ({ page }) => {
   const isolated = await observe(page), disclosure = page.locator('#worker-stack'), toggle = disclosure.locator('summary');
   for (const variant of ['A', 'B', 'C']) {
     await page.goto(route + '?variant=' + variant);
@@ -167,20 +206,20 @@ test('collapsing each stack preserves status, recipient, drafts and attachments'
     await expect(page.locator('#title')).toHaveText('Mobile review');
     await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
     await toggle.focus(); await page.keyboard.press('Space');
-    await expect(disclosure).toHaveJSProperty('open', true);
-    await expect(toggle).toBeFocused();
+    await expect(disclosure).toHaveJSProperty('open', true); await expect(toggle).toBeFocused();
   }
   await page.locator('#attach').click(); await page.getByRole('button', { name: 'Add sample image' }).click();
-  await page.getByRole('button', { name: 'Open Messaging, Working', exact: true }).click();
-  await toggle.click(); await page.locator('#abort').click();
-  await expect(page.locator('#title')).toHaveText('Messaging');
+  await page.getByRole('button', { name: 'View Messaging log, Working', exact: true }).click();
+  await toggle.click(); await expect(page.locator('#composer')).toBeHidden();
   await expect(disclosure).toHaveJSProperty('open', false);
-  await expect(toggle).toContainText('1 needs answer · 1 ready');
-  await expect(toggle).not.toContainText('working');
-  await page.getByRole('button', { name: 'Return to Mobile review coordinator' }).click();
+  await page.getByRole('button', { name: 'Back to main conversation', exact: true }).click();
   await expect(disclosure).toHaveJSProperty('open', false);
   await expect(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
   await expect(page.locator('#attachments img')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove sample image' }).click();
+  await page.locator('#prompt').fill('Stop Messaging'); await page.locator('#send').click();
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await expect(toggle).toContainText('1 needs answer · 1 ready'); await expect(toggle).not.toContainText('working');
   await expect(page.locator('#prototype-state')).toContainText('"expanded": false');
   isolated();
 });
@@ -228,6 +267,12 @@ test('stack prototypes fit phone, narrow, short and desktop views in one capture
         await expect(page.locator('#worker-stack')).toHaveJSProperty('open', false);
         await fits(page);
         if (view.name === 'phone' || theme === 'light') await page.screenshot({ path: join(evidence, variant + '-' + view.name + '-' + theme + '-collapsed.png'), fullPage: true });
+        await page.locator('#worker-stack > summary').click();
+        if (variant === 'B') await page.getByRole('button', { name: 'Inspect Messaging, Working', exact: true }).click();
+        await page.getByRole('button', { name: /^View Messaging log/ }).click();
+        await expect(page.locator('#composer')).toBeHidden(); await fits(page);
+        expect(await page.locator('.stack-row[aria-current="page"] .stack-name').evaluate(node => node.getBoundingClientRect().top >= document.querySelector('#worker-stack > summary').getBoundingClientRect().bottom)).toBe(true);
+        if (view.name === 'phone' || theme === 'light') await page.screenshot({ path: join(evidence, variant + '-' + view.name + '-' + theme + '-worker-log.png'), fullPage: true });
       }
     }
   }

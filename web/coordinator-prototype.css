@@ -13,6 +13,11 @@
 .stack-study .message-text { font-size: 16px; }
 .stack-study .message-text p:last-child { margin-bottom: 0; }
 .stack-route { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+.coordinator-actions { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.coordinator-actions button { min-height: 44px; padding: 8px 0; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; }
+.worker-inspection { flex-shrink: 0; width: calc(100% - 32px); max-width: var(--content-width); margin: 0 auto 8px; padding: 8px 0; }
+.worker-inspection p { margin: 0; color: var(--muted); font-size: 13px; }
+.worker-inspection button { min-height: 44px; padding: 8px 0; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
 .stack-dock { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); max-height: min(36dvh, 280px); margin: 0 auto 8px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); }
 #worker-stack > summary { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; background: var(--bg); }
 #worker-stack > summary::-webkit-details-marker { display: none; }
@@ -37,7 +42,7 @@
 .stack-detail { padding: 10px 0 4px; border-top: 1px solid var(--line); }
 .stack-detail h3 { margin: 0 0 6px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .stack-detail p { margin: 0; font-size: 15px; line-height: 1.6; }
-.stack-detail-actions { display: flex; gap: 20px; }
+.stack-detail-actions { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 .stack-detail-actions button { min-height: 44px; padding: 8px 0; font-size: 13px; }
 .stack-tree-root { min-height: 44px; }
 .stack-tree-root .stack-name { font-size: 13px; }
