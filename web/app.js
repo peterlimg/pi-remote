@@ -5,6 +5,24 @@ import MarkdownIt from './markdown-it.mjs';
 import { renderDiagrams } from './diagrams.js';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
+// Only disclosure-only lines become markup; all other HTML stays escaped.
+markdown.block.ruler.before('html_block', 'disclosure', (state, start, end, silent) => {
+  if (state.sCount[start] - state.blkIndent >= 4) return false;
+  const line = state.src.slice(state.bMarks[start] + state.tShift[start], state.eMarks[start]).trim();
+  const match = /^(?:(<details(?:\s+open)?\s*>)\s*)?(?:<summary\s*>(.*?)<\/summary\s*>\s*)?(?:(<\/details\s*>)\s*)?$/i.exec(line);
+  if (!match || !line) return false;
+  if (silent) return true;
+  const html = content => { state.push('html_block', '', 0).content = content + '\n'; };
+  if (match[1]) html('<details class="markdown-details"' + (/\sopen[\s>]/i.test(match[1]) ? ' open' : '') + '>');
+  if (match[2] !== undefined) {
+    html('<summary>');
+    const text = state.push('inline', '', 0); text.content = match[2]; text.children = [];
+    html('</summary>');
+  }
+  if (match[3]) html('</details>');
+  state.line = start + 1;
+  return true;
+}, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
 function refreshDiagramTheme() {
   const state = cache.get(selected);
   if (state) renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
@@ -1615,8 +1633,12 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         body.textContent = skill ? skill.text : text || (message.images?.length || paths.length || localVideos.get(message.id)?.length ? '' : '(empty message)');
       }
       else {
-        // HTML and images are disabled; markdown-it also rejects unsafe link schemes.
+        // Only disclosure markup is allowed; images, arbitrary HTML and unsafe link schemes stay disabled.
         body.innerHTML = markdown.render(splitVideoMessage(message.text || '', message.role).text);
+        for (const [index, detail] of [...body.querySelectorAll('.markdown-details')].entries()) {
+          detail.dataset.disclosureId = 'message:' + (message.liveId || message.id) + ':' + index;
+          detail.open = expanded.get(detail.dataset.disclosureId) ?? detail.open;
+        }
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
         for (const pre of body.querySelectorAll('pre')) {
           const code = pre.querySelector('code');

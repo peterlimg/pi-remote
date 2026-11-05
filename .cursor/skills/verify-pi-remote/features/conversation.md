@@ -4,7 +4,7 @@ A conversation shows user and assistant messages, formatted replies, collapsible
 
 ## Sub-features
 
-- `conversation-markdown`: render formatting without executing embedded markup.
+- `conversation-markdown`: render formatting and collapsible sections without executing embedded markup.
 - `conversation-diagrams`: render Mermaid fences locally, inspect the source, and zoom the diagram.
 - `conversation-copy`: copy a reply's Markdown or an individual code block's source.
 - `conversation-zoom-lock`: keep the page at 1x while preserving the image viewer's own zoom.
@@ -28,6 +28,7 @@ Preconditions: authenticated baseline, no command sent yet. Start with Project A
 
 - **Open.** `await page.getByRole('button', { name: /Project Alpha/ }).click()`; require `#transcript` to contain `Working on Project Alpha`.
 - **Formatting.** Require `await expect(page.locator('.message-text strong')).toHaveText('The relay is ready.')` and `.message-text pre code` text `npm test\n`. Require `#transcript script, #transcript img, #transcript a[href^="javascript:"]` count 0. The seeded malicious text must not become executable markup or a remote image request; inspect the trace network as well.
+- **Collapsible sections.** The `Markdown details` and `disclosure support` checks in `test/browser/mermaid.spec.mjs` cover `<details>` and `<summary>` lines, nested sections, formatted summaries, embedded diagrams, keyboard toggling, disclosure/focus across updates, and literal code examples. Only these structural tags and the boolean `open` attribute are supported; other HTML and attributes remain escaped.
 - **Diagrams.** Run `npm run test:browser -- test/browser/mermaid.spec.mjs --trace on`, then repeat with `--browser=webkit`. Mermaid fences render as local SVG images, with `Open diagram` using the existing zoom viewer and `Diagram source` revealing copyable source. The library loads only when needed inside a network-restricted, opaque-origin sandbox. The tiny build omits mindmaps, architecture and math. Invalid, oversized or unavailable diagrams retain their source. The minimal saved-conversation check uses a real isolated host; streaming, theme, security and failure checks simulate only the browser WebSocket. This does not prove physical iPhone behavior.
 - **Project.** `await page.locator('.session-info summary').click()`; require `#project` visible with text `/projects/Project Alpha`. Click again to collapse. The summary's accessible name is `Session details`.
 - **Copy.** Run `npm run test:browser -- test/browser/copy-message.spec.mjs --trace on`. `Copy message` copies the original Markdown; each fenced or indented code block has `Copy code`, which copies only its source including line breaks. Require the native clipboard value, `Copied` feedback and the polite status announcement. The failure case replaces only the clipboard API and requires a visible manual-copy fallback. The browser WebSocket is simulated.

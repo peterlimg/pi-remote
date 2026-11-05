@@ -165,3 +165,55 @@ test('plain code does not load Mermaid and a failed library keeps the diagram so
   await expect(page.locator('.code-block pre')).toHaveText(simple);
   await expect(page.locator('.code-block pre')).toBeVisible();
 });
+
+test('Markdown details and summary tags become collapsible sections', async ({ page }, testInfo) => {
+  const text = '<details>\n<summary>Payment **model**</summary>\n\n' + fence(simple) + '\n</details>\n\n'
+    + '<details> <summary>Missing-lock mutation counterexample</summary>\n\nNoDoublePayment breaks at step 12.\n'
+    + '<details open>\n<summary>Step **12**</summary>\n\nBoth claims commit the same accrual.\n</details>\n</details>';
+  const update = await openDiagrams(page, text);
+  const details = page.locator('.message-text > .markdown-details'), first = details.first(), second = details.last();
+  await expect(details).toHaveCount(2);
+  await expect(first.locator(':scope > summary strong')).toHaveText('model');
+  const summary = second.locator(':scope > summary'), paragraph = second.locator(':scope > p');
+  await expect(summary).toHaveText('Missing-lock mutation counterexample');
+  await expect(paragraph).toBeHidden();
+  await summary.focus(); await page.keyboard.press('Enter');
+  await expect(paragraph).toBeVisible();
+  await expect(second.locator('details')).toHaveAttribute('open', '');
+  await expect(second.locator('details p')).toBeVisible();
+  update(text + '\n\nStreamed update.');
+  await expect(page.locator('.message-text')).toContainText('Streamed update.');
+  await expect(summary).toBeFocused();
+  await expect(paragraph).toBeVisible();
+  await expect(first).not.toHaveAttribute('open', '');
+  await first.locator(':scope > summary').click();
+  await expect(first.locator('img[alt="Mermaid diagram"]')).toBeVisible();
+  await expect(page.locator('.message-text')).not.toContainText('</details>');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(first.locator('img')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('markdown-details-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: testInfo.outputPath('markdown-details-desktop.png') });
+  await testInfo.attach('markdown-disclosures', { body: await page.locator('#transcript').ariaSnapshot(), contentType: 'text/plain' });
+});
+
+test('disclosure support leaves arbitrary HTML escaped and code examples literal', async ({ page }) => {
+  const external = [];
+  page.on('request', request => { if (request.url().startsWith('http') && new URL(request.url()).hostname !== '127.0.0.1') external.push(request.url()); });
+  const literal = '<details><summary>Literal example</summary></details>\n';
+  await openDiagrams(page, '<details>\n<summary>Safe **title** <img src="https://example.com/tracker.png" onerror="window.injected=true"></summary>\n\n'
+    + '<script>window.injected=true</script>\n\n[unsafe](javascript:window.injected=true)\n\n</details>\n\n'
+    + '<details open onclick="window.injected=true">\n\nUnsafe attributes stay text.\n\n</details>\n\n'
+    + '```html\n' + literal + '```\n\n`<summary>Inline example</summary>`\n\n'
+    + '    <details>\n    <summary>Indented example</summary>\n    </details>');
+  const details = page.locator('.markdown-details');
+  await expect(details).toHaveCount(1);
+  await expect(details.locator('summary strong')).toHaveText('title');
+  await details.locator('summary').click();
+  await expect(page.locator('#transcript script, #transcript img, #transcript iframe, #transcript [onclick], #transcript a[href^="javascript:"]')).toHaveCount(0);
+  await expect(page.locator('.code-block pre').first()).toHaveText(literal);
+  await expect(page.locator('.code-block pre').last()).toHaveText('<details>\n<summary>Indented example</summary>\n</details>');
+  await expect(page.locator('.message-text > p > code')).toHaveText('<summary>Inline example</summary>');
+  expect(await page.evaluate(() => window.injected)).toBeUndefined();
+  expect(external).toEqual([]);
+});

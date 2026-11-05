@@ -589,6 +589,8 @@ pre.message-text { white-space: pre-wrap; }
 .message-text > :first-child { margin-top: 0; }
 .message-text > :last-child { margin-bottom: 0; }
 .message-text p { margin-bottom: 12px; }
+.markdown-details { margin: 16px 0; }
+.markdown-details > summary { min-height: 44px; padding: 8px 0; font-weight: 600; }
 .message-text h1, .message-text h2, .message-text h3, .message-text h4 { font-size: 1.1em; font-weight: 600; line-height: 1.4; margin: 24px 0 8px; }
 .message-text ul, .message-text ol { padding-left: 24px; margin: 8px 0 16px; }
 .message-text li { margin: 4px 0; }
