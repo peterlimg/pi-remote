@@ -2,8 +2,15 @@ import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts, session
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage, VideoCache } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
+import { renderDiagrams } from './diagrams.js';
 import { hello, channel, validKey } from './e2e.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
+function refreshDiagramTheme() {
+  const state = cache.get(selected);
+  if (state) renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
+}
+new MutationObserver(refreshDiagramTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshDiagramTheme);
 const $ = id => document.getElementById(id);
 const activityIndicator = $('agent-activity');
 let historyWindow, historyRequest, historyForward = [], historyError = '', historyGeneration = 0, historyScrollTop = 0;
@@ -1718,6 +1725,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (activityIndicator.parentNode !== box) box.append(activityIndicator);
   for (const child of [...box.childNodes]) if (child !== activityIndicator) child.remove();
   box.insertBefore(fragment, activityIndicator);
+  renderDiagrams(box, openImage, () => {
+    if (pinnedToBottom) box.scrollTop = box.scrollHeight;
+    updateScrollButton();
+  });
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
   for (const { outgoing, messageId } of matched) {

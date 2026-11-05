@@ -22,6 +22,7 @@
     "test:provider-parity": "node test/provider-parity.mjs"
   },
   "dependencies": {
+    "@mermaid-js/tiny": "12.3.0",
     "jsqr": "1.4.0",
     "markdown-it": "15.0.1",
     "qrcode-terminal": "0.12.0",

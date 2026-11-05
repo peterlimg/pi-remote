@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -36,6 +36,10 @@ const files = new Map([
   ['/session-icons-prototype.js', ['session-icons-prototype.js', 'text/javascript; charset=utf-8']],
   ['/protocol.js', ['protocol.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/diagrams.js', ['diagrams.js', 'text/javascript; charset=utf-8']],
+  ['/diagram-renderer.html', ['diagram-renderer.html', 'text/html; charset=utf-8']],
+  ['/diagram-renderer.js', ['diagram-renderer.js', 'text/javascript; charset=utf-8']],
+  ['/mermaid-tiny.js', ['../node_modules/@mermaid-js/tiny/dist/mermaid.tiny.js', 'text/javascript; charset=utf-8']],
   ['/theme.js', ['theme.js', 'text/javascript; charset=utf-8']],
   ['/images.js', ['images.js', 'text/javascript; charset=utf-8']],
   ['/videos.js', ['videos.js', 'text/javascript; charset=utf-8']],
@@ -59,14 +63,19 @@ export const readAsset = path => readFileSync(new URL('../web/' + files.get(path
 // A relay passes the body it got from the computer; otherwise serve this install's copy.
 export function serveStatic(req, res, body) {
   const path = (req.url || '/').split('?')[0];
+  const nonce = path === '/diagram-renderer.html' ? randomBytes(18).toString('base64') : undefined;
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   // The tunnel adds a slow round trip per request: revalidate (304) instead of re-downloading.
   res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; " + (path === '/sdk-guide.html' ? "font-src 'self'; " : "") + "connect-src 'self'; img-src 'self' blob:; media-src blob:; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  // Only the sandboxed renderer needs Mermaid's generated inline SVG styles.
+  res.setHeader('Content-Security-Policy', path === '/diagram-renderer.html'
+    ? `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'; sandbox allow-scripts`
+    : "default-src 'none'; script-src 'self'; style-src 'self'; " + (path === '/sdk-guide.html' ? "font-src 'self'; " : "") + "connect-src 'self'; img-src 'self' blob:; media-src blob:; frame-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   if (path === '/health' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
   if (!assetPath(req)) { res.writeHead(404); res.end('Not found'); return; }
   body ??= readAsset(path);
+  if (nonce) body = Buffer.from(body.toString().replaceAll('nonce="diagram-script"', `nonce="${nonce}"`));
   const etag = 'W/"' + createHash('sha256').update(body).digest('base64url').slice(0, 22) + '"';
   res.setHeader('ETag', etag); res.setHeader('Vary', 'Accept-Encoding');
   if (req.headers['if-none-match'] === etag) { res.writeHead(304); res.end(); return; }

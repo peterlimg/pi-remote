@@ -600,6 +600,12 @@ pre.message-text { white-space: pre-wrap; }
 .copy-code { display: grid; place-items: center; width: 44px; padding: 0; margin-left: auto; }
 .message-text .code-block pre { margin: 0; border: 0; border-radius: 0; }
 .code-block :focus-visible { outline-offset: -3px; }
+.diagram-renderer { position: fixed; left: -10000px; top: 0; width: 1200px; height: 900px; border: 0; pointer-events: none; }
+.mermaid-diagram { display: block; padding: 16px; }
+.mermaid-diagram img { display: block; width: 100%; height: auto; }
+.diagram-source { border-top: 1px solid var(--line); }
+.diagram-source summary { min-height: 44px; padding: 10px 16px; color: var(--muted); font-size: 14px; }
+.message-text .diagram-status { margin: 12px 16px; }
 .message-text blockquote { margin: 16px 0; padding-left: 16px; border-left: 1px solid var(--line); color: var(--muted); }
 .message-text table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 13px; }
 .message-text th, .message-text td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; }
