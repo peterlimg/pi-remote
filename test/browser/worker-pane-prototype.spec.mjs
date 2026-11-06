@@ -29,7 +29,7 @@ async function inspect(page, variant, worker = 'Messaging') {
   if (variant === 'A') await page.getByRole('region', { name: 'Workers', exact: true }).getByRole('button', { name: worker + ', ' + (worker === 'Messaging' ? 'Result ready' : 'Stopped'), exact: true }).click();
   else {
     await page.getByRole('button', { name: 'Open workers', exact: true }).click();
-    if (variant === 'B') await page.locator('#worker-pane').getByRole('button', { name: worker + ', ' + (worker === 'Messaging' ? 'Result ready' : 'Stopped'), exact: true }).click();
+    if (variant === 'B' || variant === 'D') await page.locator('#worker-pane').getByRole('button', { name: worker + ', ' + (worker === 'Messaging' ? 'Result ready' : 'Stopped'), exact: true }).click();
     else await page.getByRole('tab', { name: worker, exact: true }).click();
   }
   await expect(page.locator('#pane-title')).toHaveText(worker);
@@ -45,7 +45,7 @@ test('pane variants preserve the production composer, draft, sample attachment a
   expect(form(readFileSync('web/coordinator-prototype.html', 'utf8'))).toBe(form(readFileSync('web/index.html', 'utf8')));
   const paneStyles = readFileSync('web/coordinator-prototype.css', 'utf8').split('/* Isolated worker navigation study.')[1];
   expect(paneStyles).not.toMatch(/#composer|\.composer|#prompt|#attach\b|#model\b|#send\b|#usage-meter/);
-  for (const variant of ['A', 'B', 'C']) {
+  for (const variant of ['A', 'B', 'C', 'D']) {
     await page.goto(route + '&variant=' + variant);
     await page.locator('#prompt').fill('Keep this unsent draft while I inspect.');
     await page.getByRole('button', { name: 'Add attachments', exact: true }).click();
@@ -56,7 +56,7 @@ test('pane variants preserve the production composer, draft, sample attachment a
     await expect(page.locator('#worker-pane')).toHaveAttribute('aria-modal', 'true');
     await expect(page.locator('#pane-content')).toContainText('Illustrative content');
     await expect(page.locator('#worker-pane textarea, #worker-pane input, #worker-pane form')).toHaveCount(0);
-    if (variant === 'B') {
+    if (variant === 'B' || variant === 'D') {
       await page.getByRole('button', { name: 'Workers', exact: true }).click();
       await page.getByRole('button', { name: 'Recovery, Stopped', exact: true }).click();
       await expect(page.locator('#pane-content')).toContainText('No completed report');
@@ -90,7 +90,7 @@ test('pane variants preserve the production composer, draft, sample attachment a
 test('all pane layouts fit phone, narrow, short and desktop views in both themes', async ({ page }) => {
   test.setTimeout(90000);
   const safe = await isolated(page);
-  for (const variant of ['A', 'B', 'C']) for (const [name, width, height, colorScheme] of [
+  for (const variant of ['A', 'B', 'C', 'D']) for (const [name, width, height, colorScheme] of [
     ['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'dark'],
     ['short', 390, 510, 'dark'], ['desktop', 1440, 900, 'light']
   ]) {
@@ -115,7 +115,12 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
     });
     expect(geometry.overflow).toBe(false); expect(geometry.pageScroll).toBe(0);
     expect(before.height).toBeGreaterThan(44);
-    expect(geometry.panel.x).toBeGreaterThanOrEqual(48); expect(geometry.panel.right).toBeCloseTo(width, 0);
+    if (variant === 'D') {
+      expect(geometry.panel.x).toBeCloseTo((width - Math.min(640, width)) / 2, 0);
+      expect(geometry.panel.width).toBeCloseTo(Math.min(640, width), 0);
+      expect(geometry.panel.height).toBeLessThanOrEqual(Math.min(height * .72, 640) + 1);
+      expect(geometry.panel.y).toBeGreaterThanOrEqual(24);
+    } else { expect(geometry.panel.x).toBeGreaterThanOrEqual(48); expect(geometry.panel.right).toBeCloseTo(width, 0); }
     expect(geometry.backgroundAlpha).toBeGreaterThanOrEqual(180); expect(geometry.backgroundAlpha).toBeLessThan(255);
     expect(geometry.opacity).toBe(1);
     expect(geometry.backdrop).toBe(geometry.standardBackdrop);
@@ -132,19 +137,19 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
   safe();
 });
 
-test('animated workers drawer enters from the right without scrolling its overlay', async ({ page }, testInfo) => {
+test('animated worker panes enter along their own axis without scrolling the overlay', async ({ page }, testInfo) => {
   const safe = await isolated(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.goto(route + '&variant=B');
+  for (const variant of ['B', 'D']) {
+  await page.goto(route + '&variant=' + variant);
   await page.evaluate(() => {
     window.drawerMotion = { frames: [], done: false };
     document.getElementById('workers-open').addEventListener('click', () => {
       const start = performance.now();
       const sample = () => {
-        const pane = document.getElementById('worker-pane'), surface = pane.querySelector('.pane-surface');
-        const rect = surface.getBoundingClientRect();
-        window.drawerMotion.frames.push({ time: performance.now() - start, x: rect.x, width: rect.width,
-          overlayScroll: pane.scrollLeft, pageScroll: document.scrollingElement.scrollLeft });
+        const pane = document.getElementById('worker-pane'), rect = pane.querySelector('.pane-surface').getBoundingClientRect();
+        window.drawerMotion.frames.push({ time: performance.now() - start, x: rect.x, y: rect.y,
+          overlayX: pane.scrollLeft, overlayY: pane.scrollTop, pageX: document.scrollingElement.scrollLeft, pageY: document.scrollingElement.scrollTop });
         if (performance.now() - start < 350) requestAnimationFrame(sample); else window.drawerMotion.done = true;
       };
       requestAnimationFrame(sample);
@@ -153,15 +158,16 @@ test('animated workers drawer enters from the right without scrolling its overla
   await page.getByRole('button', { name: 'Open workers', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.drawerMotion.done)).toBe(true);
   const frames = await page.evaluate(() => window.drawerMotion.frames);
-  await testInfo.attach('drawer-motion.json', { body: JSON.stringify(frames, null, 2), contentType: 'application/json' });
+  await testInfo.attach('motion-' + variant + '.json', { body: JSON.stringify(frames, null, 2), contentType: 'application/json' });
   expect(frames.length).toBeGreaterThan(3);
-  expect(Math.max(...frames.map(frame => frame.overlayScroll))).toBe(0);
-  expect(Math.max(...frames.map(frame => frame.pageScroll))).toBe(0);
-  const resting = frames.at(-1).x;
-  expect(Math.min(...frames.map(frame => frame.x))).toBeGreaterThanOrEqual(resting - 1);
-  expect(frames[0].x).toBeGreaterThan(resting + 10);
-  for (let index = 1; index < frames.length; index++) expect(frames[index].x).toBeLessThanOrEqual(frames[index - 1].x + 1);
+  for (const frame of frames) for (const key of ['overlayX', 'overlayY', 'pageX', 'pageY']) expect(frame[key]).toBe(0);
+  const axis = variant === 'D' ? 'y' : 'x', still = variant === 'D' ? 'x' : 'y', resting = frames.at(-1)[axis];
+  expect(Math.min(...frames.map(frame => frame[axis]))).toBeGreaterThanOrEqual(resting - 1);
+  expect(frames[0][axis]).toBeGreaterThan(resting + 10);
+  for (let index = 1; index < frames.length; index++) expect(frames[index][axis]).toBeLessThanOrEqual(frames[index - 1][axis] + 1);
+  for (const frame of frames) expect(frame[still]).toBeCloseTo(frames.at(-1)[still], 0);
   await expect(page.getByRole('button', { name: 'Close worker pane', exact: true })).toBeFocused();
+  }
   safe();
 });
 
@@ -205,6 +211,46 @@ test('right swipe follows the finger and dismisses, while cancelled and vertical
   await expect(surface).toHaveCSS('transform', 'none');
   expect(Math.round((await surface.boundingBox()).x)).toBe(resting);
   await page.keyboard.press('Escape'); await expect(page.locator('#worker-pane')).not.toBeVisible();
+  }
+  safe();
+});
+
+test('bottom sheet drags down to dismiss without stealing scroll from a worker log', async ({ page }) => {
+  const safe = await isolated(page);
+  for (const reducedMotion of ['reduce', 'no-preference']) {
+    await page.setViewportSize({ width: 390, height: 510 }); await page.emulateMedia({ reducedMotion });
+    await page.goto(route + '&variant=D');
+    await page.locator('#prompt').fill('Keep this draft behind the bottom sheet.');
+    await page.getByRole('button', { name: 'Open workers', exact: true }).click();
+    const surface = page.locator('.pane-surface');
+    await expect(surface).toHaveCSS('transform', 'none');
+    await expect(page.locator('#pane-title')).toHaveText('Workers');
+    const client = await page.context().newCDPSession(page);
+    const touch = (type, x, y) => client.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x, y }] });
+    const header = await page.locator('.pane-header').boundingBox(), x = header.x + header.width / 2, y = header.y + 32;
+    const resting = Math.round((await surface.boundingBox()).y);
+    await touch('touchStart', x, y); await touch('touchMove', x, y + 24); await touch('touchMove', x, y + 64);
+    expect((await surface.boundingBox()).y).toBeGreaterThan(resting + 40);
+    await touch('touchCancel');
+    await expect.poll(async () => Math.round((await surface.boundingBox()).y)).toBe(resting);
+    await touch('touchStart', x, y); await touch('touchMove', x, y + 24); await touch('touchEnd');
+    await expect.poll(async () => Math.round((await surface.boundingBox()).y)).toBe(resting);
+    await page.getByRole('button', { name: 'Messaging, Result ready', exact: true }).click();
+    const scroll = page.locator('#pane-scroll'), body = await scroll.boundingBox(), sy = body.y + body.height - 16;
+    await touch('touchStart', 230, sy); await touch('touchMove', 230, sy - 32); await touch('touchMove', 230, sy - 70); await touch('touchEnd');
+    await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    const before = await scroll.evaluate(node => node.scrollTop), top = body.y + 16;
+    await touch('touchStart', 230, top); await touch('touchMove', 230, top + 32); await touch('touchMove', 230, top + 60); await touch('touchEnd');
+    await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeLessThan(before);
+    await expect(surface).toBeVisible();
+    expect(Math.round((await surface.boundingBox()).y)).toBe(resting);
+    await touch('touchStart', x, y); await touch('touchMove', x, y + 30); await touch('touchMove', x, y + 90); await touch('touchMove', x, y + 150); await touch('touchEnd');
+    await expect(page.locator('#worker-pane')).not.toBeVisible();
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft behind the bottom sheet.');
+    await expect(page.getByRole('button', { name: 'Open workers', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Open workers', exact: true }).click();
+    await expect(surface).toHaveCSS('transform', 'none');
+    await page.keyboard.press('Escape'); await expect(page.locator('#worker-pane')).not.toBeVisible();
   }
   safe();
 });

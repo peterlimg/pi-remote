@@ -182,5 +182,13 @@ body[data-study=panes] { --study-controls-height: calc(68px + env(safe-area-inse
   .pane-entry:hover strong, .pane-worker-row:hover strong, .pane-footer button:hover { text-decoration: underline; text-underline-offset: 4px; }
   .pane-switcher > button:hover { background: color-mix(in srgb, var(--bg) 16%, transparent); }
 }
+body[data-variant=D] .pane-surface { left: 0; right: 0; top: auto; width: min(640px, 100%); height: min(72dvh, 640px); max-height: calc(100% - var(--study-controls-height) - 24px); margin-inline: auto; border: 1px solid var(--line); border-bottom: 0; border-radius: 24px 24px 0 0; overflow: clip; }
+body[data-variant=D] .pane-header { position: relative; padding-top: 24px; }
+body[data-variant=D] .pane-header::before { content: ''; position: absolute; top: 9px; left: calc(50% - 18px); width: 36px; height: 4px; border-radius: 2px; background: var(--muted); }
+body[data-variant=D] .pane-entry > svg { transform: rotate(-90deg); }
 @keyframes pane-reveal { from { transform: translateX(100%); } to { transform: translateX(0); } }
-@media (prefers-reduced-motion: no-preference) { .worker-pane[open] .pane-surface { animation: pane-reveal 220ms cubic-bezier(.16, 1, .3, 1); } }
+@keyframes sheet-rise { from { transform: translateY(calc(100% + var(--study-controls-height))); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  .worker-pane[open] .pane-surface { animation: pane-reveal 220ms cubic-bezier(.16, 1, .3, 1); }
+  body[data-variant=D] .worker-pane[open] .pane-surface { animation-name: sheet-rise; }
+}

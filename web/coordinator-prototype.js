@@ -408,12 +408,13 @@ renderSelected(); updateViewport();
 }
 
 function WorkerPaneStudy() {
-// Three UI-only worker-pane studies. No transport, storage, model calls, or real files.
+// Four UI-only worker-pane studies. No transport, storage, model calls, or real files.
 const $ = id => document.getElementById(id);
 const variants = {
   A: { name: 'Tree + drawer', description: 'Keep the current worker tree. Tapping a worker slides its read-only log over the conversation from the right. Close it to return to the same place.' },
   B: { name: 'Workers drawer', description: 'Replace the whole tree with one Workers row. It opens a right-side worker list; tap a worker to read its log. The main conversation gets the space back.' },
-  C: { name: 'Pinned inspector', description: 'Open the last worker directly and switch logs with tabs. On a wide screen the inspector stays beside an interactive main conversation; on a phone it slides over it.' }
+  C: { name: 'Pinned inspector', description: 'Open the last worker directly and switch logs with tabs. On a wide screen the inspector stays beside an interactive main conversation; on a phone it slides over it.' },
+  D: { name: 'Bottom sheet', description: 'One Workers row opens a translucent sheet from the bottom. Inspect a worker, return to the list, or pull the sheet down to close. The conversation stays in place.' }
 };
 const workers = {
   messaging: { name: 'Messaging', state: 'reported', label: 'Result ready', detail: 'Phone-to-Pi trace and a delivery caveat.', log: `
@@ -435,9 +436,11 @@ let swipe, swipeAnimation;
 const wide = matchMedia('(min-width: 1100px)');
 const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
 const modal = () => variant !== 'C' || !wide.matches;
+const roster = () => variant === 'B' || variant === 'D';
+const translatePane = distance => 'translate' + (variant === 'D' ? 'Y' : 'X') + '(' + distance + 'px)';
 const feedback = text => { $('sample-feedback').textContent = text; surfaceState(); };
 function surfaceState() {
-  $('prototype-state').textContent = JSON.stringify({ variant, paneOpen: pane.open, presentation: modal() ? 'drawer' : 'split',
+  $('prototype-state').textContent = JSON.stringify({ variant, paneOpen: pane.open, presentation: variant === 'D' ? 'bottom sheet' : modal() ? 'drawer' : 'split',
     inspectedWorker: selected, recipient: 'main conversation', draft: $('prompt').value, sampleAttachment: attached,
     workers: Object.fromEntries(Object.entries(workers).map(([id, worker]) => [id, { name: worker.name, state: worker.state }])) }, null, 2);
 }
@@ -456,34 +459,38 @@ function releasePaneSwipe(dismiss) {
   const drag = swipe; swipe = undefined;
   if (!drag?.dragging) return;
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { resetPaneSwipe(); if (dismiss) closePane(); return; }
-  const end = dismiss ? Math.max(surface.offsetWidth, drag.dx) : 0;
-  const animation = surface.animate({ transform: ['translateX(' + drag.dx + 'px)', 'translateX(' + end + 'px)'] },
+  const exit = variant === 'D' ? pane.clientHeight - surface.offsetTop : surface.offsetWidth;
+  const end = dismiss ? Math.max(exit, drag.distance) : 0;
+  const animation = surface.animate({ transform: [translatePane(drag.distance), translatePane(end)] },
     { duration: 180, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'forwards' });
   swipeAnimation = animation;
   animation.finished.then(() => { if (swipeAnimation === animation) { if (dismiss) closePane(); else resetPaneSwipe(); } }, () => {});
 }
 surface.addEventListener('touchstart', event => {
   if (!pane.open || !modal() || swipeAnimation || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) return;
+  if (variant === 'D' && $('pane-scroll').contains(event.target) && $('pane-scroll').scrollTop > 0) return;
   const touch = event.touches[0];
-  swipe = { x: touch.clientX, y: touch.clientY, dx: 0, dragging: false };
+  swipe = { x: touch.clientX, y: touch.clientY, distance: 0, dragging: false };
 }, { passive: true });
 surface.addEventListener('touchmove', event => {
   if (!swipe) return;
   if (event.touches.length !== 1) { releasePaneSwipe(false); return; }
   const dx = event.touches[0].clientX - swipe.x, dy = event.touches[0].clientY - swipe.y;
+  const distance = variant === 'D' ? dy : dx, cross = variant === 'D' ? dx : dy;
   if (!swipe.dragging) {
-    if (dx < -12 || Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { swipe = undefined; return; }
-    if (dx < 12 || dx < Math.abs(dy) * 1.25) return;
+    if (distance < -12 || Math.abs(cross) > 12 && Math.abs(cross) >= Math.abs(distance)) { swipe = undefined; return; }
+    if (distance < 12 || distance < Math.abs(cross) * 1.25) return;
     swipe.dragging = true;
     surface.getAnimations().forEach(animation => animation.cancel());
   }
   event.preventDefault();
-  swipe.dx = Math.max(0, dx); surface.style.transform = 'translateX(' + swipe.dx + 'px)';
+  swipe.distance = Math.max(0, distance); surface.style.transform = translatePane(swipe.distance);
 }, { passive: false });
 surface.addEventListener('touchend', event => {
   if (!swipe?.dragging) { swipe = undefined; return; }
   event.preventDefault();
-  releasePaneSwipe(swipe.dx > Math.min(100, surface.offsetWidth / 4));
+  const size = variant === 'D' ? surface.offsetHeight : surface.offsetWidth;
+  releasePaneSwipe(swipe.distance > Math.min(100, size / 4));
 }, { passive: false });
 surface.addEventListener('touchcancel', () => releasePaneSwipe(false));
 function renderEntrypoint() {
@@ -500,7 +507,7 @@ function renderPane() {
   const worker = workers[selected];
   $('pane-title').textContent = worker ? worker.name : 'Workers';
   $('pane-subtitle').textContent = worker ? worker.label + ' · Sample worker' : '2 workers in this conversation';
-  $('pane-back').hidden = variant !== 'B' || !worker;
+  $('pane-back').hidden = !roster() || !worker;
   $('worker-tabs').hidden = variant !== 'C';
   $('pane-return').firstChild.textContent = modal() ? 'Back to main conversation' : 'Continue in main conversation';
   const content = $('pane-content');
@@ -552,7 +559,7 @@ function setVariant(next) {
   savePosition(); $('study-info').hidePopover(); resetPaneSwipe();
   if (opened) pane.close();
   variant = next;
-  if (variant !== 'B' && !selected) selected = lastWorker;
+  if (!roster() && !selected) selected = lastWorker;
   if (opened) showPane(); else { renderEntrypoint(); updateURL(); }
 }
 function cycle(step) { const keys = Object.keys(variants); setVariant(keys[(keys.indexOf(variant) + step + keys.length) % keys.length]); }
@@ -577,7 +584,7 @@ $('worker-tabs').addEventListener('keydown', event => {
   const id = ids[(ids.indexOf(current) + (event.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length];
   openPane(id); $('worker-tabs').querySelector('[data-worker="' + id + '"]').focus();
 });
-$('workers-open').addEventListener('click', () => openPane(variant === 'B' ? null : lastWorker));
+$('workers-open').addEventListener('click', () => openPane(roster() ? null : lastWorker));
 $('pane-back').addEventListener('click', () => { openPane(null); $('pane-content').querySelector('button').focus(); });
 $('pane-close').addEventListener('click', closePane);
 $('pane-dismiss').addEventListener('click', closePane);
@@ -619,7 +626,7 @@ $('attachment-add').addEventListener('click', () => {
   item.append(image, remove); $('attachments').replaceChildren(item); $('attachments').hidden = false; $('send').disabled = false; surfaceState();
 });
 renderEntrypoint();
-if (params.has('pane')) { if (variant !== 'B' && !selected) selected = lastWorker; showPane(); } else updateURL();
+if (params.has('pane')) { if (!roster() && !selected) selected = lastWorker; showPane(); } else updateURL();
 requestAnimationFrame(() => { $('transcript').scrollTop = $('transcript').scrollHeight; });
 
 }
