@@ -102,8 +102,12 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
     await inspect(page, variant);
     const geometry = await page.evaluate(() => {
       const rect = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
-      const panel = document.querySelector('.pane-surface');
-      return { overflow: document.documentElement.scrollWidth > innerWidth, pageScroll: scrollY, panel: rect(panel),
+      const panel = document.querySelector('.pane-surface'), style = getComputedStyle(panel);
+      const canvas = document.createElement('canvas'), context = canvas.getContext('2d');
+      context.fillStyle = style.backgroundColor; context.fillRect(0, 0, 1, 1);
+      return { backgroundAlpha: context.getImageData(0, 0, 1, 1).data[3], opacity: Number(style.opacity),
+        backdrop: getComputedStyle(document.getElementById('pane-dismiss')).backgroundColor,
+        standardBackdrop: getComputedStyle(document.getElementById('sample-attachment'), '::backdrop').backgroundColor, overflow: document.documentElement.scrollWidth > innerWidth, pageScroll: scrollY, panel: rect(panel),
         body: rect(document.getElementById('pane-scroll')), footer: rect(document.querySelector('.pane-footer')),
         switcher: rect(document.getElementById('prototype-controls')), modal: document.getElementById('worker-pane').matches(':modal'),
         form: rect(document.getElementById('composer')), main: rect(document.querySelector('#app > main')),
@@ -111,7 +115,9 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
     });
     expect(geometry.overflow).toBe(false); expect(geometry.pageScroll).toBe(0);
     expect(before.height).toBeGreaterThan(44);
-    expect(geometry.panel.x).toBeGreaterThanOrEqual(0); expect(geometry.panel.right).toBeLessThanOrEqual(width + 1);
+    expect(geometry.panel.x).toBeGreaterThanOrEqual(48); expect(geometry.panel.right).toBeCloseTo(width, 0);
+    expect(geometry.backgroundAlpha).toBe(255); expect(geometry.opacity).toBe(1);
+    expect(geometry.backdrop).toBe(geometry.standardBackdrop);
     expect(geometry.panel.y).toBeGreaterThanOrEqual(0);
     expect(geometry.panel.bottom).toBeLessThanOrEqual(geometry.switcher.y);
     expect(geometry.body.height).toBeGreaterThanOrEqual(44);

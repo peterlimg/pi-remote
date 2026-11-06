@@ -34,7 +34,7 @@ A separate `study=panes` comparison uses the same route, stylesheet, and exact c
 - Pane B, Workers drawer: one compact Workers row opens a right-side roster, then a worker log with a back-to-roster control.
 - Pane C, Pinned inspector: one Workers row opens the last log with worker tabs. At 1100px and above it reserves a right column beside the interactive conversation; on phones it becomes a modal drawer.
 
-Pane B is the user's preferred drawer layout. Keep the conversation stationary and slide the pane in from the right, without a left-edge flash. The full-screen overlay must not scroll when focus enters the moving pane.
+Pane B is the user's preferred drawer layout. Keep the conversation stationary and slide the pane in from the right, without a left-edge flash. The full-screen overlay must not scroll when focus enters the moving pane. Phone drawers leave a clear 48px dismiss area on the left; the reading surface is fully opaque and flush with the right edge.
 
 Use native dialog focus, Escape, explicit close/return, and background dismissal. Keep prototype comparison controls reachable while inspecting. Preserve the main draft, sample attachment, and reading position. Names wrap; lists and log sections are unboxed. Pane reveal respects reduced motion. Short screens scroll inside the pane and retain its return control. No worker inputs, direct Stop, or synthetic prompt routing. Sample reports are illustrative, not executed reviews. These proposals do not change the selected production C layout.
 

@@ -114,8 +114,8 @@ body[data-study=panes] { --study-controls-height: calc(68px + env(safe-area-inse
 /* Autofocus must not scroll the overlay toward the panel while it is offscreen. */
 .worker-pane { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); overflow: clip; pointer-events: none; }
 .worker-pane::backdrop { background: transparent; }
-.pane-dismiss { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border-radius: 0; background: rgb(0 0 0 / .32); pointer-events: auto; }
-.pane-surface { position: absolute; top: 0; right: 0; bottom: var(--study-controls-height); display: flex; flex-direction: column; width: min(560px, calc(100% - 16px)); min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--bg); pointer-events: auto; }
+.pane-dismiss { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border-radius: 0; background: rgb(0 0 0 / .4); pointer-events: auto; }
+.pane-surface { position: absolute; top: 0; right: 0; bottom: var(--study-controls-height); display: flex; flex-direction: column; width: min(560px, calc(100% - 48px)); min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--bg); pointer-events: auto; }
 .pane-header { display: flex; align-items: flex-start; gap: 12px; flex-shrink: 0; padding: max(16px, env(safe-area-inset-top)) 16px 14px 24px; border-bottom: 1px solid var(--line); }
 .pane-heading { flex: 1; min-width: 0; }
 .pane-heading h2 { margin: 6px 0 4px; font-size: 20px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }

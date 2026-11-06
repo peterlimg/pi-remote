@@ -22,7 +22,7 @@ npm run prototype:workers
 
 Then visit `http://127.0.0.1:8815/coordinator-prototype.html?study=panes&variant=A`, or change `variant` to `B` or `C`. The original stack studies remain under `study=stacks`. The floating arrows switch variants and update the URL. `pane=messaging`, `pane=recovery`, or `pane=workers` opens a shareable inspection state. Use the options control for the theme and sample state. Arrow keys switch variants except while editing or using worker tabs.
 
-A and B overlay the main view. C becomes a nonmodal split view at 1100px and above, so the main composer can be used while the worker stays visible. Closing a modal pane returns focus to the Workers control without opening the phone keyboard.
+A and B overlay the main view. Phone drawers leave 48px of dimmed chat visible on the left; the pane itself is opaque and flush with the right edge. C becomes a nonmodal split view at 1100px and above, so the main composer can be used while the worker stays visible. Closing a modal pane returns focus to the Workers control without opening the phone keyboard.
 
 ## Focused verification
 
