@@ -116,7 +116,8 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
     expect(geometry.overflow).toBe(false); expect(geometry.pageScroll).toBe(0);
     expect(before.height).toBeGreaterThan(44);
     expect(geometry.panel.x).toBeGreaterThanOrEqual(48); expect(geometry.panel.right).toBeCloseTo(width, 0);
-    expect(geometry.backgroundAlpha).toBe(255); expect(geometry.opacity).toBe(1);
+    expect(geometry.backgroundAlpha).toBeGreaterThanOrEqual(180); expect(geometry.backgroundAlpha).toBeLessThan(255);
+    expect(geometry.opacity).toBe(1);
     expect(geometry.backdrop).toBe(geometry.standardBackdrop);
     expect(geometry.panel.y).toBeGreaterThanOrEqual(0);
     expect(geometry.panel.bottom).toBeLessThanOrEqual(geometry.switcher.y);
@@ -161,6 +162,50 @@ test('animated workers drawer enters from the right without scrolling its overla
   expect(frames[0].x).toBeGreaterThan(resting + 10);
   for (let index = 1; index < frames.length; index++) expect(frames[index].x).toBeLessThanOrEqual(frames[index - 1].x + 1);
   await expect(page.getByRole('button', { name: 'Close worker pane', exact: true })).toBeFocused();
+  safe();
+});
+
+test('right swipe follows the finger and dismisses, while cancelled and vertical gestures stay in the drawer', async ({ page }) => {
+  const safe = await isolated(page);
+  for (const reducedMotion of ['reduce', 'no-preference']) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion });
+  await page.goto(route + '&variant=B');
+  await page.locator('#prompt').fill('Keep this draft after swiping the worker pane.');
+  await page.getByRole('button', { name: 'Open workers', exact: true }).click();
+  const surface = page.locator('.pane-surface');
+  await expect(surface).toHaveCSS('transform', 'none');
+  const client = await page.context().newCDPSession(page);
+  const touch = (type, x, y) => client.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x, y }] });
+  const resting = (await surface.boundingBox()).x;
+  const row = await page.getByRole('button', { name: 'Messaging, Result ready', exact: true }).boundingBox();
+  const x = row.x + 24, y = row.y + row.height / 2;
+  await touch('touchStart', x, y); await touch('touchMove', x + 24, y); await touch('touchMove', x + 64, y);
+  expect((await surface.boundingBox()).x).toBeGreaterThan(resting + 40);
+  await touch('touchCancel');
+  await expect.poll(async () => Math.round((await surface.boundingBox()).x)).toBe(resting);
+  await expect(page.locator('#pane-title')).toHaveText('Workers');
+  await touch('touchStart', x, y); await touch('touchMove', x + 24, y); await touch('touchEnd');
+  await expect.poll(async () => Math.round((await surface.boundingBox()).x)).toBe(resting);
+  await expect(page.locator('#worker-pane')).toBeVisible();
+  await expect(page.locator('#pane-title')).toHaveText('Workers');
+  await page.getByRole('button', { name: 'Messaging, Result ready', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 510 });
+  const scroll = page.locator('#pane-scroll'), body = await scroll.boundingBox(), sy = body.y + body.height - 28;
+  await touch('touchStart', 230, sy); await touch('touchMove', 230, sy - 40); await touch('touchMove', 230, sy - 100); await touch('touchEnd');
+  await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+  await expect(page.locator('#worker-pane')).toBeVisible();
+  await touch('touchStart', 220, 42); await touch('touchMove', 160, 42); await touch('touchEnd');
+  await expect(page.locator('#worker-pane')).toBeVisible();
+  await touch('touchStart', 150, 42); await touch('touchMove', 180, 42); await touch('touchMove', 230, 42); await touch('touchMove', 310, 42); await touch('touchEnd');
+  await expect(page.locator('#worker-pane')).not.toBeVisible();
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft after swiping the worker pane.');
+  await expect(page.getByRole('button', { name: 'Open workers', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Open workers', exact: true }).click();
+  await expect(surface).toHaveCSS('transform', 'none');
+  expect(Math.round((await surface.boundingBox()).x)).toBe(resting);
+  await page.keyboard.press('Escape'); await expect(page.locator('#worker-pane')).not.toBeVisible();
+  }
   safe();
 });
 

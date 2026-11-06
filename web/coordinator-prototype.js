@@ -430,7 +430,8 @@ let variant = Object.hasOwn(variants, params.get('variant')) ? params.get('varia
 let selected = Object.hasOwn(workers, params.get('pane')) ? params.get('pane') : null;
 let lastWorker = selected || 'messaging', attached = false, returnWorker = 'messaging';
 const positions = { messaging: 0, recovery: 0 };
-const pane = $('worker-pane'), controls = $('prototype-controls');
+const pane = $('worker-pane'), controls = $('prototype-controls'), surface = pane.querySelector('.pane-surface');
+let swipe, swipeAnimation;
 const wide = matchMedia('(min-width: 1100px)');
 const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
 const modal = () => variant !== 'C' || !wide.matches;
@@ -448,6 +449,43 @@ function updateURL() {
   surfaceState();
 }
 function savePosition() { if (pane.open && selected) positions[selected] = $('pane-scroll').scrollTop; }
+function resetPaneSwipe() {
+  swipe = undefined; swipeAnimation?.cancel(); swipeAnimation = undefined; surface.style.transform = '';
+}
+function releasePaneSwipe(dismiss) {
+  const drag = swipe; swipe = undefined;
+  if (!drag?.dragging) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { resetPaneSwipe(); if (dismiss) closePane(); return; }
+  const end = dismiss ? Math.max(surface.offsetWidth, drag.dx) : 0;
+  const animation = surface.animate({ transform: ['translateX(' + drag.dx + 'px)', 'translateX(' + end + 'px)'] },
+    { duration: 180, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'forwards' });
+  swipeAnimation = animation;
+  animation.finished.then(() => { if (swipeAnimation === animation) { if (dismiss) closePane(); else resetPaneSwipe(); } }, () => {});
+}
+surface.addEventListener('touchstart', event => {
+  if (!pane.open || !modal() || swipeAnimation || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) return;
+  const touch = event.touches[0];
+  swipe = { x: touch.clientX, y: touch.clientY, dx: 0, dragging: false };
+}, { passive: true });
+surface.addEventListener('touchmove', event => {
+  if (!swipe) return;
+  if (event.touches.length !== 1) { releasePaneSwipe(false); return; }
+  const dx = event.touches[0].clientX - swipe.x, dy = event.touches[0].clientY - swipe.y;
+  if (!swipe.dragging) {
+    if (dx < -12 || Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { swipe = undefined; return; }
+    if (dx < 12 || dx < Math.abs(dy) * 1.25) return;
+    swipe.dragging = true;
+    surface.getAnimations().forEach(animation => animation.cancel());
+  }
+  event.preventDefault();
+  swipe.dx = Math.max(0, dx); surface.style.transform = 'translateX(' + swipe.dx + 'px)';
+}, { passive: false });
+surface.addEventListener('touchend', event => {
+  if (!swipe?.dragging) { swipe = undefined; return; }
+  event.preventDefault();
+  releasePaneSwipe(swipe.dx > Math.min(100, surface.offsetWidth / 4));
+}, { passive: false });
+surface.addEventListener('touchcancel', () => releasePaneSwipe(false));
 function renderEntrypoint() {
   document.body.dataset.variant = variant;
   document.body.dataset.paneOpen = String(pane.open);
@@ -486,6 +524,7 @@ function renderPane() {
   requestAnimationFrame(() => { $('pane-scroll').scrollTop = selected ? positions[selected] : 0; });
 }
 function showPane() {
+  resetPaneSwipe();
   controls.querySelector('[popover]')?.hidePopover();
   pane.setAttribute('aria-modal', String(modal()));
   pane.append(controls);
@@ -502,7 +541,7 @@ function openPane(id) {
 }
 function closePane() {
   if (!pane.open) return;
-  savePosition(); $('study-info').hidePopover();
+  resetPaneSwipe(); savePosition(); $('study-info').hidePopover();
   pane.close(); document.body.append(controls);
   renderEntrypoint(); updateURL();
   const target = variant === 'A' ? $('coordinator-worker-links').querySelector('[data-worker="' + returnWorker + '"]') : $('workers-open');
@@ -510,7 +549,7 @@ function closePane() {
 }
 function setVariant(next) {
   const opened = pane.open;
-  savePosition(); $('study-info').hidePopover();
+  savePosition(); $('study-info').hidePopover(); resetPaneSwipe();
   if (opened) pane.close();
   variant = next;
   if (variant !== 'B' && !selected) selected = lastWorker;
@@ -551,7 +590,7 @@ document.addEventListener('keydown', event => {
   if (event.target.closest('input, textarea, select, [contenteditable], [role=tablist]') || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(event.key === 'ArrowRight' ? 1 : -1); }
 });
-wide.addEventListener('change', () => { if (pane.open) { savePosition(); pane.close(); showPane(); } });
+wide.addEventListener('change', () => { if (pane.open) { savePosition(); resetPaneSwipe(); pane.close(); showPane(); } });
 $('prototype-theme').addEventListener('click', () => {
   const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   root.dataset.theme = dark ? 'light' : 'dark'; surfaceState();

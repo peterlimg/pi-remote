@@ -115,7 +115,7 @@ body[data-study=panes] { --study-controls-height: calc(68px + env(safe-area-inse
 .worker-pane { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); overflow: clip; pointer-events: none; }
 .worker-pane::backdrop { background: transparent; }
 .pane-dismiss { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border-radius: 0; background: rgb(0 0 0 / .4); pointer-events: auto; }
-.pane-surface { position: absolute; top: 0; right: 0; bottom: var(--study-controls-height); display: flex; flex-direction: column; width: min(560px, calc(100% - 48px)); min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--bg); pointer-events: auto; }
+.pane-surface { position: absolute; top: 0; right: 0; bottom: var(--study-controls-height); display: flex; flex-direction: column; width: min(560px, calc(100% - 48px)); min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); pointer-events: auto; }
 .pane-header { display: flex; align-items: flex-start; gap: 12px; flex-shrink: 0; padding: max(16px, env(safe-area-inset-top)) 16px 14px 24px; border-bottom: 1px solid var(--line); }
 .pane-heading { flex: 1; min-width: 0; }
 .pane-heading h2 { margin: 6px 0 4px; font-size: 20px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
@@ -145,7 +145,7 @@ body[data-study=panes] { --study-controls-height: calc(68px + env(safe-area-inse
 .worker-tabs { display: flex; gap: 20px; flex-shrink: 0; padding: 0 24px; border-bottom: 1px solid var(--line); }
 .worker-tabs button { min-height: 48px; padding: 10px 0 8px; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-weight: 400; font-size: 14px; }
 .worker-tabs [aria-selected=true] { border-bottom-color: var(--text); color: var(--text); }
-.pane-footer { flex-shrink: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--bg); }
+.pane-footer { flex-shrink: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: transparent; }
 .pane-footer p { margin: 0; max-width: 40ch; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .pane-footer button { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 500; }
 .pane-footer button svg { order: -1; }

@@ -22,7 +22,7 @@ npm run prototype:workers
 
 Then visit `http://127.0.0.1:8815/coordinator-prototype.html?study=panes&variant=A`, or change `variant` to `B` or `C`. The original stack studies remain under `study=stacks`. The floating arrows switch variants and update the URL. `pane=messaging`, `pane=recovery`, or `pane=workers` opens a shareable inspection state. Use the options control for the theme and sample state. Arrow keys switch variants except while editing or using worker tabs.
 
-A and B overlay the main view. Phone drawers leave 48px of dimmed chat visible on the left; the pane itself is opaque and flush with the right edge. C becomes a nonmodal split view at 1100px and above, so the main composer can be used while the worker stays visible. Closing a modal pane returns focus to the Workers control without opening the phone keyboard.
+A and B overlay the main view. Phone drawers leave 48px of dimmed chat visible on the left; the pane has a translucent, softly blurred background while its text stays fully opaque. It sits flush with the right edge. Swipe it right to dismiss; short and cancelled drags snap back. Vertical scrolling remains available. C becomes a nonmodal split view at 1100px and above, so the main composer can be used while the worker stays visible. Closing a modal pane returns focus to the Workers control without opening the phone keyboard.
 
 ## Focused verification
 
@@ -30,6 +30,6 @@ A and B overlay the main view. Phone drawers leave 48px of dimmed chat visible o
 PI_REMOTE_TEST_PORT=8814 npx playwright test test/browser/worker-pane-prototype.spec.mjs test/browser/coordinator-prototype.spec.mjs --trace off
 ```
 
-Tests use Playwright's bundled Chromium by default. Set `PI_REMOTE_TEST_CHANNEL=chrome` to use an already-installed Chrome when the matching bundled browser is unavailable. Browser requests, storage, and live session APIs are blocked in the pane proof. Narrow, short, light/dark phone, and desktop views are covered; these are not physical Safari keyboard checks. The motion regression also runs with reduced motion disabled and samples the real opening frames. It requires right-to-left entry without overlay or page scrolling, rather than only checking the drawer's settled layout.
+Tests use Playwright's bundled Chromium by default. Set `PI_REMOTE_TEST_CHANNEL=chrome` to use an already-installed Chrome when the matching bundled browser is unavailable. Browser requests, storage, and live session APIs are blocked in the pane proof. Narrow, short, light/dark phone, and desktop views are covered; these are not physical Safari keyboard checks. The motion regression also runs with reduced motion disabled and samples the real opening frames. It requires right-to-left entry without overlay or page scrolling, rather than only checking the drawer's settled layout. Native touch input checks finger-following dismissal, cancelled and short swipes, vertical scrolling, draft preservation, and reopening with both motion preferences.
 
 The comparison bar is study tooling, not a proposed product control. Choosing a variant requires user feedback, not a screenshot or passing browser check.
