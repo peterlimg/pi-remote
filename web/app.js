@@ -1459,7 +1459,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (historyWindow) state = { ...state, messages: historyWindow.messages, tools: [] };
   const box = $('transcript'), bottom = !anchor && atThreadBottom(), oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
-  const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')].map(node => [node.dataset.disclosureId, node.open]));
+  // A diagram arriving mid-reply can change the default, but not the reader's explicit choice.
+  const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')]
+    .filter(node => !node.classList.contains('markdown-details') || node.dataset.disclosureChosen)
+    .map(node => [node.dataset.disclosureId, node.open]));
   const focusedTool = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
   if (state.coordination?.role === 'coordinator' && state.coordination.readOnly && !messages.length) {
@@ -1637,7 +1640,11 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         body.innerHTML = markdown.render(splitVideoMessage(message.text || '', message.role).text);
         for (const [index, detail] of [...body.querySelectorAll('.markdown-details')].entries()) {
           detail.dataset.disclosureId = 'message:' + (message.liveId || message.id) + ':' + index;
-          detail.open = expanded.get(detail.dataset.disclosureId) ?? detail.open;
+          detail.open = expanded.get(detail.dataset.disclosureId) ?? (detail.open || !!detail.querySelector('code.language-mermaid'));
+          if (expanded.has(detail.dataset.disclosureId)) detail.dataset.disclosureChosen = 'true';
+          detail.querySelector(':scope > summary')?.addEventListener('click', event => {
+            if (!event.target.closest('a')) detail.dataset.disclosureChosen = 'true';
+          });
         }
         for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
         for (const pre of body.querySelectorAll('pre')) {

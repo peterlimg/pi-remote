@@ -174,6 +174,10 @@ test('Markdown details and summary tags become collapsible sections', async ({ p
   const details = page.locator('.message-text > .markdown-details'), first = details.first(), second = details.last();
   await expect(details).toHaveCount(2);
   await expect(first.locator(':scope > summary strong')).toHaveText('model');
+  await expect(first).toHaveAttribute('open', '');
+  await expect(first.locator('img[alt="Mermaid diagram"]')).toBeVisible();
+  await expect(first.locator('.diagram-source pre')).toBeHidden();
+  await first.locator(':scope > summary').click();
   const summary = second.locator(':scope > summary'), paragraph = second.locator(':scope > p');
   await expect(summary).toHaveText('Missing-lock mutation counterexample');
   await expect(paragraph).toBeHidden();
@@ -195,6 +199,38 @@ test('Markdown details and summary tags become collapsible sections', async ({ p
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: testInfo.outputPath('markdown-details-desktop.png') });
   await testInfo.attach('markdown-disclosures', { body: await page.locator('#transcript').ariaSnapshot(), contentType: 'text/plain' });
+});
+
+test('diagram sections expand when Mermaid arrives and preserve deliberate folds', async ({ page }, testInfo) => {
+  const prefix = '<details>\n<summary>Charts</summary>\n\n<details>\n<summary>Passing chart</summary>\n\n';
+  const suffix = '\n</details>\n</details>\n\n<details>\n<summary>Notes</summary>\n\nNot a diagram.\n</details>';
+  const update = await openDiagrams(page, prefix + 'Preparing chart.' + suffix);
+  const charts = page.locator('.message-text > .markdown-details').first();
+  const chart = charts.locator(':scope > .markdown-details');
+  const notes = page.locator('.message-text > .markdown-details').last();
+  await expect(charts).not.toHaveAttribute('open', '');
+  await expect(chart).not.toHaveAttribute('open', '');
+  update(prefix + 'Still preparing chart.' + suffix);
+  await expect(charts).toContainText('Still preparing chart.');
+  update(prefix + fence(simple) + suffix);
+  const image = chart.locator('img[alt="Mermaid diagram"]');
+  await expect(image).toBeVisible();
+  await expect(charts).toHaveAttribute('open', '');
+  await expect(chart).toHaveAttribute('open', '');
+  await expect(notes).not.toHaveAttribute('open', '');
+  await expect(chart.locator('.diagram-source')).not.toHaveAttribute('open', '');
+  await page.screenshot({ path: testInfo.outputPath('diagram-expanded-by-default-phone.png') });
+  await chart.locator(':scope > summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(image).toBeHidden();
+  update(prefix + fence(simple) + suffix + '\n\nReply updated.');
+  await expect(page.locator('.message-text')).toContainText('Reply updated.');
+  await expect(chart).not.toHaveAttribute('open', '');
+  await expect(charts).toHaveAttribute('open', '');
+  await expect(chart.locator(':scope > summary')).toBeFocused();
+  await expect(image).toBeHidden();
+  await chart.locator(':scope > summary').click();
+  await expect(image).toBeVisible();
 });
 
 test('disclosure support leaves arbitrary HTML escaped and code examples literal', async ({ page }) => {
