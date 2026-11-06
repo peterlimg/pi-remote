@@ -1,4 +1,4 @@
-let renderer, nextId = 0, queue = Promise.resolve();
+let renderer, nextId = 0, queue = Promise.resolve(), blocks = new Map();
 const pending = new Map(), cache = new Map(), urls = new Map();
 function getRenderer() {
   return renderer ||= new Promise((resolve, reject) => {
@@ -35,32 +35,42 @@ function diagram(source, dark) {
   }
   return cache.get(key);
 }
-export function renderDiagrams(root, openImage, resized) {
-  const viewing = document.querySelector('#image-viewer[open] img')?.src;
-  for (const [link, url] of urls) if (!link.isConnected && viewing !== url) { URL.revokeObjectURL(url); urls.delete(link); }
+export function renderDiagrams(root, openImage, resized, sessionId) {
+  const previous = blocks, counts = new Map(); blocks = new Map();
   const theme = document.documentElement.dataset.theme;
   const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   for (const code of root.querySelectorAll('.code-block code.language-mermaid')) {
-    const pre = code.closest('pre'), status = document.createElement('p');
-    status.className = 'diagram-status hint'; status.setAttribute('role', 'status'); status.textContent = 'Rendering diagram…';
-    pre.before(status);
+    const pre = code.closest('pre'), block = pre.closest('.code-block'), message = block.closest('[data-message-id]');
+    const index = counts.get(message) || 0; counts.set(message, index + 1);
+    const key = JSON.stringify([sessionId, message?.dataset.scrollKey, index]), source = code.textContent, saved = previous.get(key);
+    if (saved?.source === source && saved.dark === dark) { block.replaceWith(saved.block); blocks.set(key, saved); continue; }
+    blocks.set(key, { block, source, dark });
+    const status = document.createElement('p');
+    status.className = 'diagram-status diagram-loading hint'; status.setAttribute('role', 'status'); status.textContent = 'Rendering diagram…';
+    pre.hidden = true; pre.before(status);
+    const unavailable = () => {
+      if (!code.isConnected) return;
+      pre.hidden = false; status.classList.remove('diagram-loading'); status.textContent = 'Diagram unavailable. Source shown below.'; resized();
+    };
     // Let rapid streaming updates settle before asking the renderer to lay out a diagram.
     setTimeout(async () => {
       if (!code.isConnected) return;
-      const svg = code.textContent.length <= 50000 && await diagram(code.textContent, dark);
+      const svg = source.length <= 50000 && await diagram(source, dark);
       if (!code.isConnected) return;
-      if (!svg) { status.textContent = 'Diagram unavailable. Source shown below.'; return; }
+      if (!svg) { unavailable(); return; }
       const link = document.createElement('a'), image = document.createElement('img');
       const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
       link.href = url; link.className = 'mermaid-diagram'; link.setAttribute('aria-label', 'Open diagram');
       image.alt = 'Mermaid diagram'; image.src = url; link.append(image);
       try { await image.decode(); }
-      catch { URL.revokeObjectURL(url); status.textContent = 'Diagram unavailable. Source shown below.'; return; }
+      catch { URL.revokeObjectURL(url); unavailable(); return; }
       if (!code.isConnected) { URL.revokeObjectURL(url); return; }
       link.addEventListener('click', openImage); urls.set(link, url);
       const details = document.createElement('details'), summary = document.createElement('summary');
       details.className = 'diagram-source'; summary.textContent = 'Diagram source'; details.append(summary);
-      pre.before(details); details.append(pre); status.replaceWith(link); resized();
+      pre.before(details); details.append(pre); pre.hidden = false; status.replaceWith(link); resized();
     }, 200);
   }
+  const viewing = document.querySelector('#image-viewer[open] img')?.src;
+  for (const [link, url] of urls) if (!link.isConnected && viewing !== url) { URL.revokeObjectURL(url); urls.delete(link); }
 }

@@ -1757,7 +1757,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   renderDiagrams(box, openImage, () => {
     if (pinnedToBottom) box.scrollTop = box.scrollHeight;
     updateScrollButton();
-  });
+  }, selected);
   clearThreadVideos(keepVideos);
   for (const video of playing) if (threadVideos.get(video.path) === video) video.player.play().catch(() => {});
   for (const { outgoing, messageId } of matched) {

@@ -59,6 +59,14 @@ test('Mermaid state diagrams render instead of displaying only their source', as
 
 test('nested concurrent state diagrams support copying, source, zoom and both themes', async ({ page, context, browserName }, testInfo) => {
   if (browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.emulateMedia({ colorScheme: 'light' });
+  // Observe the real SVG blobs without fetching URLs that the app's CSP intentionally blocks.
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL), revoke = URL.revokeObjectURL.bind(URL);
+    window.diagramBlobs = new Map();
+    URL.createObjectURL = blob => { const url = create(blob); window.diagramBlobs.set(url, blob); return url; };
+    URL.revokeObjectURL = url => { window.diagramBlobs.delete(url); revoke(url); };
+  });
   const source = `stateDiagram-v2
   direction LR
   state "Legend" as legend {
@@ -103,16 +111,30 @@ test('nested concurrent state diagrams support copying, source, zoom and both th
   await expect(page.locator('.code-block').last().locator('pre')).toHaveText('npm test\n');
   await block.getByRole('link', { name: 'Open diagram' }).click();
   await expect(page.locator('#image-viewer')).toBeVisible();
+  await page.locator('#image-viewer img').evaluate(async image => {
+    await image.decode();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  });
+  const initialZoom = await page.locator('#image-zoom-reset').textContent();
   await page.keyboard.press('+');
-  await expect(page.locator('#image-zoom-reset')).not.toHaveText('100%');
+  await expect(page.locator('#image-zoom-reset')).not.toHaveText(initialZoom);
   await page.screenshot({ path: testInfo.outputPath('state-diagram-zoom-phone.png') });
   await page.getByRole('button', { name: 'Close image', exact: true }).click();
   for (const [width, colorScheme] of [[390, 'dark'], [390, 'light'], [1280, 'dark']]) {
     await page.setViewportSize({ width, height: 900 });
     const previous = await image.getAttribute('src');
     await page.emulateMedia({ colorScheme });
-    if (colorScheme === 'light' || width === 1280) await expect(image).not.toHaveAttribute('src', previous);
+    await expect(image).not.toHaveAttribute('src', previous);
     await expect(image).toBeVisible();
+    const drawing = await image.evaluate(async node => {
+      const svg = await window.diagramBlobs.get(node.src).text(), document = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      return { svg, styles: [...document.querySelectorAll('style')].map(style => style.textContent).join('\n'),
+        filters: [...document.querySelectorAll('[filter], [style]')].flatMap(element => [element.getAttribute('filter'), element.style?.filter]).filter(value => value && value !== 'none') };
+    });
+    expect(drawing.styles).not.toMatch(/filter:\s*(?:url|drop-shadow)/);
+    expect(drawing.filters).toEqual([]);
+    expect(drawing.svg).toContain(colorScheme === 'dark' ? '#243a50' : '#e6eef5');
+    expect(drawing.svg).toMatch(/#(?:922|992222)\b/i);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`state-diagram-${width}-${colorScheme}.png`) });
   }
@@ -120,7 +142,13 @@ test('nested concurrent state diagrams support copying, source, zoom and both th
   update(fence(source) + '\n\nAnother update.');
   await expect(page.locator('.message-text')).toContainText('Another update.');
   await expect(image).toBeVisible();
-  expect(await page.evaluate(async url => { try { await fetch(url); return true; } catch { return false; } }, url)).toBe(false);
+  await expect(image).toHaveAttribute('src', url);
+  expect(await page.evaluate(url => window.diagramBlobs.has(url), url)).toBe(true);
+  update(fence(source.replace('Committed', 'Claim committed')) + '\n\nChanged diagram.');
+  await expect(page.locator('.message-text')).toContainText('Changed diagram.');
+  await expect(image).toBeVisible();
+  await expect(image).not.toHaveAttribute('src', url);
+  expect(await page.evaluate(url => window.diagramBlobs.has(url), url)).toBe(false);
   expect(requests.filter(url => url.endsWith('/mermaid-tiny.js'))).toHaveLength(1);
   expect(requests.filter(url => url.startsWith('http') && new URL(url).hostname !== '127.0.0.1')).toEqual([]);
   await testInfo.attach('diagram-conversation', { body: await page.locator('#transcript').ariaSnapshot(), contentType: 'text/plain' });
@@ -151,6 +179,33 @@ test('invalid and oversized diagrams retain source and later valid updates rende
   await expect(block.locator('img')).toBeVisible();
   expect(dialogs).toEqual([]);
   expect(external).toEqual([]);
+});
+
+test('diagram loading hides raw source and unchanged updates keep the rendered image stable', async ({ page }, testInfo) => {
+  let release;
+  const loaded = new Promise(resolve => { release = resolve; });
+  await page.route('**/mermaid-tiny.js', async route => { await loaded; await route.continue(); });
+  try {
+    const update = await openDiagrams(page, fence(simple));
+    const block = page.locator('.code-block'), image = block.locator('img');
+    await expect(block.locator('.diagram-status')).toHaveText('Rendering diagram…');
+    await expect(block.locator('pre')).toBeHidden();
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
+    await page.screenshot({ path: testInfo.outputPath('diagram-loading-phone.png') });
+    release();
+    await expect(image).toBeVisible();
+    await block.getByText('Diagram source', { exact: true }).click();
+    const original = await image.elementHandle(), url = await image.getAttribute('src');
+    for (let index = 0; index < 3; index++) {
+      update(fence(simple) + '\n\nReply update ' + index);
+      await expect(page.locator('.message-text')).toContainText('Reply update ' + index);
+      expect(await original.evaluate(node => node.isConnected)).toBe(true);
+      await expect(image).toHaveAttribute('src', url);
+      await expect(block.locator('.diagram-status')).toHaveCount(0);
+      await expect(block.locator('pre')).toBeVisible();
+    }
+    await page.screenshot({ path: testInfo.outputPath('diagram-stable-after-updates-phone.png') });
+  } finally { release(); }
 });
 
 test('plain code does not load Mermaid and a failed library keeps the diagram source', async ({ page }) => {
