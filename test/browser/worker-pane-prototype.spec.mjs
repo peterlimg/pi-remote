@@ -125,6 +125,39 @@ test('all pane layouts fit phone, narrow, short and desktop views in both themes
   safe();
 });
 
+test('animated workers drawer enters from the right without scrolling its overlay', async ({ page }, testInfo) => {
+  const safe = await isolated(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto(route + '&variant=B');
+  await page.evaluate(() => {
+    window.drawerMotion = { frames: [], done: false };
+    document.getElementById('workers-open').addEventListener('click', () => {
+      const start = performance.now();
+      const sample = () => {
+        const pane = document.getElementById('worker-pane'), surface = pane.querySelector('.pane-surface');
+        const rect = surface.getBoundingClientRect();
+        window.drawerMotion.frames.push({ time: performance.now() - start, x: rect.x, width: rect.width,
+          overlayScroll: pane.scrollLeft, pageScroll: document.scrollingElement.scrollLeft });
+        if (performance.now() - start < 350) requestAnimationFrame(sample); else window.drawerMotion.done = true;
+      };
+      requestAnimationFrame(sample);
+    }, { capture: true, once: true });
+  });
+  await page.getByRole('button', { name: 'Open workers', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.drawerMotion.done)).toBe(true);
+  const frames = await page.evaluate(() => window.drawerMotion.frames);
+  await testInfo.attach('drawer-motion.json', { body: JSON.stringify(frames, null, 2), contentType: 'application/json' });
+  expect(frames.length).toBeGreaterThan(3);
+  expect(Math.max(...frames.map(frame => frame.overlayScroll))).toBe(0);
+  expect(Math.max(...frames.map(frame => frame.pageScroll))).toBe(0);
+  const resting = frames.at(-1).x;
+  expect(Math.min(...frames.map(frame => frame.x))).toBeGreaterThanOrEqual(resting - 1);
+  expect(frames[0].x).toBeGreaterThan(resting + 10);
+  for (let index = 1; index < frames.length; index++) expect(frames[index].x).toBeLessThanOrEqual(frames[index - 1].x + 1);
+  await expect(page.getByRole('button', { name: 'Close worker pane', exact: true })).toBeFocused();
+  safe();
+});
+
 test('pinned inspector keeps desktop main input usable and becomes a native modal drawer on phones', async ({ page }) => {
   const safe = await isolated(page);
   await page.setViewportSize({ width: 1440, height: 900 });

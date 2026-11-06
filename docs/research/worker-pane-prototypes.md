@@ -30,6 +30,6 @@ A and B overlay the main view. C becomes a nonmodal split view at 1100px and abo
 PI_REMOTE_TEST_PORT=8814 npx playwright test test/browser/worker-pane-prototype.spec.mjs test/browser/coordinator-prototype.spec.mjs --trace off
 ```
 
-Tests use Playwright's bundled Chromium by default. Set `PI_REMOTE_TEST_CHANNEL=chrome` to use an already-installed Chrome when the matching bundled browser is unavailable. Browser requests, storage, and live session APIs are blocked in the pane proof. Narrow, short, light/dark phone, and desktop views are covered; these are not physical Safari keyboard checks.
+Tests use Playwright's bundled Chromium by default. Set `PI_REMOTE_TEST_CHANNEL=chrome` to use an already-installed Chrome when the matching bundled browser is unavailable. Browser requests, storage, and live session APIs are blocked in the pane proof. Narrow, short, light/dark phone, and desktop views are covered; these are not physical Safari keyboard checks. The motion regression also runs with reduced motion disabled and samples the real opening frames. It requires right-to-left entry without overlay or page scrolling, rather than only checking the drawer's settled layout.
 
 The comparison bar is study tooling, not a proposed product control. Choosing a variant requires user feedback, not a screenshot or passing browser check.
