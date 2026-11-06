@@ -1,3 +1,11 @@
+// Separate pane studies share this static route without touching live chat.
+if (new URL(location.href).searchParams.get('study') === 'panes') {
+  const content = document.getElementById('worker-pane-study').content.cloneNode(true);
+  content.querySelector('#pane-composer-slot').replaceWith(document.getElementById('composer'));
+  document.body.replaceChildren(content);
+  document.body.dataset.study = 'panes';
+  WorkerPaneStudy();
+} else {
 // UI-only coordinator studies on this route, selected with ?variant=A|B|C|D.
 const $ = id => document.getElementById(id);
 const variants = {
@@ -396,3 +404,183 @@ let promptWidth = 0;
 new ResizeObserver(([entry]) => { if (entry.contentRect.width !== promptWidth) { promptWidth = entry.contentRect.width; resizePrompt(); updateScrollButton(); } }).observe($('prompt'));
 addEventListener('resize', updateViewport); visualViewport?.addEventListener('resize', updateViewport); visualViewport?.addEventListener('scroll', updateViewport);
 renderSelected(); updateViewport();
+
+}
+
+function WorkerPaneStudy() {
+// Three UI-only worker-pane studies. No transport, storage, model calls, or real files.
+const $ = id => document.getElementById(id);
+const variants = {
+  A: { name: 'Tree + drawer', description: 'Keep the current worker tree. Tapping a worker slides its read-only log over the conversation from the right. Close it to return to the same place.' },
+  B: { name: 'Workers drawer', description: 'Replace the whole tree with one Workers row. It opens a right-side worker list; tap a worker to read its log. The main conversation gets the space back.' },
+  C: { name: 'Pinned inspector', description: 'Open the last worker directly and switch logs with tabs. On a wide screen the inspector stays beside an interactive main conversation; on a phone it slides over it.' }
+};
+const workers = {
+  messaging: { name: 'Messaging', state: 'reported', label: 'Result ready', detail: 'Phone-to-Pi trace and a delivery caveat.', log: `
+    <section><h3>Assignment from the main conversation</h3><p>Trace how phone messages reach Pi. Report one concrete risk with file references. Read-only investigation.</p></section>
+    <details><summary>Sample activity · read 3 files</summary><ol><li><code>web/app.js</code><br>Follow the composer submission.</li><li><code>src/client-channel.mjs</code><br>Follow the authenticated command.</li><li><code>extension/index.ts</code><br>Follow delivery into Pi.</li></ol></details>
+    <section><h3>Sample report</h3><p>The example path is the phone composer, the host's authenticated channel, and the selected Pi session.</p><p>A delivery acknowledgement does not mean the investigation has finished. The main conversation should distinguish accepted input from a reviewed result.</p><p class="sample-label">Illustrative content for comparing the pane. This is not a new code review or an executed trace.</p></section>` },
+  recovery: { name: 'Recovery', state: 'stopped', label: 'Stopped', detail: 'Stopped by the coordinator. No final report.', log: `
+    <section><h3>Assignment from the main conversation</h3><p>Trace what happens after a host restart. Report one concrete risk with file references.</p></section>
+    <details><summary>Sample activity · read 2 files</summary><ol><li><code>src/service.mjs</code><br>Look for session restoration.</li><li><code>src/coordinator.mjs</code><br>Look for uncertain task delivery.</li></ol></details>
+    <section><h3>Stopped by the coordinator</h3><p>The main conversation requested that Recovery stop. Messaging was left unchanged.</p><p>No completed report is available. The partial activity above is not proof that restart recovery passed.</p><p class="sample-label">Sample state only. Opening or closing this pane does not start or stop any worker.</p></section>` }
+};
+const params = new URL(location.href).searchParams;
+let variant = Object.hasOwn(variants, params.get('variant')) ? params.get('variant') : 'A';
+let selected = Object.hasOwn(workers, params.get('pane')) ? params.get('pane') : null;
+let lastWorker = selected || 'messaging', attached = false, returnWorker = 'messaging';
+const positions = { messaging: 0, recovery: 0 };
+const pane = $('worker-pane'), controls = $('prototype-controls');
+const wide = matchMedia('(min-width: 1100px)');
+const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+const modal = () => variant !== 'C' || !wide.matches;
+const feedback = text => { $('sample-feedback').textContent = text; surfaceState(); };
+function surfaceState() {
+  $('prototype-state').textContent = JSON.stringify({ variant, paneOpen: pane.open, presentation: modal() ? 'drawer' : 'split',
+    inspectedWorker: selected, recipient: 'main conversation', draft: $('prompt').value, sampleAttachment: attached,
+    workers: Object.fromEntries(Object.entries(workers).map(([id, worker]) => [id, { name: worker.name, state: worker.state }])) }, null, 2);
+}
+function updateURL() {
+  const url = new URL(location.href);
+  url.searchParams.set('study', 'panes'); url.searchParams.set('variant', variant);
+  if (pane.open) url.searchParams.set('pane', selected || 'workers'); else url.searchParams.delete('pane');
+  history.replaceState(null, '', url);
+  surfaceState();
+}
+function savePosition() { if (pane.open && selected) positions[selected] = $('pane-scroll').scrollTop; }
+function renderEntrypoint() {
+  document.body.dataset.variant = variant;
+  document.body.dataset.paneOpen = String(pane.open);
+  $('coordinator-context').hidden = variant !== 'A';
+  $('workers-open').hidden = variant === 'A';
+  $('workers-open').setAttribute('aria-expanded', String(pane.open));
+  $('variant-label').textContent = variant + ' · ' + variants[variant].name;
+  $('variant-description').textContent = variants[variant].description;
+  for (const button of $('coordinator-worker-links').children) button.setAttribute('aria-expanded', String(pane.open && selected === button.dataset.worker));
+}
+function renderPane() {
+  const worker = workers[selected];
+  $('pane-title').textContent = worker ? worker.name : 'Workers';
+  $('pane-subtitle').textContent = worker ? worker.label + ' · Sample worker' : '2 workers in this conversation';
+  $('pane-back').hidden = variant !== 'B' || !worker;
+  $('worker-tabs').hidden = variant !== 'C';
+  $('pane-return').firstChild.textContent = modal() ? 'Back to main conversation' : 'Continue in main conversation';
+  const content = $('pane-content');
+  content.setAttribute('role', variant === 'C' ? 'tabpanel' : 'region');
+  content.setAttribute('aria-label', worker ? worker.name + ' log' : 'Worker list');
+  if (!worker) {
+    content.innerHTML = '<p class="pane-roster-note">Inspect their work here. Keep all instructions in the main conversation.</p><ul class="pane-roster"></ul>';
+    for (const [id, item] of Object.entries(workers)) {
+      const row = document.createElement('li'), button = document.createElement('button');
+      button.type = 'button'; button.className = 'pane-worker-row'; button.dataset.worker = id;
+      button.setAttribute('aria-label', item.name + ', ' + item.label);
+      button.innerHTML = '<span><strong>' + item.name + '</strong><small>' + item.label + '</small><small>' + item.detail + '</small></span>' + arrow;
+      row.append(button); content.querySelector('ul').append(row);
+    }
+  } else content.innerHTML = '<article class="worker-log" aria-label="' + worker.name + ' sample log">' + worker.log + '</article>';
+  for (const button of $('worker-tabs').children) {
+    const active = button.dataset.worker === selected;
+    button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
+  }
+  $('pane-scroll').setAttribute('aria-label', worker ? worker.name + ' worker log' : 'Worker list');
+  requestAnimationFrame(() => { $('pane-scroll').scrollTop = selected ? positions[selected] : 0; });
+}
+function showPane() {
+  controls.querySelector('[popover]')?.hidePopover();
+  pane.setAttribute('aria-modal', String(modal()));
+  pane.append(controls);
+  modal() ? pane.showModal() : pane.show();
+  renderEntrypoint(); renderPane(); updateURL();
+  $('pane-close').focus({ preventScroll: true });
+}
+function openPane(id) {
+  savePosition();
+  selected = id;
+  if (id) { lastWorker = id; returnWorker = id; }
+  if (!pane.open) showPane();
+  else { renderEntrypoint(); renderPane(); updateURL(); }
+}
+function closePane() {
+  if (!pane.open) return;
+  savePosition(); $('study-info').hidePopover();
+  pane.close(); document.body.append(controls);
+  renderEntrypoint(); updateURL();
+  const target = variant === 'A' ? $('coordinator-worker-links').querySelector('[data-worker="' + returnWorker + '"]') : $('workers-open');
+  target.focus({ preventScroll: true });
+}
+function setVariant(next) {
+  const opened = pane.open;
+  savePosition(); $('study-info').hidePopover();
+  if (opened) pane.close();
+  variant = next;
+  if (variant !== 'B' && !selected) selected = lastWorker;
+  if (opened) showPane(); else { renderEntrypoint(); updateURL(); }
+}
+function cycle(step) { const keys = Object.keys(variants); setVariant(keys[(keys.indexOf(variant) + step + keys.length) % keys.length]); }
+for (const [id, worker] of Object.entries(workers)) {
+  const button = document.createElement('button');
+  button.type = 'button'; button.className = 'coordinator-worker'; button.dataset.worker = id; button.dataset.state = worker.state;
+  button.setAttribute('aria-label', worker.name + ', ' + worker.label);
+  button.setAttribute('aria-haspopup', 'dialog'); button.setAttribute('aria-controls', 'worker-pane');
+  button.innerHTML = '<strong>' + worker.name + '</strong><span class="coordinator-worker-state"><i aria-hidden="true"></i>' + worker.label + '</span>' + arrow;
+  $('coordinator-worker-links').append(button);
+  const tab = document.createElement('button');
+  tab.type = 'button'; tab.role = 'tab'; tab.dataset.worker = id; tab.setAttribute('aria-controls', 'pane-content');
+  tab.textContent = worker.name; $('worker-tabs').append(tab);
+}
+$('coordinator-worker-links').addEventListener('click', event => { const id = event.target.closest('[data-worker]')?.dataset.worker; if (id) openPane(id); });
+$('pane-content').addEventListener('click', event => { const id = event.target.closest('[data-worker]')?.dataset.worker; if (id) { openPane(id); $('pane-title').focus({ preventScroll: true }); } });
+$('worker-tabs').addEventListener('click', event => { const id = event.target.closest('[data-worker]')?.dataset.worker; if (id) openPane(id); });
+$('worker-tabs').addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  event.preventDefault();
+  const ids = Object.keys(workers), current = event.target.closest('[data-worker]')?.dataset.worker || selected;
+  const id = ids[(ids.indexOf(current) + (event.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length];
+  openPane(id); $('worker-tabs').querySelector('[data-worker="' + id + '"]').focus();
+});
+$('workers-open').addEventListener('click', () => openPane(variant === 'B' ? null : lastWorker));
+$('pane-back').addEventListener('click', () => { openPane(null); $('pane-content').querySelector('button').focus(); });
+$('pane-close').addEventListener('click', closePane);
+$('pane-dismiss').addEventListener('click', closePane);
+pane.addEventListener('cancel', event => { event.preventDefault(); closePane(); });
+$('pane-return').addEventListener('click', () => { if (modal()) closePane(); else $('prompt').focus(); });
+for (const id of ['main-session', 'coordinator-owner']) $(id).addEventListener('click', () => { closePane(); $('prompt').focus(); });
+$('variant-prev').addEventListener('click', () => cycle(-1));
+$('variant-next').addEventListener('click', () => cycle(1));
+document.addEventListener('keydown', event => {
+  if (event.target.closest('input, textarea, select, [contenteditable], [role=tablist]') || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(event.key === 'ArrowRight' ? 1 : -1); }
+});
+wide.addEventListener('change', () => { if (pane.open) { savePosition(); pane.close(); showPane(); } });
+$('prototype-theme').addEventListener('click', () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark'; surfaceState();
+});
+$('composer').hidden = false;
+for (const id of ['model', 'reasoning-control', 'usage-meter', 'fast-mode', 'status-line']) $(id).hidden = false;
+$('abort').hidden = true;
+$('model-name').textContent = 'GPT-6.1 Sol'; $('reasoning-value').textContent = 'Max';
+$('usage-meter').setAttribute('aria-label', 'Sample context usage: 4 percent');
+$('usage-arc').setAttribute('stroke-dasharray', '4 100');
+$('status-line').innerHTML = '<span>CH96%</span><span>$0.14</span><span>4%/500k</span>';
+$('send').disabled = true;
+$('prompt').addEventListener('input', () => { $('send').disabled = !$('prompt').value.trim() && !attached; surfaceState(); });
+$('composer').addEventListener('submit', event => { event.preventDefault(); feedback('Preview only. Your draft has not been sent.'); $('study-info').showPopover(); });
+for (const id of ['model', 'reasoning-control', 'usage-meter', 'commands', 'status-line']) $(id).addEventListener('click', () => $('study-info').showPopover());
+$('attach').addEventListener('click', () => $('sample-attachment').showModal());
+$('attachment-close').addEventListener('click', () => $('sample-attachment').close());
+$('attachment-add').addEventListener('click', () => {
+  attached = true; $('sample-attachment').close();
+  const item = document.createElement('div'); item.className = 'attachment';
+  const image = document.createElement('img'); image.alt = 'Sample image, not uploaded';
+  image.src = '/icon.svg';
+  const remove = document.createElement('button'); remove.type = 'button'; remove.setAttribute('aria-label', 'Remove sample attachment');
+  remove.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
+  remove.addEventListener('click', () => { attached = false; $('attachments').replaceChildren(); $('attachments').hidden = true; $('send').disabled = !$('prompt').value.trim(); surfaceState(); });
+  item.append(image, remove); $('attachments').replaceChildren(item); $('attachments').hidden = false; $('send').disabled = false; surfaceState();
+});
+renderEntrypoint();
+if (params.has('pane')) { if (variant !== 'B' && !selected) selected = lastWorker; showPane(); } else updateURL();
+requestAnimationFrame(() => { $('transcript').scrollTop = $('transcript').scrollHeight; });
+
+}

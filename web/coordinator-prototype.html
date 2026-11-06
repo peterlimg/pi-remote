@@ -101,5 +101,75 @@
     <p>No files are opened or uploaded.</p><button id="attachment-add" type="button" class="quiet">Add sample image</button>
   </div></dialog>
   <p id="sample-feedback" class="sr-only" role="status"></p>
+  <template id="worker-pane-study">
+  <!-- Three read-only worker-pane variants in the existing conversation shell. No real sessions or transport. -->
+  <div id="app" class="shell viewing pane-study">
+    <aside>
+      <header class="brand"><h2>Sessions</h2></header>
+      <nav aria-label="Sample sessions"><button id="main-session" type="button" class="sample-session"><strong>Trace messaging to Pi and host restart recovery risks</strong><span>pi-remote · Sample conversation</span></button></nav>
+      <p class="study-sidebar-note">UI prototypes.<br>No agents are running.</p>
+      <a class="study-exit" href="/">Back to Pi Remote</a>
+    </aside>
+    <main>
+      <header class="conversation-header">
+        <a id="back" class="quiet preview-back mobile-only" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
+        <div class="conversation-heading"><div class="heading-slot"><div class="heading-text"><h1 id="title">Trace messaging to Pi and host restart recovery risks</h1></div></div></div>
+        <button class="study-about" type="button" aria-label="About these prototypes" popovertarget="study-info"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
+      </header>
+      <section id="transcript" aria-label="Main conversation" tabindex="0">
+        <article class="message user" aria-label="You"><div class="message-text">Start two workers named Messaging and Recovery.
+
+Messaging: trace how phone messages reach Pi.
+Recovery: trace what happens after a host restart.
+
+Each should report one concrete risk with file references. Review their findings and give me a short combined answer here.
+
+Read-only investigation. Don't change files or run commands.</div></article>
+        <article class="message" aria-label="Pi"><div class="message-text"><p>Messaging returned a report. Recovery was stopped at your request.</p><p>You can keep talking here while I review the findings.</p></div></article>
+        <p class="study-caption">Sample conversation. No agents are running.</p>
+      </section>
+      <section id="coordinator-context" class="coordinator-context" aria-label="Workers">
+        <details id="coordinator-workers" open>
+          <summary><span>Workers · 2</span><span id="coordinator-worker-summary">1 ready</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary>
+          <button id="coordinator-owner" class="coordinator-worker coordinator-tree-root" type="button" aria-current="page"><strong>Trace messaging to Pi and host restart recovery risks</strong><span class="coordinator-worker-state">Main conversation</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+          <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
+        </details>
+      </section>
+      <button id="workers-open" class="pane-entry" type="button" aria-label="Open workers" aria-haspopup="dialog" aria-controls="worker-pane" aria-expanded="false" hidden><strong>Workers · 2</strong><span>1 result ready</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      <div id="pane-composer-slot"></div>
+      <button id="status-line" type="button" title="Sample usage" hidden></button>
+    </main>
+  </div>
+  <dialog id="worker-pane" class="worker-pane" aria-labelledby="pane-title" tabindex="-1">
+    <button id="pane-dismiss" class="pane-dismiss" type="button" aria-label="Dismiss worker pane"></button>
+    <section class="pane-surface" aria-label="Worker inspection">
+      <header class="pane-header">
+        <div class="pane-heading"><button id="pane-back" class="pane-back" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>Workers</button><h2 id="pane-title" tabindex="-1">Workers</h2><p id="pane-subtitle">Owned by this conversation</p></div>
+        <button id="pane-close" class="pane-close" type="button" aria-label="Close worker pane" autofocus><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      </header>
+      <nav id="worker-tabs" class="worker-tabs" aria-label="Worker logs" role="tablist" hidden></nav>
+      <div id="pane-scroll" class="pane-scroll" tabindex="0"><div id="pane-content"></div></div>
+      <footer class="pane-footer"><p>Read-only worker logs. Send instructions in the main conversation.</p><button id="pane-return" type="button">Back to main conversation<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button></footer>
+    </section>
+  </dialog>
+  <nav id="prototype-controls" class="pane-switcher" aria-label="Prototype variants">
+    <button id="variant-prev" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+    <span class="variant-caption"><small>UI prototype</small><span id="variant-label" role="status"></span></span>
+    <button id="variant-next" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+    <button id="study-options" type="button" aria-label="Prototype options" popovertarget="study-info"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v.01M12 12v4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg></button>
+    <div id="study-info" class="pane-study-info" popover aria-label="About the worker pane prototypes">
+      <h2>Worker pane prototypes</h2><p id="variant-description"></p>
+      <p>No agents, model calls, uploads, commands, or saved state. Composer text and the sample attachment stay in this page. Send and settings controls do not change live sessions.</p>
+      <button id="prototype-theme" class="quiet" type="button">Switch light / dark</button>
+      <details><summary>Sample state</summary><pre id="prototype-state"></pre></details>
+      <button class="quiet" type="button" popovertarget="study-info" popovertargetaction="hide">Close</button>
+    </div>
+  </nav>
+  <dialog id="sample-attachment" class="project-picker" aria-labelledby="attachment-title"><div class="project-sheet sample-attachment-sheet">
+    <header><h2 id="attachment-title">Sample attachment</h2><button id="attachment-close" class="quiet" type="button">Cancel</button></header>
+    <p>No real files are opened or uploaded.</p><button id="attachment-add" class="quiet" type="button">Add sample image</button>
+  </div></dialog>
+  <p id="sample-feedback" class="sr-only" role="status"></p>
+  </template>
 </body>
 </html>

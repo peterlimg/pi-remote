@@ -26,4 +26,14 @@ D is a pinned exploration of the user's working-answer direction, not approval o
 
 The floating A/B/C/D switcher is prototype tooling, not a proposed product control. All actions are local samples. A rendered variation or passing browser check is not user approval.
 
+## Right-side worker panes
+
+A separate `study=panes` comparison uses the same route, stylesheet, and exact composer node. The original `study=stacks` A–D remain unchanged. The supplied screenshot identifies the large worker tree as the area to reconsider.
+
+- Pane A, Tree + drawer: retain the production tree; tapping a worker slides in its read-only log without changing the main conversation.
+- Pane B, Workers drawer: one compact Workers row opens a right-side roster, then a worker log with a back-to-roster control.
+- Pane C, Pinned inspector: one Workers row opens the last log with worker tabs. At 1100px and above it reserves a right column beside the interactive conversation; on phones it becomes a modal drawer.
+
+Use native dialog focus, Escape, explicit close/return, and background dismissal. Keep prototype comparison controls reachable while inspecting. Preserve the main draft, sample attachment, and reading position. Names wrap; lists and log sections are unboxed. Pane reveal respects reduced motion. Short screens scroll inside the pane and retain its return control. No worker inputs, direct Stop, or synthetic prompt routing. Sample reports are illustrative, not executed reviews. These proposals do not change the selected production C layout.
+
 The rejected worker-window study is preserved in Git at `6f3d0ee`.
