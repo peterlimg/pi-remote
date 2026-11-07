@@ -1,0 +1,10 @@
+{
+  "syncCommit": "5720555fe156c9b538c21373d5a7aad0514212fd",
+  "files": [
+    "src/coordinator.mjs",
+    "src/service.mjs",
+    "src/commands.mjs",
+    "src/live-session.mjs",
+    "src/rpc.mjs"
+  ]
+}
