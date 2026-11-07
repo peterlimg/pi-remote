@@ -1,5 +1,5 @@
 {
-  "syncCommit": "9f6f2e0f1b50d61260287ff5149bfa124f4de7b2",
+  "syncCommit": "45f281d16ac145381304088a2e51208c0b219c6f",
   "files": [
     "src/coordinator.mjs",
     "src/service.mjs",

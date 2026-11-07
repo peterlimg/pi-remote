@@ -1,6 +1,6 @@
 # Coordinator ordering and bounded recovery
 
-Product source confirmed at `9f6f2e0f1b50d61260287ff5149bfa124f4de7b2`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
+Product source confirmed at `45f281d16ac145381304088a2e51208c0b219c6f`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
 
 ## Checked promises
 
@@ -10,6 +10,8 @@ Product source confirmed at `9f6f2e0f1b50d61260287ff5149bfa124f4de7b2`; see cove
 | RecoveryFlow | 223 states / 536 steps | NoDuplicateInputs, ReportsAreCurrent, StopWinsRecovery, UncertainEffectsBlock, RecoveryIsBounded |
 
 WorkerFlow projects recovery/blocked states to one uncertainty state. RecoveryFlow separates queued inputs, read receipts, replaced generations, asynchronous inspection, Stop and tool outcomes. Neither is the runtime implementation.
+
+The session-activity reconciliation adds only read-only list metadata in `SessionService.matches` and shared display activity helpers. No runtime status, command/report persistence, permissions, await boundaries or task transitions changed, so neither model needs a state/action change. The five combined session-list/worker-sheet/composer E2Es pass. Formal checks and negative controls are rechecked against the reviewed source; the UI itself remains outside these models.
 
 The nine runtime traces cover delayed prompt acknowledgement/failure, Stop serialization and accepted results, reports during Stop, deduplicated recovery, stale generations, Stop during recovery, missing tool outcomes and a two-attempt budget. They use real host authorization, persistence, journal receipts and subprocess RPC. Only the Pi RPC endpoint is controlled. A follow-up cannot now overtake an unfinished Stop; the historical Stop/continuation race is prevented before dispatch.
 

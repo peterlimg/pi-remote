@@ -69,6 +69,8 @@ export async function replay(sourceRoot, scenario, evidence) {
         trace.push('Recovery continues the same session; persisted input bodies=' + delivered.length);
         return save('NoDuplicateInputs', delivered.length === new Set(delivered).size, task().state);
       }
+      // The fixture writes its verdict before acknowledging this recovery prompt.
+      await until(() => task().dispatch === 'accepted', 10000);
       const stale = JSON.parse(readFileSync(join(root, 'stale-result.json'), 'utf8'));
       trace.push('The older generation posted a result while a new attempt was working; accepted=' + stale.ok);
       return save('ReportsAreCurrent', stale.ok === false, task().state);
