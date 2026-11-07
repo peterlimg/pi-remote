@@ -1902,7 +1902,7 @@ function renderCoordinator(state) {
     button.dataset.state = task.state; button.setAttribute('aria-label', task.title + ', ' + (coordinatorLabels[task.state] || task.state));
     const name = el('span'); name.append(el('strong', task.title), el('small', coordinatorLabels[task.state] || task.state));
     const arrow = $('coordinator-open').querySelector('svg').cloneNode(true); button.append(name, arrow);
-    button.addEventListener('click', () => openCoordinatorWorker(task.sessionId)); row.append(button); list.append(row);
+    button.addEventListener('click', event => openCoordinatorWorker(task.sessionId, event.detail === 0)); row.append(button); list.append(row);
     if (focused === task.id) button.focus({ preventScroll: true });
   }
   if (!tasks.length) list.append(el('p', 'No workers yet.', 'hint'));
@@ -1923,13 +1923,13 @@ function watchCoordinatorWorker(log) {
     log.error = error.message; renderCoordinatorLog();
   });
 }
-function openCoordinatorWorker(id) {
+function openCoordinatorWorker(id, keyboard) {
   stopCoordinatorWorker();
   coordinatorPositions.set('roster:' + selected, $('coordinator-scroll').scrollTop);
   $('coordinator-log').replaceChildren();
   coordinatorLog = { id, state: cache.get(id), scrollTop: coordinatorPositions.get(id) || 0 };
   coordinatorRenderKey = undefined; renderCoordinator(cache.get(selected));
-  $('coordinator-log-back').focus({ preventScroll: true });
+  $(keyboard ? 'coordinator-log-back' : 'coordinator-sheet').focus({ preventScroll: true });
   watchCoordinatorWorker(coordinatorLog);
 }
 function receiveCoordinatorWorker(packet) {
@@ -2054,6 +2054,7 @@ function openCoordinatorTasks() {
   stopCoordinatorWorker(); resetCoordinatorDrag(); coordinatorRenderKey = undefined;
   $('coordinator-sheet').showModal(); $('coordinator-open').setAttribute('aria-expanded', 'true');
   renderCoordinator(cache.get(selected)); $('coordinator-scroll').scrollTop = 0;
+  $('coordinator-sheet').focus({ preventScroll: true });
 }
 function returnToCoordinator() {
   const owner = cache.get(selected)?.coordination?.coordinatorId;
@@ -2064,11 +2065,12 @@ $('coordinator-return').addEventListener('click', returnToCoordinator);
 $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
 $('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
-$('coordinator-log-back').addEventListener('click', () => {
+$('coordinator-log-back').addEventListener('click', event => {
   const id = coordinatorLog?.id;
   stopCoordinatorWorker(); coordinatorRenderKey = undefined; renderCoordinator(cache.get(selected));
   $('coordinator-scroll').scrollTop = coordinatorPositions.get('roster:' + selected) || 0;
-  [...$('coordinator-task-list').querySelectorAll('button')].find(button => button.dataset.workerId === cache.get(selected)?.coordination?.tasks.find(task => task.sessionId === id)?.id)?.focus({ preventScroll: true });
+  const worker = [...$('coordinator-task-list').querySelectorAll('button')].find(button => button.dataset.workerId === cache.get(selected)?.coordination?.tasks.find(task => task.sessionId === id)?.id);
+  (event.detail === 0 && worker ? worker : $('coordinator-sheet')).focus({ preventScroll: true });
 });
 $('coordinator-sheet').addEventListener('click', event => { if (event.target === $('coordinator-sheet')) $('coordinator-sheet').close(); });
 $('coordinator-sheet').addEventListener('close', () => { stopCoordinatorWorker(); resetCoordinatorDrag(); $('coordinator-open').setAttribute('aria-expanded', 'false'); });

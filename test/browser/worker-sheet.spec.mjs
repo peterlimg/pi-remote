@@ -8,7 +8,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const task = { id: 'task', sessionId: 'worker', title: 'Messaging and recovery inspection with a long worker name', state: 'working', instruction: 'Inspect screenshot.png.', readOnly: true };
   const parent = { id: 'parent', title: 'Main conversation', cwd: '/project', status: 'idle', messages: [
     { id: 'parent-note', role: 'user', text: 'Keep the main image.', images: [parentImage] }
-  ], coordination: { role: 'coordinator', readOnly: false, tasks: [task] } };
+  ], coordination: { role: 'coordinator', readOnly: false, tasks: [task, { ...task, id: 'recovery-task', sessionId: 'recovery', title: 'Recovery', state: 'stopped' }] } };
   let worker = { id: 'worker', title: task.title, cwd: '/project', status: 'working', historyTruncated: true, messages: [
     { id: 'ls-first', role: 'toolResult', toolCallId: 'ls-first', toolName: 'ls', text: 'Source unavailable.', isError: true },
     { id: 'ls-second', role: 'toolResult', toolCallId: 'ls-second', toolName: 'ls', text: 'Source unavailable.', isError: true },
@@ -50,8 +50,21 @@ test('worker sheet scopes history and images without disturbing the live parent'
   expect((await page.locator('#coordinator-context').boundingBox()).height).toBeLessThanOrEqual(48);
   await expect(page.locator('#coordinator-context button')).toHaveCount(1);
   await expect(page.locator('#coordinator-workers, #coordinator-owner')).toHaveCount(0);
-  await page.locator('#coordinator-open').click();
-  await page.getByRole('button', { name: task.title + ', Working', exact: true }).click();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.locator('#coordinator-open').tap();
+  const sheet = page.locator('#coordinator-sheet'), close = page.getByRole('button', { name: 'Close workers', exact: true });
+  await expect(sheet).toBeFocused(); await expect(close).not.toBeFocused();
+  await expect(close).toHaveCSS('outline-style', 'none');
+  await expect(page.locator('#coordinator-task-list > div')).toHaveCount(2);
+  const borders = await page.locator('.coordinator-sheet, .coordinator-sheet > header, #coordinator-task-list > div, #coordinator-task-list button').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderWidth));
+  expect(borders.every(width => width === '0px')).toBe(true);
+  await page.screenshot({ path: info.outputPath('worker-roster-touch.png') });
+  await page.keyboard.press('Tab'); await expect(close).toBeFocused();
+  await expect(close).toHaveCSS('outline-style', 'solid'); await expect(close).toHaveCSS('outline-width', '2px');
+  await page.screenshot({ path: info.outputPath('worker-roster-keyboard.png') });
+  await page.getByRole('button', { name: task.title + ', Working', exact: true }).tap();
+  await expect(sheet).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Back to workers', exact: true })).toHaveCSS('outline-style', 'none');
   const log = page.locator('#coordinator-log'), read = log.locator('details').filter({ has: page.locator('summary', { hasText: 'read · screenshot.png' }) });
   await read.locator('summary').click();
   const image = read.locator('img');
@@ -69,12 +82,13 @@ test('worker sheet scopes history and images without disturbing the live parent'
     expect(space.header).toBeLessThanOrEqual(74); expect(space.targets).toBe(true); expect(space.overflow).toBe(false);
     expect(space.body).toBeGreaterThan(space.sheet - space.header - space.safeBottom - 3);
     const rows = await log.locator(':scope > .coordinator-log-detail').evaluateAll(nodes => nodes.map(node => {
-      const style = getComputedStyle(node), adjacent = node.previousElementSibling?.classList.contains('coordinator-log-detail');
+      const style = getComputedStyle(node);
       return { top: style.borderTopWidth, bottom: style.borderBottomWidth, margin: style.marginBottom,
-        expectedTop: adjacent ? '1px' : '0px', touchHeight: node.querySelector('summary').getBoundingClientRect().height };
+        touchHeight: node.querySelector('summary').getBoundingClientRect().height };
     }));
     expect(rows.length).toBeGreaterThan(3);
-    for (const row of rows) { expect(row.top).toBe(row.expectedTop); expect(row.bottom).toBe('0px'); expect(row.margin).toBe('0px'); expect(row.touchHeight).toBeGreaterThanOrEqual(44); }
+    for (const row of rows) { expect(row.top).toBe('0px'); expect(row.bottom).toBe('0px'); expect(row.margin).toBe('0px'); expect(row.touchHeight).toBeGreaterThanOrEqual(44); }
+    await expect(read.locator('.tool-input')).toHaveCSS('border-bottom-width', '0px');
     await expect(page.locator('.coordinator-sheet > footer')).toHaveCount(0);
     await expect(page.locator('#coordinator-sheet')).toHaveAccessibleDescription('Read-only inspection. Give instructions in the main conversation.');
     await expect(page.locator('#coordinator-title')).toHaveText(task.title);
@@ -102,9 +116,14 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(log).toContainText('A newer live finding.');
   await log.getByRole('button', { name: 'Latest messages', exact: true }).click();
   await expect(log.getByRole('button', { name: 'Latest messages', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Back to workers', exact: true }).click();
+  const back = page.getByRole('button', { name: 'Back to workers', exact: true });
+  await back.tap(); await expect(sheet).toBeFocused();
   await expect(page.locator('#coordinator-title')).toHaveText('Workers');
-  await page.getByRole('button', { name: 'Close workers', exact: true }).click();
+  const workerButton = page.getByRole('button', { name: task.title + ', Working', exact: true });
+  await workerButton.focus(); await page.keyboard.press('Enter');
+  await expect(back).toBeFocused(); await expect(back).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Enter'); await expect(workerButton).toBeFocused();
+  await close.tap();
   await expect(page.locator('#prompt')).toHaveValue('Keep this main draft.'); await expect(page.locator('#title')).toHaveText(parent.title);
   await expect(mainImage).toHaveAttribute('src', mainURL); await expect.poll(() => mainImage.evaluate(node => node.naturalWidth)).toBe(1);
   expect(requests.filter(packet => packet.op === 'history').map(packet => packet.sessionId)).toEqual(['worker', 'worker']);
