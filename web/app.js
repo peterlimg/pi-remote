@@ -3236,18 +3236,21 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   main.addEventListener('touchstart', event => {
     resetSwipe();
     const touch = event.touches[0];
-    trackingSwipe = event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 && touch.clientX < 24 && app.classList.contains('viewing') &&
-      matchMedia('(max-width: 700px)').matches && !event.target.closest('button, a, input, textarea, summary, dialog');
-    if (trackingSwipe) event.preventDefault();
+    // A right thumb can reach the thread's middle without reaching the left edge.
+    trackingSwipe = event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 && app.classList.contains('viewing') &&
+      (touch.clientX < 24 || event.target.closest('#transcript')) && matchMedia('(max-width: 700px)').matches &&
+      !event.target.closest('button, a, input, textarea, summary, dialog, pre, table');
+    if (trackingSwipe && touch.clientX < 24) event.preventDefault();
     startX = touch.clientX; startY = touch.clientY; dx = 0;
   }, { passive: false });
   main.addEventListener('touchmove', event => {
     if (!trackingSwipe) return;
     if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) { resetSwipe(); return; }
-    const touch = event.touches[0];
+    const touch = event.touches[0], dy = Math.abs(touch.clientY - startY);
     dx = Math.max(0, touch.clientX - startX);
     if (!app.classList.contains('swiping')) {
-      if (dx < 8) { if (Math.abs(touch.clientY - startY) > 8) resetSwipe(); return; }
+      if (dy > 8 && dy >= dx) { resetSwipe(); return; }
+      if (dx < 8) return;
       app.classList.add('swiping');
     }
     event.preventDefault();
@@ -3257,8 +3260,8 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     if (!trackingSwipe) return;
     trackingSwipe = false;
     if (!app.classList.contains('swiping')) return;
-    // ponytail: distance-only threshold; add flick velocity if short fast swipes feel ignored.
-    const back = dx > main.offsetWidth / 3;
+    // Keep the native edge threshold aligned with Safari's switch feedback.
+    const back = dx > (event.nativeSwipeHaptic ? main.offsetWidth / 3 : 72);
     if (back && !event.nativeSwipeHaptic) haptic();
     main.style.transition = 'transform .2s ease-out';
     main.style.transform = back ? 'translateX(100%)' : '';

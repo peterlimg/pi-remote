@@ -18,6 +18,7 @@ for (const standalone of [false, true]) {
       messages: [{ id: 'reply', role: 'assistant', text: `Reply for task ${i}` }] }));
     const service = Object.assign(Object.create(SessionService.prototype), {
       catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['1', '2', '3']), closedSessions: new Set(), warnings: [],
+      coordination: { taskForSession: () => undefined },
     });
     service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
     let client, scroll;
@@ -70,7 +71,7 @@ for (const standalone of [false, true]) {
       // The swipe must reveal the live list, not the browser's older history screenshot.
       await expect(sidebar).toHaveCSS('visibility', 'visible');
       states[0].updatedAt += 1000;
-      states[0].messages[0].text = `Working during swipe from task ${id}`;
+      states[0].title = `Working during swipe from task ${id}`;
       client.send(JSON.stringify({ type: 'sessions', ...scroll.update() }));
       await expect(now).toContainText(`Working during swipe from task ${id}`);
       await touch('touchMove', 180);
@@ -90,6 +91,60 @@ for (const standalone of [false, true]) {
       await testInfo.attach(`sessions-scroll-${id}`, { body: JSON.stringify(frames), contentType: 'application/json' });
       expect(frames.filter(frame => frame.visible && frame.top !== initialTop)).toEqual([]);
     }
+  });
+}
+
+for (const standalone of [false, true]) {
+  test(`a short right-handed swipe returns to sessions in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page, browserName }, testInfo) => {
+    if (standalone) await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
+    await page.goto('/#token=browser-test-token-only-123456789012345');
+    await page.getByRole('button', { name: /Project Alpha/ }).tap();
+    await expect(page.locator('#transcript')).toContainText('Working on Project Alpha');
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
+    await page.locator('#prompt').fill('Keep my draft');
+    const x = Math.round(page.viewportSize().width * .55);
+    // Starting away from the edge must not steal controls, code scrolling, or vertical drags.
+    for (const selector of ['#prompt', '#heading', '#session-swipe', '#transcript pre code', '#transcript a']) {
+      await page.locator(selector).first().evaluate((node, x) => {
+        for (const type of ['touchstart', 'touchmove', 'touchend']) node.dispatchEvent(Object.assign(
+          new Event(type, { bubbles: true, cancelable: true }), {
+            touches: type === 'touchend' ? [] : [{ clientX: x + (type === 'touchmove' ? 90 : 0), clientY: 300 }],
+          }));
+      }, x);
+      await expect(page.locator('#app')).toHaveClass(/viewing/);
+      await expect(page.locator('#app')).not.toHaveClass(/swiping/);
+    }
+    const prevented = await page.locator('#transcript').evaluate((node, x) => {
+      const fire = (type, dx, dy) => !node.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+        touches: type === 'touchend' ? [] : [{ clientX: x + dx, clientY: 300 + dy }],
+      }));
+      return [fire('touchstart', 0, 0), fire('touchmove', 90, 140), fire('touchmove', 100, 140), fire('touchend', 100, 140)];
+    }, x);
+    expect(prevented).toEqual([false, false, false, false]);
+    await expect(page.locator('#app')).not.toHaveClass(/swiping/);
+    const reply = page.getByText('Working on Project Alpha', { exact: true });
+    await reply.scrollIntoViewIfNeeded();
+    const box = await reply.boundingBox(), y = box.y + box.height / 2;
+    const cdp = browserName === 'chromium' && await page.context().newCDPSession(page);
+    // Chromium sends trusted touches; WebKit replays the same path synthetically.
+    const touch = (type, x) => cdp ? cdp.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }],
+    }) : page.locator('#transcript').evaluate((node, { type, x, y }) => node.dispatchEvent(Object.assign(
+      new Event(type.toLowerCase(), { bubbles: true, cancelable: true }), {
+        touches: type === 'touchEnd' ? [] : [{ clientX: x, clientY: y }],
+      })), { type, x, y });
+    await touch('touchStart', x);
+    await touch('touchMove', x + 12);
+    await touch('touchMove', x + 90);
+    await expect(page.locator('#app')).toHaveClass(/swiping/);
+    await page.screenshot({ path: testInfo.outputPath('right-handed-swipe.png') });
+    await touch('touchEnd', x + 90);
+    await expect(page.locator('#app')).not.toHaveClass(/viewing/);
+    await expect.poll(() => page.evaluate(() => history.state)).toBeNull();
+    await expect(page.getByRole('button', { name: /Project Alpha/ })).toBeVisible();
+    await page.getByRole('button', { name: /Project Alpha/ }).tap();
+    await expect(page.locator('#prompt')).toHaveValue('Keep my draft');
+    await expect(page.locator('#transcript')).toContainText('Working on Project Alpha');
   });
 }
 
