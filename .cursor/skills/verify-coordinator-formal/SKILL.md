@@ -52,6 +52,8 @@ Read shortest counterexamples and show the chart in the reader's words. Inspecti
 | RPC/checkpoint gaps | src/service.mjs command/dispatch/restore; src/live-session.mjs WorkerSession; src/rpc.mjs requests |
 | Durable request receipts | src/commands.mjs CommandJournal.execute; fresh request IDs are assumed in these models |
 
+`SessionService.matches` may add read-only worker-activity counts for session lists, with `web/protocol.js` deriving display activity. This does not change runtime status, command permissions or the task ledger; presentation remains outside both models. Review such covered-source changes for side effects before advancing the sync record.
+
 A model action is one synchronous state-changing prefix/completion, not the entire awaited operation. WorkerFlow projects mailbox recovering and blocked states to `unknown`; RecoveryFlow distinguishes them. WorkerFlow prohibits a prompt overtaking unfinished Stop. `latest`, acceptedValid and reportFrom abstract command identity and ghost history. RecoveryFlow abstracts a bounded set of input IDs and epochs rather than UUIDs and text.
 
 ## Runtime and negative controls

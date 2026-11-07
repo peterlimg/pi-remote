@@ -5,7 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { tmpdir, homedir } from 'node:os';
 import { discover, isInside, readSession, lastPromptTime } from './catalog.mjs';
 import { summary } from './state.mjs';
-import { unnamed, sessionGroup, activityOrder } from '../web/protocol.js';
+import { unnamed, sessionGroup, activityOrder, workerRunning } from '../web/protocol.js';
 import { sessionKey, canonical } from './locks.mjs';
 import { CommandJournal, requestKey, validateCommand, commandList, modelList } from './commands.mjs';
 import { HistoryReader } from './history.mjs';
@@ -122,7 +122,12 @@ export class SessionService extends EventEmitter {
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && item.resumable, pinned: this.pins.has(id) });
     const visible = [...all.values()].filter(item => includeHelpers || query || !this.closedSessions.has(item.id) &&
       !this.coordination.taskForSession(item.id) && !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
-    for (const item of visible) if (this.closedSessions.has(item.id)) item.closed = true;
+    for (const item of visible) {
+      if (this.closedSessions.has(item.id)) item.closed = true;
+      // Lists update independently of the watched conversation, without exposing full task records.
+      const coordination = this.coordination.describe(item.id);
+      if (coordination?.role === 'coordinator') item.workersWorking = coordination.tasks.filter(workerRunning).length;
+    }
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));
     return { matches, total: visible.length };

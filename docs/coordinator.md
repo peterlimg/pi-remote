@@ -13,6 +13,8 @@ Requires Pi 1.4 or newer. Workers need a native Pi model because their restricte
 
 This works for host-managed sessions and sessions connected through the terminal bridge. Only independent conversations appear in the default global session list. Workers remain children, including when working or pinned. Explicit search and the worker sheet still reach their transcripts.
 
+A parent appears **Working** in **Now** while any owned worker is starting, working or stopping, even when another conversation is selected. Its own **Needs input**, **Working** or **Starting** status takes priority. Queued, recovering, waiting and finished workers do not imply a running session. This is display activity only: an idle parent still has Send, not a main-response Stop button.
+
 The sheet keeps the selected parent, composer, draft, attachments, and main reading position intact. Its separate read-only subscription watches one owned worker alongside the parent on the existing authenticated connection. Closing it or selecting another conversation clears that subscription. It reconnects after a host restart; recovery can add a continuation note without duplicating recorded instruction bodies. Explicitly opening a worker from session search still hides all input controls and offers a return to its parent.
 
 Stopping the main response does not stop workers. Ask the assistant to stop a specific task.

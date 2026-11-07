@@ -31,7 +31,8 @@ test('search ignores stale replies, debounces typing, and restores its scroll wi
   const states = Array.from({ length: 45 }, (_, i) => ({ id: String(i), title: `Task ${i}`, cwd: '/projects/app',
     status: 'saved', updatedAt: 45 - i, messages: [] }));
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true,
+      coordination: { taskForSession: () => undefined, describe: () => undefined } });
   states[0].status = 'idle'; service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
   let client, scroll, hold = false;
   const requests = [], replies = [];

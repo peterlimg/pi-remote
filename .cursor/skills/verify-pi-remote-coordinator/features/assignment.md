@@ -10,6 +10,7 @@ A user asks their ordinary conversation for workers. That same session coordinat
 - `parallel`: dispatch two independent Pi workers.
 - `responsive`: receive another coordinator answer while a worker remains active.
 - `hierarchy`: workers are children, absent from default global sections and visible directly in coordinator chat.
+- `parent-activity`: the parent appears Working in Now while an owned worker is starting/working/stopping, without changing its actual agent status or composer. `test/browser/session-worker-activity.spec.mjs` covers overview, active collection, unwatched updates, icons, priority, exclusions and live removal through real host task/report boundaries with replayed Pi endpoints.
 - `limit`: at most two tasks are active for a coordinator.
 
 ## How to get to it (user POV)

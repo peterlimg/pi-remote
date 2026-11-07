@@ -1,4 +1,4 @@
-import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts, sessionGroup, activityOrder } from './protocol.js';
+import { patchState, loadedSkill, sessionTitle, taskText, replyAttempts, sessionActivity, sessionGroup, activityOrder, workerRunning } from './protocol.js';
 import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_BYTES, IMAGE_LIMIT, validateImages } from './images.js';
 import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage, splitVideoMessage, VideoCache } from './videos.js';
 import MarkdownIt from './markdown-it.mjs';
@@ -638,14 +638,14 @@ const isUnread = item => item.previewRole !== 'user' && item.updatedAt > seen[it
 function sessionRow(item) {
   const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
   button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
-  const kind = sessionKind(item), busy = ['working', 'waiting'].includes(item.status) && kind && !kind.emoji;
+  const status = sessionActivity(item), kind = sessionKind(item), busy = ['working', 'waiting'].includes(status) && kind && !kind.emoji;
   if (busy) button.classList.add('session-busy');
-  const icon = statusIcon(item.status);
+  const icon = statusIcon(status);
   if (isUnread(item)) { icon.dataset.unread = ''; icon.title = 'New reply'; }
   const indicators = el('span', undefined, 'session-indicators');
   indicators.append(kind && !kind.emoji ? showSessionKind(icon, item, 32) : icon);
   if ('unread' in icon.dataset) indicators.append(el('span', 'New reply', 'sr-only'));
-  if (['idle', 'saved'].includes(item.status)) indicators.append(el('span', statusLabels[item.status], 'sr-only'));
+  if (['idle', 'saved'].includes(status)) indicators.append(el('span', statusLabels[status], 'sr-only'));
   button.append(indicators);
   const body = el('div', undefined, 'session-body');
   const top = el('div', undefined, 'session-top');
@@ -660,10 +660,10 @@ function sessionRow(item) {
   const meta = el('div', undefined, 'session-meta');
   if (item.closed) meta.append(el('span', 'Closed', 'session-closed'));
   // Ready and Saved are the resting states; only label what needs attention.
-  if (!['idle', 'saved'].includes(item.status)) {
-    const status = el('span', statusLabels[item.status] || item.status, 'session-state');
-    status.dataset.status = item.status;
-    meta.append(status);
+  if (!['idle', 'saved'].includes(status)) {
+    const label = el('span', statusLabels[status] || status, 'session-state');
+    label.dataset.status = status;
+    meta.append(label);
   }
   if (!isBlank(item.cwd)) {
     const project = el('span', undefined, 'session-project');
@@ -677,7 +677,7 @@ function sessionRow(item) {
     time.dateTime = date.toISOString(); time.title = 'Last activity: ' + date.toLocaleString();
     meta.append(time);
   }
-  if (kind?.emoji) meta.append(dressKind(el('span', undefined, 'session-kind'), kind, 20, item.status));
+  if (kind?.emoji) meta.append(dressKind(el('span', undefined, 'session-kind'), kind, 20, status));
   body.append(meta);
   button.append(body);
   // The finger lifting after a swipe must not also open the session.
@@ -1011,9 +1011,9 @@ function syncBotVisibility() {
 document.addEventListener('visibilitychange', syncBotVisibility);
 // Characters take the status slot; custom emoji keep the plain activity indicator.
 function showSessionKind(icon, item, size = 28) {
-  const kind = sessionKind(item), unread = 'unread' in icon.dataset;
-  if (!kind || kind.emoji && (unread || !['idle', 'saved'].includes(item.status))) return icon;
-  return dressKind(icon, kind, size, item.status, unread);
+  const kind = sessionKind(item), unread = 'unread' in icon.dataset, status = sessionActivity(item);
+  if (!kind || kind.emoji && (unread || !['idle', 'saved'].includes(status))) return icon;
+  return dressKind(icon, kind, size, status, unread);
 }
 function sessionKind(item) {
   let choice = sessionIcons.get(item.id);
@@ -1048,7 +1048,7 @@ function dressKind(node, kind, size, status, unread = false) {
 // The header leads with the session's bot beside both lines; it shows activity but not unread, since you are reading it.
 function headingKind(item) {
   const kind = item && sessionKind(item);
-  return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 32, item.status)] : [];
+  return kind ? [dressKind(el('span', undefined, 'heading-kind'), kind, 32, sessionActivity(item))] : [];
 }
 // Keep older manual choices available while the picker defaults to the approved family.
 function renderSessionIconChoice() {
@@ -1876,8 +1876,9 @@ function renderCoordinator(state) {
   $('coordinator-return').textContent = worker ? 'Return to ' + role.coordinatorTitle : '';
   $('coordinator-return').disabled = worker && !connected && !cache.has(role.coordinatorId);
   $('coordinator-worker-count').textContent = tasks.length;
-  const summary = [];
-  for (const [states, label] of [[['starting', 'working', 'stopping'], 'working'], [['queued'], 'queued'], [['recovering'], 'recovering'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
+  const summary = [], working = tasks.filter(workerRunning).length;
+  if (working) summary.push(working + ' working');
+  for (const [states, label] of [[['queued'], 'queued'], [['recovering'], 'recovering'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
     const count = tasks.filter(task => states.includes(task.state)).length;
     if (count) summary.push(count + ' ' + label);
   }
@@ -3095,18 +3096,18 @@ function openNearby() {
   if (at < 0) return;
   const here = projectName(sessions.find(row => row.id === selected)?.cwd);
   list.replaceChildren(...ids.map(id => {
-    const item = sessions.find(row => row.id === id), text = el('span', undefined, 'nearby-text'), meta = el('small');
-    const button = el('button'); button.type = 'button'; button.dataset.status = item.status;
+    const item = sessions.find(row => row.id === id), status = sessionActivity(item), text = el('span', undefined, 'nearby-text'), meta = el('small');
+    const button = el('button'); button.type = 'button'; button.dataset.status = status;
     if (id === selected) button.setAttribute('aria-current', 'true');
-    const icon = statusIcon(item.status), fresh = isUnread(item), project = projectName(item.cwd);
+    const icon = statusIcon(status), fresh = isUnread(item), project = projectName(item.cwd);
     if (fresh) icon.dataset.unread = '';
     const preview = item.preview ? displayPaths(taskText({ role: item.previewRole, text: item.preview, truncated: true })) : '';
     const elapsed = age(new Date(item.lastPromptAt ?? item.updatedAt));
     // Line 2 says what opening the session would show: its question, the new reply, or how long it has run.
-    const state = item.status === 'waiting' ? item.dialog?.title?.split('\n')[0] || statusLabels.waiting
-      : item.status === 'working' ? statusLabels.working + (elapsed === 'now' ? '' : ' ' + elapsed) : '';
-    const detail = item.status === 'waiting' ? '' : fresh && !state ? preview : preview && (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + preview;
-    if (item.status === 'waiting') button.dataset.attention = 'waiting';
+    const state = status === 'waiting' ? item.dialog?.title?.split('\n')[0] || statusLabels.waiting
+      : status === 'working' ? statusLabels.working + (elapsed === 'now' ? '' : ' ' + elapsed) : '';
+    const detail = status === 'waiting' ? '' : fresh && !state ? preview : preview && (item.previewRole === 'user' ? 'You: ' : 'Pi: ') + preview;
+    if (status === 'waiting') button.dataset.attention = 'waiting';
     else if (fresh && !state && preview) button.dataset.attention = 'unread';
     // The project only when it differs from the one you are in.
     const parts = [project !== here && project && el('span', project, 'nearby-project'), state && el('span', state, 'nearby-state'), detail].filter(Boolean);
@@ -3114,7 +3115,7 @@ function openNearby() {
     if (!parts.length) meta.append(project || 'No messages yet');
     text.append(el('strong', sessionTitle(item.title, cache.get(id)?.messages)), meta);
     // A running session is always "now"; its elapsed time is on line 2 instead.
-    button.append(showSessionKind(icon, item, 24), text, el('time', item.status === 'working' ? '' : age(new Date(item.updatedAt))));
+    button.append(showSessionKind(icon, item, 24), text, el('time', status === 'working' ? '' : age(new Date(item.updatedAt))));
     button.addEventListener('click', () => { menu.hidePopover(); if (id !== selected) stepSession(Math.sign(ids.indexOf(id) - at), id); });
     return button;
   }));

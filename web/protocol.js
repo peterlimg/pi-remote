@@ -1,5 +1,13 @@
-export const sessionGroup = item => ['working', 'waiting', 'starting'].includes(item.status) ? 'now' : item.pinned ? 'pinned' : 'recent';
-export const activityOrder = (a, b) => (b.status === 'waiting') - (a.status === 'waiting') ||
+// Match the Workers summary: queued/recovering are separate, and an answer or returned result is not work.
+export const workerRunning = task => ['starting', 'working', 'stopping'].includes(task.state);
+// List/header activity is not the main agent's runtime status or permission to send/stop.
+export function sessionActivity(item) {
+  if (['working', 'waiting', 'starting'].includes(item.status)) return item.status;
+  const tasks = item.coordination?.role === 'coordinator' ? item.coordination.tasks : [];
+  return item.workersWorking > 0 || tasks.some(workerRunning) ? 'working' : item.status;
+}
+export const sessionGroup = item => ['working', 'waiting', 'starting'].includes(sessionActivity(item)) ? 'now' : item.pinned ? 'pinned' : 'recent';
+export const activityOrder = (a, b) => (sessionActivity(b) === 'waiting') - (sessionActivity(a) === 'waiting') ||
   (b.lastPromptAt ?? b.updatedAt) - (a.lastPromptAt ?? a.updatedAt) || a.id.localeCompare(b.id);
 
 export function loadedSkill(message) {

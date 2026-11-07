@@ -20,6 +20,7 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   states.push({ id: 'pinned', title: 'Pinned notes', cwd: '/project', status: 'idle', updatedAt: Date.now(), messages: [] });
   const service = Object.assign(Object.create(SessionService.prototype), {
     catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['pinned']), closedSessions: new Set(), warnings: [],
+    coordination: { taskForSession: () => undefined, describe: () => undefined },
   });
   service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
   await page.routeWebSocket('**/ws', ws => {
