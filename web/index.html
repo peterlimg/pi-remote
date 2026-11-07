@@ -156,11 +156,6 @@
           </form>
         </div>
       </div></dialog>
-      <dialog id="coordinator-sheet" class="project-picker" aria-labelledby="coordinator-title" tabindex="-1"><div class="project-sheet coordinator-sheet">
-        <header><h2 id="coordinator-title">Background tasks</h2><button id="coordinator-done" type="button" class="quiet">Done</button></header>
-        <p class="coordinator-help">Read-only task details. Give replies and commands to the coordinator in the main conversation. Returned results remain separate from accepted results.</p>
-        <div id="coordinator-task-list" role="list" aria-label="Coordinator tasks"></div>
-      </div></dialog>
       <div id="notice" class="notice" role="status" hidden></div>
       <section id="empty" class="empty"><p>Select a session.</p></section>
       <span id="copy-status" class="sr-only" role="status"></span>
@@ -169,11 +164,7 @@
       </section>
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
       <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
-        <details id="coordinator-workers" open>
-          <summary><span>Workers · <span id="coordinator-worker-count">0</span></span><span id="coordinator-worker-summary"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary>
-          <button id="coordinator-owner" class="coordinator-worker coordinator-tree-root" type="button"><strong></strong><span class="coordinator-worker-state">Main conversation</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
-          <div id="coordinator-worker-links" class="coordinator-worker-links"></div>
-        </details>
+        <button id="coordinator-open" type="button" aria-haspopup="dialog" aria-controls="coordinator-sheet" aria-expanded="false"><span>Workers · <span id="coordinator-worker-count">0</span></span><span id="coordinator-worker-summary"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></button>
       </section>
       <div id="coordinator-inspection" class="coordinator-inspection" hidden><p id="coordinator-inspection-note"></p><button id="coordinator-return" type="button" class="quiet" aria-label="Return to coordinator"></button></div>
       <form id="composer" class="composer" hidden>
@@ -221,6 +212,19 @@
       <button id="status-line" type="button" title="Usage" hidden></button>
     </main>
   </div>
+  <dialog id="coordinator-sheet" class="project-picker" aria-labelledby="coordinator-title" tabindex="-1">
+    <div class="coordinator-sheet">
+      <header>
+        <div class="coordinator-heading"><button id="coordinator-log-back" type="button" class="quiet" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>Workers</button><h2 id="coordinator-title">Workers</h2><p id="coordinator-subtitle"></p></div>
+        <button id="coordinator-done" type="button" class="quiet" aria-label="Close workers" autofocus><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      </header>
+      <div id="coordinator-scroll" tabindex="0" aria-label="Worker inspection">
+        <div id="coordinator-task-list" role="list" aria-label="Workers"></div>
+        <section id="coordinator-log" aria-label="Read-only worker log" hidden></section>
+      </div>
+      <footer><p>Read-only inspection. Give instructions in the main conversation.</p><button id="coordinator-conversation" type="button" class="quiet">Return to conversation</button></footer>
+    </div>
+  </dialog>
   <section id="access-warning" class="access-banner" aria-label="Login needs attention" hidden>
     <p id="access-message" role="alert"></p>
     <button id="repair" type="button">Pair again</button>

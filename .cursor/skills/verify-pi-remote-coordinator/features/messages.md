@@ -12,17 +12,17 @@ Worker questions and reports return to their owning coordinator. All user input 
 
 ## How to get to it (user POV)
 
-Read and answer the coordinator's question in the main conversation. The **Workers** tree opens read-only logs; **Session details → Background tasks** opens read-only assignments and reports. A worker's visible **Return to coordinator** control returns to its parent. Neither inspection view offers direct replies, Stop, or acceptance controls.
+Read and answer the coordinator's question in the main conversation. The compact **Workers** row opens the roster in a bottom sheet. A worker row opens its read-only log; **Task details** contains assignments and reports. **Workers** returns to the roster and **Return to conversation** dismisses without selecting another session. **Session details → Background tasks** opens the same sheet. It has no replies, Stop, acceptance, model, or permission controls.
 
 ## Driving it with Playwright
 
 Preconditions: First inspection needs an answer and Second inspection is working.
 
-- Collapse Workers and send `Keep the original identifier.` in the main composer. Require the coordinator to acknowledge the addressed task, First inspection to return its report, and the tree to remain collapsed while states update.
-- Open **Background tasks**, inspect **Returned result**, and require `ALPHA_VALUE=stable`. There must be no direct reply, acceptance, or Stop controls. Close and send `Review and accept the first result.` in the main composer. Require **Accepted** in a second view.
-- Expand Workers. Keep an unsent coordinator draft and attach the fixture PNG. Open **First inspection, Accepted**. Require a read-only explanation, no visible composer, model controls, or permission input, and no apparent human bubbles for task instructions.
-- In a second browser tab, open the coordinator and send `Stop Second inspection.`. Require its reply and the first tab's sibling tree to show **Stopped** while First inspection stays **Accepted**. The native provider audit must show that only the held worker request was aborted.
-- Return to the coordinator and require its unsent draft and attachment unchanged. Browser command frames must target only the coordinator, never a worker.
+- Inspect First inspection, then send `Keep the original identifier.` from a second main-conversation tab. Require both the first tab's main transcript and worker stream to update on the same connection. The sheet header becomes **Result ready** and the worker log receives the scoped instruction.
+- Inspect **Task details → Returned result** and require `ALPHA_VALUE=stable`. There must be no direct reply, acceptance, or Stop controls. Close and send `Review and accept the first result.` in the main composer. Require **Accepted** in a second view.
+- Keep an unsent coordinator draft, attach the fixture PNG, and scroll the main transcript up. Open **Workers → First inspection, Accepted**. Require no inputs inside the sheet, no apparent human bubbles for task instructions, and explicit failed labels for blocked tools. The selected parent and unchanged composer remain behind the modal.
+- In a second browser tab, open the coordinator and send `Stop Second inspection.`. Require its reply in both main transcripts. Return the first sheet to its roster and require **Stopped** while First inspection stays **Accepted**. The native provider audit must show that only the held worker request was aborted.
+- Dismiss and require the unsent draft, attachment, and main reading position unchanged. Browser command frames must target only the coordinator, never a worker.
 - Repeat delegation in the terminal-owned session. Phone submissions must remain **You** messages, while the internal worker wake-up appears as **Prompted by an extension**. Require a returned worker question in that same main conversation.
 - Inspect the matching command and report frames plus persisted task IDs. The full proof exercises these paths.
 

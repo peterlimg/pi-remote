@@ -26,6 +26,7 @@ markdown.block.ruler.before('html_block', 'disclosure', (state, start, end, sile
 function refreshDiagramTheme() {
   const state = cache.get(selected);
   if (state) renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
+  renderCoordinatorLog();
 }
 new MutationObserver(refreshDiagramTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshDiagramTheme);
@@ -130,12 +131,14 @@ const threadImages = new Map(), threadVideos = new Map(), usageSummaries = new M
 const usageDetails = new Map(), usageLoading = new Set(), usageTotals = new Map(), usageTurns = new Map();
 let supportsUsage = false;
 let imageQueue = Promise.resolve(), uploadQueue = Promise.resolve();
-const imageObserver = new IntersectionObserver(entries => {
+const visibleImages = (entries, observer) => {
   for (const entry of entries) if (entry.isIntersecting) {
-    imageObserver.unobserve(entry.target);
+    observer.unobserve(entry.target);
     loadThreadImage(threadImages.get(entry.target.dataset.imageKey));
   }
-}, { root: $('transcript'), rootMargin: '160px' });
+};
+const imageObserver = new IntersectionObserver(visibleImages, { root: $('transcript'), rootMargin: '160px' });
+const coordinatorImageObserver = new IntersectionObserver(visibleImages, { root: $('coordinator-scroll'), rootMargin: '160px' });
 const videoObserver = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) {
     videoObserver.unobserve(entry.target);
@@ -155,7 +158,9 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsCoordinator = false, coordinatorRenderKey;
+let supportsCoordinator = false, supportsWorkerInspection = false, coordinatorRenderKey, coordinatorLog;
+let coordinatorDrag, coordinatorDragAnimation;
+const coordinatorPositions = new Map();
 let supportsSessionSections = false, supportsRecentAvailability = false, recentAvailability = 'online', supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
 const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, renders: 0, renderAt: 0,
   last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
@@ -372,7 +377,7 @@ function connection(text, compact = text) {
 function disconnect() {
   closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
-  const old = socket; socket = undefined; connected = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
+  const old = socket; socket = undefined; connected = false; supportsWorkerInspection = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
   debugActivity('disconnect'); supportsActivityDebug = false;
   clearTimeout(reconnectTimer); clearTimeout(connectionTimer); clearInterval(heartbeatTimer);
   connectionTimer = undefined;
@@ -439,6 +444,7 @@ function connect() {
       supportsNewPreparation = packet.supportsNewPreparation === true;
       supportsActivityDebug = packet.supportsActivityDebug === true;
       supportsCoordinator = packet.supportsCoordinator === true;
+      supportsWorkerInspection = packet.supportsWorkerInspection === true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -461,11 +467,16 @@ function connect() {
       if (supportsSessionSections || listLimit > 20 || searchQuery || listError) loadList();
       if (selected && !cache.get(selected)?.creation) {
         const id = selected;
-        request('watch', { sessionId: id }).then(() => loadUsage(id)).catch(e => notice(e.message));
+        request('watch', { sessionId: id }).then(() => {
+          loadUsage(id);
+          if (coordinatorLog && $('coordinator-sheet').open) watchCoordinatorWorker(coordinatorLog);
+        }).catch(e => notice(e.message));
         loadCommands(id);
       }
     } else if (packet.type === 'sessions') {
       receiveList(packet);
+    } else if (['workerSnapshot', 'workerPatch', 'workerNotice'].includes(packet.type)) {
+      receiveCoordinatorWorker(packet);
     } else if (packet.type === 'snapshot') {
       versions.set(packet.sessionId, packet.version);
       cache.set(packet.sessionId, packet.state);
@@ -1193,10 +1204,10 @@ async function selectSession(id, keepOrder = false) {
     notice(e.message);
   }
 }
-function clearThreadImages(keep = new Set()) {
-  for (const [id, image] of threadImages) if (!keep.has(id)) {
+function clearThreadImages(keep = new Set(), sessionId) {
+  for (const [id, image] of threadImages) if (!keep.has(id) && (sessionId === undefined || image.sessionId === sessionId)) {
     if (image.url && $('image-viewer').querySelector('img').src === image.url) $('image-viewer').close();
-    imageObserver.unobserve(image.node);
+    image.observer.unobserve(image.node);
     clearTimeout(image.retryTimer);
     if (image.url) URL.revokeObjectURL(image.url);
     threadImages.delete(id);
@@ -1236,7 +1247,7 @@ function showImage(href) {
 }
 function openImage(event) {
   event.preventDefault();
-  imageGallery = event.currentTarget.closest('#transcript, #attachments');
+  imageGallery = event.currentTarget.closest('#transcript, #attachments, #coordinator-log');
   imageViewer.showModal(); showImage(event.currentTarget.href); imageViewer.focus();
 }
 function stepImage(step) {
@@ -1280,16 +1291,16 @@ function loadThreadImage(image) {
     } finally { image.loading = false; image.button.disabled = false; }
   });
 }
-function appendThreadImages(parent, message, attachments) {
+function appendThreadImages(parent, message, attachments, sessionId = selected) {
   if (!message?.images?.length) return;
   const gallery = el('div', undefined, 'thread-images');
   gallery.dataset.scrollKey = 'images:' + message.id;
   for (const [index, reference] of message.images.entries()) {
     if ((!attachments && !/^[a-f0-9]{64}$/.test(reference.id)) || !IMAGE_TYPES.includes(reference.mimeType)) continue;
-    const key = message.id + ':' + index;
+    const key = (sessionId === selected ? '' : sessionId + ':') + message.id + ':' + index;
     let image = threadImages.get(key);
     if (image && image.id !== reference.id) {
-      imageObserver.unobserve(image.node);
+      image.observer.unobserve(image.node);
       clearTimeout(image.retryTimer);
       if (image.url) URL.revokeObjectURL(image.url);
       threadImages.delete(key); image = undefined;
@@ -1297,16 +1308,16 @@ function appendThreadImages(parent, message, attachments) {
     if (!image) {
       const node = el('div', undefined, 'thread-image'), button = el('button', 'Loading image…', 'secondary');
       button.type = 'button'; node.dataset.imageKey = key; node.append(button);
-      image = { key, id: reference.id, sessionId: selected, node, button };
+      image = { key, id: reference.id, sessionId, node, button, observer: sessionId === selected ? imageObserver : coordinatorImageObserver };
       button.addEventListener('click', () => loadThreadImage(image));
       threadImages.set(key, image);
       if (attachments?.[index]) showThreadImage(image, attachments[index].file);
-      else imageObserver.observe(node);
+      else image.observer.observe(node);
     } else if (!image.url && !image.loading && image.retryAt && !image.retryTimer) {
       // A live snapshot can precede Pi flushing the image to its session file.
       image.retryTimer = setTimeout(() => {
         image.retryTimer = undefined;
-        imageObserver.observe(image.node);
+        image.observer.observe(image.node);
       }, Math.max(0, image.retryAt - Date.now()));
     }
     gallery.append(image.node);
@@ -1467,7 +1478,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   const messages = [...(state.messages || [])], localImages = new Map(), localVideos = new Map(), keepVideos = new Set();
   if (state.coordination?.role === 'coordinator' && state.coordination.readOnly && !messages.length) {
     const intro = el('section', undefined, 'coordinator-intro');
-    intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Give all replies and instructions in this conversation. Expand Workers to inspect their read-only logs.'));
+    intro.append(el('h2', 'Read-only coordinator'), el('p', 'Ask for an investigation of this project. Up to two independent Pi sessions can work while you keep talking here. Give all replies and instructions in this conversation. Open Workers to inspect their read-only logs.'));
     fragment.append(intro);
   }
   const playing = [...threadVideos.values()].filter(video => video.player && !video.player.paused);
@@ -1492,7 +1503,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   }
   const usage = usageSummaries.get(selected);
   const usagePosition = usage ? messages.findIndex(message => message.id === usage.afterId) + 1 : -1;
-  clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => message.id + ':' + index))));
+  clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => message.id + ':' + index))), selected);
   const results = new Map(messages.filter(m => m.role === 'toolResult' && m.toolCallId).map(m => [m.toolCallId, m]));
   const tools = new Map((state.tools || []).map(tool => [tool.id, tool]));
   const rendered = new Set(), activityGroups = [];
@@ -1847,102 +1858,257 @@ function restartStalledDots() {
   dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
 }
 setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
-const coordinatorExpanded = new Map();
+const coordinatorLabels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
+  stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
 function renderCoordinator(state) {
   const role = state?.coordination, available = supportsCoordinator && !!state && !state.creation;
-  const worker = role?.role === 'worker';
-  $('coordinator-tasks').hidden = !available || role?.role !== 'coordinator' || !role.tasks.length;
+  const worker = role?.role === 'worker', tasks = role?.role === 'coordinator' ? role.tasks : [];
+  $('coordinator-tasks').hidden = !available || !tasks.length;
   $('coordinator-parent').hidden = !available || !worker;
   $('coordinator-tasks').disabled = !connected; $('coordinator-parent').disabled = !connected;
-  const context = $('coordinator-context');
-  context.hidden = !available || !role || role.role === 'coordinator' && !role.tasks.length;
+  $('coordinator-context').hidden = !available || !tasks.length;
   $('coordinator-inspection').hidden = !available || !worker;
-  if (context.hidden) return;
-  const ownerId = worker ? role.coordinatorId : state.id;
-  const ownerTitle = worker ? role.coordinatorTitle : state.title;
-  const tasks = worker ? role.tasks || cache.get(ownerId)?.coordination?.tasks || [role.task] : role.tasks;
-  if (context.dataset.coordinatorId !== ownerId) {
-    context.dataset.coordinatorId = ownerId;
-    $('coordinator-workers').open = coordinatorExpanded.get(ownerId) ?? true;
-  }
-  $('coordinator-inspection-note').textContent = worker ? 'Read-only worker log. Give instructions to ' + ownerTitle + ' in the main conversation.' : '';
-  $('coordinator-return').textContent = 'Return to ' + ownerTitle;
-  $('coordinator-return').disabled = !connected && !cache.has(ownerId);
-  const parent = $('coordinator-owner'); parent.disabled = !connected && !cache.has(ownerId);
-  parent.setAttribute('aria-label', 'Return to ' + ownerTitle + ' main conversation');
-  parent.querySelector('strong').textContent = ownerTitle;
-  if (worker) parent.removeAttribute('aria-current'); else parent.setAttribute('aria-current', 'page');
-  const key = JSON.stringify([state.id, ownerId, tasks, connected, $('coordinator-sheet').open]);
-  if (key === coordinatorRenderKey) return;
-  coordinatorRenderKey = key;
-  const labels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
-    stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
-  const links = $('coordinator-worker-links'), focused = links.querySelector('button:focus')?.dataset.workerId;
-  links.replaceChildren(); $('coordinator-worker-count').textContent = tasks.length;
+  $('coordinator-inspection-note').textContent = worker ? 'Read-only worker log. Give instructions to ' + role.coordinatorTitle + ' in the main conversation.' : '';
+  $('coordinator-return').textContent = worker ? 'Return to ' + role.coordinatorTitle : '';
+  $('coordinator-return').disabled = worker && !connected && !cache.has(role.coordinatorId);
+  $('coordinator-worker-count').textContent = tasks.length;
   const summary = [];
   for (const [states, label] of [[['starting', 'working', 'stopping'], 'working'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
     const count = tasks.filter(task => states.includes(task.state)).length;
     if (count) summary.push(count + ' ' + label);
   }
   $('coordinator-worker-summary').textContent = summary.join(' · ') || 'No active work';
+  if (!$('coordinator-sheet').open) return;
+  const key = JSON.stringify([selected, tasks, connected]);
+  if (key === coordinatorRenderKey) return;
+  coordinatorRenderKey = key;
+  $('coordinator-log-back').hidden = !coordinatorLog;
+  $('coordinator-task-list').hidden = !!coordinatorLog; $('coordinator-log').hidden = !coordinatorLog;
+  if (coordinatorLog) {
+    const task = tasks.find(task => task.sessionId === coordinatorLog.id);
+    if (!task) { $('coordinator-sheet').close(); return; }
+    $('coordinator-title').textContent = task.title;
+    $('coordinator-subtitle').textContent = coordinatorLabels[task.state] || task.state;
+    renderCoordinatorLog(); return;
+  }
+  $('coordinator-title').textContent = 'Workers';
+  $('coordinator-subtitle').textContent = summary.join(' · ') || 'No active work';
+  const list = $('coordinator-task-list'), focused = list.querySelector('button:focus')?.dataset.workerId;
+  list.replaceChildren();
   const active = new Set(['starting', 'working', 'waiting', 'stopping']);
-  const ordered = [...tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)));
-  for (const task of ordered) {
-    const button = el('button', undefined, 'coordinator-worker'); button.type = 'button';
-    button.dataset.workerId = task.id; button.dataset.state = task.state; button.disabled = !connected;
-    button.setAttribute('aria-label', task.title + ', ' + (labels[task.state] || task.state));
-    if (task.sessionId === selected) button.setAttribute('aria-current', 'page');
-    const name = el('strong', task.title); name.title = task.title;
-    const status = el('span', undefined, 'coordinator-worker-state'), marker = el('i'); marker.setAttribute('aria-hidden', 'true');
-    status.append(marker, el('span', labels[task.state] || task.state));
-    button.append(name, status, $('coordinator-workers').querySelector('summary svg').cloneNode(true));
-    button.addEventListener('click', () => { void selectSession(task.sessionId); }); links.append(button);
+  for (const task of [...tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)))) {
+    const row = el('div'); row.setAttribute('role', 'listitem'); row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
+    const button = el('button', undefined, 'coordinator-worker'); button.type = 'button'; button.dataset.workerId = task.id;
+    button.dataset.state = task.state; button.setAttribute('aria-label', task.title + ', ' + (coordinatorLabels[task.state] || task.state));
+    const name = el('span'); name.append(el('strong', task.title), el('small', coordinatorLabels[task.state] || task.state));
+    const arrow = $('coordinator-open').querySelector('svg').cloneNode(true); button.append(name, arrow);
+    button.addEventListener('click', () => openCoordinatorWorker(task.sessionId)); row.append(button); list.append(row);
     if (focused === task.id) button.focus({ preventScroll: true });
   }
-  if (!tasks.length) links.append(el('p', 'Your workers will appear here when you assign an investigation.', 'hint'));
-  if (!$('coordinator-sheet').open || worker) return;
-  const list = $('coordinator-task-list'); list.replaceChildren();
-  if (!tasks.length) { list.append(el('p', 'No tasks yet. Ask the coordinator to investigate something in this project.', 'hint')); return; }
-  for (const task of tasks) {
-    const row = el('article', undefined, 'coordinator-task'); row.setAttribute('role', 'listitem');
-    row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
-    const heading = el('header'); heading.append(el('h3', task.title), el('span', labels[task.state] || task.state));
-    const assignment = el('details'); assignment.append(el('summary', 'Assignment'), el('p', task.instruction));
-    row.append(heading, assignment);
-    if (task.state === 'waiting' && task.question) {
-      const question = el('section'); question.append(el('h4', 'Question for coordinator'), el('p', task.question)); row.append(question);
-    }
-    if (task.result) {
-      const report = el('details'); report.open = task.state === 'reported';
-      report.append(el('summary', task.state === 'reported' ? 'Returned result' : 'Last result'), el('p', task.result)); row.append(report);
-    }
-    if (task.error) row.append(el('p', task.error, 'coordinator-task-warning'));
-    if (task.delivery === 'unknown') row.append(el('p', 'Notification delivery is uncertain. Inspect the worker before repeating an action.', 'coordinator-task-warning'));
-    const actions = el('div', undefined, 'coordinator-task-actions');
-    const open = el('button', 'View worker log', 'quiet'); open.type = 'button';
-    open.disabled = !connected; open.addEventListener('click', () => { $('coordinator-sheet').close(); void selectSession(task.sessionId); }); actions.append(open);
-    row.append(actions); list.append(row);
+  if (!tasks.length) list.append(el('p', 'No workers yet.', 'hint'));
+}
+function stopCoordinatorWorker() {
+  if (!coordinatorLog) return;
+  coordinatorPositions.set(coordinatorLog.id, $('coordinator-scroll').scrollTop);
+  clearThreadImages(new Set(), coordinatorLog.id);
+  coordinatorLog = undefined;
+  if (connected && supportsWorkerInspection) request('inspectWorker', { sessionId: null }).catch(() => {});
+}
+function watchCoordinatorWorker(log) {
+  log.error = undefined;
+  if (!connected) { log.error = 'Computer disconnected. Reconnect to load this log.'; renderCoordinatorLog(); return; }
+  if (!supportsWorkerInspection) { log.error = 'Live worker logs need the pending host update. Task details are available below.'; renderCoordinatorLog(); return; }
+  request('inspectWorker', { sessionId: log.id }).catch(error => {
+    if (coordinatorLog !== log) return;
+    log.error = error.message; renderCoordinatorLog();
+  });
+}
+function openCoordinatorWorker(id) {
+  stopCoordinatorWorker();
+  coordinatorPositions.set('roster:' + selected, $('coordinator-scroll').scrollTop);
+  $('coordinator-log').replaceChildren();
+  coordinatorLog = { id, state: cache.get(id), scrollTop: coordinatorPositions.get(id) || 0 };
+  coordinatorRenderKey = undefined; renderCoordinator(cache.get(selected));
+  $('coordinator-log-back').focus({ preventScroll: true });
+  watchCoordinatorWorker(coordinatorLog);
+}
+function receiveCoordinatorWorker(packet) {
+  const log = coordinatorLog;
+  if (!log || packet.sessionId !== log.id || !$('coordinator-sheet').open) return;
+  if (packet.type === 'workerNotice') log.error = packet.error;
+  else {
+    try {
+      if (packet.type === 'workerPatch' && (!log.state || log.version + 1 !== packet.version)) throw new Error('Resync');
+      log.state = packet.type === 'workerSnapshot' ? packet.state : patchState(log.state, packet.patch);
+      log.version = packet.version; log.error = undefined; cache.set(log.id, log.state);
+    } catch { watchCoordinatorWorker(log); return; }
   }
+  renderCoordinatorLog();
+}
+async function loadCoordinatorHistory(direction) {
+  const log = coordinatorLog;
+  if (!log?.state || log.loading || !connected) return;
+  const messages = log.history?.messages || log.state.messages;
+  const cursor = direction === 'before' ? messages[0] : messages.at(-1);
+  if (!cursor) return;
+  log.loading = true; log.error = undefined; renderCoordinatorLog();
+  try {
+    const page = await request('history', { sessionId: log.id, [direction]: cursor.id, expectedTip: log.history?.tip });
+    if (coordinatorLog !== log) return;
+    log.history = page; log.scrollTop = 0; log.rendered = false;
+  } catch (error) { if (coordinatorLog === log) log.error = error.message; }
+  finally { if (coordinatorLog === log) { log.loading = false; renderCoordinatorLog(); } }
+}
+function renderCoordinatorLog() {
+  const log = coordinatorLog;
+  if (!log || !$('coordinator-sheet').open) return;
+  const task = cache.get(selected)?.coordination?.tasks?.find(task => task.sessionId === log.id);
+  if (!task) return;
+  const box = $('coordinator-log'), scroll = $('coordinator-scroll'), oldTop = log.rendered ? scroll.scrollTop : log.scrollTop;
+  const bottom = log.rendered && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
+  const expanded = new Map([...box.querySelectorAll('details')].map(node => [node.dataset.disclosureId, node.open]));
+  const focused = box.contains(document.activeElement) ? document.activeElement.closest('details')?.dataset.disclosureId : undefined;
+  const fragment = document.createDocumentFragment();
+  const detail = (id, label) => {
+    const node = el('details', undefined, 'coordinator-log-detail'); node.dataset.disclosureId = id; node.open = expanded.get(id) || false;
+    node.append(el('summary', label)); return node;
+  };
+  const meta = detail('task', 'Task details');
+  meta.append(el('h3', 'Assignment'), el('p', task.instruction));
+  if (task.state === 'waiting' && task.question) meta.append(el('h3', 'Question for coordinator'), el('p', task.question));
+  if (task.result) meta.append(el('h3', task.state === 'reported' ? 'Returned result' : 'Last result'), el('p', task.result));
+  if (task.error) meta.append(el('p', task.error, 'coordinator-task-warning'));
+  if (task.delivery === 'unknown') meta.append(el('p', 'Notification delivery is uncertain. Ask the coordinator to inspect before repeating an action.', 'coordinator-task-warning'));
+  if (!connected) fragment.append(el('p', 'Computer disconnected. Reconnect to update this log.', 'hint'));
+  if (log.error) {
+    fragment.append(el('p', log.error, 'coordinator-task-warning'));
+    const retry = el('button', 'Retry loading log', 'quiet'); retry.type = 'button'; retry.disabled = !connected || !supportsWorkerInspection;
+    retry.addEventListener('click', () => watchCoordinatorWorker(log)); fragment.append(retry);
+  }
+  fragment.append(meta);
+  if (!log.state) fragment.append(el('p', log.error ? 'Task details are available above.' : 'Loading worker log…', 'hint'));
+  else {
+    const state = log.state, messages = log.history?.messages || state.messages || [];
+    const page = el('div', undefined, 'coordinator-log-pages');
+    const pageButton = (label, action) => {
+      const button = el('button', label, 'quiet'); button.type = 'button'; button.disabled = !connected || log.loading;
+      button.addEventListener('click', action); page.append(button);
+    };
+    if (log.history?.older ?? state.historyTruncated) pageButton('Earlier messages', () => loadCoordinatorHistory('before'));
+    if (log.history) pageButton('Latest messages', () => { log.history = undefined; log.rendered = false; log.scrollTop = 0; renderCoordinatorLog(); });
+    if (log.loading) page.append(el('p', 'Loading messages…', 'hint'));
+    fragment.append(page);
+    clearThreadImages(new Set(messages.flatMap(message => (message.images || []).map((_, index) => log.id + ':' + message.id + ':' + index))), log.id);
+    const results = new Map(messages.filter(message => message.role === 'toolResult').map(message => [message.toolCallId || message.id, message]));
+    const tools = new Map((log.history ? [] : state.tools || []).map(tool => [tool.id, tool])), rendered = new Set();
+    const appendTool = (id, name, input, result) => {
+      if (rendered.has(id)) return;
+      rendered.add(id);
+      const live = tools.get(id), status = result ? result.isError ? 'error' : 'done' : live?.status || 'pending';
+      let args;
+      try { args = JSON.parse(input || '{}'); } catch { /* Input may still be streaming. */ }
+      const context = typeof args?.path === 'string' ? args.path : typeof args?.pattern === 'string' ? args.pattern : '';
+      const label = (name || live?.name || 'Tool') + (status === 'error' ? ' failed' : '') + (context ? ' · ' + displayPaths(context) : '');
+      const node = detail('tool:' + id, label); node.dataset.status = status;
+      node.append(el('p', status === 'error' ? 'Failed' : status === 'done' ? 'Complete' : 'Running…', 'hint'));
+      if (input) node.append(el('pre', displayPaths(input), 'tool-input'));
+      node.append(el('pre', displayPaths(result?.text || live?.text || 'No output yet.'), 'tool-output'));
+      if (result?.truncated) node.append(el('p', 'Output shortened for mobile.', 'hint'));
+      appendThreadImages(node, result, undefined, log.id); fragment.append(node);
+    };
+    for (const message of messages) {
+      if (message.role === 'toolResult') { appendTool(message.toolCallId || message.id, message.toolName, '', message); continue; }
+      if (message.text || message.images?.length || message.role === 'user') {
+        const instruction = message.role === 'user', article = el('article', undefined, 'message assistant');
+        article.dataset.messageId = message.id; article.setAttribute('aria-label', instruction ? 'Instruction to worker' : 'Pi');
+        const body = el('div', undefined, 'message-text');
+        if (instruction) { article.append(el('p', 'Instruction to worker', 'coordinator-instruction-label')); body.textContent = userMessageText(message); }
+        else {
+          body.innerHTML = markdown.render(message.text || '');
+          for (const link of body.querySelectorAll('a')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+          for (const [index, node] of [...body.querySelectorAll('details')].entries()) {
+            node.dataset.disclosureId = message.id + ':' + index; node.open = expanded.get(node.dataset.disclosureId) ?? node.open;
+          }
+        }
+        article.append(body); appendThreadImages(article, message, undefined, log.id); fragment.append(article);
+      }
+      if (message.stopReason === 'error') fragment.append(el('p', 'Worker reply failed. Give instructions in the main conversation.', 'coordinator-task-warning'));
+      for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
+      if (message.truncated) fragment.append(el('p', 'Message shortened for mobile.', 'hint'));
+    }
+    for (const tool of tools.values()) if (tool.status !== 'done') appendTool(tool.id, tool.name, '', results.get(tool.id));
+    if (state.error) fragment.append(el('p', state.error, 'coordinator-task-warning'));
+    if (log.history?.newer) {
+      const next = el('button', 'Newer messages', 'quiet'); next.type = 'button'; next.disabled = !connected || log.loading;
+      next.addEventListener('click', () => loadCoordinatorHistory('after')); fragment.append(next);
+    }
+  }
+  box.replaceChildren(fragment);
+  renderDiagrams(box, openImage, () => { if (bottom) scroll.scrollTop = scroll.scrollHeight; }, log.id);
+  if (focused) [...box.querySelectorAll('details')].find(node => node.dataset.disclosureId === focused)?.querySelector('summary').focus({ preventScroll: true });
+  scroll.scrollTop = bottom ? scroll.scrollHeight : oldTop; log.rendered = true;
 }
 function openCoordinatorTasks() {
+  if (cache.get(selected)?.coordination?.role !== 'coordinator') return;
   document.querySelector('.session-info').open = false;
-  coordinatorRenderKey = undefined;
-  $('coordinator-sheet').showModal(); renderCoordinator(cache.get(selected));
+  stopCoordinatorWorker(); resetCoordinatorDrag(); coordinatorRenderKey = undefined;
+  $('coordinator-sheet').showModal(); $('coordinator-open').setAttribute('aria-expanded', 'true');
+  renderCoordinator(cache.get(selected)); $('coordinator-scroll').scrollTop = 0;
 }
 function returnToCoordinator() {
   const owner = cache.get(selected)?.coordination?.coordinatorId;
   if (owner) void selectSession(owner);
 }
-$('coordinator-owner').addEventListener('click', () => { void selectSession($('coordinator-context').dataset.coordinatorId); });
-$('coordinator-workers').addEventListener('toggle', () => {
-  const owner = $('coordinator-context').dataset.coordinatorId;
-  if (owner) coordinatorExpanded.set(owner, $('coordinator-workers').open);
-});
+$('coordinator-open').addEventListener('click', openCoordinatorTasks);
 $('coordinator-return').addEventListener('click', returnToCoordinator);
 $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
 $('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
+$('coordinator-conversation').addEventListener('click', () => $('coordinator-sheet').close());
+$('coordinator-log-back').addEventListener('click', () => {
+  const id = coordinatorLog?.id;
+  stopCoordinatorWorker(); coordinatorRenderKey = undefined; renderCoordinator(cache.get(selected));
+  $('coordinator-scroll').scrollTop = coordinatorPositions.get('roster:' + selected) || 0;
+  [...$('coordinator-task-list').querySelectorAll('button')].find(button => button.dataset.workerId === cache.get(selected)?.coordination?.tasks.find(task => task.sessionId === id)?.id)?.focus({ preventScroll: true });
+});
 $('coordinator-sheet').addEventListener('click', event => { if (event.target === $('coordinator-sheet')) $('coordinator-sheet').close(); });
+$('coordinator-sheet').addEventListener('close', () => { stopCoordinatorWorker(); resetCoordinatorDrag(); $('coordinator-open').setAttribute('aria-expanded', 'false'); });
+function resetCoordinatorDrag() {
+  coordinatorDrag = undefined; coordinatorDragAnimation?.cancel(); coordinatorDragAnimation = undefined;
+  document.querySelector('.coordinator-sheet').style.transform = '';
+}
+function releaseCoordinatorDrag(dismiss) {
+  const drag = coordinatorDrag; coordinatorDrag = undefined;
+  if (!drag?.dragging) return;
+  if (reducedMotion()) { resetCoordinatorDrag(); if (dismiss) $('coordinator-sheet').close(); return; }
+  const surface = document.querySelector('.coordinator-sheet'), end = dismiss ? Math.max(surface.offsetHeight, drag.distance) : 0;
+  const animation = surface.animate({ transform: [`translateY(${drag.distance}px)`, `translateY(${end}px)`] },
+    { duration: 180, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'forwards' });
+  coordinatorDragAnimation = animation;
+  animation.finished.then(() => { if (coordinatorDragAnimation === animation) { if (dismiss) $('coordinator-sheet').close(); else resetCoordinatorDrag(); } }, () => {});
+}
+const coordinatorSurface = document.querySelector('.coordinator-sheet');
+coordinatorSurface.addEventListener('touchstart', event => {
+  if (coordinatorDragAnimation || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1 ||
+    $('coordinator-scroll').contains(event.target) && $('coordinator-scroll').scrollTop > 0) return;
+  const touch = event.touches[0]; coordinatorDrag = { x: touch.clientX, y: touch.clientY, distance: 0, dragging: false };
+}, { passive: true });
+coordinatorSurface.addEventListener('touchmove', event => {
+  if (!coordinatorDrag) return;
+  if (event.touches.length !== 1) { releaseCoordinatorDrag(false); return; }
+  const dx = event.touches[0].clientX - coordinatorDrag.x, dy = event.touches[0].clientY - coordinatorDrag.y;
+  if (!coordinatorDrag.dragging) {
+    if (dy < -12 || Math.abs(dx) > 12 && Math.abs(dx) >= Math.abs(dy)) { coordinatorDrag = undefined; return; }
+    if (dy < 12 || dy < Math.abs(dx) * 1.25) return;
+    coordinatorDrag.dragging = true; coordinatorSurface.getAnimations().forEach(animation => animation.cancel());
+  }
+  event.preventDefault(); coordinatorDrag.distance = Math.max(0, dy); coordinatorSurface.style.transform = `translateY(${coordinatorDrag.distance}px)`;
+}, { passive: false });
+coordinatorSurface.addEventListener('touchend', event => {
+  if (!coordinatorDrag?.dragging) { coordinatorDrag = undefined; return; }
+  event.preventDefault(); releaseCoordinatorDrag(coordinatorDrag.distance > Math.min(100, coordinatorSurface.offsetHeight / 4));
+}, { passive: false });
+coordinatorSurface.addEventListener('touchcancel', () => releaseCoordinatorDrag(false));
 
 function updateControls() {
   $('session-close').hidden = !supportsSessionClosing || !selected || !!cache.get(selected)?.creation;

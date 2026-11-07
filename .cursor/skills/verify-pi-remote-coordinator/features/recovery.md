@@ -22,11 +22,12 @@ Preconditions: passing coordinator proof through result acceptance and scoped St
 
 - Reload using `page.reload()`, reopen **Coordinator verification project**, then **Background tasks**. Require First inspection's accepted report and Second inspection's stopped state.
 - Send `Start an interrupted task.`. Require **Interrupted inspection** to be working and the coordinator to have finished its response.
-- Stop the owned fixture server with SIGTERM, wait for exit, and launch `test/coordinator-server.mjs` with the same `PI_COORDINATOR_FIXTURE_ROOT`. Require a new server PID and passing Doctor.
-- Reload and reopen tasks. Require **Needs inspection** for interrupted work. Compare persisted user-prompt counts, coordinator event markers, and native provider request counts before and after restart. None may increase just because recovery ran.
+- Keep Interrupted inspection's log open in the bottom sheet. Stop the owned fixture server with SIGTERM, wait for exit, and launch `test/coordinator-server.mjs` with the same `PI_COORDINATOR_FIXTURE_ROOT`. Require a new server PID and passing Doctor.
+- Require the open sheet to reconnect automatically and show **Needs inspection** without replacing the selected parent. Then reload and reopen tasks. Compare persisted user-prompt counts, coordinator event markers, and native provider request counts before and after restart. None may increase just because recovery ran.
 - At the production scoped HTTP interface, replay the original assignment and report with their original request IDs. Require the same task count, event count, and accepted result. A fresh late report from the stopped worker must fail.
 - Create a fresh ordinary session in the same project and delegate from it. Its capability cannot inspect the first session's task. A normal-session capability paired with another session ID must fail, as must a previous process's capability after restart. Worker attempts at coordinator actions and cross-origin requests must also fail.
 - Through the real client socket, send prompt, steering, follow-up, abort, model, reasoning, compaction, and dialog-answer attempts directly to a worker. Require the exact safe read-only error, unchanged task state, and no new worker prompt. Test again after restart and at capacity. The actual serialized response, not just a status flag, is the proof.
+- At the real client socket, require worker inspection and history to work only for a child of the selected parent. Reject parent/non-worker IDs and another owner's child. Resyncing the same parent must preserve inspection; selecting another conversation must clear it and its history access.
 - Check real Pi tool results for denied outside and symlink reads and unavailable write/bash. Verify original project hashes, unchanged directory entries, private state mode 0600, and absence of capability tokens in browser frames. The full proof performs these checks.
 
 ## Gotchas

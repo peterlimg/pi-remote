@@ -48,16 +48,16 @@ Doctor checks the process exists, the authenticated control endpoint identifies 
 
 ## Drive
 
-The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 390 × 844. The stable user path is:
+Set `PI_REMOTE_TEST_CHANNEL=chrome` to use installed Chrome instead of bundled Chromium. The full proof uses `@playwright/test` Chromium with the iPhone 13 profile at 390 × 844. The stable user path is:
 
 1. **Paste a private link instead**, fill **Private login link** with `browser-test-token-only-123456789012345`, then **Connect to computer**.
 2. Open **Coordinator verification project**.
 3. Require the original title and existing conversation note, no coordinator setup button, and no Workers tree. Send `Read alpha before delegating.` and require an ordinary read with no coordinator membership or workers.
 4. Send `Investigate both fixture files.` using the normal Message field and Send message control. Require the same parent ID, file, history prefix, model, and full ordinary tools. No separate coordinator file may appear.
-5. In C's collapsible **Workers** tree immediately above the composer, **First inspection** needs an answer while **Second inspection** remains working. The main conversation presents the question. Neither worker appears in global session sections, even if pinned; explicit search still finds them.
+5. Open the compact **Workers** row immediately above the composer. In its translucent bottom sheet, **First inspection** needs an answer while **Second inspection** remains working. The main conversation presents the question. Neither worker appears in global session sections, even if pinned; explicit search still finds them.
 6. Send `Keep the original identifier.` in the coordinator. Require a task-addressed reply and a returned report. Send `Review and accept the first result.` in the same conversation.
-7. Inspect First inspection's read-only log. Require no composer or permission inputs, and preserve the main draft and attachment. From a second coordinator tab send `Stop Second inspection.`. Require the inspected worker's sibling tree to update live, then **Return to coordinator**.
-8. Use **Session details → Background tasks** for read-only task records. Reload and reselect the coordinator to read the persisted accepted and stopped states. Native touch and keyboard disclosure controls must preserve their choice during status updates and inspection.
+7. Inspect First inspection's read-only log in the sheet. Require no inputs inside it, and preserve the selected parent, composer, draft, attachment, and main reading position behind it. Send the task reply from another parent tab and require both parent and worker streams to update. Send `Stop Second inspection.` there, return to the roster, and require its stopped state. **Return to conversation** dismisses without switching sessions.
+8. Use **Task details** inside a worker log for read-only assignments and reports. **Session details → Background tasks** opens the same roster. Require bounded phone/narrow/short/desktop geometry, translucent material with opaque content, upward entry without overlay scroll, short/cancelled pull snap-back, deliberate pull-down dismissal, and native log scrolling. Reload to inspect persisted accepted and stopped states; an open sheet must also reconnect across the fixture host restart.
 
 The proof also creates an ordinary fresh session through **/new**, asks `Start independent inspection.`, and requires separate ownership despite sharing the first session's project. It repeats that prompt in **Terminal verification project** and requires the worker question to arrive through the real terminal bridge. The feature map contains the restart and permission cases. Inspect `test/coordinator-e2e.mjs` before narrowing its proof claims. Its secondary HTTP checks exercise the production scoped extension interface, not test-only mutation endpoints.
 
@@ -91,5 +91,6 @@ Keep the evidence directory. Never kill by process name or delete other `pi-*` d
 - `npm run test:coordinator` runs the complete proof in `test/coordinator-e2e.mjs`.
 - `node test/coordinator-e2e.mjs doctor PID URL` runs the read-only instance check.
 - `node test/coordinator-server.mjs` launches the isolated fixture for manual drives.
+- `npx playwright test test/browser/worker-sheet.spec.mjs --trace off` checks paged worker history, scoped image loading, disclosure preservation, and the live parent through the browser WebSocket seam. This UI-only fixture does not replace the native proof's authorization and process checks.
 
 Use `/maintain-verification-skill` to keep this map aligned with future coordinator changes.

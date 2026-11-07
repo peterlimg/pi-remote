@@ -5,16 +5,18 @@ primary_target: "web/index.html"
 related_targets: ["web/app.js", "web/style.css"]
 ---
 
-# Production conversation hierarchy
+# Production conversation and worker inspection
 
-Operate mode. Preserve Pi Remote typography, themes, navigation, and the production composer.
+Operate mode. Preserve Pi Remote typography, themes, navigation, and the exact production composer.
 
-Any ordinary conversation can coordinate workers when asked. No setup button, special mode, or replacement conversation. Preserve the parent's identity, history, model, instructions, and tools; show the tree only once it has workers. Independent conversations belong in the global list. Coordinator workers are children, not peer conversations. Use the selected C hierarchy immediately above the composer, outside its form: a native Workers disclosure, a main-conversation parent row, and indented worker rows with live states. Keep the same hierarchy during read-only log inspection. Full assignments and reports use the existing read-only Background tasks inspector.
+Any ordinary conversation can coordinate workers when asked, without setup, a special mode, or replacement conversation. Preserve the parent's identity, history, model, instructions, and tools. Independent conversations belong in the global list; workers remain children.
 
-Worker navigation is a collapsible, unboxed vertical tree. Preserve its disclosure choice while switching between owner and child and while task states update. Its collapsed row keeps working, question, report, and uncertainty counts visible. No cards, tinted tiles, preview panels, or pill containers. Keep names and states readable and touch targets at least 44 pixels.
+The selected pane D direction replaces the earlier C tree with one compact Workers row immediately above and outside the composer. Show working, question, report, and uncertainty counts once workers exist. It opens a translucent bottom sheet, then a plain roster and read-only logs. Use rounded top corners, a grab handle, 74% background tint, 10px blur, and opaque content. The sheet rises from below and pulls down to dismiss. Short/cancelled pulls snap back; a scrolled log retains native vertical scrolling. Respect reduced motion and zoom.
 
-All human replies and commands belong in the coordinator conversation. Worker views have no composer, model controls, permission-response form, or direct Stop. Show a read-only explanation and an explicit return to the coordinator. Preserve the main draft and attachments during inspection. Worker instructions are labeled neutrally rather than appearing as user-authored bubbles. The host also rejects direct worker input; trusted coordinator tools retain their scoped control.
+Keep the modal overlay stationary with overflow clipping. Bound the sheet to 640px wide and min(72dvh, 640px) high, including short and keyboard-sized viewports. Preserve readable names, at least 44px targets, keyboard focus, disclosure state, and worker log reading positions. Roster rows are transparent and square-cornered, without cards or shadows.
 
-Conversation and composer remain the primary task area. Keep scroll-to-latest and session-swipe controls above the worker dock, never over its targets. Keep the worker group bounded on short viewports, preserve keyboard focus during status updates, and distinguish waiting questions, returned reports, accepted results, and interrupted work with text.
+Inspect a worker through a separate read-only stream while the parent remains selected and live. No worker composer, model controls, permission inputs, direct Stop, or result acceptance. Task details distinguish assignments, questions, returned reports, accepted results, and uncertainty. Instructions use neutral labels rather than apparent human bubbles. All human replies and commands stay in the main conversation, enforced by the host as well as the UI.
 
-C is the user-selected production direction. Do not bring the working-answer document, revision history, synthetic quick replies, or prototype switcher into live chat.
+Back returns to the roster. Close, Escape, the background, Return to conversation, and deliberate downward pulls dismiss without changing the main draft, attachments, composer, or reading position. Explicit session search may still open the existing read-only worker view with its return-to-parent control.
+
+Keep scroll-to-latest and session-swipe controls above the compact row. Do not add prototype comparison controls, sample data, synthetic prompt routing, working-answer documents, or revision history to production. The selected pane D bottom sheet is unrelated to the rejected stack D working-answer study.

@@ -30,6 +30,7 @@ async function doctor(pid, url) {
   try {
     await until(() => client.messages.some(packet => packet.type === 'ready'));
     assert.equal(client.messages.find(packet => packet.type === 'ready').supportsCoordinator, true);
+    assert.equal(client.messages.find(packet => packet.type === 'ready').supportsWorkerInspection, true);
     const page = await client.request('list', { limit: 100 });
     const sessions = page.value.sessions || page.value.changes;
     assert(sessions.some(session => session.title === 'Coordinator verification project'));
@@ -100,7 +101,12 @@ if (process.argv[2] === 'doctor') {
     await page.getByLabel('Session details', { exact: true }).click();
     await page.getByRole('button', { name: 'Background tasks', exact: true }).click(); await check(page.locator('#coordinator-sheet')).toBeVisible();
   };
-  const closeTasks = () => page.getByRole('button', { name: 'Done', exact: true }).click();
+  const closeTasks = () => page.getByRole('button', { name: 'Close workers', exact: true }).click();
+  const openLog = async name => {
+    await taskRow(name).getByRole('button').click();
+    await check(page.locator('#coordinator-title')).toHaveText(name);
+    await check(page.locator('#coordinator-log')).toBeVisible();
+  };
   const assertHierarchy = async () => {
     const client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
     try {
@@ -116,11 +122,14 @@ if (process.argv[2] === 'doctor') {
       const search = await client.request('list', { limit: 100, query: 'First inspection' });
       assert((search.value.sessions || search.value.changes).some(row => row.id === tasks[0].sessionId), 'Workers must remain searchable');
       await client.request('pin', { sessionId: tasks[0].sessionId, pinned: false });
-      const region = page.getByRole('region', { name: 'Workers', exact: true });
+      await check(page.locator('#coordinator-context')).toBeVisible();
+      await page.locator('#coordinator-open').click();
+      await check(taskRow('First inspection')).toBeVisible(); await check(taskRow('Second inspection')).toBeVisible();
       const hierarchy = {
         globalListHasOnlyRoots: roots.every(result => result.onlyRoots),
-        workersVisibleInChat: await region.count() === 1 && (await region.innerText()).includes('First inspection') && (await region.innerText()).includes('Second inspection')
+        workersVisibleInChat: await page.locator('#coordinator-sheet').isVisible()
       };
+      await closeTasks();
       save('hierarchy.json', { ...hierarchy, sections: roots });
       assert.deepEqual(hierarchy, { globalListHasOnlyRoots: true, workersVisibleInChat: true });
       record('workers belong to their coordinator, not global list sections');
@@ -150,7 +159,7 @@ if (process.argv[2] === 'doctor') {
       dirtyPaths: execFileSync('git', ['status', '--short'], { encoding: 'utf8' }), fixture: 'real host and Pi runtime; deterministic model provider' });
     save('doctor.json', await doctor(initial.pid, url));
     const original = ['alpha.txt', 'beta.txt'].map(file => hash(readFileSync(join(root, 'project', file))));
-    browser = await chromium.launch();
+    browser = await chromium.launch({ channel: process.env.PI_REMOTE_TEST_CHANNEL });
     context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
     page = await context.newPage(); observe(page);
     await page.goto(url); await page.getByText('Paste a private link instead', { exact: true }).click();
@@ -203,32 +212,33 @@ if (process.argv[2] === 'doctor') {
       await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
       if (height < 600) await page.locator('#prompt').focus(); else await page.locator('#prompt').blur();
       const workers = page.getByRole('region', { name: 'Workers', exact: true });
-      await check(workers.getByRole('button', { name: 'First inspection, Needs answer', exact: true })).toBeVisible();
-      await check(workers.getByRole('button', { name: 'Second inspection, Working', exact: true })).toBeVisible();
+      await check(page.locator('#coordinator-worker-summary')).toHaveText('1 working · 1 needs answer');
       const measured = await page.evaluate(() => {
         const rect = id => { const box = document.getElementById(id).getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height }; };
-        return { workers: rect('coordinator-context'), transcript: rect('transcript'), composer: rect('composer'),
-          overflow: document.documentElement.scrollWidth > innerWidth,
-          namesReadable: [...document.querySelectorAll('#coordinator-worker-links strong')].every(node => node.scrollWidth <= node.clientWidth + 1),
-          unboxed: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => {
-            const style = getComputedStyle(node); return style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderRadius === '0px' && style.boxShadow === 'none';
-          }),
-          targets: [...document.querySelectorAll('#coordinator-worker-links button')].every(node => { const box = node.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; }) };
+        return { workers: rect('coordinator-context'), transcript: rect('transcript'), composer: rect('composer'), overflow: document.documentElement.scrollWidth > innerWidth };
       });
-      assert(!measured.overflow && measured.targets && measured.unboxed && measured.namesReadable && measured.transcript.height >= 80);
-      assert(measured.workers.height <= Math.min(height * .36, 280) + 1, 'The session tree must stay bounded');
-      assert.equal(await page.locator('#coordinator-worker-links').evaluate(node => getComputedStyle(node).borderLeftWidth), '1px');
-      await check(page.locator('#coordinator-owner')).toHaveAttribute('aria-current', 'page');
+      assert(!measured.overflow && measured.transcript.height >= 80 && measured.workers.height <= 48);
       assert(measured.transcript.bottom <= measured.workers.top + 1 && measured.workers.bottom <= measured.composer.top + 1);
       assert(measured.composer.top - measured.workers.bottom <= 12 && measured.composer.bottom <= height + 1);
-      layout.push({ name, width, height, colorScheme, ...measured }); await snapshot(name);
-      const disclosure = page.locator('#coordinator-workers'), toggle = disclosure.locator('summary');
-      await toggle.click(); await check(disclosure).toHaveJSProperty('open', false);
-      await check(page.locator('#coordinator-worker-links button:visible')).toHaveCount(0);
-      await check(page.locator('#coordinator-worker-summary')).toHaveText('1 working · 1 needs answer');
-      assert((await workers.boundingBox()).height <= 48, 'Collapsed workers must fit one touch-height row');
-      await snapshot(name + '-collapsed');
-      await toggle.focus(); await page.keyboard.press('Space'); await check(disclosure).toHaveJSProperty('open', true);
+      await snapshot(name + '-main');
+      await page.locator('#coordinator-open').focus(); await page.keyboard.press('Space');
+      await check(page.locator('#coordinator-sheet')).toBeVisible();
+      await check(page.getByRole('button', { name: 'First inspection, Needs answer', exact: true })).toBeVisible();
+      await check(page.getByRole('button', { name: 'Second inspection, Working', exact: true })).toBeVisible();
+      const sheet = await page.locator('.coordinator-sheet').evaluate(node => {
+        const style = getComputedStyle(node), box = node.getBoundingClientRect(), rows = [...node.querySelectorAll('.coordinator-worker')];
+        return { top: box.top, bottom: box.bottom, width: box.width, height: box.height, background: style.backgroundColor, blur: style.backdropFilter,
+          foreground: getComputedStyle(node.querySelector('header')).opacity, modal: node.parentElement.matches(':modal'),
+          namesReadable: rows.every(row => { const name = row.querySelector('strong'); return name.scrollWidth <= name.clientWidth + 1; }),
+          unboxed: rows.every(row => { const css = getComputedStyle(row); return css.backgroundColor === 'rgba(0, 0, 0, 0)' && css.borderRadius === '0px' && css.boxShadow === 'none'; }),
+          targets: rows.every(row => row.getBoundingClientRect().height >= 44) };
+      });
+      assert(sheet.modal && sheet.namesReadable && sheet.unboxed && sheet.targets);
+      assert(sheet.height <= Math.min(height * .72, 640) + 1 && sheet.bottom <= height + 1 && sheet.top > 0 && sheet.width <= Math.min(width, 640));
+      assert.match(sheet.background, /0\.74/); assert.equal(sheet.blur, 'blur(10px)'); assert.equal(sheet.foreground, '1');
+      layout.push({ name, width, height, colorScheme, ...measured, sheet }); await snapshot(name);
+      await page.keyboard.press('Escape'); await check(page.locator('#coordinator-sheet')).toBeHidden();
+      await check(page.locator('#coordinator-open')).toHaveAttribute('aria-expanded', 'false');
       if (height < 600) {
         await page.locator('#transcript').evaluate(node => node.scrollTo(0, 0));
         await check(page.getByRole('button', { name: 'Go to thread bottom', exact: true })).toBeVisible();
@@ -242,6 +252,55 @@ if (process.argv[2] === 'doctor') {
     }
     save('worker-layout.json', layout);
     await page.locator('#prompt').blur(); await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
+    const touchClient = await context.newCDPSession(page);
+    const touch = (type, x, y) => touchClient.send('Input.dispatchTouchEvent', { type, touchPoints: ['touchEnd', 'touchCancel'].includes(type) ? [] : [{ x, y }] });
+    for (const reducedMotion of ['no-preference', 'reduce']) {
+      await page.emulateMedia({ reducedMotion });
+      await page.locator('#coordinator-open').click();
+      await check(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+      const surface = page.locator('.coordinator-sheet'), header = await surface.locator('header').boundingBox();
+      const x = header.x + header.width / 2, y = header.y + 32, resting = Math.round((await surface.boundingBox()).y);
+      await touch('touchStart', x, y); await touch('touchMove', x, y + 24); await touch('touchMove', x, y + 64);
+      assert((await surface.boundingBox()).y > resting + 40);
+      await touch('touchCancel'); await check.poll(async () => Math.round((await surface.boundingBox()).y)).toBe(resting);
+      await touch('touchStart', x, y); await touch('touchMove', x, y + 24); await touch('touchEnd');
+      await check.poll(async () => Math.round((await surface.boundingBox()).y)).toBe(resting);
+      await openLog('First inspection');
+      await check(page.locator('#coordinator-log .coordinator-instruction-label').first()).toBeVisible();
+      const scroll = page.locator('#coordinator-scroll'), body = await scroll.boundingBox(), sy = body.y + body.height - 16;
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      record('native log scroll geometry', { reducedMotion, ...await scroll.evaluate(node => ({ top: node.scrollTop, height: node.clientHeight, content: node.scrollHeight })) });
+      await touch('touchStart', 230, sy); await touch('touchMove', 230, sy - 40); await touch('touchMove', 230, sy - 100); await touch('touchEnd');
+      await check.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+      const before = await scroll.evaluate(node => node.scrollTop), top = body.y + 16;
+      await touch('touchStart', 230, top); await touch('touchMove', 230, top + 32); await touch('touchMove', 230, top + 60); await touch('touchEnd');
+      await check.poll(() => scroll.evaluate(node => node.scrollTop)).toBeLessThan(before);
+      assert.equal(Math.round((await surface.boundingBox()).y), resting);
+      await touch('touchStart', x, y); await touch('touchMove', x, y + 30); await touch('touchMove', x, y + 90); await touch('touchMove', x, y + 150); await touch('touchEnd');
+      await check(page.locator('#coordinator-sheet')).toBeHidden();
+      await check(page.locator('#coordinator-open')).toBeFocused();
+    }
+    await touchClient.detach();
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.evaluate(() => {
+      window.workerMotion = { frames: [], done: false };
+      const start = performance.now(), dialog = document.getElementById('coordinator-sheet');
+      const sample = () => {
+        if (dialog.open) {
+          const box = dialog.firstElementChild.getBoundingClientRect();
+          window.workerMotion.frames.push({ x: box.x, y: box.y, scroll: dialog.scrollTop });
+        }
+        if (performance.now() - start < 450) requestAnimationFrame(sample); else window.workerMotion.done = true;
+      };
+      requestAnimationFrame(sample);
+    });
+    await page.locator('#coordinator-open').click();
+    await check.poll(() => page.evaluate(() => window.workerMotion.done)).toBe(true);
+    const motion = await page.evaluate(() => window.workerMotion.frames);
+    assert(motion.length > 5 && motion[0].y > motion.at(-1).y + 100);
+    assert(motion.every((frame, i) => frame.scroll === 0 && Math.abs(frame.x - motion[0].x) < 1 && (!i || frame.y <= motion[i - 1].y + 1)));
+    save('worker-motion.json', motion); await closeTasks(); await page.emulateMedia({ reducedMotion: 'reduce' });
+    record('native pull follows the finger, short and cancelled pulls snap back, scrolled logs stay scrollable, and entry rises without overlay scroll');
     await page.locator('#back').click();
     await check(page.locator('#sessions .session').filter({ hasText: 'First inspection' })).toHaveCount(0);
     await check(page.locator('#sessions .session').filter({ hasText: 'Second inspection' })).toHaveCount(0);
@@ -255,34 +314,41 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#transcript .message.user').filter({ hasText: '[Pi Remote task events]' })).toHaveCount(0);
     await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'Prompted by an extension' }).first()).toBeVisible();
     record('internal wake-up instructions stay in collapsed activity rather than user bubbles');
-    await page.locator('#coordinator-workers > summary').click();
-    await send('Keep the original identifier.');
-    await until(() => ledger().tasks.find(task => task.title === 'First inspection').state === 'reported', 30000);
-    await check(page.locator('#transcript')).toContainText('I sent your answer to First inspection');
-    await check(page.locator('#coordinator-workers')).toHaveJSProperty('open', false);
-    record('coordinator relays the main-session answer while the tree stays collapsed');
-    await openTasks(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
+    await openTasks(); await openLog('First inspection');
+    const reply = await context.newPage(); observe(reply);
+    try {
+      await reply.goto(url); await check(reply.locator('#connection')).toHaveText('Computer connected');
+      await reply.getByRole('button', { name: /Coordinator verification project/ }).click();
+      await reply.locator('#prompt').fill('Keep the original identifier.'); await reply.getByRole('button', { name: 'Send message', exact: true }).click();
+      await until(() => ledger().tasks.find(task => task.title === 'First inspection').state === 'reported', 30000);
+      await check(page.locator('#transcript')).toContainText('I sent your answer to First inspection');
+      await check(page.locator('#coordinator-subtitle')).toHaveText('Result ready');
+      await check(page.locator('#coordinator-log article').filter({ hasText: 'Keep the original identifier.' })).toHaveCount(1);
+      assert(frames.some(({ direction, packet }) => direction === 'received' && packet.type === 'workerPatch' && packet.sessionId === ledger().tasks.find(task => task.title === 'First inspection').sessionId));
+      record('main conversation and inspected worker stream independently on the same connection');
+    } finally { await reply.close(); }
+    await page.locator('#coordinator-log').getByText('Task details', { exact: true }).click();
+    await check(page.locator('#coordinator-log')).toContainText('ALPHA_VALUE=stable');
     await check(page.getByRole('button', { name: /Reply in worker|Accept result|Stop task/ })).toHaveCount(0);
     await snapshot('returned-result'); await closeTasks();
     await send('Review and accept the first result.');
     await until(() => ledger().tasks.find(task => task.title === 'First inspection').state === 'completed', 30000);
     await check(page.locator('#transcript')).toContainText('I reviewed and accepted First inspection: ALPHA_VALUE=stable');
-    await page.locator('#coordinator-workers > summary').click();
     await page.locator('#prompt').fill('Keep my coordinator draft.');
     await page.locator('#image-files').setInputFiles({ name: 'draft.png', mimeType: 'image/png',
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9X8AAAAASUVORK5CYII=', 'base64') });
     await check(page.locator('#attachments img')).toBeVisible();
-    await page.getByRole('region', { name: 'Workers', exact: true }).getByRole('button', { name: 'First inspection, Accepted', exact: true }).click();
-    record('inspect worker through the selected C tree');
-    await check(page.locator('#title')).toHaveText('First inspection');
-    await check(page.locator('#composer')).toBeHidden(); await check(page.locator('#status-line')).toBeHidden();
-    await check(page.locator('#coordinator-inspection-note')).toContainText('Read-only worker log');
-    await check(page.locator('textarea:visible, input:visible')).toHaveCount(0);
-    await check(page.locator('#transcript .message.user')).toHaveCount(0);
-    await check(page.locator('#transcript .tool-activity-label').filter({ hasText: 'write failed 1 time' })).toHaveCount(1);
-    assert(!/wrote/i.test((await page.locator('#transcript .tool-activity-label').allTextContents()).join(' ')), 'Blocked writes must not look like successful file changes');
-    await check(page.locator('#coordinator-owner')).not.toHaveAttribute('aria-current', 'page');
-    await check(page.getByRole('button', { name: 'Second inspection, Working', exact: true })).toBeVisible();
+    await page.locator('#transcript').evaluate(node => node.scrollTo(0, 0));
+    const readingPosition = await page.locator('#transcript').evaluate(node => node.scrollTop);
+    await page.locator('#coordinator-open').click(); await openLog('First inspection');
+    record('inspect worker in the selected D bottom sheet without switching the main session');
+    await check(page.locator('#title')).toHaveText(source.title);
+    await check(page.locator('#composer')).toBeVisible();
+    await check(page.locator('#coordinator-sheet textarea, #coordinator-sheet input')).toHaveCount(0);
+    await check(page.locator('#coordinator-log .message.user')).toHaveCount(0);
+    await check(page.locator('#coordinator-log .coordinator-instruction-label').first()).toHaveText('Instruction to worker');
+    await check(page.locator('#coordinator-log summary').filter({ hasText: 'write failed' })).toHaveCount(1);
+    assert(!/wrote/i.test((await page.locator('#coordinator-log summary').allTextContents()).join(' ')), 'Blocked writes must not look like successful file changes');
     await snapshot('worker-read-only');
     const control = await context.newPage(); observe(control);
     try {
@@ -291,10 +357,13 @@ if (process.argv[2] === 'doctor') {
       await control.locator('#prompt').fill('Stop Second inspection.');
       await control.getByRole('button', { name: 'Send message', exact: true }).click();
       await check(control.locator('#transcript')).toContainText('I stopped Second inspection only');
+      await check(page.locator('#transcript')).toContainText('I stopped Second inspection only');
+      await page.locator('#coordinator-log-back').click();
       await check(page.getByRole('button', { name: 'Second inspection, Stopped', exact: true })).toBeVisible();
-      record('main-session Stop from another tab updates the inspected worker sibling tree');
+      record('main-session Stop from another tab updates the background conversation and worker roster');
     } finally { await control.close(); }
-    await page.getByRole('button', { name: 'Return to coordinator', exact: true }).click();
+    await page.getByRole('button', { name: 'Return to conversation', exact: true }).click();
+    assert.equal(await page.locator('#transcript').evaluate(node => node.scrollTop), readingPosition);
     await check(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
     await check(page.locator('#attachments img')).toBeVisible();
     await page.locator('#attachments button').click(); await page.locator('#prompt').fill('');
@@ -304,12 +373,14 @@ if (process.argv[2] === 'doctor') {
     await page.emulateMedia({ colorScheme: 'dark' }); await snapshot('result-and-scoped-stop');
     await closeTasks(); await restoreCoordinator(); await assertHierarchy(); await openTasks();
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
-    await taskRow('First inspection').getByText('Last result', { exact: true }).click(); await check(taskRow('First inspection')).toContainText('ALPHA_VALUE=stable');
+    await openLog('First inspection'); await page.locator('#coordinator-log').getByText('Task details', { exact: true }).click();
+    await check(page.locator('#coordinator-log')).toContainText('ALPHA_VALUE=stable');
     record('reload preserves task ownership and report'); await closeTasks();
     await send('Start an interrupted task.'); await openTasks(); await check(taskRow('Interrupted inspection')).toContainText('Working');
     await closeTasks(); await check(page.locator('#abort')).toBeHidden();
     const before = ledger(), main = owner(), first = before.tasks.find(task => task.title === 'First inspection');
     const promptsBefore = Object.fromEntries(before.tasks.map(task => [task.id, entries(task.file).filter(entry => entry.message.role === 'user').length]));
+    await openTasks(); await openLog('Interrupted inspection');
     const eventsBefore = eventCount(main.file), oldPid = running.child.pid;
     const oldScope = sessionCapability(bridgeToken, main.id, json(join(root, 'host', 'locks', main.id + '.json')).nonce);
     record('stop owned fixture host during active work', { pid: oldPid }); await stop();
@@ -323,7 +394,12 @@ if (process.argv[2] === 'doctor') {
       await delay(20);
     } while (Date.now() < deadline);
     assert(restored.busyWorkers === 0 && restored.managedSessions.length >= 4, 'All four native sessions must finish restoring before the no-replay check');
-    await restoreCoordinator(); await assertHierarchy(); await openTasks();
+    await check(page.locator('#coordinator-sheet')).toBeVisible();
+    await check(page.locator('#coordinator-title')).toHaveText('Interrupted inspection');
+    await check(page.locator('#coordinator-subtitle')).toHaveText('Needs inspection');
+    await check(page.locator('#coordinator-log .coordinator-instruction-label').first()).toBeVisible();
+    record('open worker sheet reconnects after host restart without replacing the main conversation');
+    await closeTasks(); await restoreCoordinator(); await assertHierarchy(); await openTasks();
     await check(taskRow('Interrupted inspection')).toContainText('Needs inspection');
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
     for (const task of ledger().tasks) assert.equal(entries(task.file).filter(entry => entry.message.role === 'user').length, promptsBefore[task.id], 'Restart must not replay a task instruction');
@@ -345,15 +421,27 @@ if (process.argv[2] === 'doctor') {
     assert.equal(overCapacity.body.ok, false); assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed');
     const directClient = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
     try {
+      assert.equal((await directClient.request('inspectWorker', { sessionId: first.sessionId })).ok, false);
+      await directClient.request('watch', { sessionId: main.id });
+      assert.equal((await directClient.request('inspectWorker', { sessionId: main.id })).ok, false);
+      assert.equal((await directClient.request('inspectWorker', { sessionId: first.sessionId })).ok, true);
+      const history = await directClient.request('history', { sessionId: first.sessionId });
+      assert.equal(history.ok, true); assert(history.value.messages.length > 0);
+      await directClient.request('watch', { sessionId: main.id });
+      assert.equal((await directClient.request('history', { sessionId: first.sessionId })).ok, true, 'Resyncing the same parent must preserve its worker inspection');
+      await directClient.request('watch', { sessionId: initial.sources.find(source => source.title === 'Other verification project').id });
+      assert.equal((await directClient.request('history', { sessionId: first.sessionId })).ok, false);
+      assert.equal((await directClient.request('inspectWorker', { sessionId: first.sessionId })).ok, false);
+      record('worker inspection and history are scoped to the selected owner and cleared on navigation');
       const denied = await directClient.request('command', { sessionId: first.sessionId, command: { type: 'prompt', text: 'Keep the original identifier.' } });
       assert.equal(denied.value?.ok, false); assert.equal(denied.value.error, 'Worker logs are read-only. Send instructions to the coordinator.');
     } finally { directClient.ws.terminate(); }
-    await taskRow('First inspection').getByRole('button', { name: 'View worker log', exact: true }).click();
-    await check(page.locator('#composer')).toBeHidden();
+    await openLog('First inspection');
+    await check(page.locator('#coordinator-sheet textarea, #coordinator-sheet input')).toHaveCount(0);
     assert.equal(entries(first.file).filter(entry => entry.message.role === 'user').length, promptsAtCapacity);
     assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed');
     record('task capacity enforced for coordinator follow-ups; direct worker input remains refused');
-    await page.getByRole('button', { name: 'Return to coordinator', exact: true }).click();
+    await page.getByRole('button', { name: 'Return to conversation', exact: true }).click();
     const toolCalls = file => entries(file).flatMap(entry => Array.isArray(entry.message.content) ? entry.message.content : []).filter(block => block.type === 'toolCall');
     const assign = toolCalls(main.file).find(call => call.name === 'remote_tasks' && call.arguments?.action === 'assign' && call.arguments.title === 'First inspection');
     const taskCount = ledger().tasks.length, eventTotal = ledger().tasks.reduce((count, task) => count + task.events.length, 0);
@@ -400,7 +488,7 @@ if (process.argv[2] === 'doctor') {
     assert(terminalOwner); assert.equal(terminalOwner.file, terminal.file); assert.equal(terminalOwner.mode, 'session');
     assert(ledger().tasks.some(task => task.coordinatorId === terminal.id && task.state === 'waiting'));
     assert.equal(ledger().tasks.filter(task => task.coordinatorId === main.id).length, taskCount);
-    await check(page.locator('#coordinator-owner')).toHaveAttribute('aria-current', 'page');
+    await check(page.locator('#coordinator-context')).toBeVisible();
     record('a terminal-owned session delegates in place and receives its worker question through the real bridge');
     await snapshot('terminal-session-coordinates');
     const audit = lines(join(root, 'provider.jsonl')), requests = audit.filter(event => event.kind === 'request');
@@ -426,7 +514,7 @@ if (process.argv[2] === 'doctor') {
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'nested worker navigation', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'live sibling tree updates', 'collapsible C tree', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
+      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'bottom-sheet worker inspection', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'independent parent and worker streams', 'translucent D bottom sheet', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
       excluded: ['paid-model judgment', 'code-writing workers', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));
@@ -449,5 +537,5 @@ if (process.argv[2] === 'doctor') {
     }
   }
   for (const file of ['doctor.json', 'restart-doctor.json', 'result.json', 'cleanup.json', 'actions.jsonl', 'provider-audit.json', 'assignment-and-question.png', 'result-and-scoped-stop.png', 'recovery-without-replay.png']) assert(existsSync(join(evidence, file)), 'Missing proof: ' + file);
-  console.log('PASS: C session tree, coordinator-only input, native Pi workers, scoped replies/Stop, readonly enforcement and durable recovery; fixture cleaned, evidence retained.');
+  console.log('PASS: D worker bottom sheet, coordinator-only input, native Pi workers, scoped replies/Stop, readonly enforcement and durable recovery; fixture cleaned, evidence retained.');
 }

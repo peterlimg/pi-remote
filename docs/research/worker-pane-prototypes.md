@@ -2,7 +2,7 @@
 
 Question: can worker inspection move into a right-side pane while keeping the main conversation and its composer in place?
 
-These are isolated, in-memory UI studies. Live chat and worker routing are unchanged. The sample matches the supplied screenshot: Messaging has a result, Recovery is stopped, and the parent conversation remains the only input destination.
+These remain isolated, in-memory UI studies. The selected pane D interaction in live chat is documented in [Workers in ordinary sessions](../coordinator.md). The comparison page never connects to live workers. The sample matches the supplied screenshot: Messaging has a result, Recovery is stopped, and the parent conversation remains the only input destination.
 
 | Variant | Main conversation | Inspection |
 | --- | --- | --- |

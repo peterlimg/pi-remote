@@ -42,7 +42,8 @@ export function sessionWindow(service) {
 }
 
 export function attachClient(socket, service, { pairing } = {}) {
-  let selected, previous;
+  let selected, previous, inspection;
+  const clearInspection = () => { clearTimeout(inspection?.timer); inspection = undefined; };
   let version = 0, watchGeneration = 0, listOptions = {};
   const list = options => {
     const page = service.list(options);
@@ -65,6 +66,18 @@ export function attachClient(socket, service, { pairing } = {}) {
     }, 150);
   };
   const onState = id => {
+    if (inspection?.id === id && inspection.previous && !inspection.timer) {
+      const current = inspection;
+      current.timer = setTimeout(() => {
+        current.timer = undefined;
+        if (closed || inspection !== current) return;
+        try {
+          const state = service.read(id);
+          send(socket, { type: 'workerPatch', sessionId: id, version: ++current.version, patch: diffState(current.previous, state) });
+          current.previous = structuredClone(state);
+        } catch (e) { send(socket, { type: 'workerNotice', sessionId: id, error: e.message }); }
+      }, 100);
+    }
     if ((selected === id || previous?.coordination?.role === 'worker' && previous.coordination.coordinatorId === id) && previous && !stateTimer) stateTimer = setTimeout(() => {
       stateTimer = undefined;
       if (closed || !selected) return;
@@ -79,7 +92,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -103,6 +116,7 @@ export function attachClient(socket, service, { pairing } = {}) {
         else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
         else if (message.op === 'watch') {
           const generation = ++watchGeneration;
+          if (selected !== message.sessionId) clearInspection();
           selected = message.sessionId; previous = undefined;
           clearTimeout(stateTimer); stateTimer = undefined;
           const state = await service.view(selected);
@@ -111,9 +125,23 @@ export function attachClient(socket, service, { pairing } = {}) {
             send(socket, { type: 'snapshot', sessionId: selected, version, state });
           }
           value = { watching: message.sessionId };
+        } else if (message.op === 'inspectWorker') {
+          if (message.sessionId === null) clearInspection();
+          else {
+            const task = service.coordination.taskForSession(message.sessionId);
+            if (!task || task.coordinatorId !== selected) throw new Error('This worker does not belong to the selected conversation.');
+            clearInspection();
+            const current = inspection = { id: task.sessionId, version: 0 };
+            const state = await service.view(current.id);
+            if (!closed && inspection === current) {
+              current.previous = structuredClone(state);
+              send(socket, { type: 'workerSnapshot', sessionId: current.id, version: 0, state });
+            }
+          }
+          value = { inspecting: message.sessionId };
         } else if (message.op === 'history') {
-          if (message.sessionId !== selected) throw new Error('Select this session before loading history');
-          value = await service.history(selected, message);
+          if (message.sessionId !== selected && message.sessionId !== inspection?.id) throw new Error('Select this session before loading history');
+          value = await service.history(message.sessionId, message);
         } else if (message.op === 'image') {
           value = await service.getImage(message.sessionId, message.imageId);
         } else if (message.op === 'upload') {
@@ -176,7 +204,7 @@ export function attachClient(socket, service, { pairing } = {}) {
     } catch (e) { send(socket, { type: 'response', id: message?.id, ok: false, error: e.message }); }
   });
   socket.once('close', () => {
-    closed = true; clearTimeout(listTimer); clearTimeout(stateTimer);
+    closed = true; clearTimeout(listTimer); clearTimeout(stateTimer); clearInspection();
     videos.close();
     service.off('list', onList); service.off('state', onState);
   });

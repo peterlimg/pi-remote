@@ -7,13 +7,15 @@ Every Pi Remote session can coordinate background investigations. Ask for worker
 Requires Pi 1.4 or newer. Workers need a native Pi model because their restricted processes exclude custom provider extensions. They inherit the parent's native model by default. A parent using an extension-only provider can specify an available native worker model without changing its own model; the assistant must ask before choosing a different model unless you already authorized it.
 
 1. Ask your current session to delegate independent investigations. It can assign up to two active tasks and continue answering while they run. Ordinary messages do not create workers or coordinator records.
-2. The collapsible **Workers** tree immediately above the composer shows this conversation and its worker logs. It appears only after workers exist. Different conversations in the same project own separate workers.
+2. The compact **Workers** row immediately above the composer opens a translucent bottom sheet with the worker roster. It appears only after workers exist. Different conversations in the same project own separate workers.
 3. Give every reply and command in this main conversation. The assistant presents decisions, relays answers to the intended task, reviews reports, and summarizes findings. It must clarify ambiguous references.
-4. Worker logs have no input controls. **Return to coordinator** restores your main draft and attachments. **Session details → Background tasks** opens read-only assignments, questions, and reports. Returned and accepted results remain distinct.
+4. Tap a worker to inspect its live, read-only log without leaving the main conversation. **Task details** contains its assignment, question, and report. Use **Workers** to return to the roster, or **Return to conversation**, Close, Escape, or a downward pull to dismiss. Short pulls snap back; scrolling an already-scrolled log does not dismiss it. **Session details → Background tasks** opens the same sheet. Returned and accepted results remain distinct.
 
-This works for host-managed sessions and sessions connected through the terminal bridge. Only independent conversations appear in the default global session list. Workers remain children, including when working or pinned. Explicit search and the worker tree still reach their transcripts.
+This works for host-managed sessions and sessions connected through the terminal bridge. Only independent conversations appear in the default global session list. Workers remain children, including when working or pinned. Explicit search and the worker sheet still reach their transcripts.
 
-The composer is unchanged and hides only during worker inspection. Stopping the main response does not stop workers. Ask the assistant to stop a specific task. The tree preserves its disclosure choice during navigation and live updates.
+The sheet keeps the selected parent, composer, draft, attachments, and main reading position intact. Its separate read-only subscription watches one owned worker alongside the parent on the existing authenticated connection. Closing it or selecting another conversation clears that subscription. It reconnects after a host restart without replaying instructions. Explicitly opening a worker from session search still hides all input controls and offers a return to its parent.
+
+Stopping the main response does not stop workers. Ask the assistant to stop a specific task.
 
 ## Worker permissions
 
