@@ -933,7 +933,8 @@ pre.message-text { white-space: pre-wrap; }
 #coordinator-done, #coordinator-log-back { display: grid; place-items: center; flex-shrink: 0; width: 44px; min-height: 44px; padding: 0; }
 #coordinator-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 20px 16px; scrollbar-gutter: stable; }
 #coordinator-scroll:focus-visible { outline-offset: -3px; }
-.coordinator-log-detail { margin-bottom: 24px; padding: 0; border-block: 1px solid var(--line); }
+.coordinator-log-detail { margin: 0; padding: 0; border: 0; }
+.coordinator-log-detail + .coordinator-log-detail { border-top: 1px solid var(--line); }
 .coordinator-log-detail > summary { min-height: 44px; padding: 10px 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .coordinator-log-detail h3 { margin: 16px 0 8px; font-size: 14px; }
 .coordinator-log-detail p { font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

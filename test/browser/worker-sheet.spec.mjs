@@ -10,6 +10,9 @@ test('worker sheet scopes history and images without disturbing the live parent'
     { id: 'parent-note', role: 'user', text: 'Keep the main image.', images: [parentImage] }
   ], coordination: { role: 'coordinator', readOnly: false, tasks: [task] } };
   let worker = { id: 'worker', title: task.title, cwd: '/project', status: 'working', historyTruncated: true, messages: [
+    { id: 'ls-first', role: 'toolResult', toolCallId: 'ls-first', toolName: 'ls', text: 'Source unavailable.', isError: true },
+    { id: 'ls-second', role: 'toolResult', toolCallId: 'ls-second', toolName: 'ls', text: 'Source unavailable.', isError: true },
+    { id: 'find-failed', role: 'toolResult', toolCallId: 'find-failed', toolName: 'find', text: 'Source unavailable.', isError: true },
     { id: 'worker-call', role: 'assistant', toolCalls: [{ id: 'read-image', name: 'read', text: '{"path":"screenshot.png"}' }] },
     { id: 'worker-result', role: 'toolResult', toolCallId: 'read-image', toolName: 'read', text: 'Image output.', images: [workerImage] }
   ] };
@@ -65,6 +68,13 @@ test('worker sheet scopes history and images without disturbing the live parent'
     }));
     expect(space.header).toBeLessThanOrEqual(74); expect(space.targets).toBe(true); expect(space.overflow).toBe(false);
     expect(space.body).toBeGreaterThan(space.sheet - space.header - space.safeBottom - 3);
+    const rows = await log.locator(':scope > .coordinator-log-detail').evaluateAll(nodes => nodes.map(node => {
+      const style = getComputedStyle(node), adjacent = node.previousElementSibling?.classList.contains('coordinator-log-detail');
+      return { top: style.borderTopWidth, bottom: style.borderBottomWidth, margin: style.marginBottom,
+        expectedTop: adjacent ? '1px' : '0px', touchHeight: node.querySelector('summary').getBoundingClientRect().height };
+    }));
+    expect(rows.length).toBeGreaterThan(3);
+    for (const row of rows) { expect(row.top).toBe(row.expectedTop); expect(row.bottom).toBe('0px'); expect(row.margin).toBe('0px'); expect(row.touchHeight).toBeGreaterThanOrEqual(44); }
     await expect(page.locator('.coordinator-sheet > footer')).toHaveCount(0);
     await expect(page.locator('#coordinator-sheet')).toHaveAccessibleDescription('Read-only inspection. Give instructions in the main conversation.');
     await expect(page.locator('#coordinator-title')).toHaveText(task.title);
