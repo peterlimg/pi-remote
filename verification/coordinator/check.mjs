@@ -71,7 +71,7 @@ if (changed) {
     writeFileSync(join(evidence, 'result.json'), JSON.stringify(result, null, 2));
     console.log(JSON.stringify({ models, runtime: runtime.map(({ scenario, held, finalState }) => ({ scenario, held, finalState })), ...(selfTest ? { mutation } : {}) }, null, 2));
     const violations = models.some(result => !result.held) || runtime.some(result => !result.held);
-    console.log(selfTest ? 'SELF-TEST PASS: a scratch mutation was caught and the original report gate was rechecked; product code is unchanged.'
+    console.log(selfTest ? 'SELF-TEST PASS: both scratch mutations were caught and the original properties rechecked; product code is unchanged.'
       : violations ? 'FINDINGS: read result.json and use /statechart to inspect the model and counterexamples.' : 'PASS: bounded model and host/RPC replays agree.');
     process.exitCode = selfTest ? 0 : violations ? 1 : 0;
   } catch (error) {
