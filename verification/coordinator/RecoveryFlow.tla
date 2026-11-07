@@ -76,8 +76,8 @@ FinishRecoveryCheck ==
     /\ phase' = "working" /\ epoch' = epoch + 1 /\ attempts' = attempts + 1
     /\ run' = checkedInputs /\ read' = {} /\ checking' = FALSE
     /\ recorded' = recorded \cup checkedInputs /\ deliveries' = Counts(checkedInputs)
-    /\ unsafeResume' = unsafeResume \/ effect = "uncertain"
-    /\ stoppedRestart' = stoppedRestart \/ stopped
+    /\ unsafeResume' = (unsafeResume \/ effect = "uncertain")
+    /\ stoppedRestart' = (stoppedRestart \/ stopped)
     /\ UNCHANGED <<oldEpoch, inputs, failures, effect, stopped, checkedEpoch,
                     checkedInputs, staleAccepted>>
 BlockRecovery ==

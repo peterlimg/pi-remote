@@ -1,23 +1,39 @@
-# Coordinator ordering
+# Coordinator ordering and bounded recovery
 
-Source confirmed at `96f889e271d5750d9b7c50ad1e8021d19ee0e70f`. Both bounded properties hold. TLC reaches 80 states and 386 steps.
+Product source confirmed at `9f6f2e0f1b50d61260287ff5149bfa124f4de7b2`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
 
-## Properties and regression replays
+## Checked promises
 
-- `AcceptedResultStable`: acceptance remains valid until a new explicit instruction or Stop. Delayed instruction failures and old Stop acknowledgements must not revoke it.
-- `ReportsRequireWorking`: a worker may persist a question or result only while its task is working.
+| Model | Size | Properties |
+| --- | --- | --- |
+| WorkerFlow | 56 states / 242 steps | AcceptedResultStable, ReportsRequireWorking |
+| RecoveryFlow | 223 states / 536 steps | NoDuplicateInputs, ReportsAreCurrent, StopWinsRecovery, UncertainEffectsBlock, RecoveryIsBounded |
 
-The real-host `accepted-prompt-ack`, `accepted-prompt-failure`, and `accepted-stop-ack` replays end in `completed`. The `late-report` replay rejects a result during Stop and preserves `stopping` until the legitimate abort acknowledgement.
+WorkerFlow projects recovery/blocked states to one uncertainty state. RecoveryFlow separates queued inputs, read receipts, replaced generations, asynchronous inspection, Stop and tool outcomes. Neither is the runtime implementation.
 
-At historical source `5720555`, the failure and old Stop acknowledgement instead changed accepted results to `unknown` and `stopped`. Each command now captures a persisted command ID. A stale completion cannot update a newer command, failures cannot overwrite a question/report/acceptance, and the initial assignment catch handles startup failures only. Report text was retained even under the historical bugs; the lost acceptance state was the defect.
+The nine runtime traces cover delayed prompt acknowledgement/failure, Stop serialization and accepted results, reports during Stop, deduplicated recovery, stale generations, Stop during recovery, missing tool outcomes and a two-attempt budget. They use real host authorization, persistence, journal receipts and subprocess RPC. Only the Pi RPC endpoint is controlled. A follow-up cannot now overtake an unfinished Stop; the historical Stop/continuation race is prevented before dispatch.
 
-## Mutation sensitivity
+## Negative controls
 
-The self-test separately removes the production report-state gate and the current/active-completion gate in disposable source copies, with matching model constants disabled. Each property must fail in both TLC and a real-host replay. Restoring the source returns each check to passing. This is not a mutation of the live host or user repositories.
+Each guard is disabled only in disposable source/model copies. The matching code replay fails, then the restored model/code passes.
 
-## Checked statechart
+| Property | Broken behavior | Shortest model path |
+| --- | --- | --- |
+| AcceptedResultStable | Older failed command can change accepted work | Accepted result overwritten by a delayed failure |
+| ReportsRequireWorking | Non-working report can persist | A report after Stop |
+| NoDuplicateInputs | Recorded bodies are sent again | Deliver → interrupt → inspect → resume with duplicate (4 steps) |
+| ReportsAreCurrent | Generation is not checked | Deliver → interrupt → inspect → resume → read → old report accepted (6) |
+| StopWinsRecovery | Stop cancellation/fencing is ignored | Deliver → interrupt → inspect → Stop → resume (5) |
+| UncertainEffectsBlock | Missing tool result is ignored | Deliver → read → tool → interrupt → inspect → unsafe resume (6) |
+| RecoveryIsBounded | Retry budget is ignored | Initial failure plus three recovery continuations (10) |
 
-The view omits acknowledgement/inspection stutters, redundant Stop requests, and failures unrelated to acceptance. All remain checked.
+Negative-control development also caught two verifier issues: Stop's fixture must wait for the worker's read receipt before holding an active abort, and boolean ghost updates need explicit RHS parentheses in TLA+. These were checker/model errors, not product findings; no invariant was weakened.
+
+At historical source `5720555`, delayed instruction failure and old Stop acknowledgement revoked accepted results. Command identity/active-state guards fixed those earlier defects. The current baseline preserves acceptance.
+
+## Checked statecharts
+
+The ordering view hides redundant Stop/failure arrows and unchanged-state acknowledgement/inspection steps; all remain checked. The recovery view hides only steps within one displayed state, including read bookkeeping and follow-ups that leave the current phase unchanged.
 
 ```mermaid
 ---
@@ -26,7 +42,7 @@ title: "Coordinator and worker task flow"
 stateDiagram-v2
   s0: Starting worker
   s1: Stop pending
-  s2: Needs inspection
+  s2: Recovery or decision needed
   s3: Worker running
   s4: Result ready
   s5: Question waiting
@@ -37,7 +53,6 @@ stateDiagram-v2
   s0 --> s3: coordinator sends an instruction
   s1 --> s6: Stop acknowledgement arrives
   s1 --> s2: host restarts
-  s1 --> s3: coordinator sends an instruction
   s2 --> s3: coordinator sends an instruction
   s3 --> s4: worker returns a result
   s3 --> s5: worker asks a question
@@ -53,8 +68,54 @@ stateDiagram-v2
   s7 --> s3: coordinator sends an instruction
 ```
 
+```mermaid
+---
+title: "Safe continuation after an interrupted turn"
+---
+stateDiagram-v2
+  s0: Instructions queued
+  s1: Stopped
+  s2: Worker running
+  s3: Recovery pending
+  s4: Checking saved work
+  s5: Result ready
+  s6: Tool running
+  s7: Uncertain tool outcome
+  s8: Needs a decision
+  [*] --> s0
+  s0 --> s1: you stop this task
+  s0 --> s2: deliver unread instructions
+  s2 --> s3: turn interrupted
+  s2 --> s1: you stop this task
+  s3 --> s4: inspect history and workspace
+  s3 --> s1: you stop this task
+  s2 --> s5: worker returns its report
+  s2 --> s6: worker starts a tool
+  s4 --> s1: you stop this task
+  s4 --> s2: resume remaining work
+  s2 --> s0: worker returns its report
+  s6 --> s2: tool result saved
+  s6 --> s7: turn interrupted
+  s6 --> s1: you stop this task
+  s7 --> s8: ask one recovery question
+  s7 --> s1: you stop this task
+  s3 --> s8: ask one recovery question
+```
+
+## Native integration evidence
+
+The separate native-Pi proofs pass:
+
+- `npm run test:coordinator`: existing/fresh/terminal-owned parents, coordinator-only input, investigation permissions, two coding worktrees, real edits/checks, reviewed conflict-safe integration and restart continuation.
+- `npm run test:coordinator-recovery`: real saved shell result followed by provider failure, same-session/worktree continuation, unread follow-up across restart, rejected stale report/receipt, inconsistent input history, exhausted retries, Stop before and during Git inspection, capacity, mid-shell Pi kill and blocked replay, lost apply acknowledgement resolved without another apply, preserved parent draft/index.
+- Composer/worker-sheet browser checks: 3 passed. Static checks and diff whitespace checks pass.
+
+Only model responses/fault points are deterministic. Neither screenshots nor saved receipts establish paid-model planning quality or arbitrary shell exactly-once behavior.
+
 ## Run and limits
 
-Run `npm run verify:coordinator`, or add `-- --self-test` for both negative controls. The printed evidence directory contains model verdicts and one JSON trace per replay. Use `/skill:verify-coordinator-formal` and `/statechart` to interpret them.
+Run `npm run verify:coordinator`, or add `-- --self-test` for all seven negative controls. The printed evidence directory contains independent model verdicts and JSON replay traces. Use the formal skill and /statechart to read them.
 
-Bounds: one coordinator, one investigation task, one pending prompt and one pending abort, one restart. The RPC endpoint is fault-controlled, not native Pi. Successful atomic ledger writes are assumed. There is no capacity, request-ID replay, filesystem permission, code integration, UI, power-loss durability, or liveness proof here. Report-to-turn freshness and multiple simultaneous prompts of the same kind are outside this model. Coding worktree/edit/check/integration behavior is exercised separately by the native-Pi coordinator E2E proof.
+Bounds: WorkerFlow has one owner/worker, one pending prompt/abort and one restart. RecoveryFlow has two input IDs, three interrupted turns, eight epochs and one Stop within one unfinished assignment episode. Atomic ledger writes and coherent complete transcript reads are assumed.
+
+No multiple-worker/capacity proof, duplicate-request proof, filesystem/tool-policy proof, OS sandbox, orphan-shell reconciliation, arbitrary external exactly-once guarantee, main-turn recovery, notification liveness, code integration transaction, UI, power-loss durability or liveness proof. The native proofs cover selected integration/capacity/UI boundaries, not those general guarantees.

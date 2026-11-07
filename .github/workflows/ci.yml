@@ -64,6 +64,8 @@ jobs:
       - run: npm install --no-save @earendil-works/pi-coding-agent@1.4.0
       - run: npx playwright install --with-deps chromium
       - run: npm run test:coordinator
+        env:
+          TMPDIR: ${{ runner.temp }}
       - run: npm run test:coordinator-recovery
         env:
           TMPDIR: ${{ runner.temp }}
@@ -71,7 +73,9 @@ jobs:
         if: failure()
         with:
           name: coordinator-proof
-          path: ${{ runner.temp }}/pi-coordinator-proof-*/
+          path: |
+            ${{ runner.temp }}/pi-coordinator-proof-*/
+            ${{ runner.temp }}/pi-task-recovery-proof-*/
   claude-sdk-provider:
     runs-on: ubuntu-latest
     defaults:

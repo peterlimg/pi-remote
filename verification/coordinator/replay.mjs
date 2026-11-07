@@ -87,7 +87,7 @@ export async function replay(sourceRoot, scenario, evidence) {
     if (scenario === 'accepted-stop-ack') {
       assert.equal((await assigning).ok, true);
       trace.push('Initial instruction is acknowledged; worker is working.');
-    } else await until(() => task().state === 'working', 10000);
+    } else await until(() => task().state === 'working' && task().run?.read, 10000);
     stopping = post(owner.token, { action: 'stop', taskId: task().id });
     await until(() => task().state === 'stopping', 10000);
     trace.push('Coordinator requests Stop; stopping is persisted and abort reply is pending.');

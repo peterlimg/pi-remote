@@ -1,10 +1,14 @@
 {
-  "syncCommit": "96f889e271d5750d9b7c50ad1e8021d19ee0e70f",
+  "syncCommit": "9f6f2e0f1b50d61260287ff5149bfa124f4de7b2",
   "files": [
     "src/coordinator.mjs",
     "src/service.mjs",
     "src/commands.mjs",
     "src/live-session.mjs",
-    "src/rpc.mjs"
+    "src/rpc.mjs",
+    "src/task-input.mjs",
+    "src/history-worker.mjs",
+    "src/task-workspaces.mjs",
+    "extension/coordinator.mjs"
   ]
 }
