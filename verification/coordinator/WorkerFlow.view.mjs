@@ -1,7 +1,7 @@
 const labels = {
   starting: 'Starting worker', working: 'Worker running', waiting: 'Question waiting',
   reported: 'Result ready', completed: 'Result accepted', stopping: 'Stop pending',
-  stopped: 'Worker stopped', unknown: 'Needs inspection'
+  stopped: 'Worker stopped', unknown: 'Recovery or decision needed'
 };
 export const title = 'Coordinator and worker task flow';
 export const state = v => v.acceptedValid && v.taskState !== 'completed'

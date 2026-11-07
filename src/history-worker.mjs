@@ -6,6 +6,7 @@ import { branchMessages, cleanMessage, shown, textContent, takeText, noteTaskTim
 import { messageKey, sessionTitle, unnamed } from '../web/protocol.js';
 import { splitVideoMessage } from '../web/videos.js';
 import { validateImages } from '../web/images.js';
+import { parseTaskInput, TASK_INPUT } from './task-input.mjs';
 
 const indexes = new Map();
 const hash = text => createHash('sha256').update(text || '').digest('hex');
@@ -111,6 +112,35 @@ async function run({ op, file, before, after, tips, expectedTip, imageId, messag
   if (expectedTip && !branch.ids.has(expectedTip)) throw new Error('Conversation changed. Return to latest messages.');
   const handle = await open(file, 'r');
   try {
+    if (op === 'taskRecovery') {
+      const recorded = new Map(), calls = new Map(), results = new Set(), failedTools = [];
+      let generation, duplicate = false, invalid = false;
+      for (const node of branch.entries) {
+        if (node.type !== 'message') continue;
+        const { message } = await readEntry(handle, node);
+        if (message?.role === 'user') {
+          const content = textContent(message.content), input = parseTaskInput(content);
+          if (input) {
+            generation = input.generation;
+            for (const item of input.messages) { if (recorded.has(item.id)) duplicate = true; recorded.set(item.id, item.text); }
+          } else if (generation || content.startsWith(TASK_INPUT)) invalid = true;
+        }
+        if (message?.role === 'assistant' && Array.isArray(message.content)) for (const call of message.content.filter(part => part.type === 'toolCall')) {
+          if (typeof call.id !== 'string' || !call.id || calls.has(call.id)) invalid = true;
+          calls.set(call.id, { id: call.id, name: call.name, generation });
+        }
+        if (message?.role === 'toolResult') {
+          const call = calls.get(message.toolCallId);
+          if (!call || results.has(message.toolCallId) || call.name !== message.toolName) invalid = true;
+          results.add(message.toolCallId);
+          if (message.isError && ['edit', 'write', 'bash'].includes(call?.name)) failedTools.push(call);
+        }
+      }
+      const after = await handle.stat();
+      return { cwd: index.header.cwd, recorded: [...recorded.keys()], bodies: [...recorded].map(([id, text]) => ({ id, text })), duplicate, invalid,
+        complete: index.offset === index.size && after.size === index.size && after.mtimeMs === index.mtimeMs,
+        pendingTools: [...calls.values()].filter(call => !results.has(call.id)), failedTools };
+    }
     if (op === 'metadata' || op === 'page') {
       if (!branch.title) {
         const firstUser = unnamed(index.name) ? branch.rows.find(row => row.role === 'user') : undefined;

@@ -3,6 +3,8 @@ EXTENDS Naturals, FiniteSets
 
 CONSTANTS EnforceReportGuard, EnforceCompletionGuard
 
+\* "unknown" projects both inspection-blocked work and pending mailbox recovery.
+\* RecoveryFlow separately models the generation/input reconciliation policy.
 States == {"starting", "working", "waiting", "reported", "completed",
            "stopping", "stopped", "unknown"}
 Commands == {"prompt", "abort"}
@@ -23,6 +25,7 @@ Init ==
 \* beforeCommand is synchronous; dispatch then yields with the receipt pending.
 BeginPrompt ==
     /\ "prompt" \notin inFlight
+    /\ taskState # "stopping"
     /\ taskState' = "working"
     /\ inFlight' = inFlight \cup {"prompt"}
     /\ latest' = "prompt"
@@ -107,7 +110,8 @@ TypeOK == /\ taskState \in States
           /\ restarted \in BOOLEAN
           /\ latest \in Commands \cup {"none"}
 
-\* Ghost history is reset only by a new explicit coordinator command.
+\* Ghost history is reset only by a new authorized command; accepted inputs
+\* cannot trigger automatic recovery (that policy is checked in RecoveryFlow).
 AcceptedResultStable == acceptedValid => taskState = "completed"
 ReportsRequireWorking == reportFrom \subseteq {"working"}
 

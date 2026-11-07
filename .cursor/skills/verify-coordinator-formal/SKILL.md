@@ -1,73 +1,80 @@
 ---
 name: verify-coordinator-formal
-description: Model-check coordinator/worker instruction, report, acceptance, Stop, and restart ordering, then replay the critical races through a real isolated host. Use when changing task state transitions, asynchronous command completion, report validation, or recovery.
+description: Model-check command/report/acceptance ordering and bounded recovery inputs, generations, Stop, uncertain effects and retry limits; replay the critical races through a real isolated host.
 ---
 
-# Verify coordinator and worker ordering
+# Verify coordinator ordering and recovery
 
-Run from the repository root. This is a bounded safety check, not a proof of all orchestration behavior. It does not change worker permissions or product code.
+Run from the repository root. These are bounded safety checks, not a whole-system proof. Product files must remain unchanged by verification. The reviewed source commit is recorded only in `verification/coordinator/coverage.json`.
 
 ## Promises and harm
 
 | Property | Promise | What a break means |
 | --- | --- | --- |
-| `AcceptedResultStable` | Once a result is accepted, an older RPC outcome cannot revoke that acceptance; a new explicit instruction or Stop may change it. | A reviewed result silently changes from Accepted to Needs inspection or Stopped. |
-| `ReportsRequireWorking` | A report can be persisted only while its task is working. | A stopped or stopping worker can publish a stale result as current work. |
+| `AcceptedResultStable` | Older RPC outcomes cannot revoke an accepted result. | Reviewed work silently becomes uncertain/stopped. |
+| `ReportsRequireWorking` | New reports persist only while working. | A stopped or already-reported attempt publishes again. |
+| `NoDuplicateInputs` | A recorded input body is not delivered again during recovery. | An instruction may repeat its side effects. |
+| `ReportsAreCurrent` | Only the current execution generation can publish a new report. | An obsolete attempt replaces current work. |
+| `StopWinsRecovery` | Stop prevents automatic continuation, including a pending recovery callback. | Work restarts after the user stopped it. |
+| `UncertainEffectsBlock` | A missing tool outcome prevents automatic continuation. | An outside action could run twice. |
+| `RecoveryIsBounded` | At most two automatic attempts precede escalation. | Broken work retries indefinitely. |
 
-TLA+ fits this question because the risk is the ordering of separate synchronous host steps around asynchronous RPC replies. TLC 1.7.4 is pinned by SHA-256 in `verification/coordinator/check.mjs`. Java 11+ is required, preferably Temurin 21. The runner uses `JAVA`, Java on PATH, or an installed mise Temurin 21. `TLA2TOOLS` may select the pinned jar; otherwise it is cached and downloaded on first use.
+TLC 1.7.4 is pinned by SHA-256 in check.mjs. Java 11+ is required, preferably Temurin 21. The runner uses `JAVA`, PATH Java, or mise Temurin 21. `TLA2TOOLS` may select the pinned jar; otherwise it is downloaded and cached.
 
 ## Run
 
 ```sh
 npm run verify:coordinator
-```
-
-The command prints an absolute `pi-coordinator-formal-*` evidence directory and saves `result.json`, independent TLC verdicts, model/config files, and HTTP/RPC replay traces. Exit 0 means the checked properties hold, exit 1 means findings, and exit 2 means setup, source drift, or checker failure. Do not treat a checker error as a product bug or suppress a finding to obtain green output.
-
-**At sync commit `96f889e271d5750d9b7c50ad1e8021d19ee0e70f`, exit 0 is expected.** The delayed instruction-failure and old Stop-acknowledgement replays preserve accepted results. The report-state guard also holds. See `verification/coordinator/FINDINGS.md`.
-
-Read every TLA+ result with **`/statechart`**, following its installed skill. Use `verification/coordinator/WorkerFlow.tla`, its config, and `WorkerFlow.view.mjs`; work in a scratch directory as that skill instructs. Read its shortest paths and show the chart in the reader's words. The view hides redundant Stop requests and failures that do not revoke acceptance; all such actions remain checked. Inspect/acknowledgement steps that leave the displayed state unchanged are omitted from the drawing, not from verification.
-
-## Source coverage and atomic steps
-
-The authoritative sync record is `verification/coordinator/coverage.json`. Covered code is currently confirmed at the commit above.
-
-| Model action / replay boundary | Source to inspect |
-| --- | --- |
-| Initial `starting` task | `src/coordinator.mjs`, `Coordinators.assign` before its first await |
-| `BeginPrompt`, `BeginStop` | `Coordinators.beforeCommand`: synchronous guard, new command ID, state update, and ledger save |
-| `PromptAcknowledged`, `StopAcknowledged` | `Coordinators.afterCommand`; only the current receipt is applied, and Stop ACK changes state only while stopping |
-| `PromptFails`, `StopFails` | `Coordinators.failedCommand`; only current active work becomes unknown. The initial `assign` catch handles starting-state failures only |
-| `ReportQuestion`, `ReportResult` | `Coordinators.report`: working-state gate and persisted report before yielding |
-| `AcceptResult` | `Coordinators.action`, accept branch: reported gate and persisted completed state |
-| `Restart` | `Coordinators` constructor: starting/working/stopping become unknown; dead-host promises do not resume |
-| RPC gaps between those steps | `src/service.mjs`, `SessionService.command` and `dispatch`; `src/live-session.mjs`, `WorkerSession.dispatch`; `src/rpc.mjs`, `RpcWorker.request` and `command` |
-| Real request receipts used by replay | `src/commands.mjs`, `CommandJournal.execute`; the model assumes fresh request IDs, so this is not an idempotency proof |
-
-One model action represents one synchronous state-changing prefix/completion. Dispatch and its later completion are **not** one action. Queue-clear inside Stop is abstracted as part of its pending RPC interval because it does not change the task ledger. `latest` abstracts the current command ID under the one-pending-command-per-kind bound. `acceptedValid` and `reportFrom` are ghost history for checking promises, not production fields.
-
-## Bounds and assumptions
-
-- One coordinator and one worker, one prompt and one abort simultaneously pending, at most one host restart.
-- Finite task states and fresh request IDs. Workers may deliver questions/results while RPC replies are pending.
-- Successful atomic ledger writes at modeled boundaries; no power-loss/fsync guarantee.
-- The replay uses real HTTP authorization, task bookkeeping, command receipts, persistence, and RPC subprocesses. Only the Pi RPC endpoint is controlled by `test/fixtures/coordinator-flow-pi.mjs` to hold/fail acknowledgements. It makes no model calls or user-project edits.
-- Not checked: multiple-worker capacity/ownership, duplicate request IDs, worker tool/filesystem policy, code-worktree integration, report-to-turn freshness, native Pi timing guarantees, liveness, and UI behavior. Keep the existing native-Pi coordinator E2E proof for those integration boundaries it covers.
-
-## Prove the check can fail
-
-```sh
 npm run verify:coordinator -- --self-test
 ```
 
-This uses two disposable source copies. One removes the real `Coordinators.report` working-state gate and disables `EnforceReportGuard` in the model. The other removes the current/active-completion gate in `failedCommand` and disables `EnforceCompletionGuard`. Both mutations must violate their matching property in TLC and the real-host replay. Each copy is restored/discarded, the original property is rechecked, and covered product files must remain unchanged. A self-test pass proves sensitivity to these mutations, not an unbounded correctness guarantee.
+The command prints a retained `pi-coordinator-formal-*` evidence directory with result.json, independent TLC verdicts/configurations and HTTP/RPC traces. Exit 0 means the checked properties hold; 1 means findings; 2 means setup, source drift, model/runtime disagreement or checker failure. Never suppress a finding or weaken an invariant to get green output.
 
-## When code or a verdict changes
+Read both models through **`/statechart`**, following that skill and using scratch copies:
 
-1. Read the changed functions in the coverage table and compare their await boundaries with the TLA+ actions. The runner refuses covered source drift; fetch the sync commit if a shallow checkout lacks it.
-2. For a model violation, read `/statechart`, then inspect the matching real-host replay. If the replay does not agree, investigate the model, fault assumptions, or replay before reporting a product bug.
-3. Do not weaken an invariant to match a bug, and do not change product code merely because this skill found one. Preserve the finding and its sequence; ask before fixing it.
-4. For an intended change, update the model/replays to describe it, rerun the check and mutation self-test, and update the findings document.
-5. Only after confirming the new mapping, move `coverage.json`'s sync commit and this skill's coverage record to the reviewed source commit. Do not advance the commit simply to bypass source review.
+- `verification/coordinator/WorkerFlow.tla`, config and view: command completion, reports, acceptance, Stop and restart.
+- `verification/coordinator/RecoveryFlow.tla`, config and view: durable inputs, generation replacement, asynchronous reconciliation, Stop, tool uncertainty and retry exhaustion.
 
-Use `/maintain-formal-verification-skill` when a later change did not recheck this coverage.
+Read shortest counterexamples and show the chart in the reader's words. Inspection/unchanged-state steps are omitted only from the drawing. A safety pass does not prove eventual progress.
+
+## Source mapping and atomicity
+
+| Action / boundary | Source to inspect |
+| --- | --- |
+| Initial task, durable mailbox, queued follow-up | `Coordinators.assign`, `queueInput`, `action(message)` in src/coordinator.mjs |
+| Before/after/failed command | `beforeCommand`, `afterCommand`, `failedCommand`: command-ID guard and synchronous ledger writes surrounding awaited dispatch |
+| Read receipt / current report / acceptance | `report`, `action(accept)`; extension/coordinator.mjs `context`, `tool_call`, `task_report` |
+| Recorded bodies versus unread input | src/task-input.mjs `encodeTaskInput`; src/history-worker.mjs `taskRecovery` branch scan |
+| Interrupt, check, continue or block | `interrupt`, `advanceTask`, `deliver`, `blockRecovery`; capture generation and recheck after every awaited read/start boundary |
+| Stop and reactivation | `action(stop/message/recover)`; cancel inputs and fence pending recovery before abort; reject continuation during Stop |
+| Restart | Constructor fences mailbox generations, preserves inputs/budget and restores recoverable work; legacy tasks remain inspection-first |
+| Workspace identity/status | src/task-workspaces.mjs `inspectWorkspace`; not a general filesystem transaction or process-tree inspection |
+| RPC/checkpoint gaps | src/service.mjs command/dispatch/restore; src/live-session.mjs WorkerSession; src/rpc.mjs requests |
+| Durable request receipts | src/commands.mjs CommandJournal.execute; fresh request IDs are assumed in these models |
+
+A model action is one synchronous state-changing prefix/completion, not the entire awaited operation. WorkerFlow projects mailbox recovering and blocked states to `unknown`; RecoveryFlow distinguishes them. WorkerFlow prohibits a prompt overtaking unfinished Stop. `latest`, acceptedValid and reportFrom abstract command identity and ghost history. RecoveryFlow abstracts a bounded set of input IDs and epochs rather than UUIDs and text.
+
+## Runtime and negative controls
+
+Normal verification runs nine real-host traces: delayed prompt ACK/failure, Stop serialization/accepted result, late report, deduplicated recovery input, stale generation, Stop during recovery, missing tool outcome and retry exhaustion. The real host enforces HTTP authorization, ledger updates, journal receipts and subprocess RPC. Only the Pi endpoint is controlled by test/fixtures/coordinator-flow-pi.mjs; it records its user/tool events at that existing process boundary and makes no model calls.
+
+Self-test makes seven disposable source copies. It separately disables each matching model guard and production behavior: report-state gate, completion gate, body deduplication, report generation, Stop cancellation/fencing, uncertain-tool check and retry budget. Both TLC and the matching real-host replay must fail. The original model/runtime must pass after restoration; covered source hashes must remain unchanged. This proves sensitivity to those broken variants, not every possible bug.
+
+Also run the native-Pi `npm run test:coordinator-recovery` proof after changing these boundaries. It adds real provider failures, mid-shell Pi kill, host restart with unread follow-up, Stop during in-flight Git inspection, capacity, lost Git apply acknowledgement and phone evidence. Deterministic responses are not paid-model judgment.
+
+## Bounds and exclusions
+
+- WorkerFlow: one owner/worker, one pending prompt and abort, one restart, fresh request IDs.
+- RecoveryFlow: two inputs, three interrupted turns, up to eight epochs, one Stop, one unfinished assignment episode, at most two automatic attempts.
+- Successful atomic ledger writes and coherent complete history reads; no fsync/power-loss guarantee.
+- No multiple-worker/capacity proof, duplicate-request proof, OS sandbox, arbitrary shell exactly-once semantics, orphan-process reconciliation, interrupted-main-turn recovery, notification liveness, code integration transaction, UI or paid-model timing proof. Native E2E covers selected integrations, not all these exclusions.
+
+## When covered code changes
+
+1. Read changed functions and compare await boundaries, guards and persistence with both models. The runner refuses source drift; fetch the sync commit if missing.
+2. Read every violation through /statechart and compare its replay. Model/runtime disagreement is a checker problem until investigated, not automatically a product bug.
+3. Preserve findings; do not patch product code merely because this verification task found a bug without authorization.
+4. For authorized changes, reconcile models/replays, run both checks and the native crash proof, and update FINDINGS.md.
+5. Only then advance coverage.json to the reviewed source commit. Never advance it merely to bypass drift.
+
+Use `/maintain-formal-verification-skill` when a later covered change was not reconciled.

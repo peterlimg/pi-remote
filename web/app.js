@@ -1861,7 +1861,7 @@ function restartStalledDots() {
   dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
 }
 setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
-const coordinatorLabels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
+const coordinatorLabels = { queued: 'Queued', recovering: 'Recovering', starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
   stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
 const coordinatorLabel = task => task.workspace?.integration === 'applied' ? 'Integrated' : coordinatorLabels[task.state] || task.state;
 function renderCoordinator(state) {
@@ -1877,7 +1877,7 @@ function renderCoordinator(state) {
   $('coordinator-return').disabled = worker && !connected && !cache.has(role.coordinatorId);
   $('coordinator-worker-count').textContent = tasks.length;
   const summary = [];
-  for (const [states, label] of [[['starting', 'working', 'stopping'], 'working'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
+  for (const [states, label] of [[['starting', 'working', 'stopping'], 'working'], [['queued'], 'queued'], [['recovering'], 'recovering'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
     const count = tasks.filter(task => states.includes(task.state)).length;
     if (count) summary.push(count + ' ' + label);
   }
@@ -1899,7 +1899,7 @@ function renderCoordinator(state) {
   $('coordinator-subtitle').textContent = summary.join(' · ') || 'No active work';
   const list = $('coordinator-task-list'), focused = list.querySelector('button:focus')?.dataset.workerId;
   list.replaceChildren();
-  const active = new Set(['starting', 'working', 'waiting', 'stopping']);
+  const active = new Set(['starting', 'working', 'waiting', 'stopping', 'queued', 'recovering']);
   for (const task of [...tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)))) {
     const row = el('div'); row.setAttribute('role', 'listitem'); row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
     const button = el('button', undefined, 'coordinator-worker'); button.type = 'button'; button.dataset.workerId = task.id;
@@ -1983,7 +1983,9 @@ function renderCoordinatorLog() {
     meta.append(el('h3', 'Coding workspace'), el('p', task.workspace?.path || 'Preparing workspace…'));
     meta.append(el('p', task.workspace?.integration === 'applied' ? 'Reviewed changes integrated into the parent repository.' : 'Changes stay in this worktree until reviewed and integrated from the main conversation.'));
   }
-  if (task.state === 'waiting' && task.question) meta.append(el('h3', 'Question for coordinator'), el('p', task.question));
+  if (task.recovery?.phase && task.recovery.phase !== 'idle') meta.append(el('h3', 'Recovery'), el('p', task.recovery.attempts + ' of ' + task.recovery.limit + ' automatic attempts. ' + (task.recovery.reason || 'Checking saved work before continuing.')));
+  if (task.pendingInputs) meta.append(el('p', task.pendingInputs + ' instruction(s) waiting to be read.'));
+  if ((task.state === 'waiting' || task.recovery?.phase === 'blocked') && task.question) meta.append(el('h3', 'Question for coordinator'), el('p', task.question));
   if (task.result) meta.append(el('h3', task.state === 'reported' ? 'Returned result' : 'Last result'), el('p', task.result));
   if (task.error) meta.append(el('p', task.error, 'coordinator-task-warning'));
   if (task.delivery === 'unknown') meta.append(el('p', 'Notification delivery is uncertain. Ask the coordinator to inspect before repeating an action.', 'coordinator-task-warning'));

@@ -19,6 +19,7 @@
     "test:browser": "playwright test",
     "test:lifecycle": "node test/lifecycle-e2e.mjs",
     "test:coordinator": "node test/coordinator-e2e.mjs",
+    "test:coordinator-recovery": "node test/coordinator-recovery-e2e.mjs",
     "verify:coordinator": "node verification/coordinator/check.mjs",
     "test:provider-parity": "node test/provider-parity.mjs"
   },

@@ -64,6 +64,7 @@ jobs:
       - run: npm install --no-save @earendil-works/pi-coding-agent@1.4.0
       - run: npx playwright install --with-deps chromium
       - run: npm run test:coordinator
+      - run: npm run test:coordinator-recovery
         env:
           TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4

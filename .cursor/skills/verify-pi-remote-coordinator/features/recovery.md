@@ -1,35 +1,39 @@
-# Recover ownership and enforce scoped permissions
+# Recover bounded work and enforce scoped permissions
 
-Reloading or restarting preserves task ownership and reports. Interrupted work becomes uncertain instead of being repeated. Read-only workers cannot edit the project or control other tasks.
+Reload preserves task ownership and reports. New tasks can resume authorized unfinished work from a complete saved boundary; uncertain side effects remain blocked. All decisions stay in the main conversation.
 
-## Sub-features
+## Native crash-point proof
 
-- `reload`: task ownership, questions, and reports survive browser reload.
-- `restart`: a new host process restores records and native sessions.
-- `unknown`: interrupted work requires inspection and explicit continuation.
-- `idempotence`: the same assignment or report request ID does not duplicate work.
-- `scope`: coordinator and worker capabilities cannot address unrelated tasks.
-- `input-boundary`: direct client worker commands and dialog answers fail without dispatch or task-state changes.
-- `readonly`: project-only reads and no write or shell tools.
+```sh
+PI_REMOTE_RECOVERY_TEST_PORT=8815 npm run test:coordinator-recovery
+```
 
-## How to get to it (user POV)
+Use `PI_REMOTE_TEST_CHANNEL=chrome` for installed Chrome. This refuses an occupied port, launches an isolated host with real Pi processes and native tools, drives the phone inspector, and prints a retained `pi-task-recovery-proof-*` evidence directory. Task assignment/control uses the production scoped HTTP interface; it never modifies task records or browser state. Model responses and external failure points are deterministic.
 
-Reload the browser and reopen the coordinator. For restart, stop only the verification host you launched and start the same fixture root again. Inspect **Background tasks** after reconnecting. An uncertain task displays **Needs inspection**.
+Require these observable results:
 
-## Driving it with Playwright
+1. **Recovery counter** performs a real successful shell append, then its provider fails. The same task/session/worktree resumes, reads the saved counter, writes a remaining file and reports. Counter has exactly one line; two transport messages contain only one original input body. Capture **same-task-recovered**.
+2. Review its complete patch. The fixture Git shim executes real `git apply`, then deliberately loses its success receipt. Require integration unknown. Explicit `recover` with that revision verifies the already-present patch without a second apply. Parent index and local draft remain unchanged.
+3. **Recovery inbox** receives a follow-up while its current turn is held. Restart only the owned fixture host. The follow-up body must appear once, the original body must not repeat, and the replacement generation must reject a stale report and mismatched input receipt. Release the provider gate and require a returned result. Capture **queued-input-recovered**.
+4. **Recovery budget** always fails. Require exactly two automatic continuations and one persisted recovery escalation, not an endless loop.
+5. Corrupt only a fixture session's recorded input text after its read receipt. Require an inconsistent-history block, not redelivery. Stop one task while recovery is pending and another while real Git workspace inspection is held. Release the inspection and require Stopped with no new input transport message or model turn.
+6. **Uncertain tool** starts a real long-running shell command which writes a marker. Kill only its audited Pi PID while its tool result is absent. Require Needs inspection and one recovery question, one marker and no replacement turn. Capture **uncertain-tool-blocked**. The fixture separately kills its known shell child during cleanup; Stop is not an OS process-tree sandbox.
+7. With two other active tasks, `recover` must reject reactivation without changing the blocked task.
 
-Preconditions: passing coordinator proof through result acceptance and scoped Stop.
+Inspect result.json, tasks.json, provider-audit.json, screenshots/ARIA, host logs and cleanup.json. Neither deterministic responses nor saved tool receipts prove paid-model judgment or exactly-once arbitrary external effects. A background shell child may outlive its Pi process. Missing receipts must never be filled in to force continuation.
 
-- Reload using `page.reload()`, reopen **Coordinator verification project**, then **Background tasks**. Require First inspection's accepted report and Second inspection's stopped state.
-- Send `Start an interrupted task.`. Require **Interrupted inspection** to be working and the coordinator to have finished its response.
-- Keep Interrupted inspection's log open in the bottom sheet. Stop the owned fixture server with SIGTERM, wait for exit, and launch `test/coordinator-server.mjs` with the same `PI_COORDINATOR_FIXTURE_ROOT`. Require a new server PID and passing Doctor.
-- Require the open sheet to reconnect automatically and show **Needs inspection** without replacing the selected parent. Then reload and reopen tasks. Compare persisted user-prompt counts, coordinator event markers, and native provider request counts before and after restart. None may increase just because recovery ran.
-- At the production scoped HTTP interface, replay the original assignment and report with their original request IDs. Require the same task count, event count, and accepted result. A fresh late report from the stopped worker must fail.
-- Create a fresh ordinary session in the same project and delegate from it. Its capability cannot inspect the first session's task. A normal-session capability paired with another session ID must fail, as must a previous process's capability after restart. Worker attempts at coordinator actions and cross-origin requests must also fail.
-- Through the real client socket, send prompt, steering, follow-up, abort, model, reasoning, compaction, and dialog-answer attempts directly to a worker. Require the exact safe read-only error, unchanged task state, and no new worker prompt. Test again after restart and at capacity. The actual serialized response, not just a status flag, is the proof.
-- At the real client socket, require worker inspection and history to work only for a child of the selected parent. Reject parent/non-worker IDs and another owner's child. Resyncing the same parent must preserve inspection; selecting another conversation must clear it and its history access.
-- Check real Pi tool results for denied outside and symlink reads and unavailable write/bash. Verify original project hashes, unchanged directory entries, private state mode 0600, and absence of capability tokens in browser frames. The full proof performs these checks.
+## Existing workflow and permission regression
 
-## Gotchas
+Run `npm run test:coordinator` through result acceptance and scoped Stop.
 
-Restarting the fixture must not select a new scratch root. Never edit the task database to manufacture an unknown state. Do not repeat uncertain actions with new request IDs. A sent notification means Pi accepted input, not that a human read it. Completed workers remain ordinary open Pi sessions in this first version; the fixture cleanup must stop all PIDs it created.
+- Reload, reopen **Coordinator verification project → Workers**, and require accepted/stopped states.
+- Send `Start an interrupted task.`. Keep its log open, SIGTERM only the owned host, and restart `test/coordinator-server.mjs` with the same `PI_COORDINATOR_FIXTURE_ROOT`. Require a new PID, passing Doctor and an automatically reconnected sheet showing Working after safe continuation. Parent selection and original input-body counts remain unchanged. Only interrupted workers may invoke the model with recovery notes.
+- Replay original assignment/report request IDs, including the report's original execution generation. Task/event counts and accepted outcome stay unchanged. Fresh stopped-worker reports fail.
+- Another same-project parent cannot inspect/control these tasks. Mismatched session capabilities and expired pre-restart capabilities fail, as do worker coordinator actions and cross-origin requests.
+- Direct client worker prompt/steer/follow-up/abort/model/reasoning/compaction/dialog-answer commands return **Worker logs are read-only. Send instructions to the coordinator.** No dispatch or task-state change is permitted. Repeat after restart and at capacity.
+- Worker inspection/history is limited to a child of the selected parent. Reject parent/non-worker IDs and another owner's child. Same-parent resync retains inspection; selecting another conversation clears it.
+- Investigation tools deny outside/symlink reads and provide no write/bash. Require unchanged project hashes/entries, private state mode 0600 and no capabilities in browser frames. Coding shell restrictions are guidance on a trusted host, not an OS sandbox.
+
+## Cleanup and limits
+
+Never kill by process name, edit the task ledger, reuse another fixture root or retry uncertain actions with fresh request IDs. Use only this run's recorded PIDs and marker-owned paths. Both proofs retain evidence and remove their owned scratch data after checking Pi exits. Uncertain main-conversation turns and notification delivery are not automatically replayed by worker recovery.

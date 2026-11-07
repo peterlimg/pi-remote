@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { secret, equalSecret } from './config.mjs';
 import { readSession } from './catalog.mjs';
 import { sessionKey, sessionCapability } from './locks.mjs';
-import { planWorkspace, createWorkspace, reviewWorkspace, integrateWorkspace } from './task-workspaces.mjs';
+import { planWorkspace, createWorkspace, reviewWorkspace, integrateWorkspace, inspectWorkspace, resolveIntegration } from './task-workspaces.mjs';
+import { encodeTaskInput, parseTaskInput } from './task-input.mjs';
 
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
 const sessionExtension = fileURLToPath(new URL('../extension/index.ts', import.meta.url));
-const active = new Set(['starting', 'working', 'waiting', 'stopping']);
+const active = new Set(['starting', 'working', 'waiting', 'stopping', 'queued', 'recovering']);
 const publicError = (message, status = 400) => Object.assign(new Error(message), { public: true, status });
 const text = (value, name, max) => {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw publicError(`${name} must be nonempty text of at most ${max} characters.`);
@@ -24,7 +25,7 @@ const safe = error => {
 export class Coordinators {
   constructor(service) {
     this.service = service; this.file = join(service.dir, 'coordinator-tasks.json');
-    this.owners = new Map(); this.tasks = new Map(); this.waking = new Set(); this.scheduled = new Set();
+    this.owners = new Map(); this.tasks = new Map(); this.waking = new Set(); this.scheduled = new Set(); this.driving = new Set();
     try {
       const data = JSON.parse(readFileSync(this.file, 'utf8'));
       if (data.version !== 1 || !Array.isArray(data.coordinators) || !Array.isArray(data.tasks)) throw new Error('Invalid coordinator state');
@@ -34,9 +35,13 @@ export class Coordinators {
       }
       for (const task of data.tasks) {
         if (!task.file || sessionKey(task.file) !== task.sessionId || !this.owners.has(task.coordinatorId) || typeof task.token !== 'string' || task.token.length < 32 || !Array.isArray(task.events)) throw new Error('Invalid task record');
-        // An interrupted dispatch is evidence to inspect, never permission to repeat it.
-        if (['starting', 'working', 'stopping'].includes(task.state)) {
-          task.state = 'unknown'; task.error = 'Work was interrupted. Inspect the worker before continuing.';
+        if (task.protocol === 2 && (!Array.isArray(task.inputs) || task.inputs.some(input => typeof input.id !== 'string' || typeof input.text !== 'string'))) throw new Error('Invalid task mailbox');
+        if (task.protocol === 2) task.generation = randomUUID();
+        if (['starting', 'working', 'stopping', 'recovering'].includes(task.state)) {
+          const recoverable = task.protocol === 2 && !task.stopped && task.state !== 'stopping';
+          task.state = recoverable ? 'recovering' : 'unknown';
+          task.error = 'Work was interrupted. Inspecting saved work before any continuation.';
+          if (recoverable) task.recovery = { ...task.recovery, attempts: task.recovery?.attempts || 0, phase: 'pending', nextAt: Date.now(), since: Date.now() };
         }
         if (task.workspace?.integration === 'checking') delete task.workspace.integration;
         if (task.workspace?.integration === 'applying') {
@@ -50,7 +55,11 @@ export class Coordinators {
       if (error.code !== 'ENOENT') { console.error('Could not load coordinator state:', error); this.error = 'Coordinator state could not be loaded. No coordinator work will be started.'; }
     }
     service.on('state', id => { this.observe(id); this.schedule(id); });
+    this.recoveryTimer = setInterval(() => {
+      for (const task of this.tasks.values()) if (['queued', 'recovering'].includes(task.state)) void this.advanceTask(task).catch(error => console.error('Task recovery failed:', error));
+    }, 500); this.recoveryTimer.unref();
   }
+  close() { clearInterval(this.recoveryTimer); }
   check() { if (this.error) throw publicError(this.error, 503); }
   save() {
     this.check();
@@ -63,6 +72,9 @@ export class Coordinators {
   publicTask(task, concise = false) {
     const value = { id: task.id, coordinatorId: task.coordinatorId, sessionId: task.sessionId, title: task.title,
       instruction: task.instruction, state: task.state, kind: task.kind || 'investigation', readOnly: task.kind !== 'code', workspace: task.workspace && { ...task.workspace },
+      protocol: task.protocol || 1, generation: task.generation,
+      pendingInputs: task.inputs?.filter(input => !input.settled && !input.cancelled && !input.read).length || 0,
+      recovery: task.recovery && { attempts: task.recovery.attempts, limit: 2, phase: task.recovery.phase, reason: task.recovery.reason },
       question: task.question, answer: task.answer,
       result: task.result, error: task.error, updatedAt: task.updatedAt,
       delivery: task.events.at(-1)?.delivery };
@@ -150,7 +162,7 @@ export class Coordinators {
     this.check();
     if (this.taskForSession(ownerId)) throw publicError('Workers cannot control coordinator tasks.', 403);
     if (!this.owners.has(ownerId) && (human || !['list', 'assign'].includes(input?.action))) throw publicError('This session has no worker tasks.');
-    const actions = human ? ['stop', 'accept'] : ['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate'];
+    const actions = human ? ['stop', 'accept'] : ['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate', 'recover'];
     if (!input || !actions.includes(input.action)) throw publicError('Unsupported coordinator action.');
     const command = { action: input.action };
     if (input.action === 'assign') {
@@ -161,7 +173,7 @@ export class Coordinators {
     }
     else if (input.action !== 'list') command.taskId = text(input.taskId, 'Task ID', 100);
     if (input.action === 'message') command.text = text(input.text, 'Message', 10000);
-    if (input.action === 'integrate') {
+    if (input.action === 'integrate' || input.action === 'recover' && input.revision !== undefined) {
       if (typeof input.revision !== 'string' || !/^[a-f0-9]{40,64}$/.test(input.revision)) throw publicError('Supply the exact revision returned by inspect after reviewing the changes.');
       command.revision = input.revision;
     }
@@ -180,13 +192,41 @@ export class Coordinators {
         return this.publicTask(task);
       }
       if (command.action === 'integrate') return this.integrate(task, command.revision);
+      if (command.action === 'recover') {
+        if (task.workspace?.integration === 'unknown') {
+          if (command.revision !== task.workspace.reviewedRevision) throw publicError('Inspect the task and supply its reviewed revision before resolving integration.', 409);
+          const outcome = await resolveIntegration(task.workspace, command.revision, this.service.dir);
+          if (outcome === 'applied') { task.workspace.integration = 'applied'; task.state = 'completed'; }
+          else { delete task.workspace.integration; task.state = 'reported'; }
+          delete task.error; this.changed(ownerId); return this.publicTask(task);
+        }
+        if (task.protocol !== 2 || task.state !== 'unknown' || task.stopped) throw publicError('Only an inspected, interrupted task can be checked for recovery.');
+        if ([...this.tasks.values()].filter(item => item.coordinatorId === ownerId && active.has(item.state)).length >= 2) throw publicError('Two tasks are already active. Finish or stop one before continuing another.');
+        task.recovery = { attempts: 0, phase: 'pending', nextAt: Date.now(), since: Date.now() }; task.state = 'recovering';
+        this.changed(ownerId); return this.publicTask(task);
+      }
       if (command.action === 'accept') {
         if (task.state !== 'reported') throw publicError('Only a returned result can be accepted.');
         if (task.kind === 'code') throw publicError('Review the code with inspect, then integrate its exact revision to complete this task.');
         task.state = 'completed'; task.updatedAt = Date.now(); this.changed(ownerId); return this.publicTask(task);
       }
-      if (command.action === 'stop') return this.send(task, { type: 'abort' }, requestId);
-      return this.send(task, { type: 'prompt', text: command.text }, requestId);
+      if (command.action === 'stop') {
+        task.stopped = true; task.generation = randomUUID();
+        for (const input of task.inputs || []) if (!input.settled) input.cancelled = true;
+        for (const event of task.events) if (event.recovery && event.delivery === 'pending') event.delivery = 'cancelled';
+        task.recovery = undefined; task.commandId = randomUUID(); this.changed(ownerId);
+        const live = this.service.live.get(task.sessionId);
+        if (!live || live.resumable || live.managed?.restartSafe) { task.state = 'stopped'; this.changed(ownerId); return this.publicTask(task); }
+        return this.send(task, { type: 'abort' }, requestId);
+      }
+      if (task.state === 'stopping' || task.workspace?.integration) throw publicError('Wait for Stop or resolve integration before sending another instruction.', 409);
+      if (!active.has(task.state) && [...this.tasks.values()].filter(item => item.coordinatorId === ownerId && active.has(item.state)).length >= 2) throw publicError('Two tasks are already active. Finish or stop one before continuing another.');
+      task.protocol = 2; task.inputs ||= [];
+      this.queueInput(task, command.text); task.stopped = false;
+      if (task.question) task.answer = command.text;
+      if (task.state === 'unknown') { task.state = 'recovering'; task.recovery = { attempts: 0, phase: 'pending', nextAt: Date.now(), since: Date.now() }; }
+      else if (task.state !== 'working') task.state = 'queued';
+      this.changed(ownerId); return this.publicTask(task);
     });
   }
   async assign(ownerId, command) {
@@ -196,7 +236,8 @@ export class Coordinators {
     if (!model || model.startsWith('claude-sdk/') || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Workers require a native Pi model. Specify an available native provider/model for the worker; your session model stays unchanged.');
     const record = this.createTaskFile({ ...source, model }, command.title);
     const task = { ...record, id: randomUUID(), coordinatorId: ownerId, title: command.title, instruction: command.instruction,
-      kind: command.kind || 'investigation', state: 'starting', events: [], updatedAt: Date.now() };
+      kind: command.kind || 'investigation', protocol: 2, inputs: [], generation: randomUUID(), state: 'starting', events: [], updatedAt: Date.now() };
+    this.queueInput(task, (task.kind === 'code' ? 'Coding assignment' : 'Read-only assignment') + ' from your coordinator:\n\n' + task.instruction);
     this.tasks.set(task.id, task); this.changed(ownerId);
     try {
       if (task.kind === 'code') {
@@ -210,10 +251,10 @@ export class Coordinators {
       }
       this.service.catalog.set(task.sessionId, readSession(task.file));
       await this.service.startWorker(task.sessionId);
-      await this.send(task, { type: 'prompt', text: (task.kind === 'code' ? 'Coding assignment' : 'Read-only assignment') + ' from your coordinator:\n\n' + task.instruction }, randomUUID());
+      await this.deliver(task, new Set());
     } catch (error) {
       if (task.state === 'starting') {
-        task.state = 'unknown'; task.error = 'Worker startup or dispatch failed. Inspect the worker before continuing.'; this.changed(ownerId);
+        this.interrupt(task, 'Worker startup or dispatch failed.');
       }
       throw error;
     }
@@ -230,8 +271,9 @@ export class Coordinators {
     if (command.type !== 'abort' && !active.has(task.state) && [...this.tasks.values()].filter(item => item.coordinatorId === task.coordinatorId && active.has(item.state)).length >= 2) {
       throw publicError('Two tasks are already active. Finish or stop one before continuing another.');
     }
+    if (task.protocol === 2 && command.type !== 'abort' && parseTaskInput(command.text)?.generation !== task.generation) throw publicError('This execution attempt is no longer current.', 409);
     task.state = command.type === 'abort' ? 'stopping' : 'working'; task.dispatch = 'sending'; task.turnStarted = false; task.updatedAt = Date.now();
-    if (command.type !== 'abort' && task.question) task.answer = command.text;
+    if (task.protocol !== 2 && command.type !== 'abort' && task.question) task.answer = command.text;
     task.commandId = randomUUID();
     delete task.error; this.changed(task.coordinatorId); return { task, commandId: task.commandId };
   }
@@ -246,8 +288,89 @@ export class Coordinators {
   failedCommand(transition) {
     if (!transition || transition.commandId !== transition.task.commandId || !['working', 'stopping'].includes(transition.task.state)) return;
     const { task } = transition;
-    task.state = 'unknown'; task.error = 'Delivery failed or is uncertain. Inspect the worker before continuing.';
+    this.interrupt(task, 'Delivery failed or is uncertain.');
+  }
+  queueInput(task, body) {
+    const input = { id: randomUUID(), text: body, delivery: 'pending' };
+    if (task.inputs.filter(item => !item.settled && !item.cancelled).length >= 32 || encodeTaskInput(randomUUID(), [input], new Set()).length > 44000) throw publicError('The task input queue is full or this instruction is too large. Wait or shorten it.');
+    task.inputs.push(input); return input;
+  }
+  interrupt(task, reason) {
+    task.commandId = randomUUID(); task.generation = randomUUID(); task.error = reason;
+    if (task.protocol !== 2 || task.stopped || task.workspace?.integration) task.state = 'unknown';
+    else {
+      task.state = 'recovering';
+      task.recovery = { ...task.recovery, attempts: task.recovery?.attempts || 0, phase: 'pending', reason,
+        nextAt: Date.now() + 1000 * 2 ** (task.recovery?.attempts || 0), since: Date.now() };
+    }
     this.changed(task.coordinatorId);
+  }
+  blockRecovery(task, reason) {
+    task.state = 'unknown'; task.error = reason; task.generation = randomUUID(); task.commandId = randomUUID();
+    task.recovery = { ...task.recovery, attempts: task.recovery?.attempts || 0, phase: 'blocked', reason };
+    task.question = reason + ' Inspect the saved work before deciding how to continue.';
+    if (!task.recovery.alerted) {
+      task.events.push({ id: randomUUID(), kind: 'question', text: task.question, recovery: true, delivery: 'pending' });
+      task.recovery.alerted = true;
+    }
+    this.changed(task.coordinatorId); this.schedule(task.coordinatorId);
+  }
+  async deliver(task, recorded, note = '') {
+    const generation = randomUUID(), inputs = [];
+    for (const input of task.inputs.filter(item => !item.settled && !item.cancelled)) {
+      if (encodeTaskInput(generation, [...inputs, input], recorded, note).length > 48000) break;
+      inputs.push(input);
+    }
+    if (!inputs.length) throw publicError('No bounded task input is available for delivery. Inspect its queue.');
+    task.generation = generation; task.run = { generation, inputIds: inputs.map(input => input.id), read: false, status: 'sending' };
+    for (const input of inputs) input.delivery = 'sending';
+    this.changed(task.coordinatorId);
+    const result = await this.send(task, { type: 'prompt', text: encodeTaskInput(generation, inputs, recorded, note) }, 'task-' + generation);
+    if (task.generation === generation) {
+      for (const input of inputs) if (input.delivery === 'sending') input.delivery = 'sent';
+      this.changed(task.coordinatorId);
+    }
+    return result;
+  }
+  async advanceTask(task) {
+    if (this.error || this.service.stopping || !this.service.restoreLoaded || this.driving.has(task.id) || task.stopped || task.workspace?.integration) return;
+    if (!['queued', 'recovering'].includes(task.state) || (task.recovery?.nextAt || 0) > Date.now()) return;
+    const live = this.service.live.get(task.sessionId), recovery = task.state === 'recovering';
+    if (this.service.restoring.has(task.sessionId) || live?.managed && !live.managed.restartSafe || live?.state.dialog) {
+      if (recovery && Date.now() - task.recovery.since > 30000) this.blockRecovery(task, 'The previous worker is still busy or waiting for permission. No replacement was started.');
+      return;
+    }
+    this.driving.add(task.id);
+    let generation = task.generation;
+    const current = () => !this.service.stopping && !task.stopped && task.generation === generation && ['queued', 'recovering'].includes(task.state);
+    try {
+      if (recovery && task.recovery.attempts >= 2) { this.blockRecovery(task, 'Automatic recovery stopped after two attempts.'); return; }
+      if (task.kind === 'code' && task.workspace?.status !== 'ready') { this.blockRecovery(task, 'Workspace preparation is incomplete and will not be repeated automatically.'); return; }
+      const history = await this.service.historyReader.request('taskRecovery', { file: task.file });
+      if (!current()) return;
+      const saved = new Map(history.bodies.map(input => [input.id, input.text])), expected = new Map(task.inputs.map(input => [input.id, input.text]));
+      const mismatch = history.bodies.some(input => expected.get(input.id) !== input.text) || task.inputs.some(input => input.read && !input.settled && !input.cancelled && !saved.has(input.id));
+      if (history.cwd !== task.cwd || !history.complete || history.invalid || history.duplicate || mismatch) { this.blockRecovery(task, 'The saved worker history is incomplete or inconsistent.'); return; }
+      if (history.pendingTools.length || recovery && history.failedTools.some(tool => tool.generation === task.run?.generation)) {
+        this.blockRecovery(task, 'A tool outcome is incomplete or uncertain. No tool was replayed.'); return;
+      }
+      const workspace = task.kind === 'code' ? await inspectWorkspace(task.workspace) : undefined;
+      if (!current()) return;
+      if (recovery) { task.recovery.attempts++; task.recovery.phase = 'checking'; this.changed(task.coordinatorId); }
+      if (!live || live.resumable) await this.service.startWorker(task.sessionId);
+      if (!current()) return;
+      const item = this.service.live.get(task.sessionId);
+      if (!item?.managed?.restartSafe) return;
+      const note = recovery ? ('Recovery continuation ' + task.recovery.attempts + ' of 2 for the same authorized assignment.\n' +
+        'Keep the existing conversation and saved tool results. Only previously unrecorded instructions are included below. Inspect existing files and recorded results, continue only remaining work, and never repeat an uncertain outside action. Ask the coordinator if a decision is needed.\n' +
+        (workspace ? 'Verified workspace: ' + JSON.stringify(workspace) : 'The same project and session are retained.')).slice(0, 3000) : '';
+      if (recovery) task.recovery.phase = 'running';
+      await this.deliver(task, new Set(history.recorded), note);
+      generation = task.generation;
+    } catch (error) {
+      console.error('Task continuation failed:', error);
+      if (current()) this.interrupt(task, 'Worker restart or input delivery failed.');
+    } finally { this.driving.delete(task.id); }
   }
   async integrate(task, revision) {
     if (task.kind !== 'code' || task.state !== 'reported' || task.workspace?.reviewedRevision !== revision) throw publicError('Inspect and review a returned coding result before integrating it.', 409);
@@ -273,11 +396,25 @@ export class Coordinators {
     return this.publicTask(task);
   }
   report(task, requestId, input) {
+    if (input?.kind === 'receipt') {
+      if (task.protocol !== 2 || input.generation !== task.generation) throw publicError('This execution attempt is no longer current.', 409);
+      if (task.state !== 'working' || !Array.isArray(input.inputIds) || JSON.stringify(input.inputIds) !== JSON.stringify(task.run?.inputIds)) throw publicError('The input receipt does not match this execution attempt.', 409);
+      return this.operation(task.sessionId, requestId, { kind: 'receipt', generation: input.generation, inputIds: input.inputIds }, () => {
+        if (input.generation !== task.generation || task.state !== 'working') throw publicError('This execution attempt is no longer current.', 409);
+        for (const item of task.inputs) if (input.inputIds.includes(item.id)) item.read = true;
+        task.run.read = true; this.changed(task.coordinatorId); return { saved: true };
+      });
+    }
     if (!['question', 'result'].includes(input?.kind)) throw publicError('Report a question or a result.');
     const body = text(input.text, 'Report', 10000);
-    return this.operation(task.sessionId, requestId, { kind: input.kind, text: body }, () => {
+    return this.operation(task.sessionId, requestId, { kind: input.kind, text: body, ...(input.generation ? { generation: input.generation } : {}) }, () => {
+      if (task.protocol === 2 && (input.generation !== task.generation || !task.run?.read)) throw publicError('The current inputs have not been read by this execution attempt.', 409);
       if (task.state !== 'working') throw publicError('This task is not working. Wait for an explicit instruction before reporting again.');
-      task.state = input.kind === 'question' ? 'waiting' : 'reported';
+      if (task.protocol === 2) {
+        for (const item of task.inputs) if (task.run.inputIds.includes(item.id)) item.settled = true;
+        task.run.status = 'reported'; task.recovery = { attempts: 0, phase: 'idle' };
+      }
+      task.state = task.inputs?.some(item => !item.settled && !item.cancelled) ? 'queued' : input.kind === 'question' ? 'waiting' : 'reported';
       task[input.kind] = body; task.updatedAt = Date.now(); delete task.error;
       if (input.kind === 'question') delete task.answer;
       task.events.push({ id: randomUUID(), kind: input.kind, text: body, delivery: 'pending' });
@@ -290,15 +427,14 @@ export class Coordinators {
     if (!task || !item?.managed || this.service.stopping) return;
     if (!item.managed.restartSafe) { if (task.state === 'working') task.turnStarted = true; return; }
     if (task.state === 'working' && task.dispatch === 'accepted' && task.turnStarted) {
-      task.state = 'unknown'; task.error = 'The worker ended without a task report. Inspect its session before continuing.';
-      this.changed(task.coordinatorId);
+      this.interrupt(task, 'The worker ended without a task report.');
     }
     // shortcut: workers remain ordinary open Pi sessions; add idle eviction when sustained use needs a process budget.
   }
   exited(id) {
     const task = this.taskForSession(id);
     if (task && active.has(task.state) && task.state !== 'waiting' && !this.service.stopping) {
-      task.state = 'unknown'; task.error = 'The worker disconnected before returning a report.'; this.changed(task.coordinatorId);
+      this.interrupt(task, 'The worker disconnected before returning a report.');
     }
   }
   schedule(ownerId) {

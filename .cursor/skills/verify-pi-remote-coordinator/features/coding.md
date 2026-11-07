@@ -12,7 +12,7 @@ Run the full coordinator proof. After its investigation assertions, it initializ
 4. Send `Review and integrate the calculation fix.`. The deterministic parent uses inspect, reads the returned diff/revision, then integrate. Require the edited calculation and new files in the parent, completed state, preserved draft/index, and no Coding notes file copied across.
 5. Repeat the exact integration request ID and require the cached outcome rather than another apply. Another parent and a worker capability must not integrate this task.
 6. Inspect Calculation fix in the phone sheet. Task details identifies its workspace and integrated state. The original main composer is still the only input.
-7. Restart the owned fixture host. Require the integrated result and both worktree paths to survive, the active notes task to become unknown, and no worker instruction replay. Send `Stop the coding notes worker.` in the main conversation and require only that task to stop.
+7. Restart the owned fixture host. Require the integrated result and both worktree paths to survive, the active notes task to resume from its saved history with a recovery note, and no duplicate original input body or notes-file write. Send `Stop the coding notes worker.` in the main conversation and require only that task to stop.
 
 ## Evidence and limits
 

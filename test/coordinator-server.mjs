@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
-import { join, resolve, basename } from 'node:path';
+import { join, resolve, basename, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
@@ -23,6 +23,13 @@ seed(join(root, 'project', 'beta.txt'), 'BETA_VALUE=hold\n');
 seed(join(root, 'outside.txt'), 'PRIVATE_OUTSIDE_SHOULD_NOT_APPEAR\n');
 if (!existsSync(join(root, 'project', 'escape.txt'))) symlinkSync(join(root, 'outside.txt'), join(root, 'project', 'escape.txt'));
 seed(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'coordinator-fixture', defaultModel: 'fixture', compaction: { enabled: false }, retry: { enabled: false } }));
+if (process.env.PI_RECOVERY_GIT === '1') {
+  const bin = join(root, 'git-bin'); mkdirSync(bin, { recursive: true });
+  process.env.PI_RECOVERY_REAL_GIT = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  process.env.PI_RECOVERY_FIXTURE_ROOT = root;
+  if (!existsSync(join(bin, 'git'))) symlinkSync(resolve('test/fixtures/recovery-git.mjs'), join(bin, 'git'));
+  process.env.PATH = bin + delimiter + process.env.PATH;
+}
 const sources = [];
 for (const [name, folder, filename = folder] of [['Coordinator verification project', 'project'], ['Other verification project', 'other-project'], ['Terminal verification project', 'project', 'terminal']]) {
   const file = join(sessions, filename + '.jsonl'), id = randomUUID(), timestamp = new Date().toISOString();

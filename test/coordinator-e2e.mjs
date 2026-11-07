@@ -9,6 +9,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { chromium, devices, expect } from '@playwright/test';
 import { socket, until, delay } from './helpers.mjs';
 import { sessionCapability } from '../src/locks.mjs';
+import { parseTaskInput } from '../src/task-input.mjs';
 
 const clientToken = 'browser-test-token-only-123456789012345';
 const bridgeToken = 'coordinator-bridge-fixture-only-123456789012345';
@@ -90,6 +91,10 @@ if (process.argv[2] === 'doctor') {
   const ledger = () => json(join(root, 'host', 'coordinator-tasks.json'));
   const owner = () => ledger().coordinators.find(owner => owner.cwd === join(root, 'project'));
   const entries = file => lines(file).filter(entry => entry.type === 'message');
+  const inputBodies = file => entries(file).filter(entry => entry.message.role === 'user').flatMap(entry => {
+    const text = typeof entry.message.content === 'string' ? entry.message.content : entry.message.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+    return parseTaskInput(text)?.messages || [{ text }];
+  });
   const eventCount = file => entries(file).filter(entry => entry.message.role === 'user' && JSON.stringify(entry.message.content).includes('[Pi Remote task events]')).length;
   const taskRow = name => page.getByRole('listitem', { name, exact: true });
   const snapshot = async name => {
@@ -391,7 +396,7 @@ if (process.argv[2] === 'doctor') {
     await send('Start an interrupted task.'); await openTasks(); await check(taskRow('Interrupted inspection')).toContainText('Working');
     await closeTasks(); await check(page.locator('#abort')).toBeHidden();
     const before = ledger(), main = owner(), first = before.tasks.find(task => task.title === 'First inspection');
-    const promptsBefore = Object.fromEntries(before.tasks.map(task => [task.id, entries(task.file).filter(entry => entry.message.role === 'user').length]));
+    const promptsBefore = Object.fromEntries(before.tasks.map(task => [task.id, inputBodies(task.file).length]));
     await openTasks(); await openLog('Interrupted inspection');
     const eventsBefore = eventCount(main.file), oldPid = running.child.pid;
     const oldScope = sessionCapability(bridgeToken, main.id, json(join(root, 'host', 'locks', main.id + '.json')).nonce);
@@ -402,21 +407,22 @@ if (process.argv[2] === 'doctor') {
     do {
       const status = await fetch(url + '/_pi/remote', { headers: { Authorization: 'Bearer ' + bridgeToken }, signal: AbortSignal.timeout(3000) });
       restored = await status.json();
-      if (restored.busyWorkers === 0 && restored.managedSessions.length >= 4) break;
+      if (restored.managedSessions.length >= 4 && ledger().tasks.find(task => task.title === 'Interrupted inspection')?.run?.read && ledger().tasks.find(task => task.title === 'Interrupted inspection')?.state === 'working') break;
       await delay(20);
     } while (Date.now() < deadline);
-    assert(restored.busyWorkers === 0 && restored.managedSessions.length >= 4, 'All four native sessions must finish restoring before the no-replay check');
+    assert(restored.managedSessions.length >= 4, 'The native sessions must finish restoring before the recovery check');
     await check(page.locator('#coordinator-sheet')).toBeVisible();
     await check(page.locator('#coordinator-title')).toHaveText('Interrupted inspection');
-    await check(page.locator('#coordinator-subtitle')).toHaveText('Needs inspection');
+    await check(page.locator('#coordinator-subtitle')).toHaveText('Working');
     await check(page.locator('#coordinator-log .coordinator-instruction-label').first()).toBeVisible();
     record('open worker sheet reconnects after host restart without replacing the main conversation');
     await closeTasks(); await restoreCoordinator(); await assertHierarchy(); await openTasks();
-    await check(taskRow('Interrupted inspection')).toContainText('Needs inspection');
+    await check(taskRow('Interrupted inspection')).toContainText('Working');
     await check(taskRow('First inspection')).toContainText('Accepted'); await check(taskRow('Second inspection')).toContainText('Stopped');
-    for (const task of ledger().tasks) assert.equal(entries(task.file).filter(entry => entry.message.role === 'user').length, promptsBefore[task.id], 'Restart must not replay a task instruction');
+    for (const task of ledger().tasks) assert.equal(inputBodies(task.file).length, promptsBefore[task.id], 'Restart must not duplicate a task input body');
     assert.equal(eventCount(main.file), eventsBefore, 'Restart must not reannounce acknowledged notifications');
-    assert.equal(lines(join(root, 'provider.jsonl')).filter(event => event.kind === 'request').length, requestsBefore, 'Restore must not invoke the model again');
+    const resumed = lines(join(root, 'provider.jsonl')).filter(event => event.kind === 'request').slice(requestsBefore);
+    assert(resumed.length >= 1 && resumed.every(event => event.role === 'worker' && event.input.startsWith('Recovery continuation')), 'Only interrupted authorized work may resume with a recovery note');
     await snapshot('recovery-without-replay'); record('new host restores ownership and exposes interrupted work without replay', { previousPid: oldPid, pid: restarted.pid });
     assert.equal((await api()).status, 403);
     assert.equal((await api(oldScope, undefined, undefined, { 'X-Pi-Remote-Session': main.id })).status, 403, 'A previous process ownership capability must expire');
@@ -425,6 +431,8 @@ if (process.argv[2] === 'doctor') {
     assert.equal((await api(second.token, { requestId: hash(randomUUID()), action: 'list' })).status, 403);
     const late = await api(second.token, { requestId: hash(randomUUID()), kind: 'result', text: 'A stopped task must not accept this report.' });
     assert.equal(late.body.ok, false); assert.equal(ledger().tasks.find(task => task.id === second.id).state, 'stopped');
+    const interrupted = ledger().tasks.find(task => task.title === 'Interrupted inspection');
+    assert.equal((await api(main.token, { action: 'stop', taskId: interrupted.id, requestId: hash(randomUUID()) })).body.ok, true);
     for (const title of ['Capacity A', 'Capacity B']) assert.equal((await api(main.token, {
       action: 'assign', title, instruction: 'Inspect beta.txt and keep investigating until stopped.', requestId: hash(randomUUID())
     })).body.ok, true);
@@ -459,7 +467,7 @@ if (process.argv[2] === 'doctor') {
     const taskCount = ledger().tasks.length, eventTotal = ledger().tasks.reduce((count, task) => count + task.events.length, 0);
     assert.equal((await api(main.token, { ...assign.arguments, requestId: hash(assign.id) })).body.ok, true);
     const report = toolCalls(first.file).find(call => call.name === 'task_report' && call.arguments.kind === 'result');
-    assert.equal((await api(first.token, { ...report.arguments, requestId: hash(report.id) })).body.ok, true);
+    assert.equal((await api(first.token, { ...report.arguments, generation: first.run?.generation, requestId: hash(report.id) })).body.ok, true);
     assert.equal(ledger().tasks.length, taskCount); assert.equal(ledger().tasks.reduce((count, task) => count + task.events.length, 0), eventTotal);
     assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed'); record('scope checks and idempotent assignment/report retries');
     const freshFrames = frames.length;
@@ -584,13 +592,13 @@ if (process.argv[2] === 'doctor') {
     assert(codingResults.some(result => result.name === 'bash' && result.text.includes('calculation checks passed')));
     assert(codingResults.filter(result => result.name === 'write' && result.isError).length >= 2);
     assert(!existsSync(join(root, 'future-outside.txt'))); assert.equal(readFileSync(join(root, 'outside.txt'), 'utf8'), 'PRIVATE_OUTSIDE_SHOULD_NOT_APPEAR\n');
-    const codePrompts = [coding(), notes()].map(task => entries(task.file).filter(entry => entry.message.role === 'user').length);
+    const codePrompts = [coding(), notes()].map(task => inputBodies(task.file).length);
     const oldWorkspace = coding().workspace.path, notesWorkspace = notes().workspace.path;
     await stop(); await start(); await restoreCoordinator();
     assert.equal(coding().workspace.path, oldWorkspace); assert.equal(coding().state, 'completed');
-    assert.equal(notes().workspace.path, notesWorkspace); assert.equal(notes().state, 'unknown');
+    assert.equal(notes().workspace.path, notesWorkspace); await until(() => notes().state === 'working' && notes().run?.read, 30000);
     assert.equal(readFileSync(join(notesWorkspace, 'worker-notes.md'), 'utf8'), 'Independent coding work in its own worktree.\n');
-    for (const [index, task] of [coding(), notes()].entries()) assert.equal(entries(task.file).filter(entry => entry.message.role === 'user').length, codePrompts[index]);
+    for (const [index, task] of [coding(), notes()].entries()) assert.equal(inputBodies(task.file).length, codePrompts[index]);
     await send('Stop the coding notes worker.'); await until(() => notes().state === 'stopped', 30000);
     assert.equal(coding().state, 'completed');
     const matching = await api(main.token, { action: 'assign', kind: 'code', title: 'Matching fix', instruction: 'Fix add in calc.mjs and run its focused Node check.', requestId: hash(randomUUID()) });
@@ -611,7 +619,7 @@ if (process.argv[2] === 'doctor') {
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'bottom-sheet worker inspection', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'independent parent and worker streams', 'translucent D bottom sheet', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'coding worktrees and native edits/checks', 'reviewed conflict-safe integration', 'coding restart recovery', 'no private capabilities in browser'],
+      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'bottom-sheet worker inspection', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'independent parent and worker streams', 'translucent D bottom sheet', 'reload persistence', 'host process restart', 'safe continuation without duplicated inputs', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'coding worktrees and native edits/checks', 'reviewed conflict-safe integration', 'coding restart recovery', 'no private capabilities in browser'],
       excluded: ['paid-model judgment', 'OS sandboxing', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));

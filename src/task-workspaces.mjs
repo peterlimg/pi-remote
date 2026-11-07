@@ -30,6 +30,23 @@ async function validate(workspace) {
   const common = async cwd => realpathSync((await git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim());
   if (await common(workspace.path) !== await common(workspace.repository)) throw fail('The task workspace belongs to a different repository.');
 }
+export async function inspectWorkspace(workspace) {
+  await validate(workspace);
+  return { head: (await git(workspace.path, ['rev-parse', 'HEAD'])).trim(), status: (await git(workspace.path, ['status', '--short'])).slice(0, 8000) };
+}
+export async function resolveIntegration(workspace, revision, dir) {
+  await validate(workspace);
+  if (realpathSync((await git(workspace.repository, ['rev-parse', '--show-toplevel'])).trim()) !== realpathSync(workspace.repository)) throw fail('The destination repository moved.');
+  const patch = await git(workspace.path, ['diff', '--binary', '--no-ext-diff', '--no-textconv', workspace.base, revision, '--']);
+  if (!patch) return 'applied';
+  const temp = mkdtempSync(join(dir, 'task-resolve-'));
+  try {
+    const file = join(temp, 'changes.patch'); writeFileSync(file, patch, { mode: 0o600 });
+    try { await git(workspace.repository, ['apply', '--reverse', '--check', file]); return 'applied'; } catch {}
+    try { await git(workspace.repository, ['apply', '--check', file]); return 'not-applied'; } catch {}
+    throw fail('The interrupted patch is partial or conflicts with local changes. Resolve it manually before checking again.');
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+}
 export async function reviewWorkspace(workspace, dir) {
   await validate(workspace);
   const temp = mkdtempSync(join(dir, 'task-index-'));

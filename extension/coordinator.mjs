@@ -5,6 +5,7 @@ import { realpathSync, readFileSync, lstatSync } from 'node:fs';
 import { resolve, relative, isAbsolute, sep, join, dirname } from 'node:path';
 import { loadConfig, dataDir } from '../src/config.mjs';
 import { sessionKey, sessionCapability } from '../src/locks.mjs';
+import { parseTaskInput } from '../src/task-input.mjs';
 
 const guidance = [
   'The user gives all instructions and replies in this main conversation. Worker logs are read-only inspection views. Never ask the user to enter a worker session to answer it or give it commands.',
@@ -12,6 +13,7 @@ const guidance = [
   'Keep this conversation available. Assign returns after dispatch; do not wait for a worker to finish before answering another user message. Carry the user’s goals and relevant constraints into every assignment.',
   'Inspect worker questions, resolve routine clarifications from existing instructions, and present only missing user decisions here. Relay answers with remote_tasks message to the intended task. Clarify ambiguous references rather than guessing.',
   'Inspect complete reports before summarizing or accepting them. Review their evidence, accept a supported result, and synthesize useful findings here. Idle is not proof of completion, and a report is not permission for new work.',
+  'Worker follow-ups are durable and wait for the current turn to settle. Do not describe a queued instruction as already applied. Safe recovery reuses the session/worktree, never blindly repeats tools. Inspect blocked recovery before using recover; unresolved tool effects remain blocked.',
   'Address follow-ups and Stop to explicit task IDs. Stopping your response does not stop workers. Never approve permission dialogs automatically or replay an uncertain dispatch or notification.',
   'Investigation workers remain read-only. For authorized development work, assign kind code. Coding workers edit and run checks in separate Git worktrees on this trusted host, not an OS sandbox. Carry all relevant project instructions into their assignment. Never delegate private host access or work outside the assignment.',
   'Inspect a returned coding result and review its entire diff, then use integrate with the exact review revision. Integration applies the reviewed patch to the parent repository without committing or pushing. Resolve conflicts through this conversation. Never integrate an unread or truncated diff. Accept is for investigation results. Integrated coding tasks are finished; use a new assignment for further changes.',
@@ -40,9 +42,9 @@ async function callHost(origin, headers, input, signal, toolCallId) {
 function registerTasks(pi, call) {
   pi.registerTool({
     name: 'remote_tasks', label: 'Background workers', exposure: 'direct', executionMode: 'sequential',
-    description: 'Delegate user-requested investigations or coding work from this conversation. Assign kind code for edits and checks in a separate Git worktree. Inspect returns the code diff and revision; review it completely before integrate with that revision. Integration applies only that patch, without commit or push. List tasks, assign workers, inspect reports, send task-specific instructions, stop one task, or accept a reviewed result. Assign returns immediately after dispatch. At most two tasks may be active. The optional worker model must be an available native Pi provider/model; the parent session model does not change.',
+    description: 'Delegate user-requested investigations or coding work from this conversation. Assign kind code for edits and checks in a separate Git worktree. Inspect returns the code diff and revision; review it completely before integrate with that revision. Integration applies only that patch, without commit or push. List tasks, assign workers, inspect reports, queue task-specific instructions, stop one task, or accept a reviewed result. Safe interruptions recover automatically with at most two attempts. Use recover to recheck a blocked task after inspection. For interrupted integration, recover requires its inspected revision and only checks whether that patch is present. Assign returns immediately after dispatch. At most two tasks may be active. The optional worker model must be an available native Pi provider/model; the parent session model does not change.',
     parameters: Type.Object({
-      action: Type.Union(['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate'].map(value => Type.Literal(value))),
+      action: Type.Union(['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate', 'recover'].map(value => Type.Literal(value))),
       taskId: Type.Optional(Type.String({ maxLength: 100 })), title: Type.Optional(Type.String({ maxLength: 120 })),
       instruction: Type.Optional(Type.String({ maxLength: 8000 })), text: Type.Optional(Type.String({ maxLength: 10000 })),
       model: Type.Optional(Type.String({ maxLength: 500 })),
@@ -92,7 +94,7 @@ export default function coordinatorExtension(pi) {
       env: Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('PI_REMOTE_'))) })
   }));
   const call = (input, signal, id) => callHost(origin, { Authorization: 'Bearer ' + token }, input, signal, id);
-  let reported = false;
+  let reported = false, generation;
   const inside = (path, dir) => { const rel = relative(dir, path); return !rel || !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep); };
   if (role === 'coordinator') registerTasks(pi, call);
   else pi.registerTool({
@@ -100,7 +102,7 @@ export default function coordinatorExtension(pi) {
     description: 'Persist a question or final result for your assigned task and return it to the owning coordinator. Include evidence and unresolved limits. A question waits for an explicit reply. This tool ends the current turn; do not continue working after reporting.',
     parameters: Type.Object({ kind: Type.Union([Type.Literal('question'), Type.Literal('result')]), text: Type.String({ minLength: 1, maxLength: 10000 }) }, { additionalProperties: false }),
     async execute(id, input, signal) {
-      const value = await call(input, signal, id); reported = true;
+      const value = await call({ ...input, generation }, signal, id); reported = true;
       return { ...toolResult(value), terminate: true };
     }
   });
@@ -112,10 +114,19 @@ export default function coordinatorExtension(pi) {
       pi.appendEntry(marker, { text: event.text }); ctx.ui.setStatus(marker, event.text);
     }
   });
-  pi.on('tool_call', (event, ctx) => {
+  pi.on('context', async event => {
+    if (role === 'coordinator') return;
+    const input = event.messages.filter(message => message.role === 'user').map(message => parseTaskInput(typeof message.content === 'string' ? message.content : message.content?.filter(part => part.type === 'text').map(part => part.text).join('\n'))).findLast(Boolean);
+    if (!input) return;
+    generation = input.generation;
+    await call({ kind: 'receipt', generation, inputIds: input.inputIds }, undefined, 'receipt:' + generation);
+  });
+  pi.on('tool_call', async (event, ctx) => {
     if (!allowed.includes(event.toolName)) return { block: true, reason: 'This session cannot use that tool.' };
     if (role === 'coordinator') return;
     if (reported) return { block: true, reason: 'The task has reported. Wait for a new instruction.' };
+    const snapshot = await call();
+    if (snapshot.protocol === 2 && (!generation || snapshot.generation !== generation || snapshot.state !== 'working')) return { block: true, reason: 'This execution attempt is no longer current. Wait for the coordinator.', terminate: true };
     if (event.toolName === 'task_report' || coding && event.toolName === 'bash') return;
     try {
       const root = realpathSync(coding ? process.env.PI_REMOTE_WORKSPACE_ROOT : ctx.cwd);

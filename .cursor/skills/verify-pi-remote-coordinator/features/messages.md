@@ -5,7 +5,7 @@ Worker questions and reports return to their owning coordinator. All user input 
 ## Sub-features
 
 - `question`: a persisted question names its task and owner.
-- `reply`: the coordinator relays the main-session reply to the correct worker.
+- `reply`: the coordinator durably queues the main-session reply for the correct worker's next turn, preserving an unread follow-up across restart.
 - `draft`: main drafts and attachments survive read-only worker inspection.
 - `report`: a returned result remains distinct from an accepted result.
 - `stop`: Stop affects only the addressed worker.

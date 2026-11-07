@@ -483,7 +483,7 @@ export class SessionService extends EventEmitter {
       writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
       renameSync(file + '.tmp', file);
     }
-    this.stopping = true;
+    this.stopping = true; this.coordination.close();
     await this.historyReader.close();
     const prepared = this.prepared; this.prepared = undefined;
     const sessions = new Set([...this.live.values(), ...this.starting, prepared?.item].filter(Boolean));

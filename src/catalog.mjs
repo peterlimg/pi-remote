@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { validateImages, MAX_IMAGES } from '../web/images.js';
 import { sessionKey } from './locks.mjs';
+import { parseTaskInput, taskInputText } from './task-input.mjs';
 import { sessionTitle } from './session-title.mjs';
 
 export function rootsFromEnv() {
@@ -122,7 +123,9 @@ export function cleanMessage(message, key) {
     const reference = imageReference(part);
     if (reference) images.set(index, reference);
   }
-  const raw = textContent(content ? content.filter((part, index) => part.type !== 'toolCall' && !images.has(index)) : message.content);
+  let raw = textContent(content ? content.filter((part, index) => part.type !== 'toolCall' && !images.has(index)) : message.content);
+  const taskInput = message.role === 'user' && parseTaskInput(raw);
+  if (taskInput) raw = taskInputText(taskInput);
   const calls = content?.filter(part => part.type === 'toolCall') || [];
   let budget = Math.max(0, 24000 - raw.length), truncated = raw.length > 24000 || calls.length > 20;
   const toolCalls = calls.slice(0, 20).map(call => {
