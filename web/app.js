@@ -152,7 +152,7 @@ let videoCache = token ? new VideoCache(JSON.stringify([token, key])) : undefine
 // Only a browser on the computer itself may skip encryption; the relay must never see plaintext.
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 let loginLinkError = '', homeScreenLogin = false, homeScreenTimer;
-let swipeTimer, trackingSwipe = false, openingAnimation;
+let swipeTimer, trackingSwipe = false, openingAnimation, pendingSwipeRender;
 let switchOrder, switchOrigin, headingGesture, headingSwitching = false, headingNudged = false, lastHeadingTap = 0;
 const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
@@ -1455,6 +1455,9 @@ function formatToolDuration(durationMs) {
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
+  // Removing the touched message mid-drag loses touchend and strands the translated page.
+  if (trackingSwipe) { pendingSwipeRender = () => renderConversation(state, { anchor, historyChanged }); return; }
+  pendingSwipeRender = undefined;
   activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
   renderProject(state.cwd, sessions.find(item => item.id === selected) || selectedSummary);
@@ -2965,6 +2968,7 @@ function resetSwipe() {
   const main = document.querySelector('main');
   main.style.transition = main.style.transform = '';
   $('app').classList.remove('swiping', 'opening'); $('sidebar').inert = false;
+  const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
 $('back').addEventListener('click', () => {
   haptic(); resetSwipe();
@@ -3259,7 +3263,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   const release = event => {
     if (!trackingSwipe) return;
     trackingSwipe = false;
-    if (!app.classList.contains('swiping')) return;
+    if (!app.classList.contains('swiping')) return resetSwipe();
     // Keep the native edge threshold aligned with Safari's switch feedback.
     const back = dx > (event.nativeSwipeHaptic ? main.offsetWidth / 3 : 72);
     if (back && !event.nativeSwipeHaptic) haptic();

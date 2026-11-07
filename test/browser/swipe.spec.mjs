@@ -148,6 +148,66 @@ for (const standalone of [false, true]) {
   });
 }
 
+for (const standalone of [false, true]) for (const distance of [0, 52, 90]) {
+  test(`a live reply cannot strand a ${distance === 0 ? 'tap' : distance < 72 ? 'canceled swipe' : 'completed swipe'} in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page, browserName }, testInfo) => {
+    if (standalone) await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
+    const state = { id: 'streaming', title: 'Streaming session', cwd: '/project', status: 'working',
+      messages: [{ id: 'reply', role: 'assistant', text: 'Swipe from this live reply.' }] };
+    let client;
+    await page.routeWebSocket('**/ws', ws => {
+      client = ws;
+      ws.onMessage(raw => {
+        const packet = JSON.parse(raw);
+        if (packet.type === 'auth') {
+          ws.send(JSON.stringify({ type: 'ready' }));
+          ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
+        } else if (packet.op === 'watch') ws.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 1, state }));
+        if (packet.id) ws.send(JSON.stringify({ type: 'response', id: packet.id, ok: true, value: [] }));
+      });
+    });
+    await page.goto('/#token=browser-test-token-only-123456789012345');
+    await page.getByRole('button', { name: /Streaming session/ }).tap();
+    const reply = page.getByText('Swipe from this live reply.', { exact: true });
+    await expect(reply).toBeVisible();
+    await expect(page.locator('#app')).not.toHaveClass(/opening/);
+    await page.locator('#prompt').fill('Keep this draft');
+    const box = await reply.boundingBox(), x = Math.round(page.viewportSize().width * .55), y = box.y + box.height / 2;
+    await reply.evaluate(node => { window.swipeTouchTarget = node; });
+    const cdp = browserName === 'chromium' && await page.context().newCDPSession(page);
+    const touch = (type, x) => cdp ? cdp.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }],
+    }) : page.evaluate(({ type, x, y }) => window.swipeTouchTarget.dispatchEvent(Object.assign(
+      new Event(type.toLowerCase(), { bubbles: true, cancelable: true }), {
+        touches: type === 'touchEnd' ? [] : [{ clientX: x, clientY: y }],
+      })), { type, x, y });
+    await touch('touchStart', x);
+    if (distance) {
+      await touch('touchMove', x + 12);
+      await touch('touchMove', x + distance);
+      await expect(page.locator('#app')).toHaveClass(/swiping/);
+    }
+    state.messages[0].text = 'The reply updated during the swipe.';
+    client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 2, state }));
+    // The following notice is an ordering barrier: the browser has handled the preceding snapshot.
+    client.send(JSON.stringify({ type: 'notice', error: 'Live reply update delivered.' }));
+    await expect(page.locator('#notice')).toHaveText('Live reply update delivered.');
+    await touch('touchEnd', x + distance);
+    if (distance > 72) {
+      state.messages[0].text = 'The newest reply after lifting the finger.';
+      client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: 3, state }));
+    }
+    await expect(page.locator('#app')).not.toHaveClass(/swiping/);
+    await expect(page.locator('main')).toHaveCSS('transform', 'none');
+    if (distance > 72) {
+      await expect(page.locator('#app')).not.toHaveClass(/viewing/);
+      await page.getByRole('button', { name: /Streaming session/ }).tap();
+    } else await expect(page.locator('#app')).toHaveClass(/viewing/);
+    await expect(page.locator('#transcript')).toContainText(state.messages[0].text);
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+    await page.screenshot({ path: testInfo.outputPath('swipe-after-live-update.png') });
+  });
+}
+
 for (const standalone of [false, true]) for (const interruption of ['short swipe', 'second touch', 'touchcancel', 'navigation during settling']) {
 test(`${standalone ? 'home-screen' : 'browser'} swipe recovers from ${interruption} while a session is running`, async ({ page }, testInfo) => {
   if (standalone) await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
