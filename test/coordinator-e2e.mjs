@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync, existsSync, readdirSync, statSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
@@ -254,6 +254,14 @@ if (process.argv[2] === 'doctor') {
     await page.locator('#prompt').blur(); await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
     const touchClient = await context.newCDPSession(page);
     const touch = (type, x, y) => touchClient.send('Input.dispatchTouchEvent', { type, touchPoints: ['touchEnd', 'touchCancel'].includes(type) ? [] : [{ x, y }] });
+    const scrollTouch = async (x, y, distance) => {
+      await touch('touchStart', x, y);
+      for (let step = 1; step <= 12; step++) {
+        await touch('touchMove', x, y + distance * (1 - (1 - step / 12) ** 3));
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+      }
+      await touch('touchEnd');
+    };
     for (const reducedMotion of ['no-preference', 'reduce']) {
       await page.emulateMedia({ reducedMotion });
       await page.locator('#coordinator-open').click();
@@ -267,13 +275,17 @@ if (process.argv[2] === 'doctor') {
       await check.poll(async () => Math.round((await surface.boundingBox()).y)).toBe(resting);
       await openLog('First inspection');
       await check(page.locator('#coordinator-log .coordinator-instruction-label').first()).toBeVisible();
-      const scroll = page.locator('#coordinator-scroll'), body = await scroll.boundingBox(), sy = body.y + body.height - 16;
+      const taskDetails = page.locator('#coordinator-log details[data-disclosure-id="task"]');
+      if (await taskDetails.getAttribute('open') === null) await taskDetails.locator('summary').click();
+      const scroll = page.locator('#coordinator-scroll');
+      await check.poll(() => scroll.evaluate(node => node.scrollHeight - node.clientHeight)).toBeGreaterThan(100);
+      const body = await scroll.boundingBox(), sy = body.y + body.height - 16;
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       record('native log scroll geometry', { reducedMotion, ...await scroll.evaluate(node => ({ top: node.scrollTop, height: node.clientHeight, content: node.scrollHeight })) });
-      await touch('touchStart', 230, sy); await touch('touchMove', 230, sy - 40); await touch('touchMove', 230, sy - 100); await touch('touchEnd');
+      await scrollTouch(230, sy, -100);
       await check.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
       const before = await scroll.evaluate(node => node.scrollTop), top = body.y + 16;
-      await touch('touchStart', 230, top); await touch('touchMove', 230, top + 32); await touch('touchMove', 230, top + 60); await touch('touchEnd');
+      await scrollTouch(230, top, 60);
       await check.poll(() => scroll.evaluate(node => node.scrollTop)).toBeLessThan(before);
       assert.equal(Math.round((await surface.boundingBox()).y), resting);
       await touch('touchStart', x, y); await touch('touchMove', x, y + 30); await touch('touchMove', x, y + 90); await touch('touchMove', x, y + 150); await touch('touchEnd');
@@ -506,6 +518,91 @@ if (process.argv[2] === 'doctor') {
     assert(!JSON.stringify(audit).includes('PRIVATE_OUTSIDE_SHOULD_NOT_APPEAR'));
     assert.deepEqual(['alpha.txt', 'beta.txt'].map(file => hash(readFileSync(join(root, 'project', file)))), original);
     assert.deepEqual(readdirSync(join(root, 'project')).sort(), ['alpha.txt', 'beta.txt', 'escape.txt']);
+    // Coding runs through the same phone conversation and real native tool runtime.
+    for (const title of ['Capacity A', 'Capacity B']) {
+      const task = ledger().tasks.find(task => task.title === title);
+      assert.equal((await api(main.token, { action: 'stop', taskId: task.id, requestId: hash(randomUUID()) })).body.ok, true);
+    }
+    const project = join(root, 'project'), calculation = 'export const add = (a, b) => a - b;\n';
+    writeFileSync(join(project, 'calc.mjs'), calculation);
+    symlinkSync(join(root, 'future-outside.txt'), join(project, 'dangling.txt'));
+    const git = args => execFileSync('git', ['-C', project, ...args], { encoding: 'utf8' });
+    git(['init', '-q']); git(['add', '.']);
+    git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Fixture base']);
+    writeFileSync(join(project, 'parent-draft.txt'), 'Unrelated local draft.\n');
+    writeFileSync(join(project, 'staged.txt'), 'Unrelated staged change.\n'); git(['add', 'staged.txt']);
+    const originalIndex = git(['ls-files', '--stage']);
+    await restoreCoordinator();
+    await send('Fix the fixture calculation with two workers.');
+    await until(() => ledger().tasks.find(task => task.title === 'Calculation fix')?.state === 'reported', 30000);
+    const coding = () => ledger().tasks.find(task => task.title === 'Calculation fix');
+    const notes = () => ledger().tasks.find(task => task.title === 'Coding notes');
+    await until(() => notes()?.state === 'working' && existsSync(join(notes().workspace.path, 'worker-notes.md')), 30000);
+    assert.notEqual(coding().workspace.path, notes().workspace.path);
+    assert.equal(coding().kind, 'code'); assert.equal(readFileSync(join(project, 'calc.mjs'), 'utf8'), calculation);
+    assert.equal(readFileSync(join(coding().workspace.path, 'calc.mjs'), 'utf8'), calculation.replace('a - b', 'a + b'));
+    assert(!existsSync(join(coding().workspace.path, 'parent-draft.txt')));
+    assert(!existsSync(join(project, 'worker-notes.md')));
+    const codeClient = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
+    try {
+      const denied = await codeClient.request('command', { sessionId: coding().sessionId, command: { type: 'prompt', text: 'Bypass the main conversation.' } });
+      assert.equal(denied.value?.ok, false); assert.equal(denied.value.error, 'Worker logs are read-only. Send instructions to the coordinator.');
+    } finally { codeClient.ws.terminate(); }
+    const peek = await api(main.token, { action: 'inspect', taskId: coding().id, requestId: hash(randomUUID()) });
+    assert.equal(peek.body.ok, true); assert(peek.body.value.review.diff.includes('a + b')); assert(peek.body.value.review.diff.includes('checks.txt'));
+    const oldRevision = peek.body.value.review.revision;
+    assert.equal((await api(main.token, { action: 'message', taskId: coding().id, text: 'Revise calculation fixture.', requestId: hash(randomUUID()) })).body.ok, true);
+    await until(() => coding().state === 'reported' && existsSync(join(coding().workspace.path, 'review-marker.txt')), 30000);
+    assert.equal((await api(main.token, { action: 'integrate', taskId: coding().id, revision: oldRevision, requestId: hash(randomUUID()) })).body.ok, false);
+    assert.equal(coding().state, 'reported'); assert.equal(coding().workspace.integration, undefined);
+    const review = (await api(main.token, { action: 'inspect', taskId: coding().id, requestId: hash(randomUUID()) })).body.value.review;
+    const conflict = calculation.replace('a - b', 'a * b'); writeFileSync(join(project, 'calc.mjs'), conflict);
+    assert.equal((await api(main.token, { action: 'integrate', taskId: coding().id, revision: review.revision, requestId: hash(randomUUID()) })).body.ok, false);
+    assert.equal(readFileSync(join(project, 'calc.mjs'), 'utf8'), conflict); assert.equal(git(['ls-files', '--stage']), originalIndex);
+    assert.equal(coding().state, 'reported'); writeFileSync(join(project, 'calc.mjs'), calculation);
+    await send('Review and integrate the calculation fix.');
+    await until(() => coding().state === 'completed', 30000);
+    assert.equal(coding().workspace.integration, 'applied');
+    assert.equal(readFileSync(join(project, 'calc.mjs'), 'utf8'), calculation.replace('a - b', 'a + b'));
+    assert.equal(readFileSync(join(project, 'checks.txt'), 'utf8'), 'calculation checks passed\n');
+    assert.equal(readFileSync(join(project, 'parent-draft.txt'), 'utf8'), 'Unrelated local draft.\n');
+    assert.equal(git(['ls-files', '--stage']), originalIndex); assert(!existsSync(join(project, 'worker-notes.md')));
+    assert.equal((await api(freshOwner.token, { action: 'inspect', taskId: coding().id, requestId: hash(randomUUID()) })).body.ok, false);
+    assert.equal((await api(coding().token, { action: 'integrate', taskId: coding().id, revision: review.revision, requestId: hash(randomUUID()) })).status, 403);
+    const integration = toolCalls(main.file).findLast(call => call.name === 'remote_tasks' && call.arguments?.action === 'integrate');
+    assert.equal((await api(main.token, { ...integration.arguments, requestId: hash(integration.id) })).body.ok, true);
+    await openTasks(); await openLog('Calculation fix');
+    await page.locator('#coordinator-log').getByText('Task details', { exact: true }).click();
+    await check(page.locator('#coordinator-log')).toContainText('Reviewed changes integrated');
+    await check(page.locator('#coordinator-subtitle')).toHaveText('Integrated');
+    await check(page.locator('#coordinator-sheet textarea, #coordinator-sheet input')).toHaveCount(0);
+    await snapshot('coding-workspace-integrated'); await closeTasks();
+    const codingRequests = lines(join(root, 'provider.jsonl')).filter(event => event.role === 'coder' && event.kind === 'request' && event.purpose === 'agent');
+    for (const request of codingRequests) assert.deepEqual([...request.tools].sort(), ['bash', 'edit', 'find', 'grep', 'ls', 'read', 'task_report', 'write']);
+    const codingResults = codingRequests.flatMap(event => event.results);
+    for (const name of ['edit', 'write', 'bash']) assert(codingResults.some(result => result.name === name && !result.isError));
+    assert(codingResults.some(result => result.name === 'bash' && result.text.includes('calculation checks passed')));
+    assert(codingResults.filter(result => result.name === 'write' && result.isError).length >= 2);
+    assert(!existsSync(join(root, 'future-outside.txt'))); assert.equal(readFileSync(join(root, 'outside.txt'), 'utf8'), 'PRIVATE_OUTSIDE_SHOULD_NOT_APPEAR\n');
+    const codePrompts = [coding(), notes()].map(task => entries(task.file).filter(entry => entry.message.role === 'user').length);
+    const oldWorkspace = coding().workspace.path, notesWorkspace = notes().workspace.path;
+    await stop(); await start(); await restoreCoordinator();
+    assert.equal(coding().workspace.path, oldWorkspace); assert.equal(coding().state, 'completed');
+    assert.equal(notes().workspace.path, notesWorkspace); assert.equal(notes().state, 'unknown');
+    assert.equal(readFileSync(join(notesWorkspace, 'worker-notes.md'), 'utf8'), 'Independent coding work in its own worktree.\n');
+    for (const [index, task] of [coding(), notes()].entries()) assert.equal(entries(task.file).filter(entry => entry.message.role === 'user').length, codePrompts[index]);
+    await send('Stop the coding notes worker.'); await until(() => notes().state === 'stopped', 30000);
+    assert.equal(coding().state, 'completed');
+    const matching = await api(main.token, { action: 'assign', kind: 'code', title: 'Matching fix', instruction: 'Fix add in calc.mjs and run its focused Node check.', requestId: hash(randomUUID()) });
+    assert.equal(matching.body.ok, true);
+    const matched = () => ledger().tasks.find(task => task.title === 'Matching fix');
+    await until(() => matched().state === 'reported', 30000);
+    const matchedReview = (await api(main.token, { action: 'inspect', taskId: matched().id, requestId: hash(randomUUID()) })).body.value.review;
+    const parentDiff = git(['diff']);
+    assert.equal((await api(main.token, { action: 'integrate', taskId: matched().id, revision: matchedReview.revision, requestId: hash(randomUUID()) })).body.ok, true);
+    assert.equal(git(['diff']), parentDiff); assert.equal(git(['ls-files', '--stage']), originalIndex);
+    record('coding workers edit and test in separate worktrees, reject stale/conflicting integration, preserve parent changes/index, survive restart without replay, and stop by task ID');
+    save('coding-audit.json', codingRequests);
     assert.equal(statSync(join(root, 'host', 'coordinator-tasks.json')).mode & 0o777, 0o600);
     for (const token of [oldScope, scope, bridgeToken, ...ledger().coordinators.map(record => record.token), ...ledger().tasks.map(record => record.token)]) assert(!JSON.stringify(frames).includes(token), 'Private capabilities must not enter browser state');
     const workerIds = new Set(ledger().tasks.map(task => task.sessionId));
@@ -514,8 +611,8 @@ if (process.argv[2] === 'doctor') {
     save('provider-audit.json', audit); save('browser-frames.json', frames);
     save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
     save('result.json', { passed: true, feature: 'coordinator', entry: 'phone conversation',
-      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'bottom-sheet worker inspection', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'independent parent and worker streams', 'translucent D bottom sheet', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'no private capabilities in browser'],
-      excluded: ['paid-model judgment', 'code-writing workers', 'physical iPhone/Safari', 'Render relay'] });
+      checks: ['manual login and doctor', 'implicit existing-session delegation with preserved history and tools', 'fresh-session and terminal-bridge delegation', 'same-project ownership isolation', 'ownership capability expiration', 'two real Pi workers', 'bottom-sheet worker inspection', 'root-only global sections', 'two-task limit', 'coordinator stays responsive', 'main-session question/reply', 'read-only worker logs and serialized input rejection', 'draft and attachment preservation', 'coordinator report acceptance', 'main-session scoped Stop', 'independent parent and worker streams', 'translucent D bottom sheet', 'reload persistence', 'host process restart', 'unknown work without replay', 'scope authorization', 'idempotent retries', 'readonly tools and paths', 'coding worktrees and native edits/checks', 'reviewed conflict-safe integration', 'coding restart recovery', 'no private capabilities in browser'],
+      excluded: ['paid-model judgment', 'OS sandboxing', 'physical iPhone/Safari', 'Render relay'] });
   } catch (error) {
     save('failure.txt', error.stack || String(error));
     if (page && !page.isClosed()) { try { await snapshot('failure'); } catch {} }
@@ -537,5 +634,5 @@ if (process.argv[2] === 'doctor') {
     }
   }
   for (const file of ['doctor.json', 'restart-doctor.json', 'result.json', 'cleanup.json', 'actions.jsonl', 'provider-audit.json', 'assignment-and-question.png', 'result-and-scoped-stop.png', 'recovery-without-replay.png']) assert(existsSync(join(evidence, file)), 'Missing proof: ' + file);
-  console.log('PASS: D worker bottom sheet, coordinator-only input, native Pi workers, scoped replies/Stop, readonly enforcement and durable recovery; fixture cleaned, evidence retained.');
+  console.log('PASS: D worker bottom sheet, coordinator-only input, native Pi workers, scoped replies/Stop, readonly investigations, coding worktrees/integration and durable recovery; fixture cleaned, evidence retained.');
 }

@@ -1,6 +1,6 @@
 ---
 name: verify-pi-remote-coordinator
-description: Verify implicit worker coordination in ordinary Pi Remote sessions through the phone web UI, real Pi RPC processes, durable task files, scoped replies and Stop, read-only permissions, and host restart recovery. Use after coordinator or task-routing changes.
+description: Verify implicit worker coordination in ordinary Pi Remote sessions through the phone web UI, real Pi RPC processes, durable task files, scoped replies and Stop, investigation permissions, coding worktrees, reviewed integration, and host restart recovery. Use after coordinator or task-routing changes.
 ---
 
 # Verify Pi Remote coordinators
@@ -17,7 +17,7 @@ PI_REMOTE_COORDINATOR_TEST_PORT=8813 npm run test:coordinator
 
 This command refuses an occupied port, launches `test/coordinator-server.mjs`, runs Doctor, drives the phone UI, restarts its own host process, and cleans up. It prints an absolute `pi-coordinator-proof-*` evidence directory. A passing run ends with `PASS` and exit code 0.
 
-The host and Pi RPC processes are real. Only the model provider is deterministic, supplied by `test/fixtures/coordinator-provider.mjs` through Pi's provider extension interface. It attempts allowed reads and forbidden operations, asks a question, returns a report, and holds another worker until Stop. It makes no paid model requests.
+The host and Pi RPC processes are real. Only the model provider is deterministic, supplied by `test/fixtures/coordinator-provider.mjs` through Pi's provider extension interface. It attempts allowed reads and forbidden operations, asks a question, returns a report, and holds another worker until Stop. A later coding scenario uses native edit/write/bash tools in real Git worktrees and integrates a reviewed patch. It makes no paid model requests.
 
 The fixture creates three pinned source sessions, **Coordinator verification project**, **Other verification project**, and **Terminal verification project**, in temporary projects. The first is an ordinary host-managed session; a separate real Pi process owns the terminal bridge. The first project contains `alpha.txt`, `beta.txt`, and an escaping symlink. Private fixture data and session files are outside that project. It never uses the real Pi Remote data directory or relay.
 
@@ -67,9 +67,9 @@ The full proof retains Doctor results, root-only list checks, phone/narrow/short
 
 Exercise visible controls. Never populate internal application state, storage, or task records to make an assertion pass. Verify mutations with a second user-facing read and the persisted task record. The fixture's seed files and deterministic model are setup at existing external seams, not substitutes for the host or Pi tool runtime.
 
-Require evidence that project file hashes and directory contents are unchanged, outside reads and symlinks are blocked, write/bash are unavailable, private capability tokens never enter browser state, main-session replies and Stop reach only their addressed task, and an actual host process restart does not repeat a task prompt or notification. Notification acknowledgement is not proof that the human read a summary.
+For investigation workers, require unchanged project file hashes and directory contents, blocked outside reads and symlinks, and unavailable write/bash. For coding workers, require real native edits/checks in distinct worktrees, unchanged parent files until reviewed integration, rejected stale/conflicting revisions, unchanged parent staged index/drafts, blocked outside file-tool writes, and code-workspace recovery without replay. In both cases require that private capability tokens never enter browser state, main-session replies and Stop reach only their addressed task, and an actual host process restart does not repeat a task prompt or notification. Notification acknowledgement is not proof that the human read a summary.
 
-The proof records actions, protocol frames, screenshots, and native tool results instead of a trace ZIP. Do not infer physical iPhone keyboard or Safari behavior from Chromium. Do not infer real-model planning quality from the deterministic provider.
+The proof records actions, protocol frames, screenshots, and native tool results instead of a trace ZIP. Do not infer physical iPhone keyboard or Safari behavior from Chromium. Do not infer real-model planning quality from the deterministic provider. Coding shells are trusted-host execution, not an OS sandbox. Read features/coding.md for the coding sequence; it follows the unchanged investigation proof.
 
 ## Cleanup
 

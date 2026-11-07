@@ -24,3 +24,4 @@ Capture each action and its observable result, a second read of mutations, proce
 - [Assignment and conversation](assignment.md): in-place delegation from ordinary existing, fresh, and terminal-owned sessions, two independent tasks, and a responsive conversation.
 - [Replies, reports, and Stop](messages.md): ownership, draft isolation, result acceptance, and scoped control.
 - [Recovery and permissions](recovery.md): reload, host restart, uncertainty, idempotence, and read-only authorization.
+- [Coding and integration](coding.md): native edits/checks in separate worktrees, complete diff review, conflict protection, index preservation, and restart recovery.

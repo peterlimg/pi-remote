@@ -1863,6 +1863,7 @@ function restartStalledDots() {
 setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
 const coordinatorLabels = { starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
   stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
+const coordinatorLabel = task => task.workspace?.integration === 'applied' ? 'Integrated' : coordinatorLabels[task.state] || task.state;
 function renderCoordinator(state) {
   const role = state?.coordination, available = supportsCoordinator && !!state && !state.creation;
   const worker = role?.role === 'worker', tasks = role?.role === 'coordinator' ? role.tasks : [];
@@ -1891,7 +1892,7 @@ function renderCoordinator(state) {
     const task = tasks.find(task => task.sessionId === coordinatorLog.id);
     if (!task) { $('coordinator-sheet').close(); return; }
     $('coordinator-title').textContent = task.title;
-    $('coordinator-subtitle').textContent = coordinatorLabels[task.state] || task.state;
+    $('coordinator-subtitle').textContent = coordinatorLabel(task);
     renderCoordinatorLog(); return;
   }
   $('coordinator-title').textContent = 'Workers';
@@ -1902,8 +1903,8 @@ function renderCoordinator(state) {
   for (const task of [...tasks].sort((a, b) => Number(active.has(b.state)) - Number(active.has(a.state)))) {
     const row = el('div'); row.setAttribute('role', 'listitem'); row.setAttribute('aria-label', task.title); row.dataset.state = task.state;
     const button = el('button', undefined, 'coordinator-worker'); button.type = 'button'; button.dataset.workerId = task.id;
-    button.dataset.state = task.state; button.setAttribute('aria-label', task.title + ', ' + (coordinatorLabels[task.state] || task.state));
-    const name = el('span'); name.append(el('strong', task.title), el('small', coordinatorLabels[task.state] || task.state));
+    button.dataset.state = task.state; button.setAttribute('aria-label', task.title + ', ' + coordinatorLabel(task));
+    const name = el('span'); name.append(el('strong', task.title), el('small', coordinatorLabel(task)));
     const arrow = $('coordinator-open').querySelector('svg').cloneNode(true); button.append(name, arrow);
     button.addEventListener('click', event => openCoordinatorWorker(task.sessionId, event.detail === 0)); row.append(button); list.append(row);
     if (focused === task.id) button.focus({ preventScroll: true });
@@ -1978,6 +1979,10 @@ function renderCoordinatorLog() {
   };
   const meta = detail('task', 'Task details');
   meta.append(el('h3', 'Assignment'), el('p', task.instruction));
+  if (task.kind === 'code') {
+    meta.append(el('h3', 'Coding workspace'), el('p', task.workspace?.path || 'Preparing workspace…'));
+    meta.append(el('p', task.workspace?.integration === 'applied' ? 'Reviewed changes integrated into the parent repository.' : 'Changes stay in this worktree until reviewed and integrated from the main conversation.'));
+  }
   if (task.state === 'waiting' && task.question) meta.append(el('h3', 'Question for coordinator'), el('p', task.question));
   if (task.result) meta.append(el('h3', task.state === 'reported' ? 'Returned result' : 'Last result'), el('p', task.result));
   if (task.error) meta.append(el('p', task.error, 'coordinator-task-warning'));

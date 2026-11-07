@@ -26,7 +26,47 @@ export default function verificationProvider(pi) {
       const decoded = message => { try { return JSON.parse(text(message)); } catch { return {}; } };
       const choose = async () => {
         if (naming) return words('Independent inspection session');
+        if (role === 'coder') {
+          if (input === 'Revise calculation fixture.') {
+            if (!results.length) return [call('write', { path: 'review-marker.txt', content: 'Reviewed revision changed.\n' })];
+            return [call('task_report', { kind: 'result', text: 'Added review-marker.txt; the calculation checks still pass.' })];
+          }
+          if (input.includes('notes worker')) {
+            if (!results.length) return [call('write', { path: 'worker-notes.md', content: 'Independent coding work in its own worktree.\n' })];
+            audit({ kind: 'holding' });
+            while (!options.signal?.aborted) await delay(20);
+            audit({ kind: 'aborted' }); return [];
+          }
+          const steps = [
+            () => call('read', { path: 'calc.mjs' }),
+            () => call('edit', { path: 'calc.mjs', edits: [{ oldText: 'a - b', newText: 'a + b' }] }),
+            () => call('bash', { command: `node --input-type=module -e 'import assert from "node:assert/strict"; import {add} from "./calc.mjs"; assert.equal(add(2,3),5); assert.equal(process.env.PI_REMOTE_COORDINATOR_TOKEN,undefined); console.log("calculation checks passed");'` }),
+            () => call('write', { path: join(root, 'outside.txt'), content: 'Outside writes must be blocked.' }),
+            () => call('write', { path: 'dangling.txt', content: 'Dangling symlink writes must be blocked.' }),
+            () => call('write', { path: 'checks.txt', content: 'calculation checks passed\n' })
+          ];
+          if (results.some((result, index) => result.isError && ![3, 4].includes(index))) return [call('task_report', { kind: 'question', text: 'A coding tool failed: ' + text(results.find(result => result.isError)) })];
+          if (results.length < steps.length) return [steps[results.length]()];
+          return [call('task_report', { kind: 'result', text: 'Fixed calc.mjs and added checks.txt. Ran node assertions: calculation checks passed. Changes remain in this worktree pending review.' })];
+        }
         if (role !== 'worker') {
+          if (input === 'Fix the fixture calculation with two workers.') {
+            if (!results.length) return [
+              call('remote_tasks', { action: 'assign', kind: 'code', title: 'Calculation fix', instruction: 'Fix add in calc.mjs and run its focused Node check.' }),
+              call('remote_tasks', { action: 'assign', kind: 'code', title: 'Coding notes', instruction: 'Be the notes worker, write worker-notes.md, then wait until stopped.' })
+            ];
+            return words('Started two coding workers in separate worktrees.');
+          }
+          if (['Review and integrate the calculation fix.', 'Stop the coding notes worker.'].includes(input)) {
+            if (!results.length) return [call('remote_tasks', { action: 'list' })];
+            const latest = decoded(results.at(-1));
+            if (latest.tasks) {
+              const task = latest.tasks.find(task => task.title === (input.startsWith('Stop') ? 'Coding notes' : 'Calculation fix'));
+              return [call('remote_tasks', { action: input.startsWith('Stop') ? 'stop' : 'inspect', taskId: task.id })];
+            }
+            if (latest.review) return [call('remote_tasks', { action: 'integrate', taskId: latest.id, revision: latest.review.revision })];
+            return words(input.startsWith('Stop') ? 'Stopped the notes worker only.' : 'Reviewed and integrated the calculation fix.');
+          }
           if (input === 'Read alpha before delegating.') {
             if (!results.length) return [call('read', { path: 'alpha.txt' })];
             return words('Read ALPHA_VALUE=stable in this existing conversation. No workers were started.');

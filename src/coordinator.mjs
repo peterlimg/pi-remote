@@ -1,10 +1,11 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { secret, equalSecret } from './config.mjs';
 import { readSession } from './catalog.mjs';
 import { sessionKey, sessionCapability } from './locks.mjs';
+import { planWorkspace, createWorkspace, reviewWorkspace, integrateWorkspace } from './task-workspaces.mjs';
 
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
 const sessionExtension = fileURLToPath(new URL('../extension/index.ts', import.meta.url));
@@ -37,6 +38,10 @@ export class Coordinators {
         if (['starting', 'working', 'stopping'].includes(task.state)) {
           task.state = 'unknown'; task.error = 'Work was interrupted. Inspect the worker before continuing.';
         }
+        if (task.workspace?.integration === 'checking') delete task.workspace.integration;
+        if (task.workspace?.integration === 'applying') {
+          task.workspace.integration = 'unknown'; task.state = 'unknown'; task.error = 'Integration was interrupted. Inspect the destination before taking further action.';
+        }
         for (const event of task.events) if (event.delivery === 'sending') event.delivery = 'unknown';
         this.tasks.set(task.id, task);
       }
@@ -57,7 +62,8 @@ export class Coordinators {
   taskForSession(id) { return [...this.tasks.values()].find(task => task.sessionId === id); }
   publicTask(task, concise = false) {
     const value = { id: task.id, coordinatorId: task.coordinatorId, sessionId: task.sessionId, title: task.title,
-      instruction: task.instruction, state: task.state, readOnly: true, question: task.question, answer: task.answer,
+      instruction: task.instruction, state: task.state, kind: task.kind || 'investigation', readOnly: task.kind !== 'code', workspace: task.workspace && { ...task.workspace },
+      question: task.question, answer: task.answer,
       result: task.result, error: task.error, updatedAt: task.updatedAt,
       delivery: task.events.at(-1)?.delivery };
     if (concise) for (const key of ['instruction', 'question', 'answer', 'result']) if (value[key]?.length > 1000) value[key] = value[key].slice(0, 1000) + '\n[Use inspect for the complete task.]';
@@ -66,9 +72,9 @@ export class Coordinators {
   describe(id, concise = false) {
     if (this.error) return undefined;
     const owner = this.owners.get(id);
-    if (owner) return { role: 'coordinator', readOnly: owner.mode !== 'session', tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
+    if (owner) return { role: 'coordinator', readOnly: owner.mode !== 'session', supportsCodingWorkers: true, tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
     const task = this.taskForSession(id);
-    if (task) return { role: 'worker', readOnly: true, coordinatorId: task.coordinatorId,
+    if (task) return { role: 'worker', readOnly: task.kind !== 'code', coordinatorId: task.coordinatorId,
       coordinatorTitle: this.owners.get(task.coordinatorId).title, task: this.publicTask(task),
       tasks: [...this.tasks.values()].filter(item => item.coordinatorId === task.coordinatorId)
         .map(({ id, sessionId, title, state }) => ({ id, sessionId, title, state })) };
@@ -82,15 +88,18 @@ export class Coordinators {
     }
     this.check();
     if (!this.origin) throw publicError('The coordinator host is not ready.', 503);
-    const role = owner ? 'coordinator' : 'worker';
+    const coding = task?.kind === 'code';
+    if (coding && (task.workspace?.status !== 'ready' || task.workspace.cwd !== task.cwd || meta.cwd !== task.cwd)) throw publicError('The coding workspace is not ready. Inspect the task before continuing.', 409);
+    const role = owner ? 'coordinator' : coding ? 'coder' : 'worker';
     const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve',
-      '-e', extension, '--tools', owner ? 'remote_tasks' : 'read,grep,find,ls,task_report'];
+      '-e', extension, '--tools', owner ? 'remote_tasks' : coding ? 'read,grep,find,ls,edit,write,bash,task_report' : 'read,grep,find,ls,task_report'];
     // Explicit model selection fails closed when a provider needs an excluded extension.
     if (meta.model) args.push('--model', meta.model);
     if (meta.thinkingLevel) args.push('--thinking', meta.thinkingLevel);
     return { ...options, args: [...(options.args || []), ...args], env: { ...options.env,
       PI_REMOTE_COORDINATOR_ROLE: role, PI_REMOTE_COORDINATOR_URL: this.origin,
-      PI_REMOTE_COORDINATOR_TOKEN: record.token, PI_REMOTE_COORDINATOR_DATA: this.service.dir } };
+      PI_REMOTE_COORDINATOR_TOKEN: record.token, PI_REMOTE_COORDINATOR_DATA: this.service.dir,
+      PI_REMOTE_WORKSPACE_ROOT: coding ? task.workspace.path : '' } };
   }
   async operation(actorId, requestId, command, action) {
     try {
@@ -141,22 +150,39 @@ export class Coordinators {
     this.check();
     if (this.taskForSession(ownerId)) throw publicError('Workers cannot control coordinator tasks.', 403);
     if (!this.owners.has(ownerId) && (human || !['list', 'assign'].includes(input?.action))) throw publicError('This session has no worker tasks.');
-    const actions = human ? ['stop', 'accept'] : ['list', 'assign', 'inspect', 'message', 'stop', 'accept'];
+    const actions = human ? ['stop', 'accept'] : ['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate'];
     if (!input || !actions.includes(input.action)) throw publicError('Unsupported coordinator action.');
     const command = { action: input.action };
     if (input.action === 'assign') {
       command.title = text(input.title, 'Task title', 120); command.instruction = text(input.instruction, 'Task instruction', 8000);
       if (input.model !== undefined) command.model = text(input.model, 'Worker model', 500);
+      if (input.kind !== undefined && !['investigation', 'code'].includes(input.kind)) throw publicError('Choose an investigation or code assignment.');
+      if (input.kind !== undefined) command.kind = input.kind;
     }
     else if (input.action !== 'list') command.taskId = text(input.taskId, 'Task ID', 100);
     if (input.action === 'message') command.text = text(input.text, 'Message', 10000);
+    if (input.action === 'integrate') {
+      if (typeof input.revision !== 'string' || !/^[a-f0-9]{40,64}$/.test(input.revision)) throw publicError('Supply the exact revision returned by inspect after reviewing the changes.');
+      command.revision = input.revision;
+    }
     return this.operation(ownerId, requestId, command, async () => {
-      if (command.action === 'list') return this.describe(ownerId, true) || { role: 'coordinator', readOnly: false, tasks: [] };
+      if (command.action === 'list') return this.describe(ownerId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, tasks: [] };
       if (command.action === 'assign') { this.adopt(ownerId); return this.assign(ownerId, command); }
       const task = this.owned(ownerId, command.taskId);
-      if (command.action === 'inspect') return this.publicTask(task);
+      if (command.action === 'inspect') {
+        if (task.kind === 'code' && task.workspace?.status === 'ready' && !active.has(task.state)) {
+          const commandId = task.commandId, state = task.state;
+          const review = await reviewWorkspace(task.workspace, this.service.dir);
+          if (task.commandId !== commandId || task.state !== state || task.workspace.integration === 'checking' || task.workspace.integration === 'applying') throw publicError('The task changed during review. Inspect it again.', 409);
+          task.workspace.reviewedRevision = review.revision; this.changed(ownerId);
+          return { ...this.publicTask(task), review };
+        }
+        return this.publicTask(task);
+      }
+      if (command.action === 'integrate') return this.integrate(task, command.revision);
       if (command.action === 'accept') {
         if (task.state !== 'reported') throw publicError('Only a returned result can be accepted.');
+        if (task.kind === 'code') throw publicError('Review the code with inspect, then integrate its exact revision to complete this task.');
         task.state = 'completed'; task.updatedAt = Date.now(); this.changed(ownerId); return this.publicTask(task);
       }
       if (command.action === 'stop') return this.send(task, { type: 'abort' }, requestId);
@@ -167,17 +193,28 @@ export class Coordinators {
     const owner = this.owners.get(ownerId);
     if ([...this.tasks.values()].filter(task => task.coordinatorId === ownerId && active.has(task.state)).length >= 2) throw publicError('Two tasks are already active. Finish or stop one before assigning another.');
     const source = this.service.read(ownerId), model = command.model || source.model;
-    if (!model || model.startsWith('claude-sdk/') || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Read-only workers require a native Pi model. Specify an available native provider/model for the worker; your session model stays unchanged.');
+    if (!model || model.startsWith('claude-sdk/') || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Workers require a native Pi model. Specify an available native provider/model for the worker; your session model stays unchanged.');
     const record = this.createTaskFile({ ...source, model }, command.title);
     const task = { ...record, id: randomUUID(), coordinatorId: ownerId, title: command.title, instruction: command.instruction,
-      state: 'starting', events: [], updatedAt: Date.now() };
+      kind: command.kind || 'investigation', state: 'starting', events: [], updatedAt: Date.now() };
     this.tasks.set(task.id, task); this.changed(ownerId);
-    this.service.catalog.set(task.sessionId, readSession(task.file));
     try {
+      if (task.kind === 'code') {
+        task.workspace = await planWorkspace(source.cwd, this.service.dir, task.id); this.changed(ownerId);
+        await createWorkspace(task.workspace);
+        task.workspace.path = realpathSync(task.workspace.path); task.workspace.cwd = realpathSync(task.workspace.cwd);
+        task.cwd = task.workspace.cwd;
+        const lines = readFileSync(task.file, 'utf8').split('\n'), header = JSON.parse(lines[0]);
+        lines[0] = JSON.stringify({ ...header, cwd: task.cwd }); writeFileSync(task.file, lines.join('\n'), { mode: 0o600 });
+        task.workspace.status = 'ready'; this.changed(ownerId);
+      }
+      this.service.catalog.set(task.sessionId, readSession(task.file));
       await this.service.startWorker(task.sessionId);
-      await this.send(task, { type: 'prompt', text: 'Read-only assignment from your coordinator:\n\n' + task.instruction }, randomUUID());
+      await this.send(task, { type: 'prompt', text: (task.kind === 'code' ? 'Coding assignment' : 'Read-only assignment') + ' from your coordinator:\n\n' + task.instruction }, randomUUID());
     } catch (error) {
-      task.state = 'unknown'; task.error = 'Worker startup or dispatch failed. Inspect the worker before continuing.'; this.changed(ownerId);
+      if (task.state === 'starting') {
+        task.state = 'unknown'; task.error = 'Worker startup or dispatch failed. Inspect the worker before continuing.'; this.changed(ownerId);
+      }
       throw error;
     }
     return this.publicTask(task, true);
@@ -188,24 +225,46 @@ export class Coordinators {
     if (!internal) throw publicError('Worker logs are read-only. Send instructions to the coordinator.', 403);
     if (!['prompt', 'steer', 'followUp', 'abort'].includes(command.type)) return;
     this.check();
+    if (task.workspace?.integration) throw publicError(task.workspace.integration === 'applied'
+      ? 'This coding task was integrated. Start a new assignment for more changes.' : 'Integration needs inspection before this task can continue.', 409);
     if (command.type !== 'abort' && !active.has(task.state) && [...this.tasks.values()].filter(item => item.coordinatorId === task.coordinatorId && active.has(item.state)).length >= 2) {
       throw publicError('Two tasks are already active. Finish or stop one before continuing another.');
     }
     task.state = command.type === 'abort' ? 'stopping' : 'working'; task.dispatch = 'sending'; task.turnStarted = false; task.updatedAt = Date.now();
     if (command.type !== 'abort' && task.question) task.answer = command.text;
-    delete task.error; this.changed(task.coordinatorId); return task;
+    task.commandId = randomUUID();
+    delete task.error; this.changed(task.coordinatorId); return { task, commandId: task.commandId };
   }
-  afterCommand(task, command) {
-    if (!task) return;
+  afterCommand(transition, command) {
+    if (!transition || transition.commandId !== transition.task.commandId) return;
+    const { task } = transition;
     task.dispatch = 'accepted';
-    if (command.type === 'abort') task.state = 'stopped';
+    if (command.type === 'abort' && task.state === 'stopping') task.state = 'stopped';
     task.updatedAt = Date.now();
     this.changed(task.coordinatorId); this.observe(task.sessionId); this.schedule(task.coordinatorId);
   }
-  failedCommand(task) {
-    if (!task) return;
+  failedCommand(transition) {
+    if (!transition || transition.commandId !== transition.task.commandId || !['working', 'stopping'].includes(transition.task.state)) return;
+    const { task } = transition;
     task.state = 'unknown'; task.error = 'Delivery failed or is uncertain. Inspect the worker before continuing.';
     this.changed(task.coordinatorId);
+  }
+  async integrate(task, revision) {
+    if (task.kind !== 'code' || task.state !== 'reported' || task.workspace?.reviewedRevision !== revision) throw publicError('Inspect and review a returned coding result before integrating it.', 409);
+    if (task.workspace.integration) throw publicError('This integration already ran or needs inspection. It will not be repeated.', 409);
+    task.workspace.integration = 'checking'; delete task.error; this.changed(task.coordinatorId);
+    try {
+      await integrateWorkspace(task.workspace, revision, this.service.dir, () => { task.workspace.integration = 'applying'; this.changed(task.coordinatorId); });
+      task.workspace.integration = 'applied'; task.state = 'completed'; task.updatedAt = Date.now(); this.changed(task.coordinatorId);
+      return this.publicTask(task);
+    } catch (error) {
+      if (task.workspace.integration === 'checking') {
+        delete task.workspace.integration; task.error = 'Changes could not be integrated. Review the destination and ask the worker to resolve the conflict.';
+      } else {
+        task.workspace.integration = 'unknown'; task.state = 'unknown'; task.error = 'Integration did not finish cleanly. Inspect the destination before taking further action.';
+      }
+      this.changed(task.coordinatorId); throw error;
+    }
   }
   async send(task, command, requestId) {
     if (!this.service.live.get(task.sessionId) || this.service.live.get(task.sessionId).resumable) await this.service.startWorker(task.sessionId);
@@ -282,7 +341,7 @@ export class Coordinators {
       const task = !session && !owner && [...this.tasks.values()].find(record => equalSecret(record.token, bearer));
       if (req.headers.origin || !req.headers.authorization?.startsWith('Bearer ') || !session && !owner && !task) throw publicError('Forbidden', 403);
       const actorId = session || owner?.id;
-      if (req.method === 'GET') { respond(200, { ok: true, value: actorId ? this.describe(actorId, true) || { role: 'coordinator', readOnly: false, tasks: [] } : this.publicTask(task) }); return; }
+      if (req.method === 'GET') { respond(200, { ok: true, value: actorId ? this.describe(actorId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, tasks: [] } : this.publicTask(task) }); return; }
       if (req.method !== 'POST') throw publicError('Method not allowed', 405);
       let size = 0, chunks = [];
       for await (const chunk of req) {
