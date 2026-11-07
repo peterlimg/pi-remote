@@ -16,6 +16,7 @@
   --user: light-dark(#edf0eb, #221f22);
   --error: light-dark(#a33030, #ffa4a4);
   --warning: light-dark(#77591a, #e4c078);
+  --working: light-dark(#15542f, #80d4a0);
   --selection: light-dark(#d3e4de, #3b383b);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -911,7 +912,9 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-worker { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 16px 0; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-weight: 400; }
 .coordinator-worker > span { flex: 1; min-width: 0; }
 .coordinator-worker strong { display: block; font-size: 17px; font-weight: 500; overflow-wrap: anywhere; }
-.coordinator-worker small { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.coordinator-worker small { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.coordinator-worker[data-state=working] small { color: var(--working); font-weight: 500; }
+.coordinator-worker[data-state=working] small::before { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .coordinator-worker:is([data-state=waiting], [data-state=unknown]) small { color: var(--warning); }
 .coordinator-worker:hover strong { text-decoration: underline; text-underline-offset: 4px; }
 .coordinator-worker > svg { flex-shrink: 0; color: var(--muted); transform: rotate(90deg); }

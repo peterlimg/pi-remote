@@ -8,7 +8,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const task = { id: 'task', sessionId: 'worker', title: 'Messaging and recovery inspection with a long worker name', state: 'working', instruction: 'Inspect screenshot.png.', readOnly: true };
   const parent = { id: 'parent', title: 'Main conversation', cwd: '/project', status: 'idle', messages: [
     { id: 'parent-note', role: 'user', text: 'Keep the main image.', images: [parentImage] }
-  ], coordination: { role: 'coordinator', readOnly: false, tasks: [task, { ...task, id: 'recovery-task', sessionId: 'recovery', title: 'Recovery', state: 'stopped' }] } };
+  ], coordination: { role: 'coordinator', readOnly: false, tasks: [task, { ...task, id: 'recovery-task', sessionId: 'recovery', title: 'Model the worker lifecycle and generate a statechart', state: 'completed', workspace: { integration: 'applied' } }] } };
   let worker = { id: 'worker', title: task.title, cwd: '/project', status: 'working', historyTruncated: true, messages: [
     { id: 'ls-first', role: 'toolResult', toolCallId: 'ls-first', toolName: 'ls', text: 'Source unavailable.', isError: true },
     { id: 'ls-second', role: 'toolResult', toolCallId: 'ls-second', toolName: 'ls', text: 'Source unavailable.', isError: true },
@@ -58,6 +58,24 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('#coordinator-task-list > div')).toHaveCount(2);
   const borders = await page.locator('.coordinator-sheet, .coordinator-sheet > header, #coordinator-task-list > div, #coordinator-task-list button').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderWidth));
   expect(borders.every(width => width === '0px')).toBe(true);
+  await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+  const workingStatus = page.getByRole('button', { name: task.title + ', Working', exact: true }).locator('small');
+  const finishedStatus = page.getByRole('button', { name: /, Integrated$/ }).locator('small');
+  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['desktop-light', 1440, 900, 'light'], ['desktop-dark', 1440, 900, 'dark']]) {
+    await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
+    const marker = await workingStatus.evaluate(node => {
+      const dot = getComputedStyle(node, '::before');
+      return { content: dot.content, width: dot.width, height: dot.height, color: dot.backgroundColor, text: getComputedStyle(node).color, animation: dot.animationName };
+    });
+    expect(marker).toMatchObject({ content: '""', width: '8px', height: '8px', animation: 'none' });
+    expect(marker.color).toBe(marker.text);
+    const [r, g, b] = marker.color.match(/[\d.]+/g).map(Number); expect(g).toBeGreaterThan(r); expect(g).toBeGreaterThan(b);
+    await expect(workingStatus).toHaveText('Working'); await expect(finishedStatus).toHaveText('Integrated');
+    expect(await finishedStatus.evaluate(node => getComputedStyle(node, '::before').content)).toBe('none');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
+  }
+  await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: info.outputPath('worker-roster-touch.png') });
   await page.keyboard.press('Tab'); await expect(close).toBeFocused();
   await expect(close).toHaveCSS('outline-style', 'solid'); await expect(close).toHaveCSS('outline-width', '2px');
@@ -140,5 +158,11 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await touchClient.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.locator('#coordinator-sheet')).toBeHidden(); await touchClient.detach();
   await expect(page.locator('#prompt')).toHaveValue('Keep this main draft.');
+  task.state = 'reported';
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+  await page.locator('#coordinator-open').tap();
+  const returnedStatus = page.getByRole('button', { name: task.title + ', Result ready', exact: true }).locator('small');
+  await expect(returnedStatus).toHaveText('Result ready');
+  expect(await returnedStatus.evaluate(node => getComputedStyle(node, '::before').content)).toBe('none');
   expect(errors).toEqual([]);
 });
