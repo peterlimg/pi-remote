@@ -362,7 +362,7 @@ if (process.argv[2] === 'doctor') {
       await check(page.getByRole('button', { name: 'Second inspection, Stopped', exact: true })).toBeVisible();
       record('main-session Stop from another tab updates the background conversation and worker roster');
     } finally { await control.close(); }
-    await page.getByRole('button', { name: 'Return to conversation', exact: true }).click();
+    await closeTasks();
     assert.equal(await page.locator('#transcript').evaluate(node => node.scrollTop), readingPosition);
     await check(page.locator('#prompt')).toHaveValue('Keep my coordinator draft.');
     await check(page.locator('#attachments img')).toBeVisible();
@@ -441,7 +441,7 @@ if (process.argv[2] === 'doctor') {
     assert.equal(entries(first.file).filter(entry => entry.message.role === 'user').length, promptsAtCapacity);
     assert.equal(ledger().tasks.find(task => task.id === first.id).state, 'completed');
     record('task capacity enforced for coordinator follow-ups; direct worker input remains refused');
-    await page.getByRole('button', { name: 'Return to conversation', exact: true }).click();
+    await closeTasks();
     const toolCalls = file => entries(file).flatMap(entry => Array.isArray(entry.message.content) ? entry.message.content : []).filter(block => block.type === 'toolCall');
     const assign = toolCalls(main.file).find(call => call.name === 'remote_tasks' && call.arguments?.action === 'assign' && call.arguments.title === 'First inspection');
     const taskCount = ledger().tasks.length, eventTotal = ledger().tasks.reduce((count, task) => count + task.events.length, 0);

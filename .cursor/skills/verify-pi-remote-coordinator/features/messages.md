@@ -12,7 +12,7 @@ Worker questions and reports return to their owning coordinator. All user input 
 
 ## How to get to it (user POV)
 
-Read and answer the coordinator's question in the main conversation. The compact **Workers** row opens the roster in a bottom sheet. A worker row opens its read-only log; **Task details** contains assignments and reports. **Workers** returns to the roster and **Return to conversation** dismisses without selecting another session. **Session details → Background tasks** opens the same sheet. It has no replies, Stop, acceptance, model, or permission controls.
+Read and answer the coordinator's question in the main conversation. The compact **Workers** row opens the roster in a bottom sheet. A worker row opens its read-only log; **Task details** contains assignments and reports. The **Back to workers** arrow returns to the roster and **Close workers** dismisses without selecting another session. The header stays within 74px, and there is no footer; the dialog retains an accessible read-only description. **Session details → Background tasks** opens the same sheet. It has no replies, Stop, acceptance, model, or permission controls.
 
 ## Driving it with Playwright
 

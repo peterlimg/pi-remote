@@ -2064,7 +2064,6 @@ $('coordinator-return').addEventListener('click', returnToCoordinator);
 $('coordinator-tasks').addEventListener('click', openCoordinatorTasks);
 $('coordinator-parent').addEventListener('click', returnToCoordinator);
 $('coordinator-done').addEventListener('click', () => $('coordinator-sheet').close());
-$('coordinator-conversation').addEventListener('click', () => $('coordinator-sheet').close());
 $('coordinator-log-back').addEventListener('click', () => {
   const id = coordinatorLog?.id;
   stopCoordinatorWorker(); coordinatorRenderKey = undefined; renderCoordinator(cache.get(selected));
