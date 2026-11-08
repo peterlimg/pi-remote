@@ -146,12 +146,12 @@ test('missing, string and partial inputs remain inspectable without inventing in
   await expect(page.locator('.tool-activity')).toHaveCount(4);
   await expect(page.locator('.codemode-activity')).toHaveCount(3);
   const orphan = page.locator('[data-tool-id="orphan"]');
-  await expect(orphan.locator('.codemode-title')).toHaveText('JavaScript run 1');
+  await expect(orphan.locator('.codemode-title')).toHaveText('Run 1');
   await orphan.locator(':scope > summary').click();
   await expect(orphan.locator('.tool-output')).toHaveText('Older output, input unavailable.');
   await expect(orphan.locator('.codemode-script')).toHaveCount(0);
   const unnamed = page.locator('[data-tool-id="unnamed"]');
-  await expect(unnamed.locator('.codemode-title')).toHaveText('JavaScript run 1');
+  await expect(unnamed.locator('.codemode-title')).toHaveText('Run 1');
   await unnamed.locator(':scope > summary').click();
   await expect(unnamed.locator('.tool-output')).toHaveText('No output.');
   await expect(page.locator('[data-tool-id="normal"]')).not.toHaveClass(/codemode-tool/);
@@ -167,8 +167,46 @@ test('missing, string and partial inputs remain inspectable without inventing in
   await string.locator('.codemode-script summary').click();
   await expect(string.locator('.tool-input')).toHaveText('// Read a string input\nconsole.log("saved");');
   await expect(page.locator('[data-tool-id="options"] .codemode-title')).toHaveText('Review the results');
-  await expect(page.locator('[data-tool-id="empty"] .codemode-title')).toHaveText('JavaScript run 4');
+  await expect(page.locator('[data-tool-id="empty"] .codemode-title')).toHaveText('Run 4');
   await expect(page.locator('#transcript')).not.toContainText('Read 1 file,');
+});
+
+test('untitled runs use action labels without treating source references as executed inner calls', async ({ page }) => {
+  const scripts = [
+    ['read-files', `const note = "tools.bash({})";
+const template = \`tools.edit({})\`;
+const pattern = /tools.write()/;
+// tools.fffind({})
+/* tools.radius_web_search({}) */
+text(await tools.read({ path: "web/app.js" }));`, 'Read files'],
+    ['search-code', 'await Promise.all([tools.read({ path: "web/app.js" }), tools.read({ path: "web/style.css" }), tools.ffgrep({ pattern: "working" })]);', 'Read files · Search code'],
+    ['run-command', 'text(await tools.bash({ command: "npm run test:browser" }));', 'Run commands'],
+    ['dynamic', 'tools.constructor({}); const name = "read"; await tools[name]({ path: "web/app.js" });', 'Run 4'],
+    ['quoted', `console.log('tools.read({})');`, 'Run 5']
+  ];
+  const state = { id: 'codemode', title: 'Inspect the activity display', cwd: '/project', status: 'idle', tools: [], messages: [
+    cleanMessage({ role: 'assistant', content: scripts.map(([id, code]) => ({ type: 'toolCall', id, name: 'codemode', arguments: { code } })) }, 'calls'),
+    ...scripts.map(([id]) => result(id, 'Script completed. Inner tool outcomes are not recorded.', 1000, 10000))
+  ] };
+  const publish = await open(page, state);
+  const group = page.locator('.codemode-activity');
+  await expect(group.locator(':scope > summary .codemode-title')).toHaveText('Codemode');
+  await expect(group.locator('.tool-activity-label')).toHaveText('5 complete');
+  for (const [id, , title] of scripts) {
+    const run = page.locator(`[data-tool-id="${id}"]`);
+    await expect(run.locator('.codemode-title')).toHaveText(title);
+    await expect(run.locator('.tool-output')).toBeHidden();
+  }
+  await expect(page.locator('#transcript')).not.toContainText('JavaScript run');
+  await expect(page.locator('#transcript')).not.toContainText('Read 2 files');
+  await capture(page, 'phone-action-titles');
+  const read = page.locator('[data-tool-id="read-files"]');
+  await read.locator(':scope > summary').click();
+  await read.locator('.codemode-script summary').click();
+  await expect(read.locator('.tool-input')).toContainText('const template');
+  publish();
+  await expect(read.locator('.codemode-title')).toHaveText('Read files');
+  await expect(read.locator('.codemode-script')).toHaveAttribute('open', '');
 });
 
 test('compact work log fits phone, narrow and desktop views without shrinking touch targets', async ({ page }) => {
@@ -178,7 +216,9 @@ test('compact work log fits phone, narrow and desktop views without shrinking to
   for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [1440, 'light']]) {
     await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme: scheme });
     const group = page.locator('.codemode-activity');
-    await group.locator(':scope > summary').scrollIntoViewIfNeeded();
+    await expect(async () => {
+      await group.locator(':scope > summary').scrollIntoViewIfNeeded();
+    }).toPass({ timeout: 5000 });
     for (const selector of ['.codemode-activity > summary', '.codemode-tool > summary']) {
       for (const box of await page.locator(selector).all()) {
         const { height } = await box.boundingBox();

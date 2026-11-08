@@ -20,7 +20,7 @@ The production composer is an invariant in the coordinator study. Copy its exact
 
 ## Codemode work log
 
-Codemode activity uses Sol's connected work-log layout. Show each run's status and recorded duration, reveal output before the script, and preserve disclosure state during streaming. A leading script comment supplies the run title; otherwise use a numbered JavaScript run. Do not infer executed inner tools or successful checks from source code.
+Codemode activity uses Sol's connected work-log layout. Show each run's status and recorded duration, reveal output before the script, and preserve disclosure state during streaming. A leading script comment supplies the run title; otherwise use short action labels for literal tool references, such as Read files or Run commands. Ignore strings, comments, and regex literals, and use a neutral numbered Run when no supported reference is available. These labels describe script intent, not executed inner calls or successful checks.
 
 ## Coordinator interaction
 

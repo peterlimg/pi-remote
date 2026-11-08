@@ -1599,7 +1599,16 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (codemode) {
       const code = typeof args?.code === 'string' ? args.code : typeof args === 'string' ? args : undefined;
       const first = code?.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('// @options:'));
-      const title = first?.startsWith('// ') && first.slice(3).trim() ? first.slice(3).trim().slice(0, 120) : `JavaScript run ${activity.tools.length}`;
+      const named = first?.startsWith('// ') ? first.slice(3).trim() : '';
+      // shortcut: literal tool references only; use a title comment for dynamic or templated scripts.
+      const source = (code || '').replace(/"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|\/(?:\\.|[^/\\\r\n])+\/[dgimsuvy]*/g, ' ');
+      const labels = new Map([
+        ['read', 'Read files'], ['ffgrep', 'Search code'], ['fffind', 'Find files'],
+        ['edit', 'Edit files'], ['write', 'Write files'], ['bash', 'Run commands'],
+        ['radius_web_search', 'Search web'], ['remote_tasks', 'Manage workers']
+      ]);
+      const actions = [...new Set([...source.matchAll(/\btools\s*\.\s*(\w+)\s*\(/g)].map(match => labels.get(match[1])).filter(Boolean))];
+      const title = (named || actions.join(' · ') || `Run ${activity.tools.length}`).slice(0, 120);
       const statusText = ({ done: 'Complete', working: 'Running', pending: 'Pending', error: 'Failed' })[status] || status;
       entry.line = 'codemode · ' + title;
       detail.classList.add('codemode-tool');
