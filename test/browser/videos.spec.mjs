@@ -15,7 +15,7 @@ async function generateVideo(page) {
   return messages.last();
 }
 
-test('tapping a video opens a screen-sized preview instead of playing in the thumbnail', async ({ page }, info) => {
+test('tapping a video opens a screen-sized preview instead of playing in the thumbnail', async ({ page, context }, info) => {
   const errors = [], packets = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
@@ -44,6 +44,46 @@ test('tapping a video opens a screen-sized preview instead of playing in the thu
   await expect(viewer).toBeVisible();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
   expect(packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined)).toHaveLength(reads);
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, points = []) => cdp.send('Input.dispatchTouchEvent', {
+    type, touchPoints: points.map(([x, y], id) => ({ x, y, id }))
+  });
+  const bounds = await player.boundingBox(), x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+  for (const [label, dx, dy, end] of [
+    ['short pull', 0, 40, 'touchEnd'], ['cancelled pull', 0, 160, 'touchCancel'],
+    ['sideways drag', 120, 100, 'touchEnd'], ['upward drag', 0, -100, 'touchEnd']
+  ]) await test.step(label, async () => {
+    await touch('touchStart', [[x, y]]);
+    await touch('touchMove', [[x + dx, y + dy]]);
+    await expect.poll(async () => (await viewer.boundingBox()).y).toBe(dy > Math.abs(dx) ? dy : 0);
+    await touch(end);
+    await expect(viewer).toBeVisible();
+    await expect.poll(async () => (await viewer.boundingBox()).y).toBe(0);
+  });
+  await touch('touchStart', [[x, y]]);
+  await touch('touchMove', [[x, y + 160]]);
+  await touch('touchStart', [[x, y + 160], [x + 40, y + 160]]);
+  await expect.poll(async () => (await viewer.boundingBox()).y).toBe(0);
+  await touch('touchEnd');
+  await expect(viewer).toBeVisible();
+  await test.step('native video controls do not drag the viewer', async () => {
+    const bottom = bounds.y + bounds.height - 48;
+    await touch('touchStart', [[x, bottom]]);
+    await touch('touchMove', [[x, bottom + 24]]);
+    await expect.poll(async () => (await viewer.boundingBox()).y).toBe(0);
+    await touch('touchEnd');
+    await expect(viewer).toBeVisible();
+  });
+  await touch('touchStart', [[x, y]]);
+  await touch('touchMove', [[x, y + 160]]);
+  await expect.poll(async () => (await viewer.boundingBox()).y).toBe(160);
+  await page.screenshot({ path: info.outputPath('video-pull-down-mobile.png'), fullPage: true });
+  await touch('touchEnd');
+  await expect(viewer).toBeHidden();
+  await expect(message.locator('video')).toHaveJSProperty('paused', true);
+  await expect(play).toBeFocused();
+  await play.tap();
+  await expect.poll(async () => (await viewer.boundingBox()).y).toBe(0);
   await page.setViewportSize({ width: 1280, height: 900 });
   const desktopSize = await player.boundingBox();
   expect(desktopSize.width).toBeGreaterThan(160);

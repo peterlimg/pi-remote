@@ -1335,8 +1335,10 @@ function appendThreadImages(parent, message, attachments, sessionId = selected) 
   parent.append(gallery);
 }
 const videoViewer = $('video-viewer');
-let videoReturn;
+let videoReturn, videoPull;
+function resetVideoPull() { videoPull = undefined; videoViewer.style.transform = ''; }
 function restoreVideo() {
+  resetVideoPull();
   const player = videoViewer.querySelector('video');
   if (!player) return;
   player.pause(); player.controls = false;
@@ -2604,6 +2606,32 @@ $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 
 $('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
 $('video-close').addEventListener('click', closeVideo);
 videoViewer.addEventListener('close', restoreVideo);
+videoViewer.addEventListener('touchstart', event => {
+  resetVideoPull();
+  if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1 || event.target.closest('button, a, input')) return;
+  const touch = event.touches[0], player = videoViewer.querySelector('video');
+  // Leave the native controls at the bottom of the player alone.
+  if (event.target === player && touch.clientY >= player.getBoundingClientRect().bottom - 80) return;
+  videoPull = { x: touch.clientX, y: touch.clientY, distance: 0 };
+}, { passive: true });
+videoViewer.addEventListener('touchmove', event => {
+  if (!videoPull) return;
+  if (event.touches.length !== 1) { resetVideoPull(); return; }
+  const dx = event.touches[0].clientX - videoPull.x, dy = event.touches[0].clientY - videoPull.y;
+  if (!videoPull.active) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+    if (dy <= 0 || Math.abs(dx) > dy) { resetVideoPull(); return; }
+    videoPull.active = true;
+  }
+  event.preventDefault();
+  videoPull.distance = Math.max(0, dy);
+  videoViewer.style.transform = `translateY(${videoPull.distance}px)`;
+}, { passive: false });
+for (const type of ['touchend', 'touchcancel']) videoViewer.addEventListener(type, () => {
+  const dismiss = type === 'touchend' && videoPull?.distance >= 80;
+  resetVideoPull();
+  if (dismiss) closeVideo();
+}, { passive: true });
 $('image-close').addEventListener('click', () => imageViewer.close());
 $('image-zoom-in').addEventListener('click', () => zoomImage(imageZoom * 2));
 $('image-zoom-out').addEventListener('click', () => zoomImage(imageZoom / 2));
