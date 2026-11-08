@@ -4,20 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Codemode studies · Pi Remote</title>
+  <title>Clearer activity · Pi Remote prototypes</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/codemode-prototype.css">
-  <link rel="stylesheet" href="/codemode-sol-prototype.css">
-  <link rel="stylesheet" href="/codemode-astra-prototype.css">
   <script type="module" src="/codemode-prototype.js"></script>
 </head>
 <body>
-  <!-- Throwaway: independent Sol 6.1 Max and Astra 6 High designs, selected with ?variant=sol|astra. No session connection or execution. -->
+  <!-- Throwaway: purpose-first, recap, and script-outline variants. Sample data only; no session connection or execution. -->
   <div class="study-shell">
     <header class="study-header">
       <a class="study-back" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
-      <div class="study-title"><h1>Prototype animation ideas</h1><p>pi-remote</p></div>
+      <div class="study-title"><h1>Clearer activity</h1><p>pi-remote</p></div>
       <button class="study-about" type="button" aria-label="About these prototypes" popovertarget="study-info"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
     </header>
     <div class="study-tools">
@@ -84,10 +82,11 @@
     <button id="next-variant" type="button" aria-label="Next prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
   </nav>
   <div id="study-info" popover>
-    <h2>Codemode UI studies</h2>
-    <p>Compare independent designs by Sol 6.1 Max and Astra 6 High using the same five sample runs. Nothing connects to a session or executes code.</p>
-    <p>Run names and nested tool steps are illustrative. The current app has codemode scripts and output, not a structured stream of inner tool calls. Reliable nested progress would need that data.</p>
-    <p>The composer is the existing Pi Remote composer, disabled for this study. Use the arrows below to compare layouts.</p>
+    <h2>What are these runs?</h2>
+    <p>Codemode runs JavaScript that can call tools to read files, search, edit code, or run commands.</p>
+    <p>Compare three layouts using the same three sample runs. Titles and tool references are illustrative. Nothing connects to a session or executes code.</p>
+    <p>The app currently has scripts and output, not a structured stream of inner tool calls. A tool mentioned in a script is not proof it ran. Purpose-first titles can already come from a leading script comment.</p>
+    <p>The production composer is unchanged and disabled here. Use the bottom arrows to compare layouts and the state menu to try running, failed, and empty samples.</p>
     <button type="button" popovertarget="study-info" popovertargetaction="hide">Got it</button>
   </div>
   <noscript>Enable JavaScript to compare these sample layouts.</noscript>

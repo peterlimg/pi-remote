@@ -3,13 +3,17 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const route = '/codemode-prototype.html';
-const assets = [route, '/codemode-prototype.css', '/codemode-prototype.js',
-  '/codemode-sol-prototype.css', '/codemode-sol-prototype.js',
-  '/codemode-astra-prototype.css', '/codemode-astra-prototype.js', '/style.css', '/icon.svg'];
+const variants = ['purpose', 'recap', 'source'];
+const assets = [route, '/codemode-prototype.css', '/codemode-prototype.js', '/style.css', '/icon.svg'];
 const capture = async (page, name) => {
   if (!process.env.PI_CODEMODE_EVIDENCE) return;
   mkdirSync(process.env.PI_CODEMODE_EVIDENCE, { recursive: true });
   await page.screenshot({ path: join(process.env.PI_CODEMODE_EVIDENCE, name + '.png'), fullPage: true });
+};
+const openActivity = async page => {
+  const activity = page.locator('.cm-activity');
+  if (!await activity.evaluate(node => node.open)) await activity.locator(':scope > summary').click();
+  return activity;
 };
 
 for (const view of [
@@ -20,18 +24,17 @@ for (const view of [
 ]) {
   test.describe(view.name, () => {
     test.use({ viewport: view.viewport, colorScheme: view.colorScheme, deviceScaleFactor: 1, reducedMotion: 'reduce' });
-    test('both independent designs fit the conversation without connecting or executing', async ({ page }) => {
+    test('three detail levels fit the conversation without connecting or executing', async ({ page }) => {
       const errors = [], sockets = [], requests = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('websocket', socket => sockets.push(socket.url()));
       page.on('request', request => requests.push(new URL(request.url()).pathname));
-      for (const model of ['sol', 'astra']) {
-        await page.goto(`${route}?variant=${model}`);
-        await expect(page.locator(`.cm-${model}`)).toBeVisible();
-        await expect(page.getByRole('main')).toContainText('codemode');
-        await expect(page.getByRole('main')).toContainText('manual icons and emoji');
-        await expect(page.getByRole('main')).toContainText(/10m\s?28s/);
+      for (const variant of variants) {
+        await page.goto(`${route}?variant=${variant}`);
+        await expect(page.locator(`.cm-${variant}`)).toBeVisible();
+        await expect(page.getByRole('main')).toContainText('working indicator');
+        await expect(page.getByRole('main')).toContainText('13.3s elapsed');
         await expect(page.getByText('Prototype · Sample data', { exact: true })).toBeVisible();
         await expect(page.locator('#composer')).toBeVisible();
         expect(await page.locator('#composer').evaluate(node => !!node.closest('[inert]'))).toBe(true);
@@ -39,12 +42,14 @@ for (const view of [
           overflow: document.documentElement.scrollWidth > innerWidth,
           threadOverflow: document.querySelector('#study-thread').scrollWidth > document.querySelector('#study-thread').clientWidth,
           composerBottom: document.querySelector('#composer').getBoundingClientRect().bottom,
-          switcherTop: document.querySelector('.study-switcher').getBoundingClientRect().top
+          switcherTop: document.querySelector('.study-switcher').getBoundingClientRect().top,
+          targets: [...document.querySelectorAll('.study-switcher button, .cm-detail summary')].filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect().height)
         }));
         expect(geometry.overflow).toBe(false);
         expect(geometry.threadOverflow).toBe(false);
         expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.switcherTop);
-        await capture(page, `${view.name}-${model}`);
+        expect(geometry.targets.every(height => height >= 44)).toBe(true);
+        await capture(page, `${view.name}-${variant}`);
       }
       expect(sockets).toEqual([]);
       expect(requests.every(path => assets.includes(path))).toBe(true);
@@ -53,72 +58,86 @@ for (const view of [
   });
 }
 
-test('model and state comparison are shareable, reload-stable and keyboard accessible', async ({ page }) => {
-  await page.goto(`${route}?variant=sol`);
-  await expect(page.locator('#variant-label')).toContainText('Sol 6.1 · Max');
+test('variant and state comparison are shareable, reload-stable and keyboard accessible', async ({ page }) => {
+  await page.goto(`${route}?variant=purpose`);
+  await expect(page.locator('#variant-label')).toContainText('A · Purpose first');
   await page.getByRole('button', { name: 'Next prototype' }).click();
-  await expect(page).toHaveURL(/variant=astra/);
-  await expect(page.locator('#variant-label')).toContainText('Astra 6 · High');
+  await expect(page).toHaveURL(/variant=recap/);
+  await expect(page.locator('.cm-run').first()).not.toBeVisible();
   await page.reload();
-  await expect(page.locator('.cm-astra')).toBeVisible();
+  await expect(page.locator('.cm-recap')).toBeVisible();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.cm-sol')).toBeVisible();
+  await expect(page.locator('.cm-source')).toBeVisible();
   await page.getByLabel('Sample run state').focus();
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.cm-sol')).toBeVisible();
+  await expect(page.locator('.cm-source')).toBeVisible();
+  await page.getByRole('button', { name: 'Next prototype' }).click();
+  await expect(page.locator('.cm-purpose')).toBeVisible();
   await page.getByRole('button', { name: 'Previous prototype' }).click();
-  await expect(page.locator('.cm-astra')).toBeVisible();
+  await expect(page.locator('.cm-source')).toBeVisible();
   await page.goto(`${route}?variant=unknown&state=__proto__`);
-  await expect(page.locator('.cm-sol')).toBeVisible();
+  await expect(page.locator('.cm-purpose')).toBeVisible();
   await expect(page.getByLabel('Sample run state')).toHaveValue('done');
   await page.getByRole('button', { name: 'About these prototypes' }).click();
   await expect(page.locator('#study-info')).toBeVisible();
   await expect(page.locator('#study-info')).toContainText('not a structured stream of inner tool calls');
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.cm-sol')).toBeVisible();
+  await expect(page.locator('.cm-purpose')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#study-info')).not.toBeVisible();
 });
 
-for (const model of ['sol', 'astra']) {
-  test(`${model} opens evidence with keyboard and shows running, failure and empty samples`, async ({ page }) => {
-    await page.goto(`${route}?variant=${model}`);
-    const activity = page.locator(model === 'sol' ? '.cm-sol-activity' : '.cm-astra-ledger');
-    const first = page.locator(model === 'sol' ? '.cm-sol-run[data-run="read"]' : '.cm-astra-run[data-run="1"]');
-    const final = page.locator(model === 'sol' ? '.cm-sol-run[data-run="browser"]' : '.cm-astra-run[data-run="5"]');
-    await first.locator('summary').first().focus();
-    await page.keyboard.press('Enter');
-    await expect(first.locator('pre').first()).toBeVisible();
-    await first.locator('details summary').click();
-    await expect(first.locator('pre').last()).toBeVisible();
-    await expect(first.locator('pre').last()).toContainText('tools.read');
-    await capture(page, `${model}-evidence`);
+for (const variant of variants) {
+  test(`${variant} opens output before script and distinguishes running, failure and empty samples`, async ({ page }) => {
+    await page.goto(`${route}?variant=${variant}`);
+    const activity = await openActivity(page);
+    const first = page.locator('.cm-run[data-run="read"]');
+    const final = page.locator('.cm-run[data-run="check"]');
+    if (!await first.evaluate(node => node.open)) {
+      await first.locator(':scope > summary').focus();
+      await page.keyboard.press('Enter');
+    }
+    if (variant === 'source') {
+      await expect(page.locator('.cm-source-note')).toHaveText('Tool references from the script, not an execution trace.');
+      await expect(first.locator('.cm-references li')).toHaveCount(2);
+      await first.locator('.cm-evidence > summary').click();
+    }
+    await expect(first.locator('.cm-output')).toBeVisible();
+    await expect(first.locator('.cm-script pre')).not.toBeVisible();
+    await first.locator('.cm-script > summary').click();
+    await expect(first.locator('.cm-script pre')).toContainText('tools.read');
+    await expect(first.locator('.cm-script pre')).toBeVisible();
+    await capture(page, `${variant}-evidence`);
     await activity.locator(':scope > summary').click();
-    await expect(first.locator('pre').first()).not.toBeVisible();
+    await expect(first.locator('.cm-output')).not.toBeVisible();
     await activity.locator(':scope > summary').focus();
     await page.keyboard.press('Enter');
-    await expect(first.locator('pre').first()).toBeVisible();
+    await expect(first.locator('.cm-output')).toBeVisible();
     await page.getByLabel('Sample run state').selectOption('working');
     await expect(page).toHaveURL(/state=working/);
+    await openActivity(page);
     await expect(final).toHaveAttribute('data-status', 'working');
-    await expect(final.locator('pre').first()).toBeVisible();
-    await expect(final.locator('pre').first()).toContainText('No final result yet');
+    await final.locator(':scope > summary').click();
+    if (variant === 'source') await final.locator('.cm-evidence > summary').click();
+    await expect(final.locator('.cm-output')).toContainText('No final result yet');
+    await expect(final.locator('.cm-time')).toHaveText('Running');
+    await expect(page.getByRole('main')).not.toContainText('1 browser check passed');
     await final.scrollIntoViewIfNeeded();
-    await capture(page, `${model}-working`);
+    await capture(page, `${variant}-working`);
     await page.getByLabel('Sample run state').selectOption('error');
     await expect(final).toHaveAttribute('data-status', 'error');
-    await expect(final.locator('pre').first()).toBeVisible();
-    await expect(final.locator('pre').first()).toHaveText('Expected the default character to stay the same after rename. 1 failed, 4 passed.');
+    if (variant === 'source') await final.locator('.cm-evidence > summary').click();
+    await expect(final.locator('.cm-output')).toHaveText('Expected the working indicator to remain visible.\n1 failed. Exit code 1.');
     await final.scrollIntoViewIfNeeded();
-    await capture(page, `${model}-error`);
+    await capture(page, `${variant}-error`);
     expect(await page.locator('#study-thread').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.reload();
     await expect(final).toHaveAttribute('data-status', 'error');
     await page.getByLabel('Sample run state').selectOption('empty');
-    await expect(page.locator(`.cm-${model}-run`)).toHaveCount(0);
-    await expect(page.getByRole('main')).toContainText(/No (codemode )?runs/);
+    await expect(page.locator('.cm-run')).toHaveCount(0);
+    await expect(page.getByRole('main')).toContainText(/No (activity|scripts)/);
     await page.getByLabel('Sample run state').selectOption('done');
-    await expect(page.locator(`.cm-${model}-run`)).toHaveCount(5);
+    await expect(page.locator('.cm-run')).toHaveCount(3);
   });
 }
 
