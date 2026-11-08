@@ -175,6 +175,7 @@ body[data-study=panes] { --study-controls-height: calc(68px + env(safe-area-inse
   .pane-footer { padding-inline: 20px; }
 }
 @media (max-height: 600px) {
+  .pane-study .coordinator-context { max-height: 140px; overflow: auto; }
   .pane-header { padding-top: 8px; padding-bottom: 8px; }
   .pane-footer { padding-block: 6px; }
 }

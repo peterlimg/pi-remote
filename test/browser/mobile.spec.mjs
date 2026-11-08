@@ -237,7 +237,7 @@ test('tool summaries group consecutive activity and hide raw commands until expa
   await expect(shell.locator('.tool-output')).toBeVisible();
   await shell.locator('summary').click();
   await expect(read).toBeVisible();
-  expect((await read.boundingBox()).height).toBeLessThan(65);
+  await expect.poll(async () => (await read.boundingBox())?.height ?? Infinity).toBeLessThan(65);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });

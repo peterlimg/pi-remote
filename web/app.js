@@ -24,6 +24,7 @@ markdown.block.ruler.before('html_block', 'disclosure', (state, start, end, sile
   return true;
 }, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
 function refreshDiagramTheme() {
+  if (!document.querySelector('code.language-mermaid')) return;
   const state = cache.get(selected);
   if (state) renderConversation(state, { anchor: readingAnchor(), historyChanged: true });
   renderCoordinatorLog();

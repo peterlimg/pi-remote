@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filterRecentSessions } from './session-filter.mjs';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -121,6 +122,7 @@ test('a rejected preparation cannot remove an existing saved session', async ({ 
     await page.goto('http://127.0.0.1:' + host.http.address().port + '/#token=' + config.clientToken);
     await expect.poll(() => error).toBe('Pi did not provide a fresh session');
     expect(readFileSync(file, 'utf8')).toBe(original);
+    await filterRecentSessions(page, 'offline');
     await page.getByRole('button', { name: /Saved session/ }).click();
     await expect(page.locator('#transcript')).toContainText('Saved conversation stays here');
     expect(host.service.live.size).toBe(0);

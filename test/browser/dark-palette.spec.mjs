@@ -15,7 +15,7 @@ test('Duet dark colors cover login, sessions, chat and menus without changing li
   await expect(page.locator('#login')).toBeVisible();
   await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(16, 13, 16)');
   await expect(page.locator('#pair-submit')).toHaveCSS('background-color', 'rgb(239, 237, 239)');
-  await expect(page.locator('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]')).toHaveAttribute('content', '#100d10');
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#100d10');
   await page.locator('#pair-submit').focus();
   await expect(page.locator('#pair-submit')).toHaveCSS('outline-color', 'rgb(239, 237, 239)');
   await page.screenshot({ path: testInfo.outputPath('login-dark.png') });

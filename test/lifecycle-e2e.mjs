@@ -71,8 +71,12 @@ try {
   await expect(page.locator('#connection')).toHaveText('Computer connected');
   await page.locator('#sessions button.session').click();
   const send = async message => {
+    const before = text()?.timestamp ?? 0;
     await page.locator('#prompt').fill(message);
     await page.getByRole('button', { name: 'Send message' }).click();
+    await expect(page.locator('#send')).toBeEnabled();
+    if (message === 'reject') await expect(page.locator('#notice')).toContainText('Replay request rejected');
+    else await expect.poll(() => text()?.timestamp ?? 0).toBeGreaterThan(before);
   };
   result.stage = 'seed';
   await send('seed');
@@ -175,11 +179,13 @@ try {
   result.stage = 'non-sdk-and-rejected-request';
   await page.locator('#model').click();
   await page.getByRole('region', { name: 'Choose a model' }).getByRole('button', { name: 'Plain lifecycle replay', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Choose a model' })).toBeHidden();
   await send('plain');
   await expect.poll(async () => (await state()).phase).toBe('ready');
   result.nonSdkTurnNeedsOnlySettlement = true;
   await page.locator('#model').click();
   await page.getByRole('region', { name: 'Choose a model' }).getByRole('button', { name: 'SDK lifecycle replay', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Choose a model' })).toBeHidden();
   await send('reject');
   await expect.poll(async () => (await state()).blocked).toBe('request-rejected');
   assert.equal((await state()).restartSafe, true);

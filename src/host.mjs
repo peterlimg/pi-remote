@@ -104,6 +104,13 @@ export async function startHost(options = {}) {
       });
     });
   });
+  // Browsers can preconnect without sending headers; Node's graceful close waits for those sockets.
+  const preconnections = new Set();
+  http.on('connection', socket => {
+    preconnections.add(socket);
+    socket.once('data', () => preconnections.delete(socket));
+    socket.once('close', () => preconnections.delete(socket));
+  });
   let disconnectRelay;
   try {
     await new Promise((resolve, reject) => { http.once('error', reject); http.listen(port, '127.0.0.1', resolve); });
@@ -146,7 +153,9 @@ export async function startHost(options = {}) {
         for (const ws of wss.clients) ws.terminate();
         wss.close(); await service.close();
         const workers = elapsed();
-        await new Promise(resolve => http.close(resolve)); lock.release();
+        const disconnected = new Promise(resolve => http.close(resolve));
+        for (const socket of preconnections) socket.destroy();
+        await disconnected; lock.release();
         logStop(`stopped: ${reason} (workers ${workers}, connections ${elapsed()})`);
       } catch (error) {
         logStop('stop failed: ' + reason + ': ' + error.message);

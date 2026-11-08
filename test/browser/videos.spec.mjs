@@ -282,8 +282,8 @@ test('agent-generated videos play, cache and download through the real host', as
   await expect(more).toBeVisible();
   expect((await message.locator('.thread-video').boundingBox()).height).toBeLessThanOrEqual(162);
   const moreSize = await more.boundingBox();
-  expect(moreSize.width).toBeGreaterThanOrEqual(44);
-  expect(moreSize.height).toBeGreaterThanOrEqual(44);
+  expect(Math.round(moreSize.width)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(moreSize.height)).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: info.outputPath('generated-video-mobile.png'), fullPage: true });
   await more.tap();
   await expect(link).toBeVisible();

@@ -196,7 +196,9 @@ try {
     await worker.command({ type: 'compact' });
     await until(() => faults.some(message => /Already compacted/.test(message)));
   } finally { await worker.close(); }
-  const bare = new RpcWorker(file, dir, { bin: process.execPath, prefix: [entry, '--no-extensions'] });
+  const bare = new RpcWorker(file, dir, { bin: process.execPath,
+    prefix: [entry, '--no-extensions', '--provider', model.provider, '--model', model.id],
+    env: { PI_CODING_AGENT_DIR: join(dir, 'worker-agent'), ANTHROPIC_API_KEY: 'test-key-no-model-calls' } });
   try {
     const usage = await bare.command({ type: 'getUsage', includeProvider: true });
     assert.ok(usage.contextUsage.contextWindow > 0);

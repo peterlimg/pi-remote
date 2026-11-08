@@ -355,7 +355,7 @@ test('/pi-remote sets up once, displays UI-only QR, survives reload, and stops t
   const handlers = new Map(), commands = new Map(), notices = [], statuses = [], screens = [];
   const pi = {
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
-    registerCommand(name, command) { commands.set(name, command); }, getSessionName: () => 'Control test'
+    registerCommand(name, command) { commands.set(name, command); }, registerTool() {}, getSessionName: () => 'Control test'
   };
   let address, verified = false, checks = 0, tunnel = false;
   const waits = []; // Progress screens, to check their hints.

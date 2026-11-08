@@ -160,8 +160,9 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await touch('touchMove', [[center.x, center.y + 160]]);
   await touch('touchEnd', []);
   await expect(viewer).toBeHidden();
-  await page.getByRole('link', { name: 'Open portrait.png' }).tap();
+  await page.getByRole('link', { name: 'Open portrait.png' }).click();
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  await image.evaluate(async img => { await img.decode(); await new Promise(requestAnimationFrame); });
   await page.keyboard.press('0');
   await expect(zoom).toHaveText('100%');
   await cdp?.detach();

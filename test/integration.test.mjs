@@ -4,11 +4,27 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { connect } from 'node:net';
+import { once } from 'node:events';
 import { startHost } from '../src/host.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
-import { socket, until } from './helpers.mjs';
+import { socket, until, delay } from './helpers.mjs';
 import { VIDEO_CHUNK_BYTES, videoMessage } from '../web/videos.js';
+
+test('host shutdown closes a browser preconnect without waiting for HTTP headers', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-remote-preconnect-'));
+  const host = await startHost({ dir, port: 0, roots: [] });
+  const preconnect = connect(host.http.address().port, '127.0.0.1');
+  t.after(async () => { preconnect.destroy(); await host.close(); rmSync(dir, { recursive: true, force: true }); });
+  await once(preconnect, 'connect');
+  const disconnected = once(preconnect, 'close');
+  await Promise.race([
+    host.close(),
+    delay(1000).then(() => assert.fail('Shutdown waited for a speculative browser connection'))
+  ]);
+  await disconnected;
+});
 
 test('two live sessions stay independent; history, ownership, dedup and disconnect work', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-host-'));
@@ -174,7 +190,7 @@ test('actual extension registers, reattaches after host restart and releases own
   ];
   const pi = {
     on(name, handler) { const list = handlers.get(name) || []; list.push(handler); handlers.set(name, list); },
-    registerCommand() {}, getSessionName() { return sessionName; },
+    registerCommand() {}, registerTool() {}, getSessionName() { return sessionName; },
     setSessionName(name) { sessionName = name; },
     async setModel(model) { if (rejectModel) return false; modelChanges++; ctx.model = model; await emit('model_select', { type: 'model_select', model }); return true; },
     getThinkingLevel() { return thinkingLevel; },
@@ -190,13 +206,13 @@ test('actual extension registers, reattaches after host restart and releases own
     model: models[0], modelRegistry: { getAvailable: () => models },
     ui: { notify() {}, setStatus() {} }, abort() {} };
   const emit = async (name, event = {}) => { for (const handler of handlers.get(name) || []) await handler(event, ctx); };
-  const extension = (await import('../extension/index.ts')).default;
-  extension(pi);
   t.after(async () => {
     await emit('session_shutdown'); await host.close();
     if (oldHome === undefined) delete process.env.PI_REMOTE_HOME; else process.env.PI_REMOTE_HOME = oldHome;
     rmSync(dir, { recursive: true, force: true });
   });
+  const extension = (await import('../extension/index.ts')).default;
+  extension(pi);
   await emit('session_start');
   await until(() => host.service.live.size === 1);
   const id = sessionKey(file);

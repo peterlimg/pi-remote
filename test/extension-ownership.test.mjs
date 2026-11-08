@@ -37,7 +37,7 @@ for (const kind of ['terminal', 'rpc']) test(`Mac and Remote reconnect through a
   config.port = host.http.address().port;
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   remoteExtension({
-    on: (name, handler) => events.set(name, handler), registerCommand() {},
+    on: (name, handler) => events.set(name, handler), registerCommand() {}, registerTool() {},
     getSessionName: () => 'Shared session', getThinkingLevel: () => 'medium',
     sendUserMessage: text => inputs.push(text)
   });
@@ -76,7 +76,7 @@ test('Pi start warns once when the relay is older than the computer', async t =>
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const file = join(dir, 'session.jsonl');
   writeFileSync(file, JSON.stringify({ type: 'session', id: 'test', cwd: dir }) + '\n');
-  remoteExtension({ on: (name, handler) => events.set(name, handler), registerCommand() {},
+  remoteExtension({ on: (name, handler) => events.set(name, handler), registerCommand() {}, registerTool() {},
     getSessionName: () => 'Session', getThinkingLevel: () => 'medium', sendUserMessage() {} });
   const context = { cwd: dir, sessionManager: { getSessionFile: () => file, getSessionId: () => 'test', getBranch: () => [] },
     ui: { notify: (message, type) => notifications.push(type + ': ' + message), setStatus() {} } };

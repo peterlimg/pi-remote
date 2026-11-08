@@ -1,5 +1,3 @@
-import { Type } from '@earendil-works/pi-ai';
-import { createBashTool } from '@earendil-works/pi-coding-agent';
 import { createHash } from 'node:crypto';
 import { realpathSync, readFileSync, lstatSync } from 'node:fs';
 import { resolve, relative, isAbsolute, sep, join, dirname } from 'node:path';
@@ -44,14 +42,13 @@ function registerTasks(pi, call) {
   pi.registerTool({
     name: 'remote_tasks', label: 'Background workers', exposure: 'direct', executionMode: 'sequential',
     description: 'Delegate user-requested investigations or coding work from this conversation. Assign kind code for edits and checks in a separate Git worktree. Inspect returns the code diff and revision; review it completely before integrate with that revision. Integration applies only that patch, without commit or push. List tasks, assign workers, inspect reports, queue task-specific instructions, stop one task, or accept a reviewed result. Safe interruptions recover automatically with at most two attempts. Use recover to recheck a blocked task after inspection. For interrupted integration, recover requires its inspected revision and only checks whether that patch is present. Assign returns immediately after dispatch. At most two tasks may be active. The optional worker model must be an available native Pi or enabled Claude SDK provider/model; the parent session model does not change.',
-    parameters: Type.Object({
-      action: Type.Union(['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate', 'recover'].map(value => Type.Literal(value))),
-      taskId: Type.Optional(Type.String({ maxLength: 100 })), title: Type.Optional(Type.String({ maxLength: 120 })),
-      instruction: Type.Optional(Type.String({ maxLength: 8000 })), text: Type.Optional(Type.String({ maxLength: 10000 })),
-      model: Type.Optional(Type.String({ maxLength: 500 })),
-      kind: Type.Optional(Type.Union([Type.Literal('investigation'), Type.Literal('code')])),
-      revision: Type.Optional(Type.String({ minLength: 40, maxLength: 64 }))
-    }, { additionalProperties: false }),
+    parameters: { type: 'object', properties: {
+      action: { type: 'string', enum: ['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate', 'recover'] },
+      taskId: { type: 'string', maxLength: 100 }, title: { type: 'string', maxLength: 120 },
+      instruction: { type: 'string', maxLength: 8000 }, text: { type: 'string', maxLength: 10000 },
+      model: { type: 'string', maxLength: 500 }, kind: { type: 'string', enum: ['investigation', 'code'] },
+      revision: { type: 'string', minLength: 40, maxLength: 64 }
+    }, required: ['action'], additionalProperties: false },
     async execute(id, input, signal, _update, context) {
       const sdk = input.action === 'assign' && (input.model || (context.model && context.model.provider + '/' + context.model.id))?.startsWith('claude-sdk/');
       if (input.kind === 'code' || sdk) {
@@ -118,7 +115,9 @@ function registerAssistant(pi, origin, token) {
   pi.registerTool({
     name: 'sessions', label: 'Sessions', exposure: 'direct', executionMode: 'sequential',
     description: 'Read the user’s Pi sessions. overview lists each session with status, open question and last reply. read returns one session’s recent messages. Read-only: it cannot answer, send or stop anything.',
-    parameters: Type.Object({ action: Type.Union([Type.Literal('overview'), Type.Literal('read')]), sessionId: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+    parameters: { type: 'object', properties: {
+      action: { type: 'string', enum: ['overview', 'read'] }, sessionId: { type: 'string', maxLength: 100 }
+    }, required: ['action'], additionalProperties: false },
     async execute(_id, input, signal) { return toolResult(await call(input, signal)); }
   });
   pi.on('session_start', () => pi.setActiveTools(['sessions']));
@@ -130,7 +129,7 @@ function registerAssistant(pi, origin, token) {
   });
   pi.on('before_agent_start', event => { pi.setActiveTools(['sessions']); return extendPrompt(event, assistantGuidance); });
 }
-export default function coordinatorExtension(pi) {
+export default async function coordinatorExtension(pi) {
   const role = process.env.PI_REMOTE_COORDINATOR_ROLE, token = process.env.PI_REMOTE_COORDINATOR_TOKEN;
   const origin = process.env.PI_REMOTE_COORDINATOR_URL, privateDir = realpathSync(process.env.PI_REMOTE_COORDINATOR_DATA);
   if (!['coordinator', 'worker', 'coder', 'assistant'].includes(role) || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(origin || '')) throw new Error('This extension requires a host-owned coordinator session.');
@@ -140,10 +139,13 @@ export default function coordinatorExtension(pi) {
   if (role === 'assistant') return registerAssistant(pi, origin, token);
   const coding = role === 'coder';
   const allowed = role === 'coordinator' ? ['remote_tasks'] : ['read', 'grep', 'find', 'ls', ...(coding ? ['edit', 'write', 'bash'] : []), 'task_report'];
-  if (coding) pi.registerTool(createBashTool(process.cwd(), {
-    spawnHook: ({ command, cwd, env }) => ({ command, cwd,
-      env: Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('PI_REMOTE_'))) })
-  }));
+  if (coding) {
+    const { createBashTool } = await import('@earendil-works/pi-coding-agent');
+    pi.registerTool(createBashTool(process.cwd(), {
+      spawnHook: ({ command, cwd, env }) => ({ command, cwd,
+        env: Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('PI_REMOTE_'))) })
+    }));
+  }
   const call = (input, signal, id) => callHost(origin, { Authorization: 'Bearer ' + token }, input, signal, id);
   let reported = false, generation;
   const inside = (path, dir) => { const rel = relative(dir, path); return !rel || !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep); };
@@ -151,7 +153,9 @@ export default function coordinatorExtension(pi) {
   else pi.registerTool({
     name: 'task_report', label: 'Report to coordinator', exposure: 'direct', executionMode: 'sequential',
     description: 'Persist a question or final result for your assigned task and return it to the owning coordinator. Include evidence and unresolved limits. A question waits for an explicit reply. This tool ends the current turn; do not continue working after reporting.',
-    parameters: Type.Object({ kind: Type.Union([Type.Literal('question'), Type.Literal('result')]), text: Type.String({ minLength: 1, maxLength: 10000 }) }, { additionalProperties: false }),
+    parameters: { type: 'object', properties: {
+      kind: { type: 'string', enum: ['question', 'result'] }, text: { type: 'string', minLength: 1, maxLength: 10000 }
+    }, required: ['kind', 'text'], additionalProperties: false },
     async execute(id, input, signal, _update, context) {
       const value = await call({ ...input, generation }, signal, id); reported = true;
       if (context.model?.provider === 'claude-sdk') {

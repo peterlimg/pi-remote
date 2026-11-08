@@ -95,9 +95,11 @@ test('completed tools show Pi execution times live and from saved history, never
     for (const width of [320, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: width === 320 ? 'light' : 'dark' });
-      await live.scrollIntoViewIfNeeded();
-      const heading = await live.locator('.tool-heading').boundingBox(), timing = await status.boundingBox();
-      expect(timing.x + timing.width).toBeLessThanOrEqual(heading.x + heading.width + 1);
+      await expect(async () => {
+        await live.scrollIntoViewIfNeeded();
+        const heading = await live.locator('.tool-heading').boundingBox(), timing = await status.boundingBox();
+        expect(timing.x + timing.width).toBeLessThanOrEqual(heading.x + heading.width + 1);
+      }).toPass({ timeout: 5000 });
       expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`tool-duration-${width}.png`) });
       writeFileSync(testInfo.outputPath(`tool-duration-${width}.aria.txt`), await live.ariaSnapshot());

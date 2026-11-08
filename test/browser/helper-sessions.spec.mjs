@@ -18,7 +18,7 @@ test('helper sessions stay out of browsing but remain searchable without changin
   const seed = (file, title, cwd, updatedAt) => {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, [
-      { type: 'session', version: 3, id: randomUUID(), cwd },
+      { type: 'session', version: 3, id: randomUUID(), cwd, timestamp: new Date(updatedAt).toISOString() },
       { type: 'session_info', id: 'name', parentId: null, name: title }
     ].map(entry => JSON.stringify(entry)).join('\n') + '\n');
     utimesSync(file, updatedAt / 1000, updatedAt / 1000); files.push(file);

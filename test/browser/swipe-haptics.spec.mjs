@@ -4,6 +4,7 @@ test.use({ browserName: 'webkit' });
 
 for (const standalone of [false, true]) {
   test(`Safari's native swipe edge navigates and cancels safely in ${standalone ? 'home-screen' : 'browser'} mode`, async ({ page }, testInfo) => {
+    test.skip(!await page.evaluate(() => !navigator.vibrate && 'switch' in document.createElement('input')), 'This WebKit build has no native switch haptics path.');
     await page.addInitScript(standalone => {
       Object.defineProperty(navigator, 'standalone', { value: standalone });
       window.scriptedSwitchClicks = 0;
@@ -74,6 +75,7 @@ for (const standalone of [false, true]) {
 }
 
 test('Safari receives a trusted drag on the native switch itself', async ({ page }) => {
+  test.skip(!await page.evaluate(() => !navigator.vibrate && 'switch' in document.createElement('input')), 'This WebKit build has no native switch haptics path.');
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).tap();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);

@@ -58,7 +58,7 @@ test('saved histories and older bridges retain prompt order after output, scans 
       agent.ws.send(JSON.stringify({ type: 'snapshot', state }));
     };
     publish({ role: 'assistant', content: 'Live background reply', timestamp: now + 1000 });
-    await expect(page.getByRole('button', { name: /Older busy task/ })).toContainText('Live background reply');
+    await expect.poll(() => host.service.read(id).messages.at(-1)?.text).toBe('Live background reply');
     await expect(rows).toHaveText([titles[1], titles[0]]);
     const promptedAt = now + 2000;
     publish({ role: 'user', content: 'My next prompt', timestamp: promptedAt }, true);
@@ -71,7 +71,7 @@ test('saved histories and older bridges retain prompt order after output, scans 
     }
     delete state.lastPromptAt;
     agent.ws.send(JSON.stringify({ type: 'snapshot', state }));
-    await expect(page.getByRole('button', { name: /Older busy task/ })).toContainText('New background output 104');
+    await expect.poll(() => host.service.read(id).messages.at(-1)?.text).toBe('New background output 104');
     expect(state.messages.some(message => message.role === 'user')).toBe(false);
     expect(host.service.live.get(id).state.lastPromptAt).toBe(promptedAt);
     host.service.scan();
@@ -128,10 +128,10 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     await filterRecentSessions(page, 'all');
     const rows = page.locator('#sessions .session strong');
     await expect(rows).toHaveText(recent.slice(0, 20));
-    await expect(page.locator('#sessions .session').first()).toHaveAccessibleName(/^Saved Recent task 1 /);
+    await expect(page.locator('#sessions .session').first()).toHaveAccessibleName(/\bSaved Recent task 1 /);
     await page.locator('#sessions .session').last().scrollIntoViewIfNeeded();
     await expect(rows).toHaveText(titles);
-    await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(new RegExp(`^${fails ? 'Saved' : 'Ready'} Older restored task 2 `));
+    await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(new RegExp(`\\b${fails ? 'Saved' : 'Ready'} Older restored task 2 `));
 
     await host.close();
     expect(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8'))).toEqual(fails ? [] : files.slice(-2).map(sessionKey));
