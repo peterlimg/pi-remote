@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { loadConfig } from '../../src/config.mjs';
 import { acquireLock, sessionKey } from '../../src/locks.mjs';
 import { readSession } from '../../src/catalog.mjs';
 import { socket, until } from '../helpers.mjs';
+import { coordinatorState } from '../coordinator-state.mjs';
 
 // Real host, task HTTP/report API and browser; only the Pi bridge/RPC endpoints are replayed.
 test('parent list activity follows owned workers without changing its own agent or composer', async ({ page }, info) => {
@@ -85,7 +86,7 @@ test('parent list activity follows owned workers without changing its own agent 
       expect(result.ok, result.error || result.value?.error).toBe(true);
       return result.value;
     };
-    const ledger = () => JSON.parse(readFileSync(join(dir, 'coordinator-tasks.json'), 'utf8'));
+    const ledger = () => coordinatorState(dir);
     const record = id => ledger().tasks.find(item => item.id === id);
     // Recovery waits for the old permission; a queued instruction is not a running worker either.
     expect((await api(owners[1], { action: 'recover', taskId: recovery.id })).state).toBe('recovering');

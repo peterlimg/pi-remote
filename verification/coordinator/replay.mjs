@@ -6,6 +6,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { socket, until, delay } from '../../test/helpers.mjs';
 import { parseTaskInput } from '../../src/task-input.mjs';
+import { coordinatorState } from '../../test/coordinator-state.mjs';
 
 const fixture = fileURLToPath(new URL('../../test/fixtures/coordinator-flow-pi.mjs', import.meta.url));
 const requestId = () => createHash('sha256').update(randomUUID()).digest('hex');
@@ -26,7 +27,7 @@ export async function replay(sourceRoot, scenario, evidence) {
   const config = { ...loadConfig(dir), port: 0, publicUrl: 'http://127.0.0.1', relayUrl: '' };
   let host, client, assigning, stopping;
   const trace = [];
-  const ledger = () => JSON.parse(readFileSync(join(dir, 'coordinator-tasks.json'), 'utf8'));
+  const ledger = () => coordinatorState(dir);
   const task = () => ledger().tasks[0];
   try {
     host = await startHost({ dir, config, port: 0, publicUrl: config.publicUrl, relayUrl: '', roots: [sessions],

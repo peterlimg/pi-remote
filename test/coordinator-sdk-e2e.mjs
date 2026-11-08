@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { chromium, devices, expect } from '@playwright/test';
 import { socket, until } from './helpers.mjs';
+import { coordinatorState } from './coordinator-state.mjs';
 
 const live = process.env.PI_COORDINATOR_SDK_LIVE === '1';
 const model = process.env.PI_COORDINATOR_SDK_MODEL || 'claude-sdk/claude-haiku-5-5';
@@ -36,9 +37,8 @@ writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'c
 const env = { ...process.env, PI_COORDINATOR_FIXTURE_ROOT: root, PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_OFFLINE: '1' };
 for (const key of Object.keys(env)) if (key.startsWith('PI_REMOTE_') && key !== 'PI_REMOTE_COORDINATOR_TEST_PORT') delete env[key];
 if (!live) env.CLAUDE_CONFIG_DIR = join(root, 'claude');
-const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const lines = file => existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-const ledger = () => existsSync(join(root, 'host', 'coordinator-tasks.json')) ? json(join(root, 'host', 'coordinator-tasks.json')) : { tasks: [], coordinators: [] };
+const ledger = () => coordinatorState(join(root, 'host'));
 const task = title => ledger().tasks.find(task => task.title === title);
 const checkpoints = task => lines(task.file).filter(row => row.customType === 'claude-sdk-checkpoint');
 const check = expect.configure({ timeout: 30000 });

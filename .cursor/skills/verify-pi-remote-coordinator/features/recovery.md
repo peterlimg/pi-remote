@@ -32,7 +32,11 @@ Run `npm run test:coordinator` through result acceptance and scoped Stop.
 - Another same-project parent cannot inspect/control these tasks. Mismatched session capabilities and expired pre-restart capabilities fail, as do worker coordinator actions and cross-origin requests.
 - Direct client worker prompt/steer/follow-up/abort/model/reasoning/compaction/dialog-answer commands return **Worker logs are read-only. Send instructions to the coordinator.** No dispatch or task-state change is permitted. Repeat after restart and at capacity.
 - Worker inspection/history is limited to a child of the selected parent. Reject parent/non-worker IDs and another owner's child. Same-parent resync retains inspection; selecting another conversation clears it.
-- Investigation tools deny outside/symlink reads and provide no write/bash. Require unchanged project hashes/entries, private state mode 0600 and no capabilities in browser frames. Coding shell restrictions are guidance on a trusted host, not an OS sandbox.
+- Investigation tools deny outside/symlink reads and provide no write/bash. Require unchanged project hashes/entries, one private `coordinator-tasks/<main-session-id>.json` per main conversation with mode 0600 inside a mode-0700 directory, and no capabilities in browser frames. Coding shell restrictions are guidance on a trusted host, not an OS sandbox.
+
+## Session-owned task storage
+
+Run `npx playwright test test/browser/session-task-storage.spec.mjs`. It uses a real isolated host and the scoped task HTTP API, with seeded legacy sessions and no model calls. Require matching partial migration to finish, questions/reports/mailboxes and capabilities to survive, updates to touch only their owning main's file, cross-main inspection to fail, and reload to preserve both sessions. The original shared file must remain only as an unchanged `.migrated` backup. A conflicting partial migration must fail closed without replacing either copy.
 
 ## Cleanup and limits
 

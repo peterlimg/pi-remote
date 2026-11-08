@@ -45,7 +45,9 @@ Worker `task_report` calls persist a question or result and end authorized work.
 
 ## Ownership and recovery
 
-`coordinator-tasks.json` in the private Pi Remote directory stores membership, worker paths, scoped capabilities, states, and notifications. The first assignment records the existing parent session, without creating another conversation. Normal-session tool requests authenticate against that process's current session ownership lock. Their capabilities expire when ownership changes. Workers can report only their own task; parents can address only their own workers. No capabilities enter browser task state.
+Each main session owns a private `coordinator-tasks/<main-session-id>.json` file in the Pi Remote directory, normally `~/.pi/remote`. It stores that session's membership, worker paths, scoped capabilities, questions, reports, states, input mailbox, and notifications. Updating one session does not rewrite another session's file. Files are mode 0600 inside a mode-0700 directory; they are not appended to the chat transcript or exposed to the browser.
+
+On upgrade, the host splits the old shared `coordinator-tasks.json` by owning main session and retains its original contents as `coordinator-tasks.json.migrated`. A matching partial split can finish after interruption; conflicting files block coordination without overwriting either copy. The backup is historical; do not replace newer session files with it. Transcript and worktree paths stay unchanged. The first assignment records the existing parent session, without creating another conversation. Normal-session tool requests authenticate against that process's current session ownership lock. Their capabilities expire when ownership changes. Workers can report only their own task; parents can address only their own workers. No capabilities enter browser task state.
 
 Assignments and commands use the existing command journal. A retry with the same request ID does not repeat work. Notification intent is saved before delivery. Questions and reports wake an idle parent, including a terminal-owned parent, without becoming apparent human input.
 

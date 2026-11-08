@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import { sessionKey, sessionCapability } from './locks.mjs';
 import { planWorkspace, createWorkspace, reviewWorkspace, integrateWorkspace, inspectWorkspace, resolveIntegration } from './task-workspaces.mjs';
 import { encodeTaskInput, parseTaskInput } from './task-input.mjs';
 import { claudeWorkerSource } from './task-provider.mjs';
+import { loadCoordinatorState, saveCoordinatorState } from './coordinator-store.mjs';
 
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
 const sessionExtension = fileURLToPath(new URL('../extension/index.ts', import.meta.url));
@@ -25,18 +26,12 @@ const safe = error => {
 
 export class Coordinators {
   constructor(service) {
-    this.service = service; this.file = join(service.dir, 'coordinator-tasks.json');
+    this.service = service;
     this.owners = new Map(); this.tasks = new Map(); this.waking = new Set(); this.scheduled = new Set(); this.driving = new Set();
     try {
-      const data = JSON.parse(readFileSync(this.file, 'utf8'));
-      if (data.version !== 1 || !Array.isArray(data.coordinators) || !Array.isArray(data.tasks)) throw new Error('Invalid coordinator state');
-      for (const owner of data.coordinators) {
-        if (!owner.file || sessionKey(owner.file) !== owner.id || typeof owner.token !== 'string' || owner.token.length < 32 || !owner.cwd) throw new Error('Invalid coordinator record');
-        this.owners.set(owner.id, owner);
-      }
+      const data = loadCoordinatorState(service.dir);
+      for (const owner of data.coordinators) this.owners.set(owner.id, owner);
       for (const task of data.tasks) {
-        if (!task.file || sessionKey(task.file) !== task.sessionId || !this.owners.has(task.coordinatorId) || typeof task.token !== 'string' || task.token.length < 32 || !Array.isArray(task.events)) throw new Error('Invalid task record');
-        if (task.protocol === 2 && (!Array.isArray(task.inputs) || task.inputs.some(input => typeof input.id !== 'string' || typeof input.text !== 'string'))) throw new Error('Invalid task mailbox');
         if (task.protocol === 2) task.generation = randomUUID();
         if (['starting', 'working', 'stopping', 'recovering'].includes(task.state)) {
           const recoverable = task.protocol === 2 && !task.stopped && task.state !== 'stopping';
@@ -51,9 +46,9 @@ export class Coordinators {
         for (const event of task.events) if (event.delivery === 'sending') event.delivery = 'unknown';
         this.tasks.set(task.id, task);
       }
-      this.save();
+      for (const owner of this.owners.values()) this.save(owner.id);
     } catch (error) {
-      if (error.code !== 'ENOENT') { console.error('Could not load coordinator state:', error); this.error = 'Coordinator state could not be loaded. No coordinator work will be started.'; }
+      console.error('Could not load coordinator state:', error); this.error = 'Coordinator state could not be loaded. No coordinator work will be started.';
     }
     service.on('state', id => { this.observe(id); this.schedule(id); });
     this.recoveryTimer = setInterval(() => {
@@ -62,13 +57,11 @@ export class Coordinators {
   }
   close() { clearInterval(this.recoveryTimer); }
   check() { if (this.error) throw publicError(this.error, 503); }
-  save() {
+  save(ownerId) {
     this.check();
-    const temp = this.file + '.tmp';
-    writeFileSync(temp, JSON.stringify({ version: 1, coordinators: [...this.owners.values()], tasks: [...this.tasks.values()] }), { mode: 0o600 });
-    renameSync(temp, this.file);
+    saveCoordinatorState(this.service.dir, this.owners.get(ownerId), [...this.tasks.values()].filter(task => task.coordinatorId === ownerId));
   }
-  changed(ownerId) { this.save(); this.service.changed(ownerId); }
+  changed(ownerId) { this.save(ownerId); this.service.changed(ownerId); }
   taskForSession(id) { return [...this.tasks.values()].find(task => task.sessionId === id); }
   publicTask(task, concise = false) {
     const value = { id: task.id, coordinatorId: task.coordinatorId, sessionId: task.sessionId, title: task.title,

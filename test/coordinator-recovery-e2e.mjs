@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chromium, devices, expect } from '@playwright/test';
 import { socket, until, delay } from './helpers.mjs';
 import { parseTaskInput, TASK_INPUT } from '../src/task-input.mjs';
+import { coordinatorState } from './coordinator-state.mjs';
 
 const port = Number(process.env.PI_REMOTE_RECOVERY_TEST_PORT || 8815), url = 'http://127.0.0.1:' + port;
 const listener = createServer();
@@ -17,7 +18,6 @@ await new Promise(resolve => listener.close(resolve));
 const evidence = mkdtempSync(join(tmpdir(), 'pi-task-recovery-proof-')), scratch = join(evidence, 'scratch'); mkdirSync(scratch);
 console.log('Evidence: ' + evidence);
 const save = (file, value) => writeFileSync(join(evidence, file), typeof value === 'string' ? value : JSON.stringify(value, null, 2));
-const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const lines = file => existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
 const hash = text => createHash('sha256').update(text).digest('hex');
 const env = { ...process.env, TMPDIR: scratch, TMP: scratch, TEMP: scratch, PI_OFFLINE: '1', PI_RECOVERY_GIT: '1' };
@@ -45,7 +45,7 @@ const stop = async () => {
   current.child.kill('SIGTERM'); const timer = setTimeout(() => current.child.kill('SIGKILL'), 10000);
   try { await current.exited; } finally { clearTimeout(timer); }
 };
-const ledger = () => json(join(root, 'host', 'coordinator-tasks.json'));
+const ledger = () => coordinatorState(join(root, 'host'));
 const task = title => ledger().tasks.find(task => task.title === title);
 const post = async (token, input) => {
   const response = await fetch(url + '/_pi/coordinator', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -169,7 +169,7 @@ try {
   await stop();
   if (root) {
     save('provider-audit.json', lines(join(root, 'provider.jsonl')));
-    if (existsSync(join(root, 'host', 'coordinator-tasks.json'))) save('tasks.json', ledger().tasks.map(({ token, ...task }) => task));
+    if (existsSync(join(root, 'host', 'coordinator-tasks'))) save('tasks.json', ledger().tasks.map(({ token, ...task }) => task));
     const pids = [...new Set(lines(join(root, 'provider.jsonl')).filter(entry => entry.kind === 'boot').map(entry => entry.pid))];
     await until(() => pids.every(pid => { try { process.kill(pid, 0); return false; } catch { return true; } }), 10000);
   }

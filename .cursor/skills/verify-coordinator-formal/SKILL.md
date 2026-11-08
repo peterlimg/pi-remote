@@ -48,6 +48,7 @@ Read shortest counterexamples and show the chart in the reader's words. Inspecti
 | Interrupt, check, continue or block | `interrupt`, `advanceTask`, `deliver`, `blockRecovery`; capture generation and recheck after every awaited read/start boundary |
 | Stop and reactivation | `action(stop/message/recover)`; cancel inputs and fence pending recovery before abort; reject continuation during Stop |
 | Restart | Constructor fences mailbox generations, preserves inputs/budget and restores recoverable work; legacy tasks remain inspection-first |
+| Session-owned persistence | src/coordinator-store.mjs atomically replaces only the owning main's task file; legacy migration finishes before runtime recovery |
 | Workspace identity/status | src/task-workspaces.mjs `inspectWorkspace`; not a general filesystem transaction or process-tree inspection |
 | RPC/checkpoint gaps | src/service.mjs command/dispatch/restore; src/live-session.mjs WorkerSession; src/rpc.mjs requests |
 | Durable request receipts | src/commands.mjs CommandJournal.execute; fresh request IDs are assumed in these models |
@@ -68,7 +69,7 @@ Also run the native-Pi `npm run test:coordinator-recovery` proof after changing 
 
 - WorkerFlow: one owner/worker, one pending prompt and abort, one restart, fresh request IDs.
 - RecoveryFlow: two inputs, three interrupted turns, up to eight epochs, one Stop, one unfinished assignment episode, at most two automatic attempts.
-- Successful atomic ledger writes and coherent complete history reads; no fsync/power-loss guarantee.
+- Successful atomic task-file writes for the modeled single owner and coherent complete history reads; no fsync/power-loss guarantee. Multi-session legacy migration is checked by the focused host E2E, not these models.
 - No multiple-worker/capacity proof, duplicate-request proof, OS sandbox, arbitrary shell exactly-once semantics, orphan-process reconciliation, interrupted-main-turn recovery, notification liveness, code integration transaction, UI or paid-model timing proof. Native E2E covers selected integrations, not all these exclusions.
 
 ## When covered code changes

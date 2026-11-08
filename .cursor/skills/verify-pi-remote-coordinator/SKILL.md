@@ -17,6 +17,8 @@ PI_REMOTE_COORDINATOR_TEST_PORT=8813 npm run test:coordinator
 
 This command refuses an occupied port, launches `test/coordinator-server.mjs`, runs Doctor, drives the phone UI, restarts its own host process, and cleans up. It prints an absolute `pi-coordinator-proof-*` evidence directory. A passing run ends with `PASS` and exit code 0.
 
+For storage isolation and legacy migration, `npx playwright test test/browser/session-task-storage.spec.mjs` exercises per-main files, matching/conflicting partial migrations, scoped updates, permissions and reload through the real host API without model calls. Read features/recovery.md.
+
 For SDK workers, `npm run test:coordinator-sdk` drives the actual host, Pi, SDK provider and MCP bridge, replaying only the external SDK peer by default. It checks source/version admission, worker permissions, private environment removal, report checkpoints, follow-ups and host restart, coding integration and Stop. Set `PI_COORDINATOR_SDK_LIVE=1` only for an authorized real-model check; `PI_COORDINATOR_SDK_MODEL` chooses the model. It uses an owned fixture and does not alter personal settings. These are independent RPC workers, not pi-subagents' borrowed foreground children.
 
 The host and Pi RPC processes are real. Only the model provider is deterministic, supplied by `test/fixtures/coordinator-provider.mjs` through Pi's provider extension interface. It attempts allowed reads and forbidden operations, asks a question, returns a report, and holds another worker until Stop. A later coding scenario uses native edit/write/bash tools in real Git worktrees and integrates a reviewed patch. It makes no paid model requests.

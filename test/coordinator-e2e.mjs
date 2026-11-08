@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { chromium, devices, expect } from '@playwright/test';
 import { socket, until, delay } from './helpers.mjs';
-import { sessionCapability } from '../src/locks.mjs';
+import { sessionCapability, sessionKey } from '../src/locks.mjs';
+import { coordinatorState } from './coordinator-state.mjs';
 import { parseTaskInput } from '../src/task-input.mjs';
 
 const clientToken = 'browser-test-token-only-123456789012345';
@@ -88,8 +89,8 @@ if (process.argv[2] === 'doctor') {
         ...(input ? { body: JSON.stringify(input) } : {}) });
       return { status: response.status, body: await response.json() };
     };
-  const ledger = () => json(join(root, 'host', 'coordinator-tasks.json'));
-  const owner = () => ledger().coordinators.find(owner => owner.cwd === join(root, 'project'));
+  const ledger = () => coordinatorState(join(root, 'host'));
+  const owner = () => ledger().coordinators.find(owner => owner.id === sessionKey(join(root, 'sessions', 'project.jsonl')));
   const entries = file => lines(file).filter(entry => entry.type === 'message');
   const inputBodies = file => entries(file).filter(entry => entry.message.role === 'user').flatMap(entry => {
     const text = typeof entry.message.content === 'string' ? entry.message.content : entry.message.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
@@ -179,7 +180,8 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#coordinator-context')).toBeHidden();
     await send('Read alpha before delegating.');
     await check(page.locator('#transcript')).toContainText('No workers were started.');
-    assert(!existsSync(join(root, 'host', 'coordinator-tasks.json')) || ledger().coordinators.length === 0 && ledger().tasks.length === 0, 'Ordinary conversation must not create coordinator membership');
+    assert.equal(ledger().coordinators.length, 0, 'Ordinary conversation must not create coordinator membership');
+    assert(!existsSync(join(root, 'host', 'coordinator-tasks.json')), 'A shared task file must not be created');
     await send('Investigate both fixture files.'); await openTasks();
     await check(taskRow('First inspection')).toContainText('Needs answer');
     await check(taskRow('Second inspection')).toContainText('Working');
@@ -611,7 +613,9 @@ if (process.argv[2] === 'doctor') {
     assert.equal(git(['diff']), parentDiff); assert.equal(git(['ls-files', '--stage']), originalIndex);
     record('coding workers edit and test in separate worktrees, reject stale/conflicting integration, preserve parent changes/index, survive restart without replay, and stop by task ID');
     save('coding-audit.json', codingRequests);
-    assert.equal(statSync(join(root, 'host', 'coordinator-tasks.json')).mode & 0o777, 0o600);
+    assert.equal(statSync(join(root, 'host', 'coordinator-tasks')).mode & 0o777, 0o700);
+    for (const main of ledger().coordinators) assert.equal(statSync(join(root, 'host', 'coordinator-tasks', main.id + '.json')).mode & 0o777, 0o600);
+    assert(!existsSync(join(root, 'host', 'coordinator-tasks.json')), 'Native tasks must stay in their owning session files');
     for (const token of [oldScope, scope, bridgeToken, ...ledger().coordinators.map(record => record.token), ...ledger().tasks.map(record => record.token)]) assert(!JSON.stringify(frames).includes(token), 'Private capabilities must not enter browser state');
     const workerIds = new Set(ledger().tasks.map(task => task.sessionId));
     assert(!frames.some(({ direction, packet }) => direction === 'sent' && ['command', 'answer', 'taskAction'].includes(packet.op) && workerIds.has(packet.sessionId)), 'Browser input must never target a worker');
@@ -631,7 +635,7 @@ if (process.argv[2] === 'doctor') {
       save('browser-frames.json', frames);
       if (root) {
         save('provider-audit.json', lines(join(root, 'provider.jsonl')));
-        if (existsSync(join(root, 'host', 'coordinator-tasks.json'))) save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
+        if (existsSync(join(root, 'host', 'coordinator-tasks'))) save('task-results.json', ledger().tasks.map(({ id, title, state, sessionId, result, error }) => ({ id, title, state, sessionId, result, error })));
       }
       const workerPids = root ? [...new Set(lines(join(root, 'provider.jsonl')).filter(event => event.kind === 'boot').map(event => event.pid))] : [];
       const stopped = await stop();
