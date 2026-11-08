@@ -108,8 +108,22 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await expect(viewer).toBeVisible();
   await expect(zoom).toHaveText('200%');
   await page.keyboard.press('0');
-  await stage.tap();
-  await expect(viewer).toBeVisible();
+  await test.step('drags, canceled touches and distant taps do not count as double taps', async () => {
+    for (const end of ['touchEnd', 'touchCancel']) {
+      await touch('touchStart', [[center.x, center.y]]);
+      if (end === 'touchEnd') {
+        await touch('touchMove', [[center.x + 40, center.y]]);
+        await touch('touchMove', [[center.x, center.y]]);
+      }
+      await touch(end, []);
+      await stage.tap();
+      await expect(zoom).toHaveText('100%');
+    }
+    await stage.tap({ position: { x: 40, y: 40 } });
+    await stage.tap({ position: { x: bounds.width - 40, y: 40 } });
+    await expect(zoom).toHaveText('100%');
+    await expect(viewer).toBeVisible();
+  });
   await stage.dblclick();
   await expect(zoom).toHaveText('200%');
   await stage.dblclick();
@@ -182,7 +196,7 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   const image = viewer.getByRole('img'), zoom = viewer.locator('#image-zoom-reset');
   await expect(image).toHaveCSS('object-fit', 'contain');
   await expect(viewer.locator('#image-position')).toBeHidden();
-  const frame = await viewer.locator('.image-stage').boundingBox();
+  const stage = viewer.locator('.image-stage'), frame = await stage.boundingBox();
   // Measure the actual image pixels, not the full-size img element's letterboxing.
   const imageBounds = () => image.evaluate(img => {
     const box = img.parentElement.getBoundingClientRect(), transform = new DOMMatrix(getComputedStyle(img).transform);
@@ -196,6 +210,18 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   expect(initial.x + initial.width).toBeCloseTo(frame.x + frame.width, 1);
   expect(initial.y).toBeCloseTo(frame.y + Math.max(0, (frame.height - initial.height) / 2), 1);
   await page.screenshot({ path: info.outputPath('fit-width-mobile.png') });
+  await test.step('real double taps zoom at the touched point and restore the initial width', async () => {
+    const pointX = frame.x + frame.width / 2 + 40, pointY = frame.y + frame.height / 2;
+    await page.touchscreen.tap(pointX, pointY);
+    await page.touchscreen.tap(pointX, pointY);
+    await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(initial.width * 2, 1);
+    expect((await imageBounds()).x).toBeCloseTo(pointX - (pointX - initial.x) * 2, 1);
+    expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
+    await page.screenshot({ path: info.outputPath('double-tap-zoomed-mobile.png') });
+    await page.touchscreen.tap(pointX, pointY);
+    await page.touchscreen.tap(pointX, pointY);
+    await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(initial.width, 1);
+  });
   await page.keyboard.press('+');
   await expect.poll(async () => (await imageBounds()).width).toBeCloseTo(frame.width * 2, 1);
   await page.keyboard.press('0');

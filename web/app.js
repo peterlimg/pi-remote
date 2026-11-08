@@ -1215,7 +1215,7 @@ function clearThreadImages(keep = new Set(), sessionId) {
 }
 const imageViewer = $('image-viewer'), imageStage = $('image-stage'), fullImage = imageViewer.querySelector('img');
 const imagePointers = new Map();
-let imageZoom = 1, imageX = 0, imageY = 0, imagePull, imageGallery;
+let imageZoom = 1, imageX = 0, imageY = 0, imagePull, imageGallery, imageTap, imageLastTap;
 function resetImagePull() {
   imagePull = undefined; imageViewer.style.transform = ''; imageStage.style.transform = '';
 }
@@ -1234,11 +1234,17 @@ function zoomImage(zoom, x = 0, y = 0) {
   const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
   positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
 }
+function imageFitZoom() {
+  const width = imageStage.clientWidth / (fullImage.naturalWidth || 1), height = imageStage.clientHeight / (fullImage.naturalHeight || 1);
+  const fit = Math.min(width, height);
+  return matchMedia('(max-width: 700px)').matches && fit ? Math.min(8, width / fit) : 1;
+}
 // Unloaded thread images count too, so the position reflects the whole conversation.
 const galleryItems = () => [...(imageGallery?.querySelectorAll('[data-image-key], #attachments a') ?? [])];
 const galleryHref = item => item?.href ?? item?.querySelector('a')?.href;
 function showImage(href) {
-  resetImagePull(); imagePointers.clear(); fullImage.src = href; positionImage(1, 0, 0);
+  resetImagePull(); imagePointers.clear(); imageTap = imageLastTap = undefined;
+  fullImage.src = href; positionImage(1, 0, 0);
   const items = galleryItems(), index = items.findIndex(item => galleryHref(item) === href);
   $('image-position').textContent = `${index + 1} / ${items.length}`;
   $('image-position').hidden = index < 0 || items.length < 2;
@@ -2562,12 +2568,12 @@ fullImage.addEventListener('load', () => {
   const fit = Math.min(width, height);
   if (!fit) return;
   // Fit phone images to the width without cropping either side.
-  const zoom = matchMedia('(max-width: 700px)').matches ? Math.min(8, width / fit) : 1;
+  const zoom = imageFitZoom();
   const top = Math.max(0, (fullImage.naturalHeight * fit * zoom - imageStage.clientHeight) / 2);
   positionImage(zoom, 0, top);
 });
 new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
-imageViewer.addEventListener('close', () => { imagePointers.clear(); resetImagePull(); });
+imageViewer.addEventListener('close', () => { imagePointers.clear(); imageTap = imageLastTap = undefined; resetImagePull(); });
 imageViewer.addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (['+', '='].includes(event.key)) zoomImage(imageZoom * 2);
@@ -2586,6 +2592,8 @@ function imageGesture() {
 imageStage.addEventListener('pointerdown', event => {
   if (event.button !== 0 || imagePointers.size >= 2) return;
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  imageTap = imagePointers.size === 1 ? { x: event.clientX, y: event.clientY, time: event.timeStamp, pointerType: event.pointerType } : undefined;
+  if (!imageTap) imageLastTap = undefined;
   resetImagePull();
   if (event.pointerType === 'touch' && imagePointers.size === 1) {
     const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
@@ -2599,6 +2607,7 @@ imageStage.addEventListener('pointerdown', event => {
 });
 imageStage.addEventListener('pointermove', event => {
   if (!imagePointers.has(event.pointerId)) return;
+  if (imageTap && Math.hypot(event.clientX - imageTap.x, event.clientY - imageTap.y) > 10) imageTap = imageLastTap = undefined;
   const before = imageGesture();
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (imagePull) {
@@ -2628,13 +2637,17 @@ imageStage.addEventListener('pointermove', event => {
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) imageStage.addEventListener(type, event => {
   if (!imagePointers.has(event.pointerId)) return;
   const pull = type === 'pointerup' ? imagePull : undefined;
-  imagePointers.delete(event.pointerId); resetImagePull();
+  const tap = type === 'pointerup' && imageTap && event.timeStamp - imageTap.time <= 350 &&
+    Math.hypot(event.clientX - imageTap.x, event.clientY - imageTap.y) <= 10 ? imageTap : undefined;
+  imagePointers.delete(event.pointerId); imageTap = undefined; resetImagePull();
   if (pull?.axis === 'y' && pull.distance >= 80) imageViewer.close();
   else if (pull?.axis === 'x' && Math.abs(pull.distance) >= 60) stepImage(pull.distance < 0 ? 1 : -1);
-});
-imageStage.addEventListener('dblclick', event => {
-  const box = imageStage.getBoundingClientRect();
-  zoomImage(imageZoom > 1 ? 1 : 2, event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
+  if (tap && imageLastTap && tap.pointerType === imageLastTap.pointerType && event.timeStamp - imageLastTap.time <= 350 &&
+      Math.hypot(event.clientX - imageLastTap.x, event.clientY - imageLastTap.y) <= 24) {
+    const box = imageStage.getBoundingClientRect(), fit = imageFitZoom();
+    zoomImage(imageZoom > fit + 0.01 ? fit : fit * 2, event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
+    imageLastTap = undefined;
+  } else imageLastTap = tap ? { ...tap, time: event.timeStamp } : undefined;
 });
 // Pull a bottom sheet down to dismiss it. A drag inside a scrolled list scrolls it instead.
 function dragToClose(sheet, dialog = sheet, list) {
