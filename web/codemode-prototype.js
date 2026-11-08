@@ -84,7 +84,7 @@ function activity(state, variant) {
   return `<details class="cm-activity">
     <summary class="cm-activity-toggle">
       <span class="cm-marker">${icon(state === 'done' ? 'check' : state === 'empty' ? 'code' : state)}<span class="sr-only">${statusNames[state]}: </span></span>
-      <span class="cm-title">${phase[variant]}</span>
+      <span class="cm-title">Codemode · ${phase[variant]}</span>
       <span class="cm-total" ${meta === '+2' ? 'aria-label="2 earlier steps"' : ''}>${meta}</span>${icon('chevron', 'cm-chevron')}
     </summary>
     ${state === 'empty' ? '<p class="cm-empty">No scripts or output to inspect.</p>' : runs.map(run => renderRun(run, state)).join('')}

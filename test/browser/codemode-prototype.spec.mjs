@@ -35,6 +35,7 @@ for (const view of [
         await expect(page.locator(`.cm-${variant}`)).toBeVisible();
         await expect(page.getByRole('main')).toContainText('working indicator');
         await expect(page.locator('.cm-activity')).toHaveJSProperty('open', false);
+        await expect(page.locator('.cm-activity > summary')).toContainText('Codemode · ');
         await expect(page.locator('.cm-run').first()).not.toBeVisible();
         await expect(page.getByText('Prototype · Sample data', { exact: true })).toBeVisible();
         await expect(page.locator('#composer')).toBeVisible();
