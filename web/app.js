@@ -1334,10 +1334,36 @@ function appendThreadImages(parent, message, attachments, sessionId = selected) 
   }
   parent.append(gallery);
 }
+const videoViewer = $('video-viewer');
+let videoReturn;
+function restoreVideo() {
+  const player = videoViewer.querySelector('video');
+  if (!player) return;
+  player.pause(); player.controls = false;
+  if (videoReturn?.isConnected) { videoReturn.prepend(player); videoReturn.focus({ preventScroll: true }); }
+  else player.remove();
+  videoReturn = undefined;
+}
+function closeVideo() { videoViewer.close(); restoreVideo(); }
+function openVideo(player) {
+  videoReturn = player.parentElement;
+  videoReturn.style.height = `${videoReturn.offsetHeight}px`;
+  player.controls = true;
+  videoViewer.append(player); videoViewer.showModal(); videoViewer.focus();
+  player.play().catch(() => {}); // Safari may require another tap after the download.
+}
+function videoPlayIcon() {
+  const play = el('span', undefined, 'video-play-icon'); play.setAttribute('aria-hidden', 'true');
+  play.innerHTML = '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>';
+  return play;
+}
 function clearThreadVideos(keep = new Set()) {
   for (const [path, video] of threadVideos) if (!keep.has(path)) {
     videoObserver.unobserve(video.node);
-    if (video.player) { video.player.pause(); video.player.removeAttribute('src'); video.player.load(); }
+    if (video.player) {
+      if (videoViewer.contains(video.player)) closeVideo();
+      video.player.pause(); video.player.removeAttribute('src'); video.player.load();
+    }
     if (video.url) URL.revokeObjectURL(video.url);
     if (video.posterURL) URL.revokeObjectURL(video.posterURL);
     threadVideos.delete(path);
@@ -1348,8 +1374,7 @@ function showThreadVideo(video, file, poster) {
   // The conversation owns its thumbnail URL; sending releases the composer's URL.
   if (poster) video.posterURL = URL.createObjectURL(poster);
   const player = el('video'); video.player = player;
-  player.controls = true; player.playsInline = true; player.preload = 'none';
-  player.style.height = video.button.style.height;
+  player.playsInline = true; player.preload = 'none';
   player.setAttribute('aria-label', video.name);
   if (video.posterURL) player.poster = video.posterURL;
   player.src = video.url;
@@ -1369,9 +1394,12 @@ function showThreadVideo(video, file, poster) {
   });
   player.addEventListener('error', () => {
     if (threadVideos.get(video.path) !== video) return;
+    if (videoViewer.contains(player)) closeVideo();
     video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);
   });
-  video.node.replaceChildren(player);
+  video.button.setAttribute('aria-label', `Play ${video.name}`);
+  video.button.replaceChildren(player, videoPlayIcon());
+  video.node.replaceChildren(video.button);
   if (video.role === 'assistant') video.node.append(download);
 }
 async function loadVideoPreview(video) {
@@ -1388,9 +1416,7 @@ async function loadVideoPreview(video) {
       const [poster] = validateImages([info.poster]);
       video.posterURL = URL.createObjectURL(new Blob([Uint8Array.from(atob(poster.data), c => c.charCodeAt(0))], { type: poster.mimeType }));
       const image = el('img'); image.src = video.posterURL; image.alt = '';
-      const play = el('span', undefined, 'video-play-icon'); play.setAttribute('aria-hidden', 'true');
-      play.innerHTML = '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>';
-      video.button.replaceChildren(image, play);
+      video.button.replaceChildren(image, videoPlayIcon());
     } else video.button.textContent = 'Play video';
   } catch (error) {
     video.info = undefined; video.button.textContent = 'Video unavailable. Retry'; video.button.title = error.message;
@@ -1398,6 +1424,7 @@ async function loadVideoPreview(video) {
 }
 async function playThreadVideo(video) {
   if (video.loading) return;
+  if (video.player) { openVideo(video.player); return; }
   if (!video.info) await loadVideoPreview(video);
   if (!video.info || threadVideos.get(video.path) !== video) return;
   const ws = socket, storage = videoCache, cacheId = JSON.stringify([video.sessionId, video.path]);
@@ -1431,7 +1458,7 @@ async function playThreadVideo(video) {
       check();
     }
     showThreadVideo(video, file);
-    video.player.play().catch(() => {}); // Safari may require another tap after the download.
+    openVideo(video.player);
   } catch (error) {
     video.info = undefined;
     video.button.textContent = 'Could not load video. Retry'; video.button.title = error.message;
@@ -2575,6 +2602,8 @@ $('settings-dialog').addEventListener('cancel', event => { event.preventDefault(
 $('model-search').addEventListener('input', renderModels);
 $('model-retry').addEventListener('click', () => { if (settingsPicker?.kind === 'model') openModels(settingsPicker.id); });
 $('picker-cancel').addEventListener('click', event => closePicker(event.detail === 0));
+$('video-close').addEventListener('click', closeVideo);
+videoViewer.addEventListener('close', restoreVideo);
 $('image-close').addEventListener('click', () => imageViewer.close());
 $('image-zoom-in').addEventListener('click', () => zoomImage(imageZoom * 2));
 $('image-zoom-out').addEventListener('click', () => zoomImage(imageZoom / 2));
@@ -3442,6 +3471,7 @@ function discardVideo(image) {
 }
 function releaseImages(images) {
   for (const image of images) {
+    if (videoViewer.querySelector('video')?.src === image.url) closeVideo();
     image.released = true; URL.revokeObjectURL(image.url);
     if (image.poster) URL.revokeObjectURL(image.poster);
     discardVideo(image);
@@ -3459,10 +3489,13 @@ function renderImages() {
     const item = el('div', undefined, 'attachment'), preview = el(image.video ? 'video' : 'img');
     if (image.video) {
       item.classList.add('video-attachment');
-      preview.controls = true; preview.playsInline = true; preview.preload = 'none';
+      preview.playsInline = true; preview.preload = 'none';
       if (image.poster) preview.poster = image.poster;
       preview.setAttribute('aria-label', image.file.name);
       preview.addEventListener('error', () => {
+        if (videoViewer.contains(preview)) closeVideo();
+        const play = preview.closest('button');
+        if (play) { play.disabled = true; play.querySelector('.video-play-icon')?.remove(); }
         if (!image.poster) { preview.replaceWith(el('div', 'Preview unavailable', 'video-preview-unavailable')); return; }
         const thumbnail = el('img'); thumbnail.src = image.poster; thumbnail.alt = 'Video preview';
         preview.replaceWith(thumbnail);
@@ -3481,7 +3514,10 @@ function renderImages() {
     if (image.video) {
       const status = el('span', image.error ? 'Upload failed. Send to retry.' : '');
       status.setAttribute('role', 'status'); status.hidden = !image.error;
-      item.append(preview, status);
+      const play = el('button', undefined, 'video-open'); play.type = 'button';
+      play.setAttribute('aria-label', `Play ${image.file.name}`);
+      play.addEventListener('click', () => openVideo(preview));
+      play.append(preview, videoPlayIcon()); item.append(play, status);
       image.progressNode = undefined;
       if (image.uploading) {
         const ring = el('div', undefined, 'video-upload-progress');

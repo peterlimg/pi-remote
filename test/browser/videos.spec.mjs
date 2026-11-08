@@ -6,6 +6,57 @@ const original = readFileSync(new URL('../fixtures/video.webm', import.meta.url)
 const file = { name: 'screen recording.webm', mimeType: 'video/webm', buffer: original };
 const token = 'browser-test-token-only-123456789012345';
 
+async function generateVideo(page) {
+  await page.locator('#prompt').fill('Send the edited video');
+  const messages = page.locator('.message.assistant').filter({ hasText: 'Here is your edited video.' });
+  const before = await messages.count();
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(messages).toHaveCount(before + 1);
+  return messages.last();
+}
+
+test('tapping a video opens a screen-sized preview instead of playing in the thumbnail', async ({ page }, info) => {
+  const errors = [], packets = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
+  await page.goto('/#token=' + token);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const message = await generateVideo(page);
+  const play = message.getByRole('button', { name: 'Play edited.webm', exact: true });
+  await expect(play.locator('img')).toBeVisible();
+  await play.tap();
+  const viewer = page.getByRole('dialog', { name: 'Video preview', exact: true });
+  const player = viewer.locator('video');
+  await expect(viewer).toBeVisible();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  await expect(player).toHaveJSProperty('controls', true);
+  const size = await player.boundingBox();
+  expect(size.width).toBeGreaterThan(160);
+  expect(size.height).toBeGreaterThan(160);
+  await expect(message.locator('video')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('video-preview-mobile.png'), fullPage: true });
+  const reads = packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined).length;
+  await viewer.getByRole('button', { name: 'Close video', exact: true }).tap();
+  await expect(viewer).toBeHidden();
+  await expect(play).toBeFocused();
+  await expect(play).toBeVisible();
+  await play.tap();
+  await expect(viewer).toBeVisible();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
+  expect(packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined)).toHaveLength(reads);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const desktopSize = await player.boundingBox();
+  expect(desktopSize.width).toBeGreaterThan(160);
+  expect(desktopSize.height).toBeGreaterThan(160);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('video-preview-desktop.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(viewer).toBeHidden();
+  await expect(message.locator('video')).toHaveJSProperty('paused', true);
+  await expect(message.locator('video')).toHaveJSProperty('controls', false);
+  expect(errors).toEqual([]);
+});
+
 for (const [orientation, buffer, width] of [
   ['landscape', original, 160],
   ['portrait', readFileSync(new URL('../fixtures/video-portrait.webm', import.meta.url)), 90]
@@ -40,6 +91,14 @@ for (const [orientation, buffer, width] of [
   await expect(video).toHaveCSS('width', '80px');
   await expect(video).toHaveCSS('height', '80px');
   await expect(video).toHaveAttribute('poster', /^blob:/);
+  await page.getByRole('button', { name: `Play ${upload.name}`, exact: true }).tap();
+  const viewer = page.locator('#video-viewer');
+  await expect(viewer).toBeVisible();
+  await expect.poll(() => viewer.locator('video').evaluate(video => video.videoWidth)).toBe(width);
+  await page.screenshot({ path: info.outputPath('video-draft-preview-mobile.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Close video', exact: true }).tap();
+  await expect(video).toHaveJSProperty('paused', true);
+  await expect(video).toHaveJSProperty('controls', false);
   await expect(page.locator('.video-attachment')).not.toHaveClass(/uploading/);
   await expect(page.locator('.video-attachment')).toHaveText('');
   const finishedPath = () => {
@@ -108,19 +167,20 @@ for (const [orientation, buffer, width] of [
   await expect(downloading).toHaveAttribute('aria-label', `Downloading ${orientation}_recording.webm 0%`);
   await page.screenshot({ path: info.outputPath('video-downloading-mobile.png'), fullPage: true });
   releaseDownload();
-  const player = page.locator('.thread-video video');
+  const player = viewer.locator('video');
   await expect(player).toBeVisible();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(width);
   await expect(page.locator('.message.user .thread-video a')).toHaveCount(0);
   const playerSize = await player.boundingBox();
-  expect(playerSize.width).toBeCloseTo(previewSize.width, 1);
-  expect(playerSize.height).toBeCloseTo(previewSize.height, 1);
+  expect(playerSize.width).toBeGreaterThan(160);
+  expect(playerSize.height).toBeGreaterThan(160);
   await page.screenshot({ path: info.outputPath('video-playing-mobile.png'), fullPage: true });
   const videoURL = await player.getAttribute('src');
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   await page.locator('#prompt').fill('Keep the preview during conversation updates');
   await page.locator('#send').click();
   await expect(page.locator('#transcript')).toContainText('Keep the preview during conversation updates');
-  await expect(player).toHaveAttribute('src', videoURL);
+  await expect(sentVideo).toHaveAttribute('src', videoURL);
   expect(videoURL).toMatch(/^blob:/);
   const reads = packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined);
   const downloaded = reads.map(request => Buffer.from(responses.find(response => response.id === request.id && response.ok).value.data, 'base64'));
@@ -143,6 +203,11 @@ for (const [orientation, buffer, width] of [
   expect(desktopSize.height).toBeLessThanOrEqual(160);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('video-sent-desktop.png'), fullPage: true });
+  await play.click();
+  await expect(viewer).toBeVisible();
+  await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(width);
+  await page.screenshot({ path: info.outputPath('video-preview-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   await info.attach('conversation', { body: await page.locator('body').ariaSnapshot(), contentType: 'text/plain' });
   expect(errors).toEqual([]);
 });
@@ -154,9 +219,7 @@ test('agent-generated videos play, cache and download through the real host', as
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
   await page.goto('/#token=' + token);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  await page.locator('#prompt').fill('Send the edited video');
-  await page.getByRole('button', { name: 'Send message' }).click();
-  const message = page.locator('.message.assistant').filter({ hasText: 'Here is your edited video.' }).last();
+  const message = await generateVideo(page);
   await expect(message).not.toContainText('Generated video files');
   await expect(message).not.toContainText('/videos/');
   const play = message.getByRole('button', { name: 'Play edited.webm', exact: true });
@@ -166,11 +229,12 @@ test('agent-generated videos play, cache and download through the real host', as
   expect(previewSize.width).toBeLessThanOrEqual(160);
   expect(previewSize.height).toBeLessThanOrEqual(160);
   await play.click();
-  const player = message.locator('video');
+  const player = page.locator('#video-viewer video');
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
   const playerSize = await player.boundingBox();
-  expect(playerSize.width).toBeLessThanOrEqual(160);
-  expect(playerSize.height).toBeLessThanOrEqual(160);
+  expect(playerSize.width).toBeGreaterThan(160);
+  expect(playerSize.height).toBeGreaterThan(160);
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   const link = message.getByRole('link', { name: 'Download edited.webm', exact: true });
   await expect(link).toHaveAttribute('href', /^blob:/);
   await expect(link).toHaveAttribute('download', 'edited.webm');
@@ -186,7 +250,9 @@ test('agent-generated videos play, cache and download through the real host', as
   await page.setViewportSize({ width: 1280, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('generated-video-desktop.png'), fullPage: true });
+  await play.click();
   await player.dispatchEvent('error');
+  await expect(page.locator('#video-viewer')).toBeHidden();
   await expect(message).toContainText('This browser cannot play this video.');
   await expect(link).toBeVisible();
   const byteReads = () => packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined).length;
@@ -198,6 +264,7 @@ test('agent-generated videos play, cache and download through the real host', as
   await play.click();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
   expect(byteReads()).toBe(downloadedReads);
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await page.getByRole('button', { name: /Project Beta/ }).click();
@@ -206,6 +273,7 @@ test('agent-generated videos play, cache and download through the real host', as
   await play.click();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
   expect(byteReads()).toBe(downloadedReads);
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   const cachedDownload = page.waitForEvent('download');
   await link.click();
   expect(readFileSync(await (await cachedDownload).path())).toEqual(original);
@@ -216,6 +284,7 @@ test('agent-generated videos play, cache and download through the real host', as
   await play.click();
   await expect.poll(() => player.evaluate(video => video.videoWidth)).toBe(160);
   expect(byteReads()).toBe(downloadedReads * 2); // Same-sized files still need revision validation.
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   await page.getByRole('button', { name: 'Show sessions' }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter(name => name.startsWith('pi-remote-videos-')))).toEqual([]);
@@ -243,16 +312,14 @@ for (const failure of ['unavailable', 'full']) test(`video playback survives ${f
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => packets.push(JSON.parse(String(payload)))));
   await page.goto('/#token=' + token);
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  await page.locator('#prompt').fill('Send the edited video');
-  await page.getByRole('button', { name: 'Send message' }).click();
-  const message = page.locator('.message.assistant').filter({ hasText: 'Here is your edited video.' }).last();
+  const message = await generateVideo(page);
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt) {
       await page.reload();
       await page.getByRole('button', { name: /Project Alpha/ }).click();
     }
     await message.getByRole('button', { name: 'Play edited.webm', exact: true }).click();
-    await expect.poll(() => message.locator('video').evaluate(video => video.videoWidth)).toBe(160);
+    await expect.poll(() => page.locator('#video-viewer video').evaluate(video => video.videoWidth)).toBe(160);
     await expect(page.locator('#notice')).toBeHidden();
   }
   expect(packets.filter(packet => packet.op === 'videoRead' && packet.offset !== undefined)).toHaveLength(2);
@@ -297,6 +364,8 @@ test('native video saving keeps the conversation and restores its viewport', asy
   await page.getByRole('button', { name: /Save video/ }).click();
   const message = page.locator('.message.assistant');
   await message.getByRole('button', { name: 'Play edited.webm', exact: true }).click();
+  await expect(page.locator('#video-viewer')).toBeVisible();
+  await page.getByRole('button', { name: 'Close video', exact: true }).click();
   const link = message.getByRole('link', { name: 'Download edited.webm', exact: true });
   const url = page.url();
   let downloads = 0; page.on('download', () => downloads++);
@@ -351,6 +420,9 @@ test('video uploads stay cancellable before the thumbnail is ready', async ({ pa
   await expect(progress).toHaveAttribute('aria-valuenow', '0');
   await expect(progress.locator('.video-upload-arc')).toHaveAttribute('stroke-dashoffset', '100');
   await expect(progress).toHaveText('');
+  await expect(page.locator('#video-viewer')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Play recording.mov', exact: true })).toBeDisabled();
+  await expect(page.locator('.video-preview-unavailable')).toBeVisible();
   await expect(page.locator('.video-attachment [role=status]')).toBeHidden();
   await page.getByRole('button', { name: 'Remove recording.mov' }).click();
   await expect(page.locator('#attachments')).toBeHidden();
