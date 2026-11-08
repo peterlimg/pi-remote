@@ -663,7 +663,7 @@ function sessionRow(item) {
   if (!['idle', 'saved'].includes(status)) {
     const label = el('span', statusLabels[status] || status, 'session-state');
     label.dataset.status = status;
-    // Keep the three-second pulse continuous when live updates rebuild the row.
+    // Keep the three-second sweep continuous when live updates rebuild the row.
     if (status === 'working') label.style.animationDelay = `-${Date.now() % 3000}ms`;
     meta.append(label);
   }

@@ -469,10 +469,12 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-state { flex-shrink: 0; white-space: nowrap; }
 .session-state[data-status=working] { color: var(--working); }
-@media (prefers-reduced-motion: no-preference) {
-  .session-state[data-status=working] { animation: session-working-pulse 3s ease-in-out infinite; }
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .session-state[data-status=working] { background-image: linear-gradient(110deg, var(--working) 43%, var(--accent) 50%, var(--working) 57%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: session-working-shimmer 3s linear infinite; }
+  }
 }
-@keyframes session-working-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+@keyframes session-working-shimmer { 0% { background-position: 100% 0; } 70%, 100% { background-position: 0% 0; } }
 .document-hidden .session-state[data-status=working], .session-state[data-status=working]:not(.in-view) { animation-play-state: paused; }
 .session-busy .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
