@@ -1362,6 +1362,7 @@ function videoPlayIcon() {
 function clearThreadVideos(keep = new Set()) {
   for (const [path, video] of threadVideos) if (!keep.has(path)) {
     videoObserver.unobserve(video.node);
+    video.node.querySelector(':popover-open')?.hidePopover();
     if (video.player) {
       if (videoViewer.contains(video.player)) closeVideo();
       video.player.pause(); video.player.removeAttribute('src'); video.player.load();
@@ -1380,11 +1381,27 @@ function showThreadVideo(video, file, poster) {
   player.setAttribute('aria-label', video.name);
   if (video.posterURL) player.poster = video.posterURL;
   player.src = video.url;
+  const actions = el('div', undefined, 'video-actions'), more = el('button', undefined, 'video-more');
+  actions.id = 'video-actions-' + crypto.randomUUID(); actions.popover = 'auto';
+  actions.setAttribute('role', 'dialog'); actions.setAttribute('aria-label', `Video actions for ${video.name}`);
+  more.type = 'button'; more.setAttribute('aria-label', `Video actions for ${video.name}`);
+  more.setAttribute('popovertarget', actions.id); more.setAttribute('aria-haspopup', 'dialog');
+  more.setAttribute('aria-controls', actions.id); more.setAttribute('aria-expanded', 'false');
+  more.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+  actions.addEventListener('toggle', event => {
+    const open = event.newState === 'open'; more.setAttribute('aria-expanded', String(open));
+    if (!open) return;
+    const anchor = more.getBoundingClientRect(), bounds = actions.getBoundingClientRect();
+    actions.style.left = Math.max(8, Math.min(anchor.right - bounds.width, innerWidth - bounds.width - 8)) + 'px';
+    actions.style.top = Math.max(8, Math.min(anchor.bottom + 4, innerHeight - bounds.height - 8)) + 'px';
+  });
   const download = el('a', 'Download video'); download.href = video.url; download.download = video.name;
+  actions.append(download);
   download.setAttribute('aria-label', `Download ${video.name}`);
   // iOS may open a blob download in its viewer; never replace the standalone chat.
   download.target = '_blank'; download.rel = 'noopener noreferrer';
   download.addEventListener('click', async event => {
+    actions.hidePopover();
     const data = { files: [new File([file], video.name, { type: file.type })] };
     if (!navigator.share || !navigator.canShare?.(data)) return;
     event.preventDefault();
@@ -1397,12 +1414,12 @@ function showThreadVideo(video, file, poster) {
   player.addEventListener('error', () => {
     if (threadVideos.get(video.path) !== video) return;
     if (videoViewer.contains(player)) closeVideo();
-    video.node.replaceChildren(el('p', 'This browser cannot play this video.'), download);
+    video.node.replaceChildren(el('p', 'This browser cannot play this video.'), more, actions);
   });
   video.button.setAttribute('aria-label', `Play ${video.name}`);
   video.button.replaceChildren(player, videoPlayIcon());
   video.node.replaceChildren(video.button);
-  if (video.role === 'assistant') video.node.append(download);
+  if (video.role === 'assistant') video.node.append(more, actions);
 }
 async function loadVideoPreview(video) {
   if (!video || video.loading || video.info || video.url) return;

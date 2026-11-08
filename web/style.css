@@ -148,7 +148,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #recent-filter { display: grid; place-items: center; width: 44px; min-height: 44px; padding: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 #recent-filter[data-active=true] { color: var(--accent); }
 #recent-filter:is(:hover, [aria-expanded=true]) { background: var(--user); }
-#recent-filter-menu { position: fixed; inset: auto; width: min(184px, calc(100vw - 16px)); margin: 0; padding: 6px; border: 0; border-radius: 12px; background: var(--composer-bg); color: var(--text); box-shadow: 0 6px 24px rgb(0 0 0 / .2); }
+#recent-filter-menu, .video-actions { position: fixed; inset: auto; width: min(184px, calc(100vw - 16px)); margin: 0; padding: 6px; border: 0; border-radius: 12px; background: var(--composer-bg); color: var(--text); box-shadow: 0 6px 24px rgb(0 0 0 / .2); }
 #recent-filter-menu p { margin: 4px 8px 6px; color: var(--muted); font-size: 12px; }
 #recent-filter-menu label { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 #recent-filter-menu label:not(:has(input:disabled)):is(:hover, :focus-within) { background: var(--user); }
@@ -621,15 +621,17 @@ pre.message-text { white-space: pre-wrap; }
 .thread-image img { object-fit: contain; }
 .thread-image button { font-size: 12px; line-height: 1.5; }
 :is(#transcript, .transcript-peek) > .thread-images { max-width: var(--content-width); margin: 0 auto 18px; }
-.thread-video { width: 160px; max-width: 85%; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--panel); }
+.thread-video { position: relative; width: 160px; max-width: 85%; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--panel); }
 .thread-video video, .thread-video img { display: block; width: 100%; max-height: 160px; object-fit: contain; }
 .thread-video button video, .video-open video { pointer-events: none; }
-.thread-video button { position: relative; display: block; width: 100%; min-height: 90px; padding: 0; border: 0; border-radius: 0; }
+.thread-video > button:not(.video-more) { position: relative; display: block; width: 100%; min-height: 90px; padding: 0; border: 0; border-radius: 0; }
 .video-play-icon { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
 .video-play-icon svg, .video-loading-icon { display: block; width: 52px; height: 52px; padding: 10px; border-radius: 50%; background: #171717; }
 .video-loading-icon .connection-spinner { display: block; width: 32px; height: 32px; border-color: currentColor; border-right-color: transparent; }
-.thread-video > p, .thread-video > a { display: block; margin: 12px; font-size: 13px; }
-.thread-video > a { min-height: 44px; padding: 12px 0; overflow-wrap: anywhere; }
+.thread-video > p { margin: 48px 12px 12px; font-size: 13px; }
+.thread-video .video-more { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 44px; min-height: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: #171717b3; color: #fff; }
+.video-actions a { display: block; min-height: 44px; padding: 10px 12px; border-radius: 6px; color: inherit; font-size: 14px; text-decoration: none; }
+.video-actions a:is(:hover, :focus-visible) { background: var(--user); }
 .tool-activity { max-width: var(--content-width); margin: 0 auto 18px; color: var(--muted); }
 .tool-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; list-style: none; }
 .tool-activity > summary::-webkit-details-marker { display: none; }

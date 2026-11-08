@@ -248,7 +248,8 @@ test('older attachments keep session boundaries over encryption and pages are by
     await expect(play).toBeVisible(); await play.click();
     await expect(page.locator('#video-viewer video')).toHaveAttribute('src', /^blob:/);
     await page.getByRole('button', { name: 'Close video', exact: true }).click();
-    await expect(page.getByRole('link', { name: 'Download old.webm' })).toBeAttached();
+    await page.getByRole('button', { name: 'Video actions for old.webm', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Download old.webm' })).toBeVisible();
     // A branch change invalidates old cursors instead of mixing its history into the new branch.
     appendFileSync(file, JSON.stringify({ id: 'other-branch', parentId: 'name', type: 'message',
       message: { role: 'user', timestamp: Date.now(), content: 'Another branch' } }) + '\n');
