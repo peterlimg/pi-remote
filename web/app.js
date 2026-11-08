@@ -663,6 +663,10 @@ function sessionRow(item) {
   if (!['idle', 'saved'].includes(status)) {
     const label = el('span', statusLabels[status] || status, 'session-state');
     label.dataset.status = status;
+    if (status === 'working') {
+      const dot = el('span', undefined, 'session-working-dot'); dot.setAttribute('aria-hidden', 'true');
+      label.prepend(dot);
+    }
     meta.append(label);
   }
   if (!isBlank(item.cwd)) {
