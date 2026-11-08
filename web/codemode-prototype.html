@@ -11,7 +11,7 @@
   <script type="module" src="/codemode-prototype.js"></script>
 </head>
 <body>
-  <!-- Throwaway: purpose-first, recap, and script-outline variants. Sample data only; no session connection or execution. -->
+  <!-- Throwaway: three collapsed, single-line activity summaries. Sample data only; no session connection or execution. -->
   <div class="study-shell">
     <header class="study-header">
       <a class="study-back" href="/" aria-label="Back to Pi Remote"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
@@ -74,7 +74,6 @@
       </form>
 
     </div>
-    <p class="study-caption" id="variant-description"></p>
   </div>
   <nav class="study-switcher" aria-label="Compare codemode prototypes">
     <button id="previous-variant" type="button" aria-label="Previous prototype"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
@@ -84,9 +83,9 @@
   <div id="study-info" popover>
     <h2>What are these runs?</h2>
     <p>Codemode runs JavaScript that can call tools to read files, search, edit code, or run commands.</p>
-    <p>Compare three layouts using the same three sample runs. Titles and tool references are illustrative. Nothing connects to a session or executes code.</p>
-    <p>The app currently has scripts and output, not a structured stream of inner tool calls. A tool mentioned in a script is not proof it ran. Purpose-first titles can already come from a leading script comment.</p>
-    <p>The production composer is unchanged and disabled here. Use the bottom arrows to compare layouts and the state menu to try running, failed, and empty samples.</p>
+    <p>Each option starts as one line. Tap it for steps, then a step for output and Script for code.</p>
+    <p>Sample data only. Nothing connects to a session or executes code. The app has scripts and output, not a structured stream of inner tool calls.</p>
+    <p>The production composer is unchanged and disabled here.</p>
     <button type="button" popovertarget="study-info" popovertargetaction="hide">Got it</button>
   </div>
   <noscript>Enable JavaScript to compare these sample layouts.</noscript>

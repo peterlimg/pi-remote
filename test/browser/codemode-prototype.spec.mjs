@@ -24,7 +24,7 @@ for (const view of [
 ]) {
   test.describe(view.name, () => {
     test.use({ viewport: view.viewport, colorScheme: view.colorScheme, deviceScaleFactor: 1, reducedMotion: 'reduce' });
-    test('three detail levels fit the conversation without connecting or executing', async ({ page }) => {
+    test('all summaries fit one collapsed row without connecting or executing', async ({ page }) => {
       const errors = [], sockets = [], requests = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -34,19 +34,22 @@ for (const view of [
         await page.goto(`${route}?variant=${variant}`);
         await expect(page.locator(`.cm-${variant}`)).toBeVisible();
         await expect(page.getByRole('main')).toContainText('working indicator');
-        await expect(page.getByRole('main')).toContainText('13.3s elapsed');
+        await expect(page.locator('.cm-activity')).toHaveJSProperty('open', false);
+        await expect(page.locator('.cm-run').first()).not.toBeVisible();
         await expect(page.getByText('Prototype · Sample data', { exact: true })).toBeVisible();
         await expect(page.locator('#composer')).toBeVisible();
         expect(await page.locator('#composer').evaluate(node => !!node.closest('[inert]'))).toBe(true);
         const geometry = await page.evaluate(() => ({
           overflow: document.documentElement.scrollWidth > innerWidth,
           threadOverflow: document.querySelector('#study-thread').scrollWidth > document.querySelector('#study-thread').clientWidth,
+          activityHeight: document.querySelector('.cm-activity').getBoundingClientRect().height,
           composerBottom: document.querySelector('#composer').getBoundingClientRect().bottom,
           switcherTop: document.querySelector('.study-switcher').getBoundingClientRect().top,
           targets: [...document.querySelectorAll('.study-switcher button, .cm-detail summary')].filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect().height)
         }));
         expect(geometry.overflow).toBe(false);
         expect(geometry.threadOverflow).toBe(false);
+        expect(geometry.activityHeight).toBe(44);
         expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.switcherTop);
         expect(geometry.targets.every(height => height >= 44)).toBe(true);
         await capture(page, `${view.name}-${variant}`);
@@ -60,7 +63,7 @@ for (const view of [
 
 test('variant and state comparison are shareable, reload-stable and keyboard accessible', async ({ page }) => {
   await page.goto(`${route}?variant=purpose`);
-  await expect(page.locator('#variant-label')).toContainText('A · Purpose first');
+  await expect(page.locator('#variant-label')).toContainText('A · Action words');
   await page.getByRole('button', { name: 'Next prototype' }).click();
   await expect(page).toHaveURL(/variant=recap/);
   await expect(page.locator('.cm-run').first()).not.toBeVisible();
@@ -97,11 +100,6 @@ for (const variant of variants) {
       await first.locator(':scope > summary').focus();
       await page.keyboard.press('Enter');
     }
-    if (variant === 'source') {
-      await expect(page.locator('.cm-source-note')).toHaveText('Tool references from the script, not an execution trace.');
-      await expect(first.locator('.cm-references li')).toHaveCount(2);
-      await first.locator('.cm-evidence > summary').click();
-    }
     await expect(first.locator('.cm-output')).toBeVisible();
     await expect(first.locator('.cm-script pre')).not.toBeVisible();
     await first.locator('.cm-script > summary').click();
@@ -115,18 +113,25 @@ for (const variant of variants) {
     await expect(first.locator('.cm-output')).toBeVisible();
     await page.getByLabel('Sample run state').selectOption('working');
     await expect(page).toHaveURL(/state=working/);
+    await expect(activity).toHaveJSProperty('open', false);
+    expect(await activity.evaluate(node => node.getBoundingClientRect().height)).toBe(44);
     await openActivity(page);
     await expect(final).toHaveAttribute('data-status', 'working');
     await final.locator(':scope > summary').click();
-    if (variant === 'source') await final.locator('.cm-evidence > summary').click();
     await expect(final.locator('.cm-output')).toContainText('No final result yet');
     await expect(final.locator('.cm-time')).toHaveText('Running');
-    await expect(page.getByRole('main')).not.toContainText('1 browser check passed');
+    await expect(activity.locator(':scope > summary')).not.toContainText(/steps complete|Checked session list/);
     await final.scrollIntoViewIfNeeded();
     await capture(page, `${variant}-working`);
     await page.getByLabel('Sample run state').selectOption('error');
+    await expect(activity).toHaveJSProperty('open', false);
+    expect(await activity.evaluate(node => node.getBoundingClientRect().height)).toBe(44);
+    await expect(activity.locator(':scope > summary')).toContainText('failed');
+    await expect(final.locator('.cm-output')).not.toBeVisible();
+    await capture(page, `${variant}-error-collapsed`);
+    await openActivity(page);
     await expect(final).toHaveAttribute('data-status', 'error');
-    if (variant === 'source') await final.locator('.cm-evidence > summary').click();
+    await final.locator(':scope > summary').click();
     await expect(final.locator('.cm-output')).toHaveText('Expected the working indicator to remain visible.\n1 failed. Exit code 1.');
     await final.scrollIntoViewIfNeeded();
     await capture(page, `${variant}-error`);
@@ -135,7 +140,7 @@ for (const variant of variants) {
     await expect(final).toHaveAttribute('data-status', 'error');
     await page.getByLabel('Sample run state').selectOption('empty');
     await expect(page.locator('.cm-run')).toHaveCount(0);
-    await expect(page.getByRole('main')).toContainText(/No (activity|scripts)/);
+    await expect(activity.locator(':scope > summary')).toContainText('No activity yet');
     await page.getByLabel('Sample run state').selectOption('done');
     await expect(page.locator('.cm-run')).toHaveCount(3);
   });
