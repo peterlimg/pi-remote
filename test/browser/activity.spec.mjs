@@ -25,10 +25,12 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.getByRole('button', { name: /Review changes/ }).click();
   const activity = page.locator('#agent-activity'), label = page.locator('#activity-label');
   await expect(activity).toBeHidden();
+  await page.evaluate(() => { Math.random = () => 0; });
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  await expect(label).toHaveText('Working…');
+  await expect(label).toHaveText('Thinking…');
   await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
+  await page.evaluate(() => { Math.random = () => 0.999; });
   await expect(activity).toHaveAttribute('role', 'status');
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'connection-spin');
   const spinStart = () => activity.locator('svg').evaluate(async svg => {
@@ -50,8 +52,9 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await expect(toolLabel).toHaveCSS('animation-name', 'none');
+  await expect(label).toHaveText('Thinking…'); // Streaming and tool updates must not rotate the label early.
   await page.locator('#prompt').fill('Keep checking');
-  await expect(label).toHaveText('Working…');
+  await expect(label).toHaveText('Thinking…');
   const checkPosition = async () => expect(async () => {
     const row = await activity.boundingBox(), composer = await page.locator('#composer').boundingBox();
     expect(row.y + row.height).toBeLessThanOrEqual(composer.y);
@@ -78,18 +81,20 @@ test('activity follows the selected agent through streaming, tools, waiting, com
     state.status = status; snapshot();
     await expect(activity).toBeHidden();
   }
+  const previousLabel = await label.textContent();
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  await expect(label).toHaveText('Working…');
+  await expect(label).not.toHaveText(previousLabel);
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();
 });
 
-test('activity keeps a stable label and shows elapsed seconds only while awaiting a reply', async ({ page }) => {
+test('activity rotates wording and shows elapsed seconds only while awaiting a reply', async ({ page }) => {
   const time = new Date('2026-01-01T00:00:00Z');
   await page.clock.install({ time });
   await page.clock.pauseAt(time);
+  await page.addInitScript(() => { Math.random = () => 0; });
   const state = { id: 'thinking', title: 'A slow reply', cwd: '/project', status: 'working', messages: [
     { id: 'reply', role: 'assistant', text: '', timestamp: time.getTime(), stopReason: 'pending' }
   ] };
@@ -111,16 +116,28 @@ test('activity keeps a stable label and shows elapsed seconds only while awaitin
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /A slow reply/ }).click();
   const activity = page.locator('#agent-activity'), label = page.locator('#activity-label'), timer = page.locator('#activity-time');
-  await expect(label).toHaveText('Working…');
+  await expect(label).toHaveText('Thinking…');
   await page.clock.runFor(4999);
   await expect(timer).toBeHidden();
   await page.clock.runFor(1);
   await expect(timer).toHaveText(' · 5s');
-  await page.clock.runFor(27000);
-  await expect(label).toHaveText('Working…');
+  await page.clock.runFor(2999);
+  await expect(label).toHaveText('Thinking…');
+  await page.clock.runFor(1);
+  await expect(label).toHaveText('Pondering…');
+  await expect(timer).toHaveText(' · 8s');
+  snapshot(); // Re-renders must not reset the rotation clock.
+  await expect(label).toHaveText('Pondering…');
+  await page.clock.runFor(8000);
+  await expect(label).toHaveText('Thinking…'); // Even fixed randomness must not repeat the previous phrase.
+  await page.evaluate(() => { Math.random = () => 0.999; });
+  await page.clock.runFor(8000);
+  await expect(label).toHaveText('Piecing it together…');
+  await expect(timer).toHaveText(' · 24s');
+  await page.clock.runFor(8000);
+  await expect(label).toHaveText('Noodling on it…');
   await expect(timer).toHaveText(' · 32s');
-  snapshot();
-  await expect(activity).toMatchAriaSnapshot('- status: Working…');
+  await expect(activity).toMatchAriaSnapshot('- status: Working…'); // Rotating phrases must not cause repeated announcements.
   state.messages[0].text = 'The reply is arriving.'; snapshot();
   await expect(timer).toBeHidden();
   state.messages[0].text = '';

@@ -1800,13 +1800,26 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   updateControls();
   updateScrollButton();
 }
+let activityLabelAt = 0;
 function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
   const active = connected && !historyWindow && state?.status === 'working', compacting = state?.compacting === true;
   const retrying = state ? replyAttempts(state).retrying : false;
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
+    const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
+      'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
+      'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
+      'Contemplating…', 'Deliberating…', 'Musing…', 'Ruminating…', 'Turning the gears…', 'Untangling it…',
+      'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
+      'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
+      .filter(text => text !== label.textContent);
+    label.textContent = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : labels[Math.floor(Math.random() * labels.length)];
+    activityLabelAt = now + 8000;
+    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting); activity.dataset.retrying = String(retrying);
+  }
+  // Screen readers keep a stable announcement while the visible phrase rotates.
   const announcement = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : 'Working…';
-  if (label.textContent !== announcement) label.textContent = announcement;
   const status = activity.querySelector('.sr-only');
   if (status.textContent !== announcement) status.textContent = announcement;
   activity.hidden = !active;
