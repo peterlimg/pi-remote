@@ -467,8 +467,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-kind :is(.bot-badge, .bot-zz) { display: none; }
 .session-project { display: flex; align-items: center; min-width: 0; overflow: hidden; }
 .session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-state { flex-shrink: 0; }
-.session-busy .session-state[data-status=working] { color: var(--accent); font-weight: 600; }
+.session-state { flex-shrink: 0; white-space: nowrap; }
+.session-state[data-status=working] { color: var(--working); }
+.session-working-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; }
 .session-busy .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }

@@ -96,6 +96,7 @@ test('sessions sort by your last prompt without jumping during background activi
 });
 
 test('compact same-project sessions show tasks and aligned bots without overflowing', async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.addInitScript(() => localStorage.setItem('pi-remote-session-icons', JSON.stringify([['login', { type: 'fix' }]])));
   let client;
   const now = Date.UTC(2026, 6, 21, 15, 45);
@@ -147,7 +148,16 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveCount(0);
-  await expect(login.locator('.session-state')).toHaveText('Working');
+  const workingState = login.locator('.session-state'), workingDot = workingState.locator('.session-working-dot');
+  await expect(workingState).toHaveText('Working');
+  await expect(login).toHaveAccessibleName(/Working/);
+  await expect(workingState).toHaveCSS('font-weight', '400');
+  await expect(workingState).toHaveCSS('font-size', '14px');
+  await expect(workingState).toHaveCSS('color', 'rgb(21, 84, 47)');
+  await expect(workingDot).toHaveAttribute('aria-hidden', 'true');
+  await expect(workingDot).toHaveCSS('width', '6px');
+  await expect(workingDot).toHaveCSS('height', '6px');
+  await expect(workingDot).toHaveCSS('animation-name', 'none');
   // The leading bot keeps its size and position when the session finishes.
   const workingIcon = login.locator('.session-indicators .bot');
   await expect(login.locator('.session-kind')).toHaveCount(0);
@@ -168,8 +178,10 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   })).toBe(true);
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
-  await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(workingState).toHaveCSS('color', 'rgb(128, 212, 160)');
+  await page.screenshot({ path: testInfo.outputPath('working-bot-mobile-dark.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
@@ -184,6 +196,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath('working-status-narrow.png') });
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
   publish(); // Live updates keep the grown list.
@@ -218,6 +231,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await page.locator('#back').click();
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
+  await expect(login.locator('.session-working-dot')).toHaveCount(0);
   await expect(login.locator('.session-kind')).toHaveCount(0);
   await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-kind', 'fix');
   await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-mood', 'idle');
