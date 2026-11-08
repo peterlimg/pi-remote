@@ -43,7 +43,7 @@ const log = row => appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(row
 export default function(pi) {
  pi.on('project_trust',()=>({trusted:'yes'}));
  pi.on('before_provider_request',event=>{
-  log({type:'payload',handoff:event.payload.prompt?.some(b=>b.type==='text'&&b.text.includes('Pi tool-set update.'))??false});
+  log({type:'payload',handoff:event.payload.prompt?.some(b=>b.type==='text'&&b.text.includes('Pi instructions or tool-set update.'))??false});
  });
  pi.on('provider_stream_event',event=>{
   const e=event.data;if(e.type==='system'&&e.subtype==='init') log({type:'init',session:e.session_id,tools:e.tools});

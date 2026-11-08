@@ -42,6 +42,7 @@ function replayQuery(args) {
   const sdkPrompt = typeof args.options.systemPrompt === 'string' ? args.options.systemPrompt : args.options.systemPrompt?.append ?? '';
   const piDocs = sdkPrompt.includes('providers (docs/custom-provider.md)') && sdkPrompt.includes('pi packages (docs/packages.md)');
   log({ type: 'query', session, resumed: Boolean(args.options.resume), resumedAt: Boolean(args.options.resumeSessionAt), invalidInit,
+    sdkSystemPrompt: args.options.systemPrompt,
     portable: args.options.systemPrompt?.preset === 'claude_code', piDocs,
     globalPolicy: sdkPrompt.includes('PORTABLE_GLOBAL_POLICY'), projectPolicy: sdkPrompt.includes('PORTABLE_PROJECT_POLICY'),
     skill: sdkPrompt.includes('PORTABLE_SKILL'), append: sdkPrompt.includes('PORTABLE_APPEND'),
@@ -61,8 +62,8 @@ function replayQuery(args) {
       const content = next.value.message.content;
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('');
       let request = content.filter(block => block.type === 'text').at(-1)?.text ?? '';
-      const continuation = text.includes('Pi tool-set update.') && request.startsWith('Continue the user request');
-      if (continuation || tools.includes('mcp__pi__extra') && ((text.includes('Pi tool-set update.') && text.includes('"text":"dynamic-tools"')) ||
+      const continuation = text.includes('Pi instructions or tool-set update.') && request.startsWith('Continue the user request');
+      if (continuation || tools.includes('mcp__pi__extra') && ((text.includes('Pi instructions or tool-set update.') && text.includes('"text":"dynamic-tools"')) ||
         (text.includes('Pi-authorized context compaction.') && text.includes('"label":"dynamic-tools"')))) request = 'dynamic-tools';
       log({ type: 'prompt', session, recovered: text.includes('Operator-approved SDK context recovery'),
         failed: text.includes('Failed SDK continuation.'),
@@ -70,7 +71,7 @@ function replayQuery(args) {
         marker: text.includes(process.env.PI_RECOVERY_MARKER!), unknown: text.includes('Execution outcome unknown'),
         leakedSignature: text.includes('RECOVERY_PRIVATE_SIGNATURE'), images: content.filter(block => block.type === 'image').length,
         providerRejection: text.includes('"providerRejected":true'), foreignFailure: text.includes('"provider":"recovery-control"') && text.includes('"stopReason":"error"'),
-        cancelled: text.includes('User-cancelled SDK continuation.'), toolUpdate: text.includes('Pi tool-set update.'), continuation,
+        cancelled: text.includes('User-cancelled SDK continuation.'), toolUpdate: text.includes('Pi instructions or tool-set update.'), continuation,
         notices: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].filter(marker => text.includes(marker)),
         noticeOrder: ['NOTICE_A', 'NOTICE_B', 'NOTICE_C'].map(marker => text.indexOf(marker)) });
       yield { type: 'system', subtype: 'init', session_id: invalidInit ? randomUUID() : session, tools, apiKeySource: 'none' };

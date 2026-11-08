@@ -1,5 +1,5 @@
 {
-  "syncCommit": "45f281d16ac145381304088a2e51208c0b219c6f",
+  "syncCommit": "f7f0bbf5ed2076836ae1c759132a6d733e0af512",
   "files": [
     "src/coordinator.mjs",
     "src/service.mjs",
@@ -7,6 +7,7 @@
     "src/live-session.mjs",
     "src/rpc.mjs",
     "src/task-input.mjs",
+    "src/task-provider.mjs",
     "src/history-worker.mjs",
     "src/task-workspaces.mjs",
     "extension/coordinator.mjs"

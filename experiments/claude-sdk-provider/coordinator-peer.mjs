@@ -74,7 +74,14 @@ function replay(args) {
       } else if (mode === 'WRITE') {
         yield* tool('bash', { command: "node -e 'if(Object.keys(process.env).some(k=>k.startsWith(\"PI_REMOTE_\")))throw Error(\"private environment\");require(\"node:fs\").appendFileSync(\"sdk-counter.txt\",\"once\\n\")'" });
         yield* tool('write', { path: 'sdk-worker-note.txt', content: 'SDK coding worker verified.\n' });
-        yield* tool('task_report', { kind: 'result', text: 'Wrote the counter once and added the SDK worker note.' });
+        const batch = [
+          { id: 'toolu_' + randomUUID(), name: 'task_report', input: { kind: 'result', text: 'Wrote the counter once and added the SDK worker note.' } },
+          { id: 'toolu_' + randomUUID(), name: 'write', input: { path: 'sdk-after-report.txt', content: 'This must be blocked.\n' } }
+        ];
+        const pending = batch.map(call => client.callTool({ name: call.name, arguments: call.input, _meta: { 'claudecode/toolUseId': call.id } }));
+        for (const promise of pending) void promise.catch(() => {});
+        yield* assistant(args.options.model, batch.map(call => ({ type: 'tool_use', ...call, name: 'mcp__pi__' + call.name })), 'tool_use');
+        await Promise.all(pending);
       } else {
         assert.equal(mode, 'READ');
         yield* tool('read', { path: 'secret.txt' });

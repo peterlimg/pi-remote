@@ -1,6 +1,6 @@
 # Coordinator ordering and bounded recovery
 
-Product source confirmed at `45f281d16ac145381304088a2e51208c0b219c6f`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
+Product source confirmed at `f7f0bbf5ed2076836ae1c759132a6d733e0af512`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
 
 ## Checked promises
 
@@ -14,6 +14,14 @@ WorkerFlow projects recovery/blocked states to one uncertainty state. RecoveryFl
 The session-activity reconciliation adds only read-only list metadata in `SessionService.matches` and shared display activity helpers. No runtime status, command/report persistence, permissions, await boundaries or task transitions changed, so neither model needs a state/action change. The five combined session-list/worker-sheet/composer E2Es pass. Formal checks and negative controls are rechecked against the reviewed source; the UI itself remains outside these models.
 
 The nine runtime traces cover delayed prompt acknowledgement/failure, Stop serialization and accepted results, reports during Stop, deduplicated recovery, stale generations, Stop during recovery, missing tool outcomes and a two-attempt budget. They use real host authorization, persistence, journal receipts and subprocess RPC. Only the Pi RPC endpoint is controlled. A follow-up cannot now overtake an unfinished Stop; the historical Stop/continuation race is prevented before dispatch.
+
+## SDK worker reconciliation
+
+SDK admission adds synchronous package-entry/version validation before task creation and explicit provider loading on worker startup. The private source is retained for restart; it is not a model argument or browser task field. No command identity, report persistence, Stop, mailbox generation, recovery await boundary or retry budget changed.
+
+After a persisted SDK report, the extension disables all tools, skips another receipt and permits a tool-free response so the provider can save its checkpoint. This changes no modeled task state and is an unchanged-state step in both models. Follow-ups still wait on the existing restart-safe lifecycle boundary. Reports remain generation-checked; post-report tools remain fenced. Neither model needs an added action or a weakened invariant.
+
+The new admission helper is included in source drift checks. SDK package trust, native query/context handoff and checkpoint internals remain outside these bounded models. The dedicated `test:coordinator-sdk` proof exercises the real host, Pi, SDK adapter, MCP, permissions, private-environment removal, report/follow-up/restart, coding integration and Stop; only the external SDK peer is replayed. Its passing evidence is retained at `pi-sdk-worker-proof-LKrsoU`, including a bundled write after a report that is rejected without mutating the worktree. The native coordinator and crash-recovery proofs also pass unchanged. These checks do not establish live SDK model behavior or account entitlement.
 
 ## Negative controls
 

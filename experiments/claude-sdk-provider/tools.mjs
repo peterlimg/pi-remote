@@ -55,12 +55,13 @@ try {
       const response = await send('followup'), currentContext = context();
       assert.deepEqual(getCurrentTools(currentContext), getCurrentTools(previous));
       assert.notEqual(getCurrentSystemMessage(currentContext).sections.tools, getCurrentSystemMessage(previous).sections.tools);
-      const blocked = mode !== 'reorder';
-      assert.equal(response.stopReason, blocked ? 'error' : 'stop', response.errorMessage);
+      assert.equal(response.stopReason, 'stop', response.errorMessage);
       assert.deepEqual(effects(), ['seed']);
-      const queries = current().filter(row => row.type === 'query'); assert.equal(queries.length, blocked ? 1 : 2);
-      if (blocked) assert.match(response.errorMessage, /environment, or output limit changed/); else assert.equal(queries[1].resumed, false);
-      result.cases.push({ mode, pass: true, declarationsUnchanged: true, freshContext: !blocked, blocked, noReplay: true });
+      const queries = current().filter(row => row.type === 'query'); assert.equal(queries.length, 2);
+      assert.equal(queries[1].resumed, false);
+      assert.equal(queries[1].sdkSystemPrompt.append.includes('OPERATOR_TOOL_POLICY_1'), mode === 'reorder-override');
+      assert.equal(queries[1].sdkSystemPrompt.append.includes('CHANGED_TOOL_INSTRUCTION'), mode === 'reorder-content');
+      result.cases.push({ mode, pass: true, declarationsUnchanged: true, freshContext: true, noReplay: true });
       await worker.close(); worker = undefined; continue;
     }
     const seeded = ['checkpoint', 'old-guard'].includes(mode);
@@ -72,7 +73,7 @@ try {
       await start();
       response = await send('dynamic-tools');
     }
-    const blocked = ['environment', 'instructions', 'missing-result', 'history'].includes(mode);
+    const blocked = ['environment', 'missing-result', 'history'].includes(mode);
     assert.equal(response.stopReason, blocked ? 'error' : 'stop', response.errorMessage);
     assert(current().find(row => row.type === 'selection').active.includes('extra'));
     const denied = ['permission', 'validation'].includes(mode);
@@ -82,6 +83,7 @@ try {
       assert.equal(queries.length, 1, 'Unsafe change must not start another SDK query.');
       assert.match(response.errorMessage, mode === 'missing-result' ? /exactly one Pi result/ : mode === 'history' ? /history changed/ : /environment, or output limit changed/);
     } else {
+      if (mode === 'instructions') assert.match(queries[1].sdkSystemPrompt.append, /PROTECTED_DYNAMIC_POLICY/);
       const capability = current().find(row => row.type === 'dynamic-tools');
       assert(capability.allowed && capability.listed.includes('extra'));
       assert.equal(queries.length, 2);

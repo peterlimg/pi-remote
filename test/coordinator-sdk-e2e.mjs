@@ -151,6 +151,7 @@ try {
   await send({ action: 'assign', kind: 'code', title: 'SDK coding', model, instruction: 'SDK_VERIFY_WRITE. Append exactly one once line followed by a newline to sdk-counter.txt. Create sdk-worker-note.txt containing exactly SDK coding worker verified. followed by one newline, then report the result. Do not change anything else.' });
   const coding = await settled('SDK coding', 'reported');
   assert.equal(readFileSync(join(coding.workspace.cwd, 'sdk-counter.txt'), 'utf8'), 'once\n');
+  assert(!existsSync(join(coding.workspace.cwd, 'sdk-after-report.txt')), 'A sibling write after task_report must not execute.');
   assert.equal(readFileSync(join(coding.workspace.cwd, 'sdk-worker-note.txt'), 'utf8'), 'SDK coding worker verified.\n');
   assert(!existsSync(join(project, 'sdk-counter.txt')));
   await send({ action: 'inspect', taskId: coding.id });
