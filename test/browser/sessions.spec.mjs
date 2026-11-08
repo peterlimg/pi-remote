@@ -148,16 +148,18 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(page.locator('.session').first()).toContainText('Prepare the release notes');
   const login = page.getByRole('button', { name: /Fix login timing out/ });
   await expect(login.locator('.session-preview')).toHaveCount(0);
-  const workingState = login.locator('.session-state'), workingDot = workingState.locator('.session-working-dot');
+  const workingState = login.locator('.session-state');
   await expect(workingState).toHaveText('Working');
   await expect(login).toHaveAccessibleName(/Working/);
   await expect(workingState).toHaveCSS('font-weight', '400');
   await expect(workingState).toHaveCSS('font-size', '14px');
   await expect(workingState).toHaveCSS('color', 'rgb(21, 84, 47)');
-  await expect(workingDot).toHaveAttribute('aria-hidden', 'true');
-  await expect(workingDot).toHaveCSS('width', '6px');
-  await expect(workingDot).toHaveCSS('height', '6px');
-  await expect(workingDot).toHaveCSS('animation-name', 'none');
+  await expect(workingState.locator('*')).toHaveCount(0);
+  await expect(workingState).toHaveCSS('animation-name', 'session-working-pulse');
+  await expect(workingState).toHaveCSS('animation-duration', '3s');
+  await expect(workingState).toHaveCSS('animation-play-state', 'running');
+  await expect.poll(() => workingState.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(.95);
+  await expect.poll(() => workingState.evaluate(node => Number(getComputedStyle(node).opacity))).toBeGreaterThan(.98);
   // The leading bot keeps its size and position when the session finishes.
   const workingIcon = login.locator('.session-indicators .bot');
   await expect(login.locator('.session-kind')).toHaveCount(0);
@@ -189,16 +191,21 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(login.locator('.session-icon')).toHaveAttribute('data-unread', '');
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
   await expect(workingIcon.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
+  await expect(workingState).toHaveText('Working');
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(workingState).toHaveCSS('animation-name', 'none');
+  await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
   await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(workingState).toHaveCSS('animation-name', 'session-working-pulse');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-status-narrow.png') });
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
+  await expect(workingState).toHaveCSS('animation-play-state', 'paused');
   publish(); // Live updates keep the grown list.
   await expect(page.locator('.session')).toHaveCount(40);
   await page.getByRole('button', { name: 'Search sessions' }).click();
@@ -231,7 +238,6 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await page.locator('#back').click();
   await expect(page.locator('.session').first()).toHaveAttribute('aria-current', 'true');
   await expect(login.locator('.session-state')).toHaveCount(0);
-  await expect(login.locator('.session-working-dot')).toHaveCount(0);
   await expect(login.locator('.session-kind')).toHaveCount(0);
   await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-kind', 'fix');
   await expect(login.locator('.session-indicators .bot')).toHaveAttribute('data-mood', 'idle');

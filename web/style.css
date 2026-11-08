@@ -469,7 +469,11 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-state { flex-shrink: 0; white-space: nowrap; }
 .session-state[data-status=working] { color: var(--working); }
-.session-working-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; }
+@media (prefers-reduced-motion: no-preference) {
+  .session-state[data-status=working] { animation: session-working-pulse 3s ease-in-out infinite; }
+}
+@keyframes session-working-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+.document-hidden .session-state[data-status=working], .session-state[data-status=working]:not(.in-view) { animation-play-state: paused; }
 .session-busy .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }

@@ -663,10 +663,8 @@ function sessionRow(item) {
   if (!['idle', 'saved'].includes(status)) {
     const label = el('span', statusLabels[status] || status, 'session-state');
     label.dataset.status = status;
-    if (status === 'working') {
-      const dot = el('span', undefined, 'session-working-dot'); dot.setAttribute('aria-hidden', 'true');
-      label.prepend(dot);
-    }
+    // Keep the three-second pulse continuous when live updates rebuild the row.
+    if (status === 'working') label.style.animationDelay = `-${Date.now() % 3000}ms`;
     meta.append(label);
   }
   if (!isBlank(item.cwd)) {
@@ -763,6 +761,7 @@ function renderList() {
     }
   } else fragment.append(...sessions.map(sessionRow));
   root.replaceChildren(fragment);
+  syncBotVisibility();
   if (!$('recent-filter')) $('recent-filter-menu').hidePopover();
   root.scrollTop = scrollTop; $('sidebar').scrollTop = sidebarTop;
   if (filterFocused && !listLoading) $('recent-filter')?.focus({ preventScroll: true });
@@ -1009,7 +1008,7 @@ function syncBotVisibility() {
   queueMicrotask(() => {
     botVisibilityQueued = false;
     botObserver.disconnect();
-    document.querySelectorAll('.bot').forEach(node => botObserver.observe(node));
+    document.querySelectorAll('.bot, .session-state[data-status=working]').forEach(node => botObserver.observe(node));
   });
 }
 document.addEventListener('visibilitychange', syncBotVisibility);
