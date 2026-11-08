@@ -31,7 +31,7 @@
   },
   "pi": { "extensions": ["./node_modules/pi-claude-sdk/index.ts"] },
   "dependencies": {
-    "pi-claude-sdk": "git+https://github.com/peterlimg/pi-claude-sdk.git#5547648c9f155086b81849d8521b996a892d392f",
+    "pi-claude-sdk": "git+https://github.com/peterlimg/pi-claude-sdk.git#acf0917e1b11bbba7e0332a6c05aca77fec3f217",
     "@anthropic-ai/claude-agent-sdk": "0.3.296",
     "@modelcontextprotocol/sdk": "1.32.1",
     "zod": "4.6.7"

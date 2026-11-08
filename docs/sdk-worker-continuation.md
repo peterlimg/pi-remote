@@ -1,5 +1,7 @@
 # SDK worker continuation investigation
 
+This investigation concerns pi-subagents' borrowed foreground workers. Pi Remote's [tracked workers](coordinator.md) use independent RPC processes with their own SDK hooks and a tool-free reporting checkpoint; that separate integration does not resolve the borrowed-child findings below.
+
 The normal foreground worker can finish real edits, but its borrowed SDK bridge is temporary. Its Pi transcript survives completion; no child-owned SDK checkpoint is saved by that route. A later retained resume therefore cannot automatically trust the earlier SDK responses.
 
 The shared `retained-standard-worker` check now exercises this actual workflow rather than inferring it from implementation details:

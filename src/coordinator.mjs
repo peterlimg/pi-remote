@@ -7,6 +7,7 @@ import { readSession } from './catalog.mjs';
 import { sessionKey, sessionCapability } from './locks.mjs';
 import { planWorkspace, createWorkspace, reviewWorkspace, integrateWorkspace, inspectWorkspace, resolveIntegration } from './task-workspaces.mjs';
 import { encodeTaskInput, parseTaskInput } from './task-input.mjs';
+import { claudeWorkerSource } from './task-provider.mjs';
 
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
 const sessionExtension = fileURLToPath(new URL('../extension/index.ts', import.meta.url));
@@ -84,7 +85,7 @@ export class Coordinators {
   describe(id, concise = false) {
     if (this.error) return undefined;
     const owner = this.owners.get(id);
-    if (owner) return { role: 'coordinator', readOnly: owner.mode !== 'session', supportsCodingWorkers: true, tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
+    if (owner) return { role: 'coordinator', readOnly: owner.mode !== 'session', supportsCodingWorkers: true, supportsSdkWorkers: true, tasks: [...this.tasks.values()].filter(task => task.coordinatorId === id).map(task => this.publicTask(task, concise)) };
     const task = this.taskForSession(id);
     if (task) return { role: 'worker', readOnly: task.kind !== 'code', coordinatorId: task.coordinatorId,
       coordinatorTitle: this.owners.get(task.coordinatorId).title, task: this.publicTask(task),
@@ -105,7 +106,8 @@ export class Coordinators {
     const role = owner ? 'coordinator' : coding ? 'coder' : 'worker';
     const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve',
       '-e', extension, '--tools', owner ? 'remote_tasks' : coding ? 'read,grep,find,ls,edit,write,bash,task_report' : 'read,grep,find,ls,task_report'];
-    // Explicit model selection fails closed when a provider needs an excluded extension.
+    if (meta.model?.startsWith('claude-sdk/')) args.push('-e', claudeWorkerSource(task?.providerExtension).path);
+    // Other extension-only providers remain unavailable in restricted workers.
     if (meta.model) args.push('--model', meta.model);
     if (meta.thinkingLevel) args.push('--thinking', meta.thinkingLevel);
     return { ...options, args: [...(options.args || []), ...args], env: { ...options.env,
@@ -127,7 +129,7 @@ export class Coordinators {
       { type: 'session_info', id: randomUUID(), parentId: null, timestamp, name: title }];
     if (source.model) {
       const slash = source.model.indexOf('/');
-      if (slash < 1) throw publicError('Select a native Pi model for the worker.');
+      if (slash < 1) throw publicError('Select a provider/model for the worker.');
       entries.push({ type: 'model_change', id: randomUUID(), parentId: entries.at(-1).id, timestamp, provider: source.model.slice(0, slash), modelId: source.model.slice(slash + 1) });
     }
     if (source.thinkingLevel) entries.push({ type: 'thinking_level_change', id: randomUUID(), parentId: entries.at(-1).id, timestamp, thinkingLevel: source.thinkingLevel });
@@ -168,6 +170,7 @@ export class Coordinators {
     if (input.action === 'assign') {
       command.title = text(input.title, 'Task title', 120); command.instruction = text(input.instruction, 'Task instruction', 8000);
       if (input.model !== undefined) command.model = text(input.model, 'Worker model', 500);
+      if (input.providerExtension !== undefined) command.providerExtension = claudeWorkerSource(input.providerExtension);
       if (input.kind !== undefined && !['investigation', 'code'].includes(input.kind)) throw publicError('Choose an investigation or code assignment.');
       if (input.kind !== undefined) command.kind = input.kind;
     }
@@ -178,7 +181,7 @@ export class Coordinators {
       command.revision = input.revision;
     }
     return this.operation(ownerId, requestId, command, async () => {
-      if (command.action === 'list') return this.describe(ownerId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, tasks: [] };
+      if (command.action === 'list') return this.describe(ownerId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, supportsSdkWorkers: true, tasks: [] };
       if (command.action === 'assign') { this.adopt(ownerId); return this.assign(ownerId, command); }
       const task = this.owned(ownerId, command.taskId);
       if (command.action === 'inspect') {
@@ -233,10 +236,12 @@ export class Coordinators {
     const owner = this.owners.get(ownerId);
     if ([...this.tasks.values()].filter(task => task.coordinatorId === ownerId && active.has(task.state)).length >= 2) throw publicError('Two tasks are already active. Finish or stop one before assigning another.');
     const source = this.service.read(ownerId), model = command.model || source.model;
-    if (!model || model.startsWith('claude-sdk/') || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Workers require a native Pi model. Specify an available native provider/model for the worker; your session model stays unchanged.');
+    if (!model || !/^[^\s/]+\/\S+$/.test(model)) throw publicError('Select an available native Pi or Claude SDK provider/model for the worker; your session model stays unchanged.');
+    const providerExtension = model.startsWith('claude-sdk/') ? claudeWorkerSource(command.providerExtension) : undefined;
     const record = this.createTaskFile({ ...source, model }, command.title);
     const task = { ...record, id: randomUUID(), coordinatorId: ownerId, title: command.title, instruction: command.instruction,
-      kind: command.kind || 'investigation', protocol: 2, inputs: [], generation: randomUUID(), state: 'starting', events: [], updatedAt: Date.now() };
+      kind: command.kind || 'investigation', ...(providerExtension ? { providerExtension } : {}),
+      protocol: 2, inputs: [], generation: randomUUID(), state: 'starting', events: [], updatedAt: Date.now() };
     this.queueInput(task, (task.kind === 'code' ? 'Coding assignment' : 'Read-only assignment') + ' from your coordinator:\n\n' + task.instruction);
     this.tasks.set(task.id, task); this.changed(ownerId);
     try {
@@ -477,7 +482,7 @@ export class Coordinators {
       const task = !session && !owner && [...this.tasks.values()].find(record => equalSecret(record.token, bearer));
       if (req.headers.origin || !req.headers.authorization?.startsWith('Bearer ') || !session && !owner && !task) throw publicError('Forbidden', 403);
       const actorId = session || owner?.id;
-      if (req.method === 'GET') { respond(200, { ok: true, value: actorId ? this.describe(actorId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, tasks: [] } : this.publicTask(task) }); return; }
+      if (req.method === 'GET') { respond(200, { ok: true, value: actorId ? this.describe(actorId, true) || { role: 'coordinator', readOnly: false, supportsCodingWorkers: true, supportsSdkWorkers: true, tasks: [] } : this.publicTask(task) }); return; }
       if (req.method !== 'POST') throw publicError('Method not allowed', 405);
       let size = 0, chunks = [];
       for await (const chunk of req) {

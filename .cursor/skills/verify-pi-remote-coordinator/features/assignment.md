@@ -12,6 +12,7 @@ A user asks their ordinary conversation for workers. That same session coordinat
 - `hierarchy`: workers are children, absent from default global sections and visible directly in coordinator chat.
 - `parent-activity`: the parent appears Working in Now while an owned worker is starting/working/stopping, without changing its actual agent status or composer. `test/browser/session-worker-activity.spec.mjs` covers overview, active collection, unwatched updates, icons, priority, exclusions and live removal through real host task/report boundaries with replayed Pi endpoints.
 - `limit`: at most two tasks are active for a coordinator.
+- `sdk`: `npm run test:coordinator-sdk` verifies SDK source admission, real Pi/MCP permission checks, report → tool-free checkpoint → follow-up → host restart, coding worktrees/integration and scoped Stop. Default mode replaces only the external SDK peer; `PI_COORDINATOR_SDK_LIVE=1` makes paid model calls. Requires the experiment's pinned SDK dependencies and a loaded `pi-claude-sdk` 0.1.1+ package. It does not verify pi-subagents' borrowed foreground route.
 
 ## How to get to it (user POV)
 

@@ -30,6 +30,10 @@ export default function verificationProvider(pi) {
       const decoded = message => { try { return JSON.parse(text(message)); } catch { return {}; } };
       const choose = async () => {
         if (naming) return words('Independent inspection session');
+        if (!['worker', 'coder'].includes(role) && input.startsWith('SDK proof: ')) {
+          audit({ kind: 'sdk-sources', commands: pi.getCommands().filter(command => command.source === 'extension' && command.sourceInfo.origin === 'package').map(({ name, source, sourceInfo }) => ({ name, source, sourceInfo })) });
+          return results.length ? words('SDK proof complete.') : [call('remote_tasks', JSON.parse(input.slice('SDK proof: '.length)))];
+        }
         if (['worker', 'coder'].includes(role)) {
           if (original.includes('recovery budget')) { failure = 'Injected provider failure for recovery budget.'; return []; }
           if (original.includes('recovery inbox')) {

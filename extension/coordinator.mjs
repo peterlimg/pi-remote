@@ -6,6 +6,7 @@ import { resolve, relative, isAbsolute, sep, join, dirname } from 'node:path';
 import { loadConfig, dataDir } from '../src/config.mjs';
 import { sessionKey, sessionCapability } from '../src/locks.mjs';
 import { parseTaskInput } from '../src/task-input.mjs';
+import { loadedClaudeWorkerSource } from '../src/task-provider.mjs';
 
 const guidance = [
   'The user gives all instructions and replies in this main conversation. Worker logs are read-only inspection views. Never ask the user to enter a worker session to answer it or give it commands.',
@@ -42,7 +43,7 @@ async function callHost(origin, headers, input, signal, toolCallId) {
 function registerTasks(pi, call) {
   pi.registerTool({
     name: 'remote_tasks', label: 'Background workers', exposure: 'direct', executionMode: 'sequential',
-    description: 'Delegate user-requested investigations or coding work from this conversation. Assign kind code for edits and checks in a separate Git worktree. Inspect returns the code diff and revision; review it completely before integrate with that revision. Integration applies only that patch, without commit or push. List tasks, assign workers, inspect reports, queue task-specific instructions, stop one task, or accept a reviewed result. Safe interruptions recover automatically with at most two attempts. Use recover to recheck a blocked task after inspection. For interrupted integration, recover requires its inspected revision and only checks whether that patch is present. Assign returns immediately after dispatch. At most two tasks may be active. The optional worker model must be an available native Pi provider/model; the parent session model does not change.',
+    description: 'Delegate user-requested investigations or coding work from this conversation. Assign kind code for edits and checks in a separate Git worktree. Inspect returns the code diff and revision; review it completely before integrate with that revision. Integration applies only that patch, without commit or push. List tasks, assign workers, inspect reports, queue task-specific instructions, stop one task, or accept a reviewed result. Safe interruptions recover automatically with at most two attempts. Use recover to recheck a blocked task after inspection. For interrupted integration, recover requires its inspected revision and only checks whether that patch is present. Assign returns immediately after dispatch. At most two tasks may be active. The optional worker model must be an available native Pi or enabled Claude SDK provider/model; the parent session model does not change.',
     parameters: Type.Object({
       action: Type.Union(['list', 'assign', 'inspect', 'message', 'stop', 'accept', 'integrate', 'recover'].map(value => Type.Literal(value))),
       taskId: Type.Optional(Type.String({ maxLength: 100 })), title: Type.Optional(Type.String({ maxLength: 120 })),
@@ -52,7 +53,17 @@ function registerTasks(pi, call) {
       revision: Type.Optional(Type.String({ minLength: 40, maxLength: 64 }))
     }, { additionalProperties: false }),
     async execute(id, input, signal, _update, context) {
-      if (input.kind === 'code' && !(await call(undefined, signal, id, context)).supportsCodingWorkers) throw new Error('The host needs the coding-worker update before assigning code.');
+      const sdk = input.action === 'assign' && (input.model || (context.model && context.model.provider + '/' + context.model.id))?.startsWith('claude-sdk/');
+      if (input.kind === 'code' || sdk) {
+        const host = await call(undefined, signal, id, context);
+        if (input.kind === 'code' && !host.supportsCodingWorkers) throw new Error('The host needs the coding-worker update before assigning code.');
+        if (sdk && !host.supportsSdkWorkers) throw new Error('The host needs the Claude SDK worker update before assigning this model.');
+      }
+      if (sdk) {
+        const providerExtension = loadedClaudeWorkerSource(pi.getCommands());
+        if (!providerExtension) throw new Error('Claude SDK workers need pi-claude-sdk 0.1.1 or newer loaded in this parent. Update the package and reload the session.');
+        input = { ...input, providerExtension };
+      }
       return toolResult(await call(input, signal, id, context));
     }
   });
@@ -79,7 +90,9 @@ export function registerSessionCoordinator(pi) {
     let snapshot;
     try { snapshot = await call(undefined, undefined, undefined, context); } catch { return; }
     const models = context.modelRegistry.getAvailable().filter(model => model.provider !== 'claude-sdk').slice(0, 8).map(model => model.provider + '/' + model.id);
-    const modelGuidance = 'Workers inherit your native Pi model unless you specify another. A parent using an extension-only provider can still coordinate, but needs a native worker model. Ask before choosing a different worker model unless the user already authorized it. Available native worker models: ' + models.join(', ');
+    const sdkModels = snapshot.supportsSdkWorkers && loadedClaudeWorkerSource(pi.getCommands())
+      ? context.modelRegistry.getAvailable().filter(model => model.provider === 'claude-sdk').map(model => model.provider + '/' + model.id) : [];
+    const modelGuidance = 'Workers inherit your native Pi or enabled Claude SDK model unless you specify another. Other extension-only providers need an explicitly selected supported worker model. Ask before choosing a different worker model unless the user already authorized it. Available native worker models: ' + models.join(', ') + (sdkModels.length ? '. Available Claude SDK worker models: ' + sdkModels.join(', ') : '');
     return extendPrompt(event, guidance + (snapshot.supportsCodingWorkers ? '' : '\nThis host has not enabled coding workers. Assign read-only investigations only.') + '\n' + modelGuidance + '\n\nDurable task context:\n' + JSON.stringify(taskContext(snapshot)));
   });
 }
@@ -87,6 +100,9 @@ export default function coordinatorExtension(pi) {
   const role = process.env.PI_REMOTE_COORDINATOR_ROLE, token = process.env.PI_REMOTE_COORDINATOR_TOKEN;
   const origin = process.env.PI_REMOTE_COORDINATOR_URL, privateDir = realpathSync(process.env.PI_REMOTE_COORDINATOR_DATA);
   if (!['coordinator', 'worker', 'coder'].includes(role) || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(origin || '')) throw new Error('This extension requires a host-owned coordinator session.');
+  const workspaceRoot = process.env.PI_REMOTE_WORKSPACE_ROOT;
+  // Keep capabilities in this closure, not in SDK subprocess environments.
+  for (const name of Object.keys(process.env)) if (name.startsWith('PI_REMOTE_') && !['PI_REMOTE_WORKER', 'PI_REMOTE_COORDINATOR_ROLE'].includes(name)) delete process.env[name];
   const coding = role === 'coder';
   const allowed = role === 'coordinator' ? ['remote_tasks'] : ['read', 'grep', 'find', 'ls', ...(coding ? ['edit', 'write', 'bash'] : []), 'task_report'];
   if (coding) pi.registerTool(createBashTool(process.cwd(), {
@@ -101,8 +117,13 @@ export default function coordinatorExtension(pi) {
     name: 'task_report', label: 'Report to coordinator', exposure: 'direct', executionMode: 'sequential',
     description: 'Persist a question or final result for your assigned task and return it to the owning coordinator. Include evidence and unresolved limits. A question waits for an explicit reply. This tool ends the current turn; do not continue working after reporting.',
     parameters: Type.Object({ kind: Type.Union([Type.Literal('question'), Type.Literal('result')]), text: Type.String({ minLength: 1, maxLength: 10000 }) }, { additionalProperties: false }),
-    async execute(id, input, signal) {
+    async execute(id, input, signal, _update, context) {
       const value = await call({ ...input, generation }, signal, id); reported = true;
+      if (context.model?.provider === 'claude-sdk') {
+        // A tool-free SDK wrap-up saves its native checkpoint without granting more work.
+        pi.setActiveTools([]);
+        return toolResult(value);
+      }
       return { ...toolResult(value), terminate: true };
     }
   });
@@ -115,7 +136,7 @@ export default function coordinatorExtension(pi) {
     }
   });
   pi.on('context', async event => {
-    if (role === 'coordinator') return;
+    if (role === 'coordinator' || reported) return;
     const input = event.messages.filter(message => message.role === 'user').map(message => parseTaskInput(typeof message.content === 'string' ? message.content : message.content?.filter(part => part.type === 'text').map(part => part.text).join('\n'))).findLast(Boolean);
     if (!input) return;
     generation = input.generation;
@@ -124,12 +145,12 @@ export default function coordinatorExtension(pi) {
   pi.on('tool_call', async (event, ctx) => {
     if (!allowed.includes(event.toolName)) return { block: true, reason: 'This session cannot use that tool.' };
     if (role === 'coordinator') return;
-    if (reported) return { block: true, reason: 'The task has reported. Wait for a new instruction.' };
+    if (reported) return { block: true, reason: 'The task has reported. Wait for a new instruction.', terminate: true };
     const snapshot = await call();
     if (snapshot.protocol === 2 && (!generation || snapshot.generation !== generation || snapshot.state !== 'working')) return { block: true, reason: 'This execution attempt is no longer current. Wait for the coordinator.', terminate: true };
     if (event.toolName === 'task_report' || coding && event.toolName === 'bash') return;
     try {
-      const root = realpathSync(coding ? process.env.PI_REMOTE_WORKSPACE_ROOT : ctx.cwd);
+      const root = realpathSync(coding ? workspaceRoot : ctx.cwd);
       const path = resolve(root, (event.input.path || '.').replace(/^@/, ''));
       let ancestor = path;
       if (coding && event.toolName === 'write') {
@@ -145,9 +166,11 @@ export default function coordinatorExtension(pi) {
       }
     } catch { return { block: true, reason: 'The requested project path is unavailable.' }; }
   });
-  pi.on('before_agent_start', async event => {
+  pi.on('before_agent_start', async (event, context) => {
     pi.setActiveTools(allowed);
     const snapshot = await call();
+    const durable = role !== 'coordinator' && context.model?.provider === 'claude-sdk'
+      ? { role, coordinatorId: snapshot.coordinatorId, task: { id: snapshot.task.id, title: snapshot.task.title, instruction: snapshot.task.instruction, kind: snapshot.task.kind } } : snapshot;
     const section = role === 'coordinator'
       ? 'This is a legacy restricted coordinator. You have only remote_tasks, not shell or editing tools.\n' + guidance + '\n\nDurable task context:\n' + JSON.stringify(taskContext(snapshot))
       : coding ? [
@@ -155,12 +178,12 @@ export default function coordinatorExtension(pi) {
         'Read relevant project instructions, but only the coordinator integrates, commits or pushes the result. Do not change branches, other worktrees, Git configuration, private host data, or shared services. Do not delegate or install software without explicit authorization.',
         'Shell commands run on the trusted host, not in an OS sandbox. Stay inside your assigned worktree and task. Never print credentials or environment secrets. Ask the coordinator when additional authority or a decision is needed; never approve permission dialogs automatically.',
         'Use task_report question for a blocking decision, or result after edits and checks finish. Report changed files, commands and results, and unverified risks. Reporting ends this turn; wait for another explicit instruction.'
-      ].join('\n') + '\n\nDurable task context:\n' + JSON.stringify(snapshot) : [
+      ].join('\n') + '\n\nDurable task context:\n' + JSON.stringify(durable) : [
         'You are an independent, read-only Pi worker assigned by a Pi Remote coordinator. Your task and latest status are below.',
         'Inspect only this project with read, grep, find and ls. Do not edit files, run commands, install anything, access private host data, or delegate.',
         'Use task_report with kind question when you need a decision, or result when your assignment is complete. Include useful findings, file references, and what remains unverified.',
         'A question does not grant permission. After reporting, stop this turn and wait for an explicit reply. Never claim that tests ran or changes were applied.'
-      ].join('\n') + '\n\nDurable task context:\n' + JSON.stringify(snapshot);
+      ].join('\n') + '\n\nDurable task context:\n' + JSON.stringify(durable);
     return extendPrompt(event, section);
   });
 }
