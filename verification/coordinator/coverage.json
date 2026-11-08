@@ -1,7 +1,8 @@
 {
-  "syncCommit": "f7f0bbf5ed2076836ae1c759132a6d733e0af512",
+  "syncCommit": "c163e736a75eb217baf88f3c21510adf0fbbdac1",
   "files": [
     "src/coordinator.mjs",
+    "src/coordinator-store.mjs",
     "src/service.mjs",
     "src/commands.mjs",
     "src/live-session.mjs",

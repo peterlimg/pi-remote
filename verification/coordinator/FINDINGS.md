@@ -1,6 +1,6 @@
 # Coordinator ordering and bounded recovery
 
-Product source confirmed at `f7f0bbf5ed2076836ae1c759132a6d733e0af512`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
+Product source confirmed at `c163e736a75eb217baf88f3c21510adf0fbbdac1`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
 
 ## Checked promises
 
@@ -22,6 +22,14 @@ SDK admission adds synchronous package-entry/version validation before task crea
 After a persisted SDK report, the extension disables all tools, skips another receipt and permits a tool-free response so the provider can save its checkpoint. This changes no modeled task state and is an unchanged-state step in both models. Follow-ups still wait on the existing restart-safe lifecycle boundary. Reports remain generation-checked; post-report tools remain fenced. Neither model needs an added action or a weakened invariant.
 
 The new admission helper is included in source drift checks. SDK package trust, native query/context handoff and checkpoint internals remain outside these bounded models. The dedicated `test:coordinator-sdk` proof exercises the real host, Pi, SDK adapter, MCP, permissions, private-environment removal, report/follow-up/restart, coding integration and Stop; only the external SDK peer is replayed. Its passing evidence is retained at `pi-sdk-worker-proof-LKrsoU`, including a bundled write after a report that is rejected without mutating the worktree. The native coordinator and crash-recovery proofs also pass unchanged. These checks do not establish live SDK model behavior or account entitlement.
+
+## Session-owned storage reconciliation
+
+`src/coordinator-store.mjs` now persists one main session and its workers in `coordinator-tasks/<main-session-id>.json`. Each synchronous state-changing prefix still completes an atomic task-file replacement before its awaited dispatch. Command IDs, report gates, mailbox generations, Stop fences, recovery guards and retry limits are unchanged. The models each have one owner, so neither needs a new state/action or a weakened invariant.
+
+Legacy splitting runs before runtime recovery. It validates the original records and matching partial files before writing missing session files, then archives the unchanged shared contents. Conflicts fail closed without overwriting either copy. Multiple-owner migration and physical file isolation are outside the single-owner models: two focused real-host storage E2Es cover matching/conflicting partial splits, preserved questions/reports/mailboxes/capabilities, scoped writes, permissions, cross-main denial and reload. The existing parent-activity E2E also passes through legacy migration.
+
+The new store is included in source drift checks. All seven properties, nine host replays and seven independent negative controls pass against the reconciled source. Native coordinator and crash-recovery proofs pass, as does SDK replay evidence `pi-sdk-worker-proof-WkQpGe`; live paid-model behavior and power-loss durability remain unverified.
 
 ## Negative controls
 
