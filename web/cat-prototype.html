@@ -11,23 +11,22 @@
   <script type="module" src="/cat-prototype.js"></script>
 </head>
 <body class="cat-prototype">
-  <!-- Throwaway: a cat that watches your sessions and tells you what needs you. Sample data only; nothing talks to the host. -->
+  <!-- Throwaway: Miso, one conversation that sees every session, starts sessions for a goal, and messages them with your OK. Sample data only. -->
   <main class="phone">
     <header class="mock-top"><h1>Sessions</h1><span>Prototype</span></header>
     <div class="variant-tabs" role="tablist" aria-label="Compare prototypes">
-      <button type="button" role="tab" data-variant="brief">A · Brief</button>
-      <button type="button" role="tab" data-variant="bubble">B · Bubble</button>
-      <button type="button" role="tab" data-variant="chat">C · Chat</button>
+      <button type="button" role="tab" data-variant="goal">Goal</button>
+      <button type="button" role="tab" data-variant="pinned">Pinned</button>
+      <button type="button" role="tab" data-variant="checkin">Check-in</button>
     </div>
     <p id="variant-note" class="variant-note"></p>
+    <p class="variant-note">Tap the cat to open Miso.</p>
     <div id="list"></div>
     <p id="status" class="variant-note" role="status"></p>
     <details class="preview-options">
       <summary>Preview controls</summary>
       <div class="preview-controls">
-        <button type="button" class="quiet" data-state="quiet">All quiet</button>
-        <button type="button" class="quiet" data-state="needs">2 need you</button>
-        <button type="button" class="quiet" id="recheck">Check now</button>
+        <button type="button" class="quiet" id="restart">Restart demo</button>
         <button type="button" class="quiet" id="theme">Toggle theme</button>
       </div>
     </details>
@@ -35,13 +34,13 @@
   <div class="bar">
     <button type="button" class="search-round" aria-label="Search sessions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
     <button type="button" id="cat" class="search-round cat-button"><span id="cat-bot" class="bot personality-bot" data-kind="miso"></span><span id="cat-count" class="cat-count" hidden></span></button>
-    <div id="bubble" class="bubble" hidden><button type="button" id="bubble-open"></button><button type="button" id="bubble-close" aria-label="Dismiss">×</button></div>
     <button type="button" class="new-session"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session</button>
   </div>
   <dialog id="sheet" class="cat-sheet" aria-labelledby="sheet-title"><div class="sheet">
     <header><span id="sheet-bot" class="bot personality-bot" data-kind="miso"></span><div><h2 id="sheet-title">Miso</h2><small id="sheet-sub"></small></div><button type="button" id="sheet-close" class="search-round" aria-label="Close">×</button></header>
-    <div id="sheet-body" class="sheet-body"></div>
-    <footer id="sheet-foot"></footer>
+    <section id="strip" class="strip" hidden><h3 id="strip-title"></h3><div class="threads"></div></section>
+    <div id="log" class="sheet-body" aria-live="polite"></div>
+    <form id="composer" class="ask"><input id="input" autocomplete="off" aria-label="Message Miso"><button type="submit" class="send" aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form>
   </div></dialog>
   <noscript><p>Enable JavaScript to try this prototype.</p></noscript>
 </body>
