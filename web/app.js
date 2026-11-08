@@ -1220,6 +1220,7 @@ function resetImagePull() {
   imagePull = undefined; imageViewer.style.transform = ''; imageStage.style.transform = '';
 }
 function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
+  fullImage.getAnimations().forEach(animation => animation.cancel());
   imageZoom = Math.max(1, Math.min(8, zoom));
   const fit = Math.min(imageStage.clientWidth / (fullImage.naturalWidth || 1), imageStage.clientHeight / (fullImage.naturalHeight || 1));
   const limitX = Math.max(0, (fullImage.naturalWidth * fit * imageZoom - imageStage.clientWidth) / 2);
@@ -1231,8 +1232,11 @@ function positionImage(zoom = imageZoom, x = imageX, y = imageY) {
   $('image-zoom-out').disabled = imageZoom <= 1; $('image-zoom-in').disabled = imageZoom >= 8;
 }
 function zoomImage(zoom, x = 0, y = 0) {
+  const from = getComputedStyle(fullImage).transform;
   const next = Math.max(1, Math.min(8, zoom)), ratio = next / imageZoom;
   positionImage(next, x - (x - imageX) * ratio, y - (y - imageY) * ratio);
+  if (!reducedMotion()) fullImage.animate({ transform: [from, fullImage.style.transform] },
+    { duration: 260, easing: 'cubic-bezier(.16, 1, .3, 1)' });
 }
 function imageFitZoom() {
   const width = imageStage.clientWidth / (fullImage.naturalWidth || 1), height = imageStage.clientHeight / (fullImage.naturalHeight || 1);
@@ -2573,7 +2577,10 @@ fullImage.addEventListener('load', () => {
   positionImage(zoom, 0, top);
 });
 new ResizeObserver(() => { if (imageViewer.open) positionImage(); }).observe(imageStage);
-imageViewer.addEventListener('close', () => { imagePointers.clear(); imageTap = imageLastTap = undefined; resetImagePull(); });
+imageViewer.addEventListener('close', () => {
+  fullImage.getAnimations().forEach(animation => animation.cancel());
+  imagePointers.clear(); imageTap = imageLastTap = undefined; resetImagePull();
+});
 imageViewer.addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (['+', '='].includes(event.key)) zoomImage(imageZoom * 2);
@@ -2591,6 +2598,10 @@ function imageGesture() {
 }
 imageStage.addEventListener('pointerdown', event => {
   if (event.button !== 0 || imagePointers.size >= 2) return;
+  if (fullImage.getAnimations().length) {
+    const transform = new DOMMatrix(getComputedStyle(fullImage).transform);
+    positionImage(transform.a, transform.e, transform.f);
+  }
   imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   imageTap = imagePointers.size === 1 ? { x: event.clientX, y: event.clientY, time: event.timeStamp, pointerType: event.pointerType } : undefined;
   if (!imageTap) imageLastTap = undefined;

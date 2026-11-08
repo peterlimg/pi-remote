@@ -28,7 +28,7 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   const initial = await image.boundingBox();
   await page.keyboard.press('+');
   await expect(zoom).toHaveText('200%');
-  expect((await image.boundingBox()).width).toBeCloseTo(initial.width * 2);
+  await expect.poll(async () => (await image.boundingBox()).width).toBeCloseTo(initial.width * 2);
   await page.keyboard.press('0');
 
   const bounds = await stage.boundingBox();
@@ -168,6 +168,7 @@ test('image viewer supports full-screen zoom, pan and pull-down dismissal', asyn
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect.poll(() => viewer.boundingBox()).toEqual({ x: 0, y: 0, width: 1280, height: 900 });
   await viewer.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect.poll(() => image.evaluate(img => img.getAnimations().length)).toBe(0);
   const beforeDrag = await image.boundingBox();
   const desktopStage = await stage.boundingBox();
   await page.mouse.move(desktopStage.width / 2, desktopStage.y + desktopStage.height / 2);
@@ -242,4 +243,65 @@ for (const [width, height] of [[1280, 900], [800, 800], [390, 1688]]) test(`${wi
   expect(desktop.height).toBeLessThanOrEqual(desktopFrame.height + 1);
   await page.screenshot({ path: info.outputPath('fit-image-desktop.png') });
   await info.attach('fit-width-image-viewer', { body: await viewer.ariaSnapshot(), contentType: 'text/plain' });
+});
+
+test('image zoom animates both ways, yields to dragging and respects reduced motion', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  const screenshot = await page.screenshot();
+  await page.locator('#image-files').setInputFiles({ name: 'motion.png', mimeType: 'image/png', buffer: screenshot });
+  await page.getByRole('link', { name: 'Open motion.png' }).tap();
+  const stage = page.locator('#image-stage'), image = stage.getByRole('img');
+  await expect.poll(() => image.evaluate(img => img.complete)).toBe(true);
+  const initial = await image.evaluate(img => new DOMMatrix(getComputedStyle(img).transform).a);
+  const box = await stage.boundingBox(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+  // Observe real input and rendered frames without changing the animation clock.
+  await stage.evaluate(node => {
+    const img = node.querySelector('img');
+    const transform = () => { const m = new DOMMatrix(getComputedStyle(img).transform); return [m.a, m.e, m.f]; };
+    window.imageZoomMotion = []; window.imageZoomInterruptions = [];
+    node.addEventListener('pointerup', () => {
+      const [animation] = img.getAnimations();
+      const record = { duration: animation?.effect.getTiming().duration || 0, scales: [transform()[0]] };
+      window.imageZoomMotion.push(record);
+      if (animation) {
+        const sample = () => {
+          record.scales.push(transform()[0]);
+          if (animation.playState === 'running') requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      }
+    });
+    let before;
+    node.addEventListener('pointerdown', () => { before = img.getAnimations().length ? transform() : undefined; }, { capture: true });
+    node.addEventListener('pointerdown', () => {
+      if (before) window.imageZoomInterruptions.push({ before, after: transform(), animations: img.getAnimations().length });
+    });
+  });
+  for (const target of [initial * 2, initial]) {
+    await page.touchscreen.tap(x, y);
+    await page.touchscreen.tap(x, y);
+    await expect.poll(() => image.evaluate(img => img.getAnimations().length)).toBe(0);
+    expect(await image.evaluate(img => new DOMMatrix(getComputedStyle(img).transform).a)).toBeCloseTo(target);
+    const motion = await page.evaluate(() => window.imageZoomMotion.at(-1));
+    expect(motion.duration).toBeGreaterThan(0);
+    expect(motion.scales.some(scale => scale > initial + 0.001 && scale < initial * 2 - 0.001)).toBe(true);
+  }
+  await page.mouse.move(x, y);
+  await page.keyboard.press('+');
+  await page.mouse.down();
+  await page.mouse.move(x + 20, y + 20);
+  await page.mouse.up();
+  const interruptions = await page.evaluate(() => window.imageZoomInterruptions);
+  expect(interruptions).toHaveLength(1);
+  expect(interruptions[0].animations).toBe(0);
+  interruptions[0].before.forEach((value, index) => expect(interruptions[0].after[index]).toBeCloseTo(value, 3));
+  await page.keyboard.press('0');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.touchscreen.tap(x, y);
+  await page.touchscreen.tap(x, y);
+  expect(await image.evaluate(img => new DOMMatrix(getComputedStyle(img).transform).a)).toBeCloseTo(initial * 2);
+  expect(await page.evaluate(() => window.imageZoomMotion.at(-1).duration)).toBe(0);
+  await info.attach('image-zoom-motion', { body: JSON.stringify(await page.evaluate(() => ({ motion: window.imageZoomMotion, interruptions: window.imageZoomInterruptions }))), contentType: 'application/json' });
 });
