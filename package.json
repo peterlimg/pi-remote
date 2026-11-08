@@ -22,6 +22,8 @@
     "test:coordinator-sdk": "node test/coordinator-sdk-e2e.mjs",
     "test:coordinator-recovery": "node test/coordinator-recovery-e2e.mjs",
     "verify:coordinator": "node verification/coordinator/check.mjs",
+    "verify:assistant": "node verification/assistant/check.mjs",
+    "test:assistant": "node test/assistant-e2e.mjs",
     "test:provider-parity": "node test/provider-parity.mjs"
   },
   "dependencies": {

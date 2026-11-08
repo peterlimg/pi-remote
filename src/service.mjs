@@ -11,6 +11,7 @@ import { CommandJournal, requestKey, validateCommand, commandList, modelList } f
 import { HistoryReader } from './history.mjs';
 import { WorkerSession, BridgeSession } from './live-session.mjs';
 import { Coordinators } from './coordinator.mjs';
+import { Assistant } from './assistant.mjs';
 
 function inside(file, dir) {
   const rel = relative(canonical(dir), canonical(file));
@@ -24,7 +25,7 @@ function isHelperSession(state) {
 }
 
 export class SessionService extends EventEmitter {
-  constructor({ dir, roots, workerOptions = {}, allowResume = true }) {
+  constructor({ dir, roots, workerOptions = {}, allowResume = true, assistantDelay }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.bridges = new WeakMap(); this.starting = new Set();
     this.restoreWarnings = []; this.restoring = new Set();
@@ -40,6 +41,7 @@ export class SessionService extends EventEmitter {
     try { this.closedSessions = new Set(JSON.parse(readFileSync(join(dir, 'closed-sessions.json'), 'utf8')).filter(id => typeof id === 'string')); }
     catch { this.closedSessions = new Set(); }
     this.coordination = new Coordinators(this);
+    this.assistant = new Assistant(this, { delay: assistantDelay });
     this.scan();
     this.setMaxListeners(50);
     this.timer = setInterval(() => this.scan(), 15000); this.timer.unref();
@@ -121,7 +123,7 @@ export class SessionService extends EventEmitter {
     const all = new Map([...this.catalog].map(([id, state]) => [id, { ...summary(state), resumable: this.allowResume, pinned: this.pins.has(id) }]));
     for (const [id, item] of this.live) all.set(id, { ...summary(item.state), resumable: this.allowResume && item.resumable, pinned: this.pins.has(id) });
     const visible = [...all.values()].filter(item => includeHelpers || query || !this.closedSessions.has(item.id) &&
-      !this.coordination.taskForSession(item.id) && !isHelperSession(this.live.get(item.id)?.state || this.catalog.get(item.id)));
+      this.independent(item.id));
     for (const item of visible) {
       if (this.closedSessions.has(item.id)) item.closed = true;
       // Lists update independently of the watched conversation, without exposing full task records.
@@ -131,6 +133,10 @@ export class SessionService extends EventEmitter {
     const matches = visible.filter(item => [item.title, item.cwd, item.preview].join(' ').toLowerCase().includes(query))
       .sort((a, b) => b.pinned - a.pinned || b.lastPromptAt - a.lastPromptAt || a.id.localeCompare(b.id));
     return { matches, total: visible.length };
+  }
+  // Not a worker child, a helper run, or Miso itself.
+  independent(id) {
+    return id !== this.assistant.id && !this.coordination.taskForSession(id) && !isHelperSession(this.live.get(id)?.state || this.catalog.get(id) || {});
   }
   pin(id, pinned) {
     if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id) || typeof pinned !== 'boolean') throw new Error('Invalid pin');
@@ -278,7 +284,7 @@ export class SessionService extends EventEmitter {
   }
   workerSession(meta, options, discardEmpty = false) {
     return new WorkerSession(meta, {
-      dir: this.dir, workerOptions: this.coordination.options(meta, options), changed: id => { if (this.live.has(id)) this.changed(id); },
+      dir: this.dir, workerOptions: this.assistant.options(meta, options) ?? this.coordination.options(meta, options), changed: id => { if (this.live.has(id)) this.changed(id); },
       started: item => { if (!item.prepared) this.live.set(item.state.id, item); },
       lifecycle: event => this.emit('lifecycle', event),
       exited: item => {
@@ -488,7 +494,7 @@ export class SessionService extends EventEmitter {
       writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
       renameSync(file + '.tmp', file);
     }
-    this.stopping = true; this.coordination.close();
+    this.stopping = true; this.coordination.close(); this.assistant.close();
     await this.historyReader.close();
     const prepared = this.prepared; this.prepared = undefined;
     const sessions = new Set([...this.live.values(), ...this.starting, prepared?.item].filter(Boolean));

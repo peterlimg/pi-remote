@@ -19,7 +19,7 @@ export async function startHost(options = {}) {
   const relayUrl = options.relayUrl ?? process.env.PI_REMOTE_RELAY_URL ?? config.relayUrl ?? '';
   let lock;
   const pairing = createPairing(config);
-  const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions });
+  const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions, assistantDelay: options.assistantDelay });
   service.coordination.bridgeToken = config.bridgeToken;
   let closing;
   const logStop = message => {
@@ -32,6 +32,7 @@ export async function startHost(options = {}) {
     busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
     if (req.url === '/_pi/coordinator') { void service.coordination.handle(req, res); return; }
+    if (req.url === '/_pi/assistant') { void service.assistant.handle(req, res); return; }
     if (!['/_pi/remote', '/_pi/pair', '/_pi/handoff'].includes(req.url)) { serveStatic(req, res); return; }
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Connection', 'close');
@@ -107,7 +108,7 @@ export async function startHost(options = {}) {
   try {
     await new Promise((resolve, reject) => { http.once('error', reject); http.listen(port, '127.0.0.1', resolve); });
     const actualPort = http.address().port;
-    service.coordination.origin = 'http://127.0.0.1:' + actualPort;
+    service.coordination.origin = service.assistant.origin = 'http://127.0.0.1:' + actualPort;
     const locks = join(dir, 'locks');
     const claim = () => acquireLock(locks, 'service', { kind: 'service', port: actualPort });
     try { lock = claim(); }
@@ -126,6 +127,7 @@ export async function startHost(options = {}) {
     }
     // Worker startup must not consume the background host's readiness timeout.
     void service.restore();
+    service.assistant.schedule();
     origins.add('http://127.0.0.1:' + actualPort); origins.add('http://localhost:' + actualPort);
     if (relayUrl) disconnectRelay = connectRelay(service, relayUrl, config.relayToken, { key: e2eKey(config), pairing });
   } catch (e) {

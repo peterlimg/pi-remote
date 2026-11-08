@@ -112,7 +112,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 :is(#search, #project-search) { flex: 1; min-width: 0; font-size: 16px; border: 0; background: transparent; padding: 6px 12px 6px 0; }
 :is(#search, #project-search):focus-visible { outline: none; }
 .search-field:focus-within { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.search-bar:not(.open) :is(.search-field, #search-close), .search-bar.open :is(#search-open, #new-session) { display: none; }
+.search-bar:not(.open) :is(.search-field, #search-close), .search-bar.open :is(#search-open, #assistant-open, #new-session) { display: none; }
+#assistant-open { width: 50px; min-height: 50px; }
 #new-session { display: flex; align-items: center; gap: 8px; min-height: 50px; margin-left: auto; padding: 0 22px 0 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 500; box-shadow: 0 1px 6px rgb(0 0 0 / .12); }
 /* The dialog spans the visible viewport, so the sheet rides above the keyboard; taps on its transparent area close it. */
 .project-picker { inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); }

@@ -445,6 +445,7 @@ function connect() {
       supportsActivityDebug = packet.supportsActivityDebug === true;
       supportsCoordinator = packet.supportsCoordinator === true;
       supportsWorkerInspection = packet.supportsWorkerInspection === true;
+      $('assistant-open').hidden = packet.supportsAssistant !== true;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -2977,6 +2978,12 @@ function closeSearch() {
   $('search-bar').classList.remove('open');
 }
 // The bar already rides above the keyboard; iOS's reveal scroll would expose the theme colour under the page.
+$('assistant-open').innerHTML = `<span class="bot personality-bot" data-kind="miso" data-mood="idle" aria-hidden="true">${botSvg('miso', 'idle', 32)}</span>`;
+$('assistant-open').addEventListener('click', async () => {
+  haptic();
+  try { await selectSession((await request('assistant')).sessionId); }
+  catch (error) { notice(error.message); }
+});
 $('search-open').addEventListener('click', () => { haptic(); $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
 // Keep the keyboard open until the click lands, or blur moves the close button out from under the tap.
 $('search-close').addEventListener('mousedown', event => event.preventDefault());

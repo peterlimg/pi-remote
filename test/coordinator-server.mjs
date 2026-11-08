@@ -50,6 +50,7 @@ writeFileSync(join(dir, 'config.json'), JSON.stringify(config), { mode: 0o600 })
 const entry = process.env.PI_REMOTE_SMOKE_PI_ENTRY || resolve('node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js');
 const local = existsSync(entry);
 const host = await startHost({ dir, config, port, publicUrl: config.publicUrl, relayUrl: '', roots: [sessions],
+  ...(process.env.PI_REMOTE_ASSISTANT_DELAY_MS ? { assistantDelay: Number(process.env.PI_REMOTE_ASSISTANT_DELAY_MS) } : {}),
   workerOptions: { bin: local ? process.execPath : 'pi', prefix: [...(local ? [entry] : []), '-e', resolve('test/fixtures/coordinator-provider.mjs')],
     env: { PI_CODING_AGENT_DIR: agent, PI_COORDINATOR_FIXTURE_ROOT: root, PI_OFFLINE: '1' } } });
 // A separate Pi owns the terminal bridge; the host owns only its ordinary RPC sessions.
