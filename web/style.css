@@ -686,7 +686,7 @@ pre.message-text { white-space: pre-wrap; }
 .codemode-tool > summary::after { grid-column: 4; margin-top: 0; }
 .codemode-tool[open] > summary::after, .codemode-script[open] > summary::after { transform: rotate(135deg); }
 .codemode-marker { position: relative; display: grid; place-items: center; width: 16px; height: 20px; background: var(--bg); color: var(--accent); }
-.codemode-tool .tool-heading { display: flex; flex-direction: column; gap: 0; min-width: 0; width: auto; }
+.codemode-tool .tool-heading { display: flex; flex-direction: column; align-items: stretch; gap: 0; min-width: 0; width: auto; }
 .codemode-tool .codemode-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .codemode-tool .tool-status { color: var(--muted); font: 11px/1.5 var(--mono); }
 .codemode-tool[data-status=working] .codemode-marker { color: var(--warning); }
