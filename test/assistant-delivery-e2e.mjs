@@ -14,11 +14,13 @@ const port = Number(process.env.PI_REMOTE_ASSISTANT_TEST_PORT || 8816), origin =
 const env = { ...process.env, PI_OFFLINE: '1' };
 for (const name of Object.keys(env)) if (name.startsWith('PI_REMOTE_') || name === 'PI_COORDINATOR_FIXTURE_ROOT') delete env[name];
 Object.assign(env, { PI_REMOTE_SMOKE_PI_ENTRY: resolve('test/fixtures/coordinator-flow-pi.mjs'), PI_FORMAL_ROOT: evidence,
-  PI_FORMAL_SCENARIO: 'assistant-delivery', PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_REMOTE_ASSISTANT_DELAY_MS: '60000' });
+  PI_FORMAL_SCENARIO: 'assistant-delivery', PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_REMOTE_ASSISTANT_DELAY_MS: '5000' });
 let root, child, stopped, client, sources, misoId;
 const ledger = () => JSON.parse(readFileSync(join(root, 'host', 'assistant.json'), 'utf8'));
 const inputs = () => existsSync(join(evidence, 'draft-inputs.jsonl')) ? readFileSync(join(evidence, 'draft-inputs.jsonl'), 'utf8').trim().split('\n').map(JSON.parse) : [];
 const count = text => inputs().filter(input => input.text === text).length;
+const notifications = () => readFileSync(ledger().file, 'utf8').trim().split('\n').map(JSON.parse)
+  .filter(entry => entry.message?.role === 'user' && (typeof entry.message.content === 'string' ? entry.message.content : entry.message.content?.[0]?.text)?.startsWith('[Pi Remote session events]\n'));
 async function start() {
   child = spawn(process.execPath, ['test/coordinator-server.mjs'], { env: { ...env, ...(root ? { PI_COORDINATOR_FIXTURE_ROOT: root } : {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
   stopped = new Promise(resolve => child.once('exit', resolve));
@@ -84,6 +86,14 @@ try {
   assert.equal(state(accepted).feedback.text, 'Reply to: ' + accepted.text);
   await action(accepted); assert.equal(count(accepted.text), 1);
   proofs.push('An acknowledged delivery captures its own final reply exactly once.');
+  const queued = ledger().events.findLast(event => event.sessionId === accepted.sessionId && event.delivery === 'pending');
+  assert(queued, 'The reply must be saved before its batching timer fires');
+  const beforeViewing = notifications().length;
+  await client.request('ping', { viewingSessionId: accepted.sessionId });
+  assert.equal(ledger().events.find(event => event.id === queued.id).delivery, 'skipped');
+  await client.request('ping', { viewingSessionId: null });
+  assert.equal(notifications().length, beforeViewing);
+  proofs.push('Opening a source conversation consumes its queued event before Miso wakes.');
 
   rmSync(join(evidence, 'draft.reply'));
   const mixed = await draft('Interleaved draft');
@@ -108,6 +118,28 @@ try {
   assert.equal(count(blocked.text), 0);
   proofs.push('A failed acknowledgement after the effect remains uncertain and cannot be retried; blocked targets reject new drafts.');
   for (const input of inputs().filter(input => input.text !== 'Unrelated user input')) assert.equal(input.streamingBehavior, 'followUp');
+
+  // At the durable restart boundary, inject duplicate and obsolete notifications around a real fresh reply.
+  rmSync(join(evidence, 'draft.fail'));
+  await stop();
+  const saved = ledger(), fresh = saved.events.findLast(event => event.delivery === 'pending' && event.sessionId === sources[0].id);
+  assert(fresh, 'A real unreported completion must survive shutdown');
+  const beforeBatch = notifications().length;
+  fresh.at = Date.now() - 10000;
+  saved.events.push({ ...fresh, id: 'duplicate-fresh-event' }, { ...fresh, id: 'obsolete-event', key: 'question:withdrawn' });
+  writeFileSync(join(root, 'host', 'assistant.json'), JSON.stringify(saved), { mode: 0o600 });
+  await start();
+  await until(() => ledger().events.find(event => event.id === 'duplicate-fresh-event').delivery === 'sent', 15000);
+  assert.equal(ledger().events.find(event => event.id === fresh.id).delivery, 'skipped');
+  assert.equal(ledger().events.find(event => event.id === 'obsolete-event').delivery, 'skipped');
+  assert.equal(notifications().length, beforeBatch + 1);
+  const payload = notifications().at(-1).message.content[0].text;
+  const batch = JSON.parse(payload.split('\n')[1]);
+  assert.equal(batch.length, 1); assert.equal(batch[0].snapshot.id, sources[0].id);
+  assert.equal(batch[0].snapshot.preview, 'Reply to: ' + failed.text);
+  await stop(); await start(); await delay(500);
+  assert.equal(notifications().length, beforeBatch + 1, 'Restart and unchanged state must not replay the batch');
+  proofs.push('A fresh saved reply wakes once across restart; duplicate and obsolete events are skipped and its snapshot travels with the wake.');
   writeFileSync(join(evidence, 'proof.json'), JSON.stringify(proofs, null, 2)); console.log(proofs.join('\n'));
 } finally {
   writeFileSync(join(evidence, 'draft.reply'), 'release');

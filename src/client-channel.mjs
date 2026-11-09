@@ -103,8 +103,11 @@ export function attachClient(socket, service, { pairing } = {}) {
       busy++;
       try {
         let value;
-        if (message.op === 'ping') value = { pong: true };
-        else if (message.op === 'activityDebug') {
+        if (message.op === 'ping' || message.op === 'viewing') {
+          if (message.viewingSessionId !== undefined) service.assistant.viewing(socket, message.viewingSessionId);
+          else if (message.op === 'viewing') throw new Error('Expected a viewed session or null.');
+          value = message.op === 'ping' ? { pong: true } : { viewing: message.viewingSessionId };
+        } else if (message.op === 'activityDebug') {
           if (!Array.isArray(message.records) || !message.records.length || message.records.length > 20) throw new Error('Invalid activity diagnostics');
           const now = Date.now(), budget = Math.min(40, debugBudget + (now - debugBudgetAt) / 1000);
           if (message.records.length > budget) throw new Error('Activity diagnostics are rate limited');
@@ -212,7 +215,7 @@ export function attachClient(socket, service, { pairing } = {}) {
     } catch (e) { send(socket, { type: 'response', id: message?.id, ok: false, error: e.message }); }
   });
   socket.once('close', () => {
-    closed = true; clearTimeout(listTimer); clearTimeout(stateTimer); clearInspection();
+    closed = true; service.assistant.viewing(socket, null); clearTimeout(listTimer); clearTimeout(stateTimer); clearInspection();
     videos.close();
     service.off('list', onList); service.off('state', onState);
   });

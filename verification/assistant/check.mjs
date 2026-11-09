@@ -14,14 +14,14 @@ const guards = ['EnforceMarkBeforeDispatch', 'EnforceNoResend', 'EnforceDialogMa
 const controls = [['EnforceMarkBeforeDispatch', 'EventsDurableBeforeWake'], ['EnforceNoResend', 'AtMostOnceEvent'], ['EnforceNoResend', 'AtMostOnceDelivery'],
   ['EnforceDialogMatch', 'AnswerHitsSeenQuestion'], ['EnforceApprovedRevision', 'NoUnapprovedSend'], ['EnforceCancel', 'CancelWins']];
 const evidence = mkdtempSync(join(tmpdir(), 'pi-assistant-formal-'));
-cpSync(join(here, 'AssistantFlow.tla'), join(evidence, 'AssistantFlow.tla'));
+for (const module of ['AssistantFlow', 'WakeFlow']) cpSync(join(here, module + '.tla'), join(evidence, module + '.tla'));
 console.log('Evidence: ' + evidence);
 
-function check(name, disabled, checked) {
-  const config = name + '.cfg';
-  writeFileSync(join(evidence, config), 'SPECIFICATION Spec\nCONSTANTS ' + guards.map(guard => guard + ' = ' + (guard === disabled ? 'FALSE' : 'TRUE')).join('\n') +
+function check(name, disabled, checked, module = 'AssistantFlow') {
+  const config = name + '.cfg', applicable = module === 'WakeFlow' ? ['EnforceFreshWake', 'EnforceObserved'] : guards;
+  writeFileSync(join(evidence, config), 'SPECIFICATION Spec\nCONSTANTS ' + applicable.map(guard => guard + ' = ' + (guard === disabled ? 'FALSE' : 'TRUE')).join('\n') +
     '\nCONSTRAINT Bounded\nINVARIANTS ' + checked.join(' ') + '\n');
-  const result = spawnSync(java, ['-XX:+UseParallelGC', '-Xmx1g', '-cp', jar, 'tlc2.TLC', '-workers', 'auto', '-config', config, '-metadir', join(evidence, name + '-states'), 'AssistantFlow.tla'],
+  const result = spawnSync(java, ['-XX:+UseParallelGC', '-Xmx1g', '-cp', jar, 'tlc2.TLC', '-workers', 'auto', '-config', config, '-metadir', join(evidence, name + '-states'), module + '.tla'],
     { cwd: evidence, encoding: 'utf8', timeout: 300000, maxBuffer: 16 * 1024 * 1024 });
   const output = (result.stdout || '') + (result.stderr || ''); writeFileSync(join(evidence, name + '.log'), output);
   if (result.error) throw result.error;
@@ -35,11 +35,14 @@ try { jar = await toolsJar(); java = javaBinary(); }
 catch (error) { console.error(error.message); process.exit(2); }
 const normal = check('normal', undefined, invariants);
 const negative = controls.map(([guard, invariant]) => ({ ...check(guard + '-' + invariant, guard, ['TypeOK', invariant]), expected: invariant }));
-const findings = [...(normal.violated ? [`${normal.violated} is violated with every guard on`] : []),
+const wake = check('wake-normal', undefined, ['TypeOK', 'OnlyFreshWakes', 'AtMostOnceChange'], 'WakeFlow');
+for (const [guard, expected] of [['EnforceFreshWake', 'OnlyFreshWakes'], ['EnforceObserved', 'AtMostOnceChange']])
+  negative.push({ ...check(guard, guard, ['TypeOK', expected], 'WakeFlow'), expected });
+const findings = [...[normal, wake].filter(item => item.violated).map(item => `${item.violated} is violated with every guard on`),
   ...negative.filter(item => item.violated !== item.expected).map(item => `Turning off ${item.disabled} did not break ${item.expected}; the invariant may be vacuous`)];
-const result = { tool: 'TLC ' + version, normal, negative, findings };
+const result = { tool: 'TLC ' + version, normal, wake, negative, findings };
 writeFileSync(join(evidence, 'result.json'), JSON.stringify(result, null, 2));
-console.log(`All invariants hold over ${normal.states} states.`);
+console.log(`Assistant flow: ${normal.states} states; wake filter: ${wake.states} states.`);
 for (const item of negative) console.log(`${item.disabled} off -> ${item.violated ? item.violated + ' violated' : 'no violation'}`);
 for (const finding of findings) console.error('FINDING: ' + finding);
 process.exitCode = findings.length ? 1 : 0;

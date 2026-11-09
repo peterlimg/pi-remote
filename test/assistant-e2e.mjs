@@ -109,8 +109,23 @@ try {
   assert.equal(forbiddenAnswer.status, 400, 'Miso’s read-only API cannot answer questions');
   proof.access = 'Requests without Miso’s token or from a browser origin get 403; Miso cannot answer through its API';
 
+  // A completion in the conversation on screen must not spend model tokens.
+  const quietCalls = misoRequests().length, viewedFrom = ledger().events.length;
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(project.title) }).click();
+  await check(page.locator('#title')).toHaveText(project.title);
+  assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Finish with a note for Miso.' } })).value.ok, true);
+  const viewedEvent = await until(() => ledger().events.slice(viewedFrom).find(item => item.kind === 'finished' && item.delivery !== 'pending'), 10000);
+  assert.equal(viewedEvent.delivery, 'skipped', 'A viewed completion must not wake Miso');
+  assert.equal(misoRequests().length, quietCalls, 'Watching this conversation must cost zero Miso model calls');
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await page.locator('#assistant-open').click();
+  await check(page.locator('#title')).toHaveText('Miso');
+  proof.viewed = 'A completed turn in the foreground conversation is skipped without a Miso model call';
+
   // A question in another session reaches Miso once, and Miso cannot answer it.
   beginClip('A session needs your input');
+  const questionCalls = misoRequests().length;
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
   const card = page.locator('.assistant-question');
   await check(card).toContainText('Post these 3 review comments to the PR?');
@@ -121,7 +136,8 @@ try {
   assert.equal((await client.request('watch', { sessionId: project.id })).ok, true);
   const dialog = client.messages.findLast(packet => packet.type === 'snapshot' && packet.sessionId === project.id).state.dialog;
   assert.equal(deliveries(question.id), 1);
-  await check(page.locator('.tool-activity-label').filter({ hasText: /^Checked \d+ sessions?$/ })).toHaveCount(1);
+  assert.equal(misoRequests().length - questionCalls, 1, 'A normal check-in summarizes the host snapshot in one model response');
+  await check(page.locator('.tool-activity-label').filter({ hasText: /^Checked \d+ sessions?$/ })).toHaveCount(0);
   await check(page.locator('.tool-activity-label').filter({ hasText: '1 session changed' })).toHaveCount(1);
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
   await endClip(page);
@@ -302,8 +318,9 @@ try {
   await browser.close(); browser = context = undefined;
   client.ws.terminate(); await stop();
   const saved = ledger(), at = Date.now();
-  saved.events.push({ id: 'restart-sending', sessionId: project.id, kind: 'finished', at, delivery: 'sending' },
-    { id: 'restart-pending', sessionId: project.id, kind: 'finished', at, delivery: 'pending' });
+  const lastChange = saved.events.findLast(item => item.sessionId === project.id && item.kind === 'finished');
+  saved.events.push({ id: 'restart-sending', sessionId: project.id, key: lastChange.key, kind: 'finished', at, delivery: 'sending' },
+    { id: 'restart-pending', sessionId: project.id, key: lastChange.key, kind: 'finished', at, delivery: 'pending' });
   writeFileSync(join(root, 'host', 'assistant.json'), JSON.stringify(saved), { mode: 0o600 });
   await start();
   await until(() => ledger().events.find(item => item.id === 'restart-pending').delivery === 'sent', 30000);

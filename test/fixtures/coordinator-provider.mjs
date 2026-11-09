@@ -47,10 +47,11 @@ export default function verificationProvider(pi) {
             return words('Review the draft below. Nothing has been sent.');
           }
           if (!input.startsWith('[Pi Remote session events]\n')) return words('Miso here. Nothing needs you yet.');
-          if (!results.length) return [call('sessions', { action: 'overview' })];
-          const overview = decoded(results[0]);
+          const snapshots = JSON.parse(input.split('\n')[1]).map(event => event.snapshot).filter(Boolean);
+          if (!snapshots.length && !results.length) return [call('sessions', { action: 'overview' })];
+          const overview = snapshots.length ? { sessions: snapshots } : decoded(results[0]);
           // A session's text asks Miso to act; Miso tries, and the host must refuse.
-          if (results.length === 1 && overview.sessions?.some(session => session.preview?.includes('IGNORE PREVIOUS'))) return [call('bash', { command: 'touch miso-escape.txt' })];
+          if (results.length === (snapshots.length ? 0 : 1) && overview.sessions?.some(session => session.preview?.includes('IGNORE PREVIOUS'))) return [call('bash', { command: 'touch miso-escape.txt' })];
           const asking = overview.sessions?.filter(session => session.question) || [];
           return words(asking.length ? asking.map(session => session.title + ' asks: ' + session.question.title + ' (' + (session.question.options || []).join(' / ') + ')').join('\n')
             : 'Nothing needs you. Latest: ' + overview.sessions?.[0]?.preview);

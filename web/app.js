@@ -458,7 +458,7 @@ function connect() {
           item.reject(new Error('Delivery outcome is unknown. Inspect the conversation before sending again.'));
         }
       }
-      connected = true; retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
+      connected = true; reportViewing(); retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
       if (homeScreenLogin) {
         if (packet.supportsPairing) void homeScreenPairing();
         else { homeScreenLogin = false; $('home-screen-code').textContent = 'If the app still asks for a login, enter the pairing code shown by /pi-remote on your computer.'; }
@@ -516,8 +516,16 @@ function connect() {
 function probe() {
   if (connectionTimer) return;
   connectionTimer = setTimeout(() => reconnect('Connection timed out'), 10000);
-  transmit(socket, { op: 'ping', id: crypto.randomUUID() });
+  transmit(socket, { op: 'ping', id: crypto.randomUUID(), viewingSessionId: viewedSession() });
 }
+function viewedSession() {
+  return document.visibilityState === 'visible' && document.querySelector('main').getClientRects().length && !$('app').hidden ? selected || null : null;
+}
+function reportViewing() {
+  if (connected && socket?.readyState === WebSocket.OPEN) transmit(socket, { op: 'viewing', id: crypto.randomUUID(), viewingSessionId: viewedSession() });
+}
+window.addEventListener('resize', reportViewing);
+window.addEventListener('pagehide', () => { if (connected) transmit(socket, { op: 'viewing', id: crypto.randomUUID(), viewingSessionId: null }); });
 // Mobile browsers suspend sockets and timers in the background. Start fresh on return.
 function reconnectNow() { if (token && !manualClose) { retry = 0; connect(); } }
 window.addEventListener('online', reconnectNow);
@@ -525,7 +533,7 @@ window.addEventListener('online', reconnectNow);
 // so returning to the list doesn't flash Connecting….
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
-  debugActivity('visibility');
+  debugActivity('visibility'); reportViewing();
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
   fitViewport();
   if (connected && Date.now() - hiddenAt < 5000) probe(); else reconnectNow();
@@ -840,7 +848,7 @@ async function closeSession(id, closed = true) {
       resetSwipe(); closePicker(); clearThreadImages(); clearThreadVideos(); resetScrollback();
       selected = undefined; selectedSummary = undefined;
       document.querySelector('.session-info').open = false;
-      $('session-icon-picker').close(); $('app').classList.remove('viewing');
+      $('session-icon-picker').close(); $('app').classList.remove('viewing'); reportViewing();
       $('title').textContent = 'Pi Remote'; renderProject(); notice('');
       $('transcript').replaceChildren(); $('transcript').hidden = true; $('dialog').hidden = true;
       $('empty').hidden = false; $('composer').hidden = true;
@@ -1171,7 +1179,7 @@ async function selectSession(id, keepOrder = false) {
   renderProject(selectedSummary?.cwd, selectedSummary);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
   if (!standalone && !history.state?.session) history.pushState({ session: true }, '');
-  $('app').classList.add('viewing');
+  $('app').classList.add('viewing'); reportViewing();
   if (entering) {
     $('app').classList.add('opening'); $('sidebar').inert = true;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3269,9 +3277,9 @@ function resetSwipe() {
 $('back').addEventListener('click', () => {
   haptic(); resetSwipe();
   if (history.state?.session) history.back();
-  else $('app').classList.remove('viewing');
+  else { $('app').classList.remove('viewing'); reportViewing(); }
 });
-window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('nearby-sessions').hidePopover(); $('app').classList.remove('viewing'); });
+window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('nearby-sessions').hidePopover(); $('app').classList.remove('viewing'); reportViewing(); });
 // Swiping the title steps through the session list's order. The order freezes while switching this way,
 // since a prompt would otherwise move the session to the top and swiping back would skip past it.
 function switchIds() {
@@ -3568,7 +3576,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     swipeTimer = setTimeout(() => {
       resetSwipe();
       if (back) {
-        closePicker(); app.classList.remove('viewing');
+        closePicker(); app.classList.remove('viewing'); reportViewing();
         if (history.state?.session) history.back();
       }
     }, 200);
