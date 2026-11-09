@@ -1747,17 +1747,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       const actions = [...new Set([...source.matchAll(/\btools\s*\.\s*(\w+)\s*\(/g)].map(match => labels.get(match[1])).filter(Boolean))];
       const title = (named || actions.join(' · ') || `Run ${activity.tools.length}`).slice(0, 120);
       const statusText = ({ done: 'Complete', working: 'Running', pending: 'Pending', error: 'Failed' })[status] || status;
-      entry.line = 'codemode · ' + title;
+      entry.line = title;
       detail.classList.add('codemode-tool');
       const summary = el('summary'), marker = el('span', undefined, 'codemode-marker');
       marker.setAttribute('aria-hidden', 'true');
       const path = status === 'done' ? '<path d="m5 12 4 4L19 6"/>' : status === 'error'
         ? '<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>'
+        : status === 'pending' ? '<circle cx="12" cy="12" r="9"/>'
         : '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
       marker.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
-      const heading = el('span', undefined, 'tool-heading'), meta = el('span', undefined, 'codemode-meta');
-      heading.append(el('span', title, 'codemode-title'));
-      meta.append(el('code', 'codemode'), el('span', ' · ' + statusText, 'codemode-state')); heading.append(meta);
+      const heading = el('span', undefined, 'tool-heading');
+      heading.append(el('span', title, 'codemode-title'), el('span', ' · ' + statusText, 'codemode-state sr-only'));
       summary.append(marker, heading);
       if (timed) {
         const time = el('span', formatToolDuration(durationMs), 'tool-status');

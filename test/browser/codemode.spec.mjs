@@ -52,11 +52,17 @@ test('codemode output stays opt-in and preserves manual expansion through stream
   await expect(group).toHaveAttribute('open', '');
   await expect(group.locator('.tool-activity-label')).toHaveText('2 complete · 1 running');
   await expect(group.locator('.tool')).toHaveCount(3);
+  await expect(group.locator('.codemode-meta')).toHaveCount(0);
+  await expect(group.locator('.codemode-tool > summary code')).toHaveCount(0);
+  await expect(read.locator(':scope > summary')).toHaveAccessibleName(/Read the icon components.*Complete/);
   await expect(read.locator('.codemode-title')).toHaveText('Read the icon components');
   await expect(read.locator('.tool-output')).toBeHidden();
   await expect(checks).not.toHaveAttribute('open', '');
   await expect(checks.locator('.tool-output')).toBeHidden();
   await expect(checks.locator('.codemode-state')).toHaveText(' · Running');
+  await expect(checks.locator('.codemode-state')).toHaveClass(/sr-only/);
+  await expect(checks.locator('.codemode-marker svg path')).toHaveAttribute('d', 'M12 7v5l3 2');
+  await expect(checks.locator(':scope > summary')).toHaveAccessibleName(/Run focused browser checks.*Running/);
   await expect(checks.locator('.tool-status')).toHaveCount(0);
   state.tools[0].text = 'Streaming output before any tap'; publish();
   await expect(checks.locator('.tool-output')).toHaveText('Streaming output before any tap');
@@ -88,6 +94,7 @@ test('codemode output stays opt-in and preserves manual expansion through stream
   await summary.click();
   state.tools[0].text = '<img src=x onerror=window.injected=1>\n3 passed'; publish();
   await expect(group).not.toHaveAttribute('open', '');
+  await expect(summary.locator('.tool-activity-line')).toHaveText('Run focused browser checks');
   await expect(summary.locator('.tool-activity-progress')).toHaveCount(0);
   await expect(checks.locator('.tool-output')).toBeHidden();
   await expect(page.locator('#transcript img')).toHaveCount(0);
@@ -112,6 +119,7 @@ test('codemode output stays opt-in and preserves manual expansion through stream
   await failed.locator(':scope > summary').click();
   await expect(failed.locator('.tool-output')).toBeVisible();
   await expect(failed.locator('.codemode-state')).toHaveText(' · Failed');
+  await expect(failed.locator(':scope > summary')).toHaveAccessibleName(/Check rename assertion.*Failed/);
   await expect(failed.locator('.tool-status')).toHaveText('0ms');
   await failed.scrollIntoViewIfNeeded(); await capture(page, 'phone-error');
   await failed.locator(':scope > summary').click();
@@ -122,6 +130,9 @@ test('codemode output stays opt-in and preserves manual expansion through stream
   const pending = page.locator('[data-tool-id="pending"]');
   await expect(group.locator('.tool-activity-label')).toHaveText('3 complete · 1 pending · 1 failed');
   await expect(pending.locator('.tool-status')).toHaveCount(0);
+  await expect(pending.locator(':scope > summary')).toHaveAccessibleName(/Review the final diff.*Pending/);
+  await expect(pending.locator('.codemode-marker svg circle')).toHaveCount(1);
+  await expect(pending.locator('.codemode-marker svg path')).toHaveCount(0);
   await pending.locator(':scope > summary').click();
   await expect(pending.locator('.tool-output')).toHaveText('Waiting to run…');
 });
@@ -226,7 +237,10 @@ test('compact work log fits phone, narrow and desktop views without shrinking to
         expect(height).toBeLessThanOrEqual(52);
       }
     }
-    expect((await group.boundingBox()).height).toBeLessThanOrEqual(220);
+    for (const heading of await group.locator('.codemode-tool .tool-heading').all()) {
+      expect((await heading.boundingBox()).height).toBeLessThanOrEqual(20);
+    }
+    expect((await group.boundingBox()).height).toBeLessThanOrEqual(190);
     const iconBounds = await group.locator('.codemode-mark path').evaluate(path => {
       const { y, height } = path.getBBox(); return { y, height };
     });

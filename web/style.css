@@ -680,19 +680,18 @@ pre.message-text { white-space: pre-wrap; }
 .codemode-activity[open] > summary :is(.tool-activity-line, .tool-activity-progress) { display: none; }
 .codemode-tool { position: relative; margin: 0; background: transparent; color: var(--text); font-family: var(--sans); }
 .codemode-tool:not(:last-child)::before { content: ''; position: absolute; top: 24px; bottom: -10px; left: 7.5px; border-left: 1px solid var(--line); pointer-events: none; }
-.codemode-tool > summary { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto 10px; align-items: start; gap: 8px; min-height: 44px; padding: 4px 0; list-style: none; }
+.codemode-tool > summary { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto 10px; align-items: center; gap: 8px; min-height: 44px; padding: 4px 0; list-style: none; }
 .codemode-tool > summary::-webkit-details-marker, .codemode-script > summary::-webkit-details-marker { display: none; }
 .codemode-tool > summary::after, .codemode-script > summary::after { content: ''; width: 7px; height: 7px; margin-top: 5px; border-top: 1.5px solid var(--muted); border-right: 1.5px solid var(--muted); transform: rotate(45deg); }
-.codemode-tool > summary::after { grid-column: 4; }
+.codemode-tool > summary::after { grid-column: 4; margin-top: 0; }
 .codemode-tool[open] > summary::after, .codemode-script[open] > summary::after { transform: rotate(135deg); }
 .codemode-marker { position: relative; display: grid; place-items: center; width: 16px; height: 20px; background: var(--bg); color: var(--accent); }
 .codemode-tool .tool-heading { display: flex; flex-direction: column; gap: 0; min-width: 0; width: auto; }
-.codemode-meta { color: var(--muted); font: 11px/1.4 var(--sans); }
-.codemode-meta code { font: 11px/1.4 var(--mono); }
-.codemode-tool .tool-status { padding-top: 1px; color: var(--muted); font: 11px/1.5 var(--mono); }
-.codemode-tool[data-status=working] :is(.codemode-marker, .codemode-state) { color: var(--warning); }
+.codemode-tool .codemode-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codemode-tool .tool-status { color: var(--muted); font: 11px/1.5 var(--mono); }
+.codemode-tool[data-status=working] .codemode-marker { color: var(--warning); }
 .codemode-tool[data-status=pending] .codemode-marker { color: var(--muted); }
-.codemode-tool[data-status=error] :is(.codemode-marker, .codemode-state) { color: var(--error); }
+.codemode-tool[data-status=error] .codemode-marker { color: var(--error); }
 .codemode-tool > :is(.codemode-output-heading, .tool-output, .codemode-script, .hint) { position: relative; margin: 0 0 0 24px; background: var(--panel); }
 .codemode-output-heading { padding: 8px 8px 0; border-radius: 8px 8px 0 0; color: var(--text); font: 600 12px/1.5 var(--sans); }
 .codemode-tool pre { padding: 8px; }
