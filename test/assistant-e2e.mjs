@@ -17,6 +17,15 @@ const env = { ...process.env, PI_OFFLINE: '1' };
 for (const name of Object.keys(env)) if (name.startsWith('PI_REMOTE_') || name === 'PI_COORDINATOR_FIXTURE_ROOT') delete env[name];
 Object.assign(env, { PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_REMOTE_ASSISTANT_DELAY_MS: '300' });
 
+const recording = process.env.PI_REMOTE_ASSISTANT_RECORD === '1', clips = [];
+let recordAt, video;
+const beginClip = name => { if (recording) clips.push({ name, start: (Date.now() - recordAt) / 1000 }); };
+const endClip = async page => {
+  if (!recording) return;
+  await page.waitForTimeout(3000);
+  clips.at(-1).end = (Date.now() - recordAt) / 1000;
+  writeFileSync(join(evidence, 'clips.json'), JSON.stringify(clips, null, 2));
+};
 let running, root, browser, context, starts = 0;
 const check = expect.configure({ timeout: 30000 });
 async function start() {
@@ -59,9 +68,11 @@ try {
   await until(() => client.messages.some(packet => packet.type === 'ready'));
   assert.equal((await client.request('pin', { sessionId: project.id, pinned: true })).ok, true, 'List updates before Miso exists must not refresh an undefined session');
   browser = await chromium.launch({ channel: process.env.PI_REMOTE_TEST_CHANNEL });
-  context = await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 1, reducedMotion: 'reduce' });
+  context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: 'reduce',
+    ...(recording ? { recordVideo: { dir: join(evidence, 'video'), size: { width: 390, height: 844 } } } : {}) });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage(), errors = [], frames = [];
+  recordAt = Date.now(); video = page.video();
   page.on('pageerror', error => errors.push(error.message));
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
     const packet = JSON.parse(payload.toString()); if (['answer', 'assistantDraft'].includes(packet.op)) frames.push(packet);
@@ -69,12 +80,14 @@ try {
   await page.goto(url); await page.getByText('Paste a private link instead', { exact: true }).click();
   await page.getByLabel('Private login link').fill(clientToken); await page.getByRole('button', { name: 'Connect to computer' }).click();
   await check(page.locator('#connection')).toHaveText('Computer connected');
+  beginClip('Open Miso');
   await page.locator('#assistant-open').click();
   await check(page.locator('#title')).toHaveText('Miso');
   await check(page.locator('.assistant-checkin')).toContainText("Hi, I'm Miso.");
   await check(page.locator('.assistant-checkin')).toContainText('Nothing needs your input right now.');
   await page.screenshot({ path: join(evidence, 'first-open.png') });
   proof.welcome = 'First open shows a greeting and a host-derived live-session check-in without a model call';
+  await endClip(page);
   await until(() => client.messages.find(packet => packet.type === 'ready')?.supportsAssistant, 10000);
   const opened = await client.request('assistant');
   assert.equal(opened.ok, true, opened.error);
@@ -97,6 +110,7 @@ try {
   proof.access = 'Requests without Miso’s token or from a browser origin get 403; Miso cannot answer through its API';
 
   // A question in another session reaches Miso once, and Miso cannot answer it.
+  beginClip('A session needs your input');
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
   const card = page.locator('.assistant-question');
   await check(card).toContainText('Post these 3 review comments to the PR?');
@@ -110,20 +124,23 @@ try {
   await check(page.locator('.tool-activity-label').filter({ hasText: /^Checked \d+ sessions?$/ })).toHaveCount(1);
   await check(page.locator('.tool-activity-label').filter({ hasText: '1 session changed' })).toHaveCount(1);
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
+  await endClip(page);
   await page.reload(); await page.locator('#assistant-open').click();
   await check(card).toHaveAttribute('data-question-id', dialog.id);
-  for (const [name, theme, width] of [['phone-light', 'light', 390], ['phone-dark', 'dark', 390], ['desktop-light', 'light', 1200]]) {
+  const layouts = [['phone-light', 'light', 390], ['phone-dark', 'dark', 390], ...(!recording ? [['desktop-light', 'light', 1200]] : [])];
+  for (const [name, theme, width] of layouts) {
     await page.emulateMedia({ colorScheme: theme }); await page.setViewportSize({ width, height: 844 });
     await card.scrollIntoViewIfNeeded();
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal overflow');
     await page.screenshot({ path: join(evidence, name + '.png') });
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  proof.question = 'A real host question appears without leaving Miso, survives reload, and has readable activity labels in phone and desktop layouts';
+  proof.question = 'A real host question appears without leaving Miso, survives reload, and has readable activity labels in ' + (recording ? 'phone light/dark layouts' : 'phone and desktop layouts');
 
   // The phone's answer must match the question it saw.
   assert.equal((await client.request('answer', { sessionId: project.id, answer: { dialogId: 'stale-dialog', value: 'Post them' } })).value.ok, false);
   const before = ledger().events.length;
+  beginClip('Answer from Miso');
   await card.getByRole('button', { name: 'Post them', exact: true }).click();
   await check(card).toHaveCount(0);
   assert.deepEqual(frames.at(-1).answer, { dialogId: dialog.id, value: 'Post them' });
@@ -135,6 +152,7 @@ try {
   await client.request('watch', { sessionId: project.id });
   assert(client.messages.findLast(packet => packet.type === 'snapshot').state.messages.some(message => message.text?.includes('User chose: Post them')));
   proof.answer = 'The phone answered the exact host dialog from Miso; the target recorded it and Miso heard once';
+  await endClip(page);
 
   // A replacement question rejects an old card; another client’s answer removes the current card.
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
@@ -181,6 +199,8 @@ try {
     assert.equal((await client.request('command', { sessionId: source.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
   }
   await check(card).toHaveCount(2);
+  beginClip('Two questions stay separate');
+  if (recording) await page.waitForTimeout(3000);
   const firstCard = page.getByRole('form', { name: 'Question from ' + project.title, exact: true });
   await firstCard.getByRole('button', { name: 'Cancel', exact: true }).click();
   await check(card).toHaveCount(1);
@@ -191,6 +211,7 @@ try {
   assert.equal(frames.at(-1).sessionId, sources[1].id);
   await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
   proof.routing = 'Two identical questions stay scoped to their source sessions; answering one leaves the other open';
+  await endClip(page);
 
   // A real Pi sessions tool prepares the draft; only the phone can approve its current revision.
   await client.request('watch', { sessionId: misoId });
@@ -198,18 +219,21 @@ try {
     headers: { Authorization: 'Bearer ' + ledger().token, 'Content-Type': 'application/json' }, body: JSON.stringify(input) })).json();
   const draftAction = action => client.request('assistantDraft', { sessionId: misoId, action });
   const targetInputs = () => lines(project.file).filter(entry => entry.message?.role === 'user' && text(entry.message).startsWith('Miso approved instruction:'));
+  beginClip('Prepare a draft, not a send');
   await page.locator('#prompt').fill('Prepare an approved instruction.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   const draftCard = page.locator('.assistant-draft').filter({ hasText: 'Review before sending' });
   await check(draftCard).toHaveCount(1);
   const draftId = await draftCard.getAttribute('data-draft-id');
   assert.equal(targetInputs().length, 0);
+  await endClip(page);
   for (const action of ['send', 'approve', 'cancel']) assert.equal((await post({ action, draftId, revision: 1 })).ok, false);
   assert.equal((await post({ action: 'draft', sessionId: project.id, text: '/reload', requestId: randomUUID() })).ok, false);
   await draftCard.getByLabel('Draft message').fill('Keep this unsaved edit.');
   assert.equal((await post({ action: 'draft', draftId, revision: 1, text: 'Miso approved instruction: newer draft.' })).ok, true);
   await check(draftCard.getByLabel('Draft message')).toHaveValue('Miso approved instruction: newer draft.');
   await check(draftCard).toContainText('Keep this unsaved edit.');
+  beginClip('Review and save your edit');
   await draftCard.getByLabel('Draft message').fill('Miso approved instruction: report the revised result.');
   await check(draftCard.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await draftCard.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -218,6 +242,8 @@ try {
   assert.equal(targetInputs().length, 0);
   await check(draftCard.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await page.screenshot({ path: join(evidence, 'draft-review.png') });
+  await endClip(page);
+  beginClip('Send once and collect the reply');
   await draftCard.getByRole('button', { name: 'Send', exact: true }).click();
   const receipt = page.locator(`[data-draft-id="${draftId}"]`);
   await check(receipt).toContainText('Sent to session');
@@ -229,12 +255,20 @@ try {
   assert.equal((await post({ action: 'draft', draftId, revision: 3, text: 'Changed after approval.' })).ok, false);
   await page.screenshot({ path: join(evidence, 'draft-reply.png') });
   proof.drafts = 'A real tool prepares a draft; editing invalidates the old revision, only phone Send delivers once, and its completed reply returns to Miso';
+  await endClip(page);
 
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
   await check(page.locator('.assistant-question:not(.assistant-draft)')).toHaveCount(1);
   const pendingDraft = (await post({ action: 'draft', sessionId: project.id, text: 'Miso approved instruction: do not interrupt.', requestId: randomUUID() })).value;
   assert.equal((await draftAction({ action: 'send', draftId: pendingDraft.id, revision: 1 })).value.ok, false);
   assert.equal(ledger().drafts.find(draft => draft.id === pendingDraft.id).state, 'drafted');
+  if (recording) {
+    beginClip('Busy targets are left alone');
+    const busyCard = page.locator(`[data-draft-id="${pendingDraft.id}"]`);
+    await busyCard.getByRole('button', { name: 'Send', exact: true }).click();
+    await check(busyCard).toContainText('This session is busy.');
+    await endClip(page);
+  }
   await page.locator(`[data-draft-id="${pendingDraft.id}"]`).getByRole('button', { name: 'Discard', exact: true }).click();
   await until(() => ledger().drafts.find(draft => draft.id === pendingDraft.id).state === 'cancelled');
   await draftAction({ action: 'send', draftId: pendingDraft.id, revision: 1 });
@@ -263,6 +297,8 @@ try {
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, 'answers.json'), JSON.stringify(frames, null, 2));
   await context.tracing.stop({ path: join(evidence, 'trace.zip') });
+  await context.close();
+  if (recording) await video.saveAs(join(evidence, 'miso-proof.webm'));
   await browser.close(); browser = context = undefined;
   client.ws.terminate(); await stop();
   const saved = ledger(), at = Date.now();
