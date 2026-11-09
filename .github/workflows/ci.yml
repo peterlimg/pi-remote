@@ -66,6 +66,9 @@ jobs:
       - run: npm run test:coordinator
         env:
           TMPDIR: ${{ runner.temp }}
+      - run: npm run test:assistant
+        env:
+          TMPDIR: ${{ runner.temp }}
       - run: npm run test:coordinator-recovery
         env:
           TMPDIR: ${{ runner.temp }}
@@ -80,6 +83,7 @@ jobs:
           name: coordinator-proof
           path: |
             ${{ runner.temp }}/pi-coordinator-proof-*/
+            ${{ runner.temp }}/pi-assistant-proof-*/
             ${{ runner.temp }}/pi-task-recovery-proof-*/
             ${{ runner.temp }}/pi-sdk-worker-proof-*/
   claude-sdk-provider:

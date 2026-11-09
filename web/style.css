@@ -816,6 +816,18 @@ pre.message-text { white-space: pre-wrap; }
 .dialog footer .secondary { margin-left: auto; }
 .dialog footer .hint { width: 100%; margin: 0; overflow-wrap: anywhere; }
 .dialog-error { color: var(--error); }
+.assistant-checkin { max-width: var(--content-width); margin: 24px auto; overflow-wrap: anywhere; }
+.assistant-checkin h2 { font-size: 20px; margin: 0 0 8px; }
+.assistant-checkin > p { margin: 8px 0; }
+.assistant-question { margin: 16px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.assistant-question-source { display: block; max-width: 100%; min-height: 44px; padding: 0; color: var(--accent); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.assistant-question h3 { margin: 8px 0 16px; font-size: 17px; }
+.assistant-question-message { white-space: pre-wrap; }
+.assistant-question-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-question-actions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.assistant-question :is(input, textarea) { width: 100%; margin-bottom: 12px; font-size: 16px; }
+.assistant-question textarea { min-height: 88px; }
+.assistant-question .hint { margin: 12px 0 0; }
 .image-viewer { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); height: var(--viewport-height, 100dvh); max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--safe-bottom) env(safe-area-inset-left); border: 0; border-radius: 0; overflow: hidden; background: var(--bg); color: var(--text); }
 .image-viewer[open] { display: flex; flex-direction: column; }
 .image-viewer:focus-visible { outline: none; }

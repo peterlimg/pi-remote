@@ -56,7 +56,9 @@ export function attachClient(socket, service, { pairing } = {}) {
   // Images staged before send live only as long as this socket; the phone falls back to inline data.
   const uploads = new Map(), videos = new VideoUploads(service.dir);
   let uploadBytes = 0;
+  const withCheckin = state => state.id === service.assistant.id ? { ...state, assistant: service.assistant.checkin() } : state;
   const onList = () => {
+    if (selected === service.assistant.id) onState(selected);
     if (!listTimer) listTimer = setTimeout(() => {
       listTimer = undefined;
       if (closed) return;
@@ -78,11 +80,11 @@ export function attachClient(socket, service, { pairing } = {}) {
         } catch (e) { send(socket, { type: 'workerNotice', sessionId: id, error: e.message }); }
       }, 100);
     }
-    if ((selected === id || previous?.coordination?.role === 'worker' && previous.coordination.coordinatorId === id) && previous && !stateTimer) stateTimer = setTimeout(() => {
+    if ((selected === service.assistant.id || selected === id || previous?.coordination?.role === 'worker' && previous.coordination.coordinatorId === id) && previous && !stateTimer) stateTimer = setTimeout(() => {
       stateTimer = undefined;
       if (closed || !selected) return;
       try {
-        const state = service.read(selected);
+        const state = withCheckin(service.read(selected));
         if (previous) send(socket, { type: 'patch', sessionId: selected, version: ++version, patch: diffState(previous, state) });
         else send(socket, { type: 'snapshot', sessionId: selected, version: ++version, state });
         previous = structuredClone(state);
@@ -119,7 +121,7 @@ export function attachClient(socket, service, { pairing } = {}) {
           if (selected !== message.sessionId) clearInspection();
           selected = message.sessionId; previous = undefined;
           clearTimeout(stateTimer); stateTimer = undefined;
-          const state = await service.view(selected);
+          const state = withCheckin(await service.view(selected));
           if (!closed && generation === watchGeneration) {
             version = 0; previous = structuredClone(state);
             send(socket, { type: 'snapshot', sessionId: selected, version, state });

@@ -1516,6 +1516,72 @@ function formatToolDuration(durationMs) {
   return durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
+const assistantCards = new Map();
+function renderCheckin(state) {
+  const section = el('section', undefined, 'assistant-checkin');
+  section.setAttribute('aria-label', 'Miso check-in');
+  if (!state.messages?.length) {
+    section.append(el('h2', "Hi, I'm Miso."), el('p', 'I keep an eye on your sessions. Ask me what needs you, or answer a question below.'));
+  }
+  const { watching, working, questions } = state.assistant;
+  section.append(el('p', watching ? `Watching ${watching} live ${watching === 1 ? 'session' : 'sessions'}. ${working} working. ${questions.length ? `${questions.length} ${questions.length === 1 ? 'needs' : 'need'} your input.` : 'Nothing needs your input right now.'}`
+    : 'No live sessions yet. Open a session and I’ll watch for questions and finished work.', 'hint'));
+  const keep = new Set();
+  for (const question of questions) {
+    const { sessionId, dialog } = question, key = sessionId + ':' + dialog.id;
+    keep.add(key);
+    let card = assistantCards.get(key);
+    if (!card) {
+      card = el('form', undefined, 'assistant-question');
+      card.dataset.questionId = dialog.id;
+      card.setAttribute('aria-label', 'Question from ' + (question.title || question.project));
+      const source = el('button', question.title || question.project || 'Open session', 'quiet assistant-question-source'); source.type = 'button';
+      source.addEventListener('click', () => selectSession(sessionId));
+      const heading = el('h3', dialog.title || 'Your input is needed'); heading.tabIndex = -1;
+      card.append(source, heading);
+      if (dialog.message) card.append(el('p', dialog.message, 'assistant-question-message'));
+      const controls = el('div', undefined, 'assistant-question-actions');
+      const feedback = el('p', '', 'hint'); feedback.setAttribute('role', 'status'); feedback.hidden = true;
+      let busy = false;
+      const answer = async response => {
+        if (busy) return;
+        busy = true; heading.focus({ preventScroll: true });
+        for (const control of card.elements) control.disabled = true;
+        feedback.hidden = false; feedback.textContent = 'Sending your answer…';
+        try {
+          await request('answer', { sessionId, answer: { dialogId: dialog.id, ...response } });
+          feedback.textContent = 'Answer sent.';
+          // Keep the receipt until the host removes the question; never infer a target reply.
+        } catch (error) {
+          busy = false;
+          for (const control of card.elements) control.disabled = false;
+          feedback.textContent = error.message;
+        }
+      };
+      const option = (label, response) => {
+        const button = el('button', label, 'secondary'); button.type = 'button';
+        button.addEventListener('click', () => answer(response)); controls.append(button);
+      };
+      let input;
+      if (dialog.method === 'select') {
+        for (const value of dialog.options || []) option(value, { value });
+      } else if (dialog.method === 'confirm') {
+        option('Allow', { confirmed: true }); option('Deny', { confirmed: false });
+      } else if (['input', 'editor'].includes(dialog.method)) {
+        input = el(dialog.method === 'editor' ? 'textarea' : 'input');
+        input.setAttribute('aria-label', dialog.title || 'Your answer'); input.value = dialog.prefill || '';
+        card.append(input);
+        const submit = el('button', 'Send answer'); submit.type = 'submit'; controls.append(submit);
+      }
+      if (dialog.method !== 'confirm') option('Cancel', { cancelled: true });
+      card.addEventListener('submit', event => { event.preventDefault(); if (input) void answer({ value: input.value }); });
+      card.append(controls, feedback); assistantCards.set(key, card);
+    }
+    section.append(card);
+  }
+  for (const key of assistantCards.keys()) if (!keep.has(key)) assistantCards.delete(key);
+  return section;
+}
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
   // Removing the touched message mid-drag loses touchend and strands the translated page.
   if (trackingSwipe) { pendingSwipeRender = () => renderConversation(state, { anchor, historyChanged }); return; }
@@ -1535,6 +1601,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (historyWindow) state = { ...state, messages: historyWindow.messages, tools: [] };
   const box = $('transcript'), bottom = !anchor && atThreadBottom(), oldScroll = box.scrollTop;
   const fragment = document.createDocumentFragment();
+  const questionFocus = document.activeElement?.closest('.assistant-checkin') ? document.activeElement : undefined;
   // A diagram arriving mid-reply can change the default, but not the reader's explicit choice.
   const expanded = new Map([...box.querySelectorAll('details[data-disclosure-id]')]
     .filter(node => !node.classList.contains('markdown-details') || node.dataset.disclosureChosen)
@@ -1599,6 +1666,12 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
     const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
     entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
+    if (state.assistant && toolName === 'sessions' && status === 'done') {
+      try {
+        const value = JSON.parse(result?.text || live?.text || '');
+        entry.sessionIds = Array.isArray(value.sessions) ? value.sessions.map(item => item.id) : value.id ? [value.id] : [];
+      } catch { /* Shortened output cannot supply an accurate count. */ }
+    }
     if (codemode) {
       const code = typeof args?.code === 'string' ? args.code : typeof args === 'string' ? args : undefined;
       const first = code?.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('// @options:'));
@@ -1691,12 +1764,21 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       continue;
     }
     // Internal notices and extension prompts belong in quiet activity rows, not chat bubbles.
-    if (message.source === 'extension' || message.activityLabel) {
+    const sessionEvent = state.assistant && message.role === 'user' && userMessageText(message).startsWith('[Pi Remote session events]\n');
+    if (message.source === 'extension' || message.activityLabel || sessionEvent) {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
       node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      const label = el('span', message.activityLabel || 'Prompted by an extension', 'tool-activity-label');
+      let activityLabel = message.activityLabel || 'Prompted by an extension';
+      if (sessionEvent) {
+        activityLabel = 'Sessions changed';
+        try {
+          const count = new Set(JSON.parse(userMessageText(message).split('\n')[1]).map(event => event.sessionId)).size;
+          activityLabel = `${count} ${count === 1 ? 'session changed' : 'sessions changed'}`;
+        } catch { /* Keep the neutral label for shortened events. */ }
+      }
+      const label = el('span', activityLabel, 'tool-activity-label');
       label.title = label.textContent; summary.append(label);
       node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
       appendThreadImages(node, message);
@@ -1789,10 +1871,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (failed) phrases.push(`${name} failed ${failed} ${failed === 1 ? 'time' : 'times'}`);
       return phrases;
     }).map((label, index) => (index ? label[0].toLowerCase() : label[0].toUpperCase()) + label.slice(1));
+    const sessionChecks = state.assistant && group.tools.every(tool => tool.name === 'sessions');
+    if (sessionChecks) {
+      const ids = new Set(group.tools.flatMap(tool => tool.sessionIds || []));
+      labels.splice(0, labels.length, group.tools.some(tool => tool.status === 'error') ? 'Session check failed'
+        : group.tools.some(tool => ['working', 'pending'].includes(tool.status)) ? 'Checking sessions…'
+        : group.tools.every(tool => tool.sessionIds) ? `Checked ${ids.size} ${ids.size === 1 ? 'session' : 'sessions'}` : 'Checked sessions');
+    }
     const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;
     const running = group.tools.findLast(tool => tool.status === 'working' && tool.preview) || group.tools.findLast(tool => tool.status === 'working');
-    const recent = running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
-      ? group.tools.findLast(tool => ['done', 'error'].includes(tool.status)) : undefined);
+    const recent = !sessionChecks && (running || (!historyWindow && state.status === 'working' && group === activityGroups.at(-1)
+      ? group.tools.findLast(tool => ['done', 'error'].includes(tool.status)) : undefined));
     if (group.codemode) {
       label.textContent = [['done', 'complete'], ['working', 'running'], ['pending', 'pending'], ['error', 'failed']]
         .map(([status, text]) => { const count = group.tools.filter(tool => tool.status === status).length; return count ? `${count} ${text}` : ''; }).filter(Boolean).join(' · ');
@@ -1834,6 +1923,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (count && !group.codemode) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
+  if (state.assistant && !historyWindow) fragment.append(renderCheckin(state));
   updateActivity();
   // Keep the indicator connected so streaming updates do not restart its CSS animation.
   if (activityIndicator.parentNode !== box) box.append(activityIndicator);
@@ -1849,6 +1939,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     submissions.delete(outgoing.key);
     for (const queued of submissions.values()) if (queued.sessionId === selected) queued.knownIds.add(messageId);
     if (sending.get(selected) !== outgoing) releaseImages(outgoing.attachments);
+  }
+  if (questionFocus) {
+    if (questionFocus.isConnected) questionFocus.focus({ preventScroll: true });
+    else box.focus({ preventScroll: true });
   }
   if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.disclosureId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
