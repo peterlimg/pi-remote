@@ -34,6 +34,7 @@ const post = async input => {
 };
 const report = async () => { if (!(await post({ kind: 'result', text: 'Formal fixture result.', generation: run.generation })).ok) throw new Error('Fixture result was not accepted'); };
 const commands = createInterface({ input: process.stdin });
+if (scenario === 'assistant-delivery') commands.on('close', () => process.exit(0));
 commands.on('line', line => { void (async () => {
   const command = JSON.parse(line);
   if (command.type === 'get_state') {
@@ -41,8 +42,20 @@ commands.on('line', line => { void (async () => {
       model: { provider: 'formal', id: 'fixture', name: 'Formal RPC fixture' }, thinkingLevel: 'off' });
   } else if (command.type === 'prompt') {
     prompts++; active = true; run = parseTaskInput(command.message);
-    persist({ role: 'user', content: [{ type: 'text', text: command.message }], timestamp: Date.now() });
+    const prompt = { role: 'user', content: [{ type: 'text', text: command.message }], timestamp: Date.now() };
+    persist(prompt);
     send({ type: 'agent_start' });
+    if (scenario === 'assistant-delivery') {
+      send({ type: 'message_end', message: prompt });
+      if (process.env.PI_REMOTE_COORDINATOR_ROLE !== 'assistant') {
+        appendFileSync(join(root, 'draft-inputs.jsonl'), JSON.stringify({ text: command.message, streamingBehavior: command.streamingBehavior }) + '\n');
+        await gate('draft.reply');
+      }
+      const answer = { role: 'assistant', content: 'Reply to: ' + command.message, stopReason: 'stop', timestamp: Date.now() };
+      persist(answer); send({ type: 'message_end', message: answer });
+      active = false; send({ type: 'agent_end' }); send({ type: 'agent_settled' });
+      reply(command, !existsSync(join(root, 'draft.fail'))); return;
+    }
     if (!(await post({ kind: 'receipt', generation: run.generation, inputIds: run.inputIds })).ok) throw new Error('Fixture receipt was not accepted');
     if (scenario.startsWith('recovery-')) {
       if (prompts === 1) {

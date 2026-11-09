@@ -58,7 +58,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   let uploadBytes = 0;
   const withCheckin = state => state.id === service.assistant.id ? { ...state, assistant: service.assistant.checkin() } : state;
   const onList = () => {
-    if (selected === service.assistant.id) onState(selected);
+    if (selected && selected === service.assistant.id) onState(selected);
     if (!listTimer) listTimer = setTimeout(() => {
       listTimer = undefined;
       if (closed) return;
@@ -188,6 +188,10 @@ export function attachClient(socket, service, { pairing } = {}) {
             const staged = uploads.get(image?.uploadId);
             if (staged) { uploads.delete(image.uploadId); uploadBytes -= staged.data.length; }
           }
+        } else if (message.op === 'assistantDraft') {
+          if (selected !== service.assistant.id || message.sessionId !== service.assistant.id) throw new Error('Open Miso before changing a draft.');
+          value = await service.journal.execute(service.assistant.id, message.id, { type: 'assistantDraft', ...message.action },
+            () => service.assistant.draftAction(message.action));
         } else if (message.op === 'assistant') {
           value = await service.assistant.open();
         } else if (message.op === 'newCoordinator') {

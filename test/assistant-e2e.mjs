@@ -6,6 +6,7 @@ import { chromium, devices, expect } from '@playwright/test';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, appendFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { socket, until } from './helpers.mjs';
 
 const clientToken = 'browser-test-token-only-123456789012345';
@@ -54,13 +55,16 @@ const proof = {};
 try {
   const { sources, pid } = await start(), project = sources[0];
   writeFileSync(join(evidence, 'doctor.json'), execFileSync(process.execPath, ['test/coordinator-e2e.mjs', 'doctor', String(pid), url]));
+  let client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
+  await until(() => client.messages.some(packet => packet.type === 'ready'));
+  assert.equal((await client.request('pin', { sessionId: project.id, pinned: true })).ok, true, 'List updates before Miso exists must not refresh an undefined session');
   browser = await chromium.launch({ channel: process.env.PI_REMOTE_TEST_CHANNEL });
   context = await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 1, reducedMotion: 'reduce' });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage(), errors = [], frames = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('websocket', ws => ws.on('framesent', ({ payload }) => {
-    const packet = JSON.parse(payload.toString()); if (packet.op === 'answer') frames.push(packet);
+    const packet = JSON.parse(payload.toString()); if (['answer', 'assistantDraft'].includes(packet.op)) frames.push(packet);
   }));
   await page.goto(url); await page.getByText('Paste a private link instead', { exact: true }).click();
   await page.getByLabel('Private login link').fill(clientToken); await page.getByRole('button', { name: 'Connect to computer' }).click();
@@ -71,7 +75,6 @@ try {
   await check(page.locator('.assistant-checkin')).toContainText('Nothing needs your input right now.');
   await page.screenshot({ path: join(evidence, 'first-open.png') });
   proof.welcome = 'First open shows a greeting and a host-derived live-session check-in without a model call';
-  let client = await socket(url.replace('http:', 'ws:') + '/ws', clientToken, url);
   await until(() => client.messages.find(packet => packet.type === 'ready')?.supportsAssistant, 10000);
   const opened = await client.request('assistant');
   assert.equal(opened.ok, true, opened.error);
@@ -188,6 +191,64 @@ try {
   assert.equal(frames.at(-1).sessionId, sources[1].id);
   await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
   proof.routing = 'Two identical questions stay scoped to their source sessions; answering one leaves the other open';
+
+  // A real Pi sessions tool prepares the draft; only the phone can approve its current revision.
+  await client.request('watch', { sessionId: misoId });
+  const post = async input => (await fetch(url + '/_pi/assistant', { method: 'POST',
+    headers: { Authorization: 'Bearer ' + ledger().token, 'Content-Type': 'application/json' }, body: JSON.stringify(input) })).json();
+  const draftAction = action => client.request('assistantDraft', { sessionId: misoId, action });
+  const targetInputs = () => lines(project.file).filter(entry => entry.message?.role === 'user' && text(entry.message).startsWith('Miso approved instruction:'));
+  await page.locator('#prompt').fill('Prepare an approved instruction.');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  const draftCard = page.locator('.assistant-draft').filter({ hasText: 'Review before sending' });
+  await check(draftCard).toHaveCount(1);
+  const draftId = await draftCard.getAttribute('data-draft-id');
+  assert.equal(targetInputs().length, 0);
+  for (const action of ['send', 'approve', 'cancel']) assert.equal((await post({ action, draftId, revision: 1 })).ok, false);
+  assert.equal((await post({ action: 'draft', sessionId: project.id, text: '/reload', requestId: randomUUID() })).ok, false);
+  await draftCard.getByLabel('Draft message').fill('Keep this unsaved edit.');
+  assert.equal((await post({ action: 'draft', draftId, revision: 1, text: 'Miso approved instruction: newer draft.' })).ok, true);
+  await check(draftCard.getByLabel('Draft message')).toHaveValue('Miso approved instruction: newer draft.');
+  await check(draftCard).toContainText('Keep this unsaved edit.');
+  await draftCard.getByLabel('Draft message').fill('Miso approved instruction: report the revised result.');
+  await check(draftCard.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  await draftCard.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await until(() => ledger().drafts.find(draft => draft.id === draftId)?.revision === 3);
+  assert.equal((await draftAction({ action: 'send', draftId, revision: 1 })).value.ok, false);
+  assert.equal(targetInputs().length, 0);
+  await check(draftCard.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  await page.screenshot({ path: join(evidence, 'draft-review.png') });
+  await draftCard.getByRole('button', { name: 'Send', exact: true }).click();
+  const receipt = page.locator(`[data-draft-id="${draftId}"]`);
+  await check(receipt).toContainText('Sent to session');
+  await check(receipt).toContainText('Instruction received: Miso approved instruction: report the revised result.');
+  assert.equal(targetInputs().length, 1);
+  assert.equal(text(targetInputs()[0].message), 'Miso approved instruction: report the revised result.');
+  assert.equal((await draftAction({ action: 'send', draftId, revision: 3 })).value.ok, true);
+  assert.equal(targetInputs().length, 1, 'A fresh request ID must not send a delivered draft again');
+  assert.equal((await post({ action: 'draft', draftId, revision: 3, text: 'Changed after approval.' })).ok, false);
+  await page.screenshot({ path: join(evidence, 'draft-reply.png') });
+  proof.drafts = 'A real tool prepares a draft; editing invalidates the old revision, only phone Send delivers once, and its completed reply returns to Miso';
+
+  assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
+  await check(page.locator('.assistant-question:not(.assistant-draft)')).toHaveCount(1);
+  const pendingDraft = (await post({ action: 'draft', sessionId: project.id, text: 'Miso approved instruction: do not interrupt.', requestId: randomUUID() })).value;
+  assert.equal((await draftAction({ action: 'send', draftId: pendingDraft.id, revision: 1 })).value.ok, false);
+  assert.equal(ledger().drafts.find(draft => draft.id === pendingDraft.id).state, 'drafted');
+  await page.locator(`[data-draft-id="${pendingDraft.id}"]`).getByRole('button', { name: 'Discard', exact: true }).click();
+  await until(() => ledger().drafts.find(draft => draft.id === pendingDraft.id).state === 'cancelled');
+  await draftAction({ action: 'send', draftId: pendingDraft.id, revision: 1 });
+  assert.equal(targetInputs().length, 1, 'Cancelled and busy drafts never reach the target');
+  const originalQuestion = page.locator('.assistant-question:not(.assistant-draft)');
+  await originalQuestion.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await check(originalQuestion).toHaveCount(0);
+  const terminalDraft = (await post({ action: 'draft', sessionId: sources[2].id, text: 'Miso approved instruction: do not resume.', requestId: randomUUID() })).value;
+  assert.equal((await draftAction({ action: 'send', draftId: terminalDraft.id, revision: 1 })).value.ok, false);
+  await draftAction({ action: 'cancel', draftId: terminalDraft.id, revision: 1 });
+  await page.reload(); await page.locator('#assistant-open').click();
+  await check(page.locator(`[data-draft-id="${draftId}"]`)).toContainText('Instruction received:');
+  proof.draftGuards = 'Busy targets and terminal sessions are not sent drafts; cancellation wins before dispatch and receipts survive page reload';
+  await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
 
   // Text in a session cannot make Miso act: its only tool is sessions.
   const attempts = misoRequests().length;

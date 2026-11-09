@@ -330,7 +330,7 @@ function request(op, extra = {}) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('No acknowledgement. Check the conversation before sending again.')); }, 35000);
-    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer', 'newCoordinator', 'taskAction'].includes(op)
+    const lookup = supportsCommandResults && ['command', 'new', 'newProject', 'resume', 'answer', 'newCoordinator', 'taskAction', 'assistantDraft'].includes(op)
       ? { op: 'commandResult', id, sessionId: op === 'newProject' ? 'new-project' : extra.sessionId, requestId: id } : undefined;
     pending.set(id, { resolve, reject, timer, lookup });
     transmit(socket, { op, id, ...extra });
@@ -1579,6 +1579,65 @@ function renderCheckin(state) {
     }
     section.append(card);
   }
+  for (const draft of state.assistant.drafts || []) {
+    const key = 'draft:' + draft.id + ':' + draft.revision + ':' + draft.state + ':' + JSON.stringify(draft.feedback);
+    keep.add(key);
+    let card = assistantCards.get(key);
+    if (!card) {
+      card = el('form', undefined, 'assistant-question assistant-draft'); card.dataset.draftId = draft.id;
+      card.setAttribute('aria-label', 'Draft to ' + (draft.title || draft.project));
+      const source = el('button', draft.title || draft.project || 'Open session', 'quiet assistant-question-source'); source.type = 'button';
+      source.addEventListener('click', () => selectSession(draft.sessionId));
+      const heading = el('h3', ({ drafted: 'Review before sending', delivering: 'Sending…', delivered: 'Sent to session', uncertain: 'Delivery uncertain', cancelled: 'Draft cancelled' })[draft.state]);
+      heading.tabIndex = -1; card.append(source, heading);
+      const feedback = el('p', '', 'hint'); feedback.setAttribute('role', 'status'); feedback.hidden = true;
+      if (draft.state === 'drafted') {
+        const input = el('textarea'); input.value = draft.text; input.dataset.savedText = draft.text; input.maxLength = 4000;
+        input.setAttribute('aria-label', 'Draft message');
+        const controls = el('div', undefined, 'assistant-question-actions');
+        const send = el('button', 'Send'), save = el('button', 'Save changes', 'secondary'), cancel = el('button', 'Discard', 'secondary');
+        for (const button of [send, save, cancel]) button.type = 'button';
+        save.hidden = true;
+        let busy = false;
+        const refresh = () => { const dirty = input.value !== draft.text; send.disabled = busy || dirty; save.hidden = !dirty; };
+        input.addEventListener('input', refresh);
+        const action = async name => {
+          if (busy) return;
+          busy = true; heading.focus({ preventScroll: true });
+          for (const control of card.elements) control.disabled = true;
+          feedback.hidden = false; feedback.textContent = name === 'send' ? 'Sending this revision…' : 'Saving…';
+          try {
+            await request('assistantDraft', { sessionId: state.id, action: { action: name, draftId: draft.id, revision: draft.revision, ...(name === 'edit' ? { text: input.value } : {}) } });
+            feedback.textContent = 'Saved. Waiting for the host update…';
+          } catch (error) {
+            busy = false;
+            for (const control of card.elements) control.disabled = false;
+            refresh(); feedback.textContent = error.message;
+          }
+        };
+        send.addEventListener('click', () => action('send'));
+        save.addEventListener('click', () => action('edit'));
+        cancel.addEventListener('click', () => action('cancel'));
+        controls.append(send, save, cancel);
+        card.append(input, el('p', 'Only Send approves this revision. Busy or offline sessions are left alone.', 'hint'), controls);
+      } else {
+        const details = el('details'); details.append(el('summary', 'Message'), el('p', draft.text, 'assistant-question-message')); card.append(details);
+        if (draft.state === 'uncertain') card.append(el('p', 'It may have arrived. Open the session before creating another draft. This draft will not be sent again.', 'hint'));
+        else if (draft.state === 'delivered' && !draft.feedback) card.append(el('p', 'Waiting for the session’s reply. Sent does not mean the work is complete.', 'hint'));
+        if (draft.feedback?.text) card.append(el('h4', 'Session reply'), el('p', draft.feedback.text, 'assistant-question-message'));
+        else if (draft.feedback?.note) card.append(el('p', draft.feedback.note, 'hint'));
+      }
+      const previous = [...assistantCards.values()].find(node => node.dataset.draftId === draft.id)?.querySelector('textarea');
+      if (previous && previous.value !== previous.dataset.savedText && previous.value !== draft.text) {
+        const recovered = el('details'); recovered.open = true;
+        recovered.append(el('summary', 'Draft changed elsewhere. Your unsaved edit'), el('p', previous.value, 'assistant-question-message'), copyButton(previous.value, 'Copy unsaved edit', 'quiet'));
+        card.append(recovered);
+      }
+      card.addEventListener('submit', event => event.preventDefault());
+      card.append(feedback); assistantCards.set(key, card);
+    }
+    section.append(card);
+  }
   for (const key of assistantCards.keys()) if (!keep.has(key)) assistantCards.delete(key);
   return section;
 }
@@ -1663,13 +1722,15 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     const entry = { name: toolName, status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp }; activity.tools.push(entry);
     let args;
     try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
+    entry.sessionAction = args?.action;
     // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
     const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
     entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
     if (state.assistant && toolName === 'sessions' && status === 'done') {
       try {
         const value = JSON.parse(result?.text || live?.text || '');
-        entry.sessionIds = Array.isArray(value.sessions) ? value.sessions.map(item => item.id) : value.id ? [value.id] : [];
+        entry.sessionAction ||= value.revision ? 'draft' : undefined;
+        entry.sessionIds = Array.isArray(value.sessions) ? value.sessions.map(item => item.id) : value.id && !value.revision ? [value.id] : [];
       } catch { /* Shortened output cannot supply an accurate count. */ }
     }
     if (codemode) {
@@ -1876,6 +1937,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       const ids = new Set(group.tools.flatMap(tool => tool.sessionIds || []));
       labels.splice(0, labels.length, group.tools.some(tool => tool.status === 'error') ? 'Session check failed'
         : group.tools.some(tool => ['working', 'pending'].includes(tool.status)) ? 'Checking sessions…'
+        : group.tools.some(tool => tool.sessionAction === 'draft') ? 'Prepared drafts for review'
         : group.tools.every(tool => tool.sessionIds) ? `Checked ${ids.size} ${ids.size === 1 ? 'session' : 'sessions'}` : 'Checked sessions');
     }
     const label = el('span', labels.join(', '), 'tool-activity-label'); label.title = label.textContent;

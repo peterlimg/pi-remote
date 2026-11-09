@@ -23,7 +23,7 @@
     "test:coordinator-recovery": "node test/coordinator-recovery-e2e.mjs",
     "verify:coordinator": "node verification/coordinator/check.mjs",
     "verify:assistant": "node verification/assistant/check.mjs",
-    "test:assistant": "node test/assistant-e2e.mjs",
+    "test:assistant": "node test/assistant-e2e.mjs && node test/assistant-delivery-e2e.mjs",
     "test:provider-parity": "node test/provider-parity.mjs"
   },
   "dependencies": {
