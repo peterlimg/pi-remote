@@ -1958,7 +1958,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       label.title = label.textContent;
       group.node.dataset.status = group.tools.some(tool => tool.status === 'error') ? 'error' : running ? 'working' : group.tools.some(tool => tool.status === 'pending') ? 'pending' : 'done';
       const mark = el('span', undefined, 'codemode-mark'); mark.setAttribute('aria-hidden', 'true');
-      mark.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 12"/></svg>';
+      mark.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-12-2 12"/></svg>';
       group.summary.append(mark);
     }
     if (recent || group.codemode) {
