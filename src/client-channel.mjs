@@ -92,7 +92,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsAssistant: true, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsAssistant: true, assistantId: service.assistant.id, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {

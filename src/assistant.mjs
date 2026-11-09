@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { secret, equalSecret } from './config.mjs';
@@ -13,6 +14,16 @@ const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.m
 const EVENT_PREFIX = '[Pi Remote session events]\n';
 const KEEP_EVENTS = 200;
 const publicError = (message, status = 400) => Object.assign(new Error(message), { public: true, status });
+// The user's installed pi-usage, so their Codex Fast setting also applies to Miso.
+function usageExtension(env = {}) {
+  const agent = env.PI_CODING_AGENT_DIR || process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent');
+  try {
+    if (!JSON.parse(readFileSync(join(agent, 'settings.json'), 'utf8')).packages?.includes('npm:@narumitw/pi-usage')) return [];
+    const manifest = join(agent, 'npm', 'node_modules', '@narumitw', 'pi-usage', 'package.json');
+    const entry = JSON.parse(readFileSync(manifest, 'utf8')).pi?.extensions?.[0];
+    return typeof entry === 'string' ? ['-e', join(dirname(manifest), entry)] : [];
+  } catch { return []; }
+}
 const clip = (value, max) => typeof value === 'string' && value.length > max ? value.slice(0, max) + '…' : value;
 
 function validate(data) {
@@ -53,7 +64,7 @@ export class Assistant {
     this.check();
     if (!this.origin) throw publicError('The assistant host is not ready.', 503);
     // shortcut: Miso needs a native Pi model; add provider-extension loading if an extension-only default must work.
-    const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve', '-e', extension, '--tools', 'sessions'];
+    const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve', '-e', extension, ...usageExtension(options.env), '--tools', 'sessions'];
     if (meta.model) args.push('--model', meta.model);
     if (meta.thinkingLevel) args.push('--thinking', meta.thinkingLevel);
     return { ...options, args: [...(options.args || []), ...args], env: { ...options.env,

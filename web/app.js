@@ -159,7 +159,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
-let supportsCoordinator = false, supportsWorkerInspection = false, coordinatorRenderKey, coordinatorLog;
+let assistantId, supportsCoordinator = false, supportsWorkerInspection = false, coordinatorRenderKey, coordinatorLog;
 let coordinatorDrag, coordinatorDragAnimation;
 const coordinatorPositions = new Map();
 let supportsSessionSections = false, supportsRecentAvailability = false, recentAvailability = 'online', supportsSessionClosing = false, supportsNewPreparation = false, supportsActivityDebug = false, listSection = 'overview', listGroups, listLoaded = 0, overviewLimit = 20;
@@ -446,7 +446,7 @@ function connect() {
       supportsActivityDebug = packet.supportsActivityDebug === true;
       supportsCoordinator = packet.supportsCoordinator === true;
       supportsWorkerInspection = packet.supportsWorkerInspection === true;
-      $('assistant-open').hidden = packet.supportsAssistant !== true;
+      $('assistant-open').hidden = packet.supportsAssistant !== true; assistantId = packet.assistantId;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -1021,6 +1021,7 @@ function showSessionKind(icon, item, size = 28) {
   return dressKind(icon, kind, size, status, unread);
 }
 function sessionKind(item) {
+  if (item.id === assistantId) return { type: 'miso', label: 'Miso', id: item.id };
   let choice = sessionIcons.get(item.id);
   if (!choice || choice.type === 'none') {
     // Save the first draw so rerenders and catalogue additions cannot reroll it.
@@ -1521,7 +1522,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   pendingSwipeRender = undefined;
   activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
-  renderProject(state.cwd, sessions.find(item => item.id === selected) || selectedSummary);
+  renderProject(state.cwd, sessions.find(item => item.id === selected) || selectedSummary || (state.id === assistantId ? state : undefined));
   $('status').textContent = state.status; $('status').dataset.status = state.status;
   $('empty').hidden = true; $('transcript').hidden = false; $('composer').hidden = false;
   if (state.error || $('notice').dataset.sessionId === state.id) notice(state.error, state.id);
@@ -2982,7 +2983,7 @@ function closeSearch() {
 $('assistant-open').innerHTML = `<span class="bot personality-bot" data-kind="miso" data-mood="idle" aria-hidden="true">${botSvg('miso', 'idle', 32)}</span>`;
 $('assistant-open').addEventListener('click', async () => {
   haptic();
-  try { await selectSession((await request('assistant')).sessionId); }
+  try { assistantId = (await request('assistant')).sessionId; await selectSession(assistantId); }
   catch (error) { notice(error.message); }
 });
 $('search-open').addEventListener('click', () => { haptic(); $('search-bar').classList.add('open'); $('search').focus({ preventScroll: true }); });
