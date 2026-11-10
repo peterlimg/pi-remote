@@ -338,8 +338,8 @@ try {
   beginClip('Send once and collect the reply');
   await draftCard.getByRole('button', { name: 'Send', exact: true }).click();
   const receipt = page.locator(`[data-draft-id="${draftId}"]`);
-  await check(receipt).toContainText('Sent to session');
-  await check(receipt).toContainText('Instruction received: Miso approved instruction: report the revised result.');
+  await check(receipt).toContainText('Replied: Instruction received: Miso approved instruction: report the revised result.');
+  await check(receipt.locator('details, h3')).toHaveCount(0);
   assert.equal(targetInputs().length, 1);
   assert.equal(text(targetInputs()[0].message), 'Miso approved instruction: report the revised result.');
   assert.equal((await draftAction({ action: 'send', draftId, revision: 3 })).value.ok, true);
