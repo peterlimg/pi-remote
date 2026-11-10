@@ -1551,7 +1551,8 @@ async function setPush(enable) {
   try {
     if (enable) {
       // iOS grants permission only when asked directly from the tap.
-      if (await Notification.requestPermission() !== 'granted') return;
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') { notice('Notifications were not allowed (' + permission + '). Check Settings → Notifications → Pi Remote.'); return; }
       const registration = await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true,
         applicationServerKey: Uint8Array.from(atob(pushKey.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0)) });
