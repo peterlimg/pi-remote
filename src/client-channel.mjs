@@ -94,7 +94,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsAssistant: true, assistantId: service.assistant.id, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -195,6 +195,11 @@ export function attachClient(socket, service, { pairing } = {}) {
           if (selected !== service.assistant.id || message.sessionId !== service.assistant.id) throw new Error('Open Miso before changing a draft.');
           value = await service.journal.execute(service.assistant.id, message.id, { type: 'assistantDraft', ...message.action },
             () => service.assistant.draftAction(message.action));
+        } else if (message.op === 'pushSubscribe' || message.op === 'pushUnsubscribe') {
+          if (!service.assistant.push) throw new Error('Notifications are unavailable on this computer.');
+          if (message.op === 'pushSubscribe') value = service.assistant.push.subscribe(message.subscription);
+          else if (typeof message.endpoint !== 'string') throw new Error('Invalid push subscription');
+          else value = service.assistant.push.unsubscribe(message.endpoint);
         } else if (message.op === 'assistant') {
           value = await service.assistant.open();
         } else if (message.op === 'newCoordinator') {

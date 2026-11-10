@@ -51,6 +51,8 @@ const entry = process.env.PI_REMOTE_SMOKE_PI_ENTRY || resolve('node_modules/@ear
 const local = existsSync(entry);
 const host = await startHost({ dir, config, port, publicUrl: config.publicUrl, relayUrl: '', roots: [sessions],
   ...(process.env.PI_REMOTE_ASSISTANT_DELAY_MS ? { assistantDelay: Number(process.env.PI_REMOTE_ASSISTANT_DELAY_MS) } : {}),
+  // A local fake push service stands in for Apple/Google; production accepts only their HTTPS hosts.
+  ...(process.env.PI_REMOTE_PUSH_TEST === '1' ? { allowPushEndpoint: url => url.protocol === 'http:' && url.hostname === '127.0.0.1' } : {}),
   workerOptions: { bin: local ? process.execPath : 'pi', prefix: [...(local ? [entry] : []), '-e', resolve('test/fixtures/coordinator-provider.mjs')],
     env: { PI_CODING_AGENT_DIR: agent, PI_COORDINATOR_FIXTURE_ROOT: root, PI_OFFLINE: '1' } } });
 // A separate Pi owns the terminal bridge; the host owns only its ordinary RPC sessions.

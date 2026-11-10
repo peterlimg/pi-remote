@@ -151,6 +151,9 @@ export class Assistant {
     this.record.events.push({ id: randomUUID(), sessionId: id, ...change, at: Date.now(), delivery: viewed ? 'skipped' : 'pending', ...(viewed ? { reason: 'viewed' } : {}) });
     for (let index; this.record.events.length > KEEP_EVENTS && (index = this.record.events.findIndex(event => event.delivery !== 'pending')) >= 0;) this.record.events.splice(index, 1);
     this.save(); this.schedule();
+    // The observed watermark makes this at most once per question, across restarts.
+    if (change.kind === 'question' && !viewed) void this.push?.send({ sessionId: id, tag: change.key, title: clip(item.state.title || 'Pi Remote', 100),
+      body: clip(item.state.dialog.title?.split(/\r?\n/)[0] || 'A session needs your input.', 200) });
   }
   // Batches events, then wakes Miso once it is idle.
   schedule() {

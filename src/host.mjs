@@ -11,6 +11,7 @@ import { serveStatic } from './http.mjs';
 import { connectRelay } from './relay.mjs';
 import { acceptSealed, e2eKey } from './e2e.mjs';
 import { createPairing } from './pairing.mjs';
+import { Push } from './push.mjs';
 
 export async function startHost(options = {}) {
   const dir = options.dir || dataDir(), config = options.config || loadConfig(dir);
@@ -21,6 +22,9 @@ export async function startHost(options = {}) {
   const pairing = createPairing(config);
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions, assistantDelay: options.assistantDelay });
   service.coordination.bridgeToken = config.bridgeToken;
+  // A damaged push.json disables notifications, never the host.
+  try { service.assistant.push = new Push(dir, options.allowPushEndpoint ? { allowEndpoint: options.allowPushEndpoint } : {}); }
+  catch (error) { console.error('Push notifications are unavailable:', error.message); }
   let closing;
   const logStop = message => {
     const line = `${new Date().toISOString()} Pi Remote host ${process.pid}: ${message.replace(/[\r\n]+/g, ' ')}\n`;

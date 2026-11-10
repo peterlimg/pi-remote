@@ -446,7 +446,7 @@ function connect() {
       supportsActivityDebug = packet.supportsActivityDebug === true;
       supportsCoordinator = packet.supportsCoordinator === true;
       supportsWorkerInspection = packet.supportsWorkerInspection === true;
-      $('assistant-open').hidden = packet.supportsAssistant !== true; assistantId = packet.assistantId;
+      $('assistant-open').hidden = packet.supportsAssistant !== true; assistantId = packet.assistantId; pushKey = packet.pushKey;
       if (supportsSessionSections) legacyList = undefined;
       blankDir = typeof packet.blankDir === 'string' ? packet.blankDir : undefined;
       for (const [id, item] of pending) {
@@ -459,6 +459,9 @@ function connect() {
         }
       }
       connected = true; reportViewing(); retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
+      void syncPush();
+      const opening = new URLSearchParams(location.search).get('open');
+      if (/^[a-f0-9]{64}$/.test(opening || '')) { history.replaceState(null, '', location.pathname); void selectSession(opening); }
       if (homeScreenLogin) {
         if (packet.supportsPairing) void homeScreenPairing();
         else { homeScreenLogin = false; $('home-screen-code').textContent = 'If the app still asks for a login, enter the pairing code shown by /pi-remote on your computer.'; }
@@ -1525,6 +1528,60 @@ function formatToolDuration(durationMs) {
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 const assistantCards = new Map();
+// Question notifications: the host pushes encrypted payloads; this subscribes the device.
+let pushKey, pushOn = false, pushBusy = false;
+const pushControl = el('div', undefined, 'assistant-push');
+const pushSupported = () => pushKey && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const keyText = buffer => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function pushSubscription() { return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription(); }
+async function syncPush() {
+  pushOn = false;
+  if (pushSupported()) {
+    try {
+      const subscription = await pushSubscription(), serverKey = subscription?.options.applicationServerKey;
+      // A different host key means the host's push identity was reset; the old subscription cannot work.
+      if (subscription && serverKey && keyText(serverKey) !== pushKey) await subscription.unsubscribe();
+      else if (subscription) { await request('pushSubscribe', { subscription: subscription.toJSON() }); pushOn = true; }
+    } catch { /* Shown as off; enabling again repairs it. */ }
+  }
+  renderPushControl();
+}
+async function setPush(enable) {
+  pushBusy = true; renderPushControl();
+  try {
+    if (enable) {
+      // iOS grants permission only when asked directly from the tap.
+      if (await Notification.requestPermission() !== 'granted') return;
+      const registration = await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true,
+        applicationServerKey: Uint8Array.from(atob(pushKey.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0)) });
+      await request('pushSubscribe', { subscription: subscription.toJSON() });
+    } else {
+      const subscription = await pushSubscription();
+      if (subscription) { await request('pushUnsubscribe', { endpoint: subscription.endpoint }); await subscription.unsubscribe(); }
+    }
+    pushOn = enable;
+  } catch (error) { notice('Could not ' + (enable ? 'turn on' : 'turn off') + ' notifications: ' + error.message); }
+  finally { pushBusy = false; renderPushControl(); }
+}
+function renderPushControl() {
+  if (!pushSupported()) {
+    pushControl.replaceChildren(...(pushKey && 'standalone' in navigator && !standalone
+      ? [el('p', 'For question notifications, add Pi Remote to your Home Screen and open it from there.', 'hint')] : []));
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    pushControl.replaceChildren(el('p', 'Notifications are blocked. Allow them for Pi Remote in your browser or system settings.', 'hint'));
+    return;
+  }
+  const button = el('button', pushOn ? 'Turn off' : 'Notify me when a session asks a question', pushOn ? 'quiet' : 'secondary');
+  button.type = 'button'; button.disabled = pushBusy;
+  button.addEventListener('click', () => void setPush(!pushOn));
+  pushControl.replaceChildren(...(pushOn ? [el('span', 'Question notifications are on.', 'hint')] : []), button);
+}
+navigator.serviceWorker?.addEventListener('message', event => {
+  if (event.data?.type === 'openSession' && /^[a-f0-9]{64}$/.test(event.data.sessionId || '')) void selectSession(event.data.sessionId);
+});
 function renderCheckin(state) {
   const section = el('section', undefined, 'assistant-checkin');
   section.setAttribute('aria-label', 'Miso check-in');
@@ -1533,7 +1590,7 @@ function renderCheckin(state) {
   }
   const { watching, working, questions } = state.assistant;
   section.append(el('p', watching ? `Watching ${watching} live ${watching === 1 ? 'session' : 'sessions'}. ${working} working. ${questions.length ? `${questions.length} ${questions.length === 1 ? 'needs' : 'need'} your input.` : 'Nothing needs your input right now.'}`
-    : 'No live sessions yet. Open a session and I’ll watch for questions and finished work.', 'hint'));
+    : 'No live sessions yet. Open a session and I’ll watch for questions and finished work.', 'hint'), pushControl);
   const keep = new Set();
   for (const question of questions) {
     const { sessionId, dialog } = question, key = sessionId + ':' + dialog.id;

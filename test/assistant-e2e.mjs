@@ -6,8 +6,10 @@ import { chromium, devices, expect } from '@playwright/test';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, appendFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createECDH, createDecipheriv, createPublicKey, hkdfSync, verify } from 'node:crypto';
+import { createServer } from 'node:http';
 import { socket, until } from './helpers.mjs';
+import { Push } from '../src/push.mjs';
 
 const clientToken = 'browser-test-token-only-123456789012345';
 const port = Number(process.env.PI_REMOTE_ASSISTANT_TEST_PORT || 8816), url = 'http://127.0.0.1:' + port;
@@ -15,7 +17,39 @@ const evidence = mkdtempSync(join(tmpdir(), 'pi-assistant-proof-'));
 console.log('Evidence: ' + evidence);
 const env = { ...process.env, PI_OFFLINE: '1' };
 for (const name of Object.keys(env)) if (name.startsWith('PI_REMOTE_') || name === 'PI_COORDINATOR_FIXTURE_ROOT') delete env[name];
-Object.assign(env, { PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_REMOTE_ASSISTANT_DELAY_MS: '300' });
+Object.assign(env, { PI_REMOTE_COORDINATOR_TEST_PORT: String(port), PI_REMOTE_ASSISTANT_DELAY_MS: '300', PI_REMOTE_PUSH_TEST: '1' });
+
+// A fake push service. Decryption here is written from RFC 8291 independently of src/push.mjs.
+const pushes = [], receiver = createECDH('prime256v1'), authSecret = randomBytes(16);
+receiver.generateKeys();
+const pushServer = createServer((req, res) => {
+  const chunks = []; req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => { pushes.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) }); res.writeHead(req.url === '/gone' ? 410 : 201); res.end(); });
+});
+await new Promise(resolve => pushServer.listen(0, '127.0.0.1', resolve));
+const pushOrigin = 'http://127.0.0.1:' + pushServer.address().port;
+const openPush = push => {
+  const salt = push.body.subarray(0, 16), sender = push.body.subarray(21, 21 + push.body[20]), sealed = push.body.subarray(21 + push.body[20]);
+  const ikm = hkdfSync('sha256', receiver.computeSecret(sender), authSecret, Buffer.concat([Buffer.from('WebPush: info\0'), receiver.getPublicKey(), sender]), 32);
+  const decipher = createDecipheriv('aes-128-gcm', Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16)),
+    Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12)));
+  decipher.setAuthTag(sealed.subarray(-16));
+  const plain = Buffer.concat([decipher.update(sealed.subarray(0, -16)), decipher.final()]);
+  assert.equal(plain.at(-1), 2, 'Single final record delimiter');
+  const [, jwt, k] = push.headers.authorization.match(/^vapid t=([^,]+), k=(.+)$/), [head, claims, signature] = jwt.split('.');
+  const key = Buffer.from(k, 'base64url');
+  const publicKey = createPublicKey({ format: 'jwk', key: { kty: 'EC', crv: 'P-256', x: key.subarray(1, 33).toString('base64url'), y: key.subarray(33).toString('base64url') } });
+  assert(verify('sha256', Buffer.from(head + '.' + claims), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')), 'VAPID signature verifies');
+  assert.equal(JSON.parse(Buffer.from(claims, 'base64url')).aud, pushOrigin);
+  assert.equal(push.headers['content-encoding'], 'aes128gcm');
+  return JSON.parse(plain.subarray(0, -1));
+};
+const subscription = path => ({ endpoint: pushOrigin + path, keys: { p256dh: receiver.getPublicKey().toString('base64url'), auth: authSecret.toString('base64url') } });
+// Production accepts only the browsers' HTTPS push services.
+const production = new Push(mkdtempSync(join(tmpdir(), 'pi-push-')));
+assert.throws(() => production.subscribe({ ...subscription('/x'), endpoint: 'https://attacker.example/x' }), /Invalid push subscription/);
+assert.throws(() => production.subscribe({ ...subscription('/x'), endpoint: 'http://web.push.apple.com/x' }), /Invalid push subscription/);
+assert.deepEqual(production.subscribe({ ...subscription('/x'), endpoint: 'https://web.push.apple.com/x' }), { subscribed: true });
 
 const recording = process.env.PI_REMOTE_ASSISTANT_RECORD === '1', clips = [];
 let recordAt, video;
@@ -71,6 +105,7 @@ try {
   context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: 'reduce',
     ...(recording ? { recordVideo: { dir: join(evidence, 'video'), size: { width: 390, height: 844 } } } : {}) });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+  await context.grantPermissions(['notifications'], { origin: url });
   const page = await context.newPage(), errors = [], frames = [];
   recordAt = Date.now(); video = page.video();
   page.on('pageerror', error => errors.push(error.message));
@@ -88,6 +123,26 @@ try {
   await page.screenshot({ path: join(evidence, 'first-open.png') });
   proof.welcome = 'First open shows a greeting and a host-derived live-session check-in without a model call';
   await endClip(page);
+
+  // The real service worker renders a delivered push; ?open= routes a notification tap to its session.
+  await check(page.getByRole('button', { name: 'Notify me when a session asks a question', exact: true })).toBeVisible();
+  const cdp = await context.newCDPSession(page);
+  const registrationId = new Promise(resolve => cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+    const found = registrations.find(item => item.scopeURL === url + '/' && !item.isDeleted); if (found) resolve(found.registrationId);
+  }));
+  await cdp.send('ServiceWorker.enable');
+  await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready; });
+  await cdp.send('ServiceWorker.deliverPushMessage', { origin: url, registrationId: await registrationId,
+    data: JSON.stringify({ sessionId: project.id, tag: 'question:proof', title: project.title, body: 'Post these 3 review comments to the PR?' }) });
+  await check.poll(() => page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map(item => [item.title, item.body, item.tag, item.data.sessionId])))
+    .toEqual([[project.title, 'Post these 3 review comments to the PR?', 'question:proof', project.id]]);
+  await page.goto(url + '/?open=' + project.id);
+  await check(page.locator('#title')).toHaveText(project.title);
+  assert.equal(new URL(page.url()).search, '');
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await page.locator('#assistant-open').click();
+  await check(page.locator('#title')).toHaveText('Miso');
+  proof.serviceWorker = 'The service worker shows a pushed question with its session, and the notification link opens that session';
   await until(() => client.messages.find(packet => packet.type === 'ready')?.supportsAssistant, 10000);
   const opened = await client.request('assistant');
   assert.equal(opened.ok, true, opened.error);
@@ -108,6 +163,10 @@ try {
     headers: { Authorization: 'Bearer ' + ledger().token }, body: JSON.stringify({ action: 'answer', sessionId: project.id, answer: { value: 'Post them' } }) });
   assert.equal(forbiddenAnswer.status, 400, 'Miso’s read-only API cannot answer questions');
   proof.access = 'Requests without Miso’s token or from a browser origin get 403; Miso cannot answer through its API';
+  for (const path of ['/live', '/gone']) assert.equal((await client.request('pushSubscribe', { subscription: subscription(path) })).value.subscribed, true);
+  assert.equal((await client.request('pushSubscribe', { subscription: { ...subscription('/x'), endpoint: 'https://attacker.example/x' } })).ok, false);
+  const pushRecord = () => JSON.parse(readFileSync(join(root, 'host', 'push.json'), 'utf8'));
+  assert.equal(pushRecord().subscriptions.length, 2);
 
   // A completion in the conversation on screen must not spend model tokens.
   const quietCalls = misoRequests().length, viewedFrom = ledger().events.length;
@@ -118,6 +177,17 @@ try {
   const viewedEvent = await until(() => ledger().events.slice(viewedFrom).find(item => item.kind === 'finished' && item.delivery !== 'pending'), 10000);
   assert.equal(viewedEvent.delivery, 'skipped', 'A viewed completion must not wake Miso');
   assert.equal(misoRequests().length, quietCalls, 'Watching this conversation must cost zero Miso model calls');
+  // A question in the conversation on screen is already visible: no push.
+  const viewedFrom2 = ledger().events.length;
+  assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
+  const viewedQuestion = await until(() => ledger().events.slice(viewedFrom2).find(item => item.kind === 'question'), 15000);
+  assert.equal(viewedQuestion.reason, 'viewed');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.equal(pushes.length, 0, 'A viewed question must not notify');
+  await client.request('watch', { sessionId: project.id });
+  const viewedDialog = client.messages.findLast(packet => packet.type === 'snapshot' && packet.sessionId === project.id).state.dialog;
+  assert.equal((await client.request('answer', { sessionId: project.id, answer: { dialogId: viewedDialog.id, value: 'Not yet' } })).value.ok, true);
+  await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
   await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await page.locator('#assistant-open').click();
   await check(page.locator('#title')).toHaveText('Miso');
@@ -131,6 +201,12 @@ try {
   await check(card).toContainText('Post these 3 review comments to the PR?');
   await check(card.getByRole('button', { name: 'Post them', exact: true })).toBeVisible();
   const question = await until(() => event('question'), 30000);
+  await until(() => pushes.some(push => push.path === '/live'), 10000);
+  assert.deepEqual(openPush(pushes.find(push => push.path === '/live')),
+    { sessionId: project.id, tag: question.key, title: project.title, body: 'Post these 3 review comments to the PR?' });
+  await until(() => pushRecord().subscriptions.length === 1, 5000);
+  assert.equal(pushRecord().subscriptions[0].endpoint, pushOrigin + '/live', 'A gone (410) subscription is removed');
+  proof.push = 'A question in a session not on screen pushes one VAPID-signed, RFC 8291-encrypted notification; viewed questions do not, and gone subscriptions are dropped';
   await until(() => misoMessages('assistant').some(body => body.includes('asks: Post these 3 review comments to the PR? (Post them / Not yet)')), 30000);
   assert.equal((await overview()).find(row => row.id === project.id).status, 'waiting', 'Miso must leave the question for the user');
   assert.equal((await client.request('watch', { sessionId: project.id })).ok, true);
@@ -309,6 +385,9 @@ try {
   for (const request of misoRequests()) assert.deepEqual(request.tools, ['sessions']);
   proof.injection = 'An injected bash request was refused; every Miso request had only the sessions tool';
 
+  const tags = pushes.filter(push => push.path === '/live').map(push => openPush(push).tag);
+  assert.equal(new Set(tags).size, tags.length, 'At most one push per question');
+  assert(!tags.includes(viewedQuestion.key));
   // Restart: an interrupted delivery is never repeated; a saved pending event is delivered once.
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, 'answers.json'), JSON.stringify(frames, null, 2));
@@ -332,6 +411,7 @@ try {
   writeFileSync(join(evidence, 'proof.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(proof, null, 2));
 } finally {
+  pushServer.close();
   if (context) await context.tracing.stop({ path: join(evidence, 'trace.zip') }).catch(() => {});
   await browser?.close();
   await stop();
