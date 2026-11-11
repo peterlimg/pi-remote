@@ -338,8 +338,8 @@ try {
   beginClip('Send once and collect the reply');
   await draftCard.getByRole('button', { name: 'Send', exact: true }).click();
   const receipt = page.locator(`[data-draft-id="${draftId}"]`);
-  await check(receipt).toContainText('Replied: Instruction received: Miso approved instruction: report the revised result.');
-  await check(receipt.locator('details, h3')).toHaveCount(0);
+  await until(() => ledger().drafts.find(draft => draft.id === draftId).feedback?.text === 'Instruction received: Miso approved instruction: report the revised result.');
+  await check(receipt).toHaveCount(0);
   assert.equal(targetInputs().length, 1);
   assert.equal(text(targetInputs()[0].message), 'Miso approved instruction: report the revised result.');
   assert.equal((await draftAction({ action: 'send', draftId, revision: 3 })).value.ok, true);
@@ -372,8 +372,8 @@ try {
   assert.equal((await draftAction({ action: 'send', draftId: terminalDraft.id, revision: 1 })).value.ok, false);
   await draftAction({ action: 'cancel', draftId: terminalDraft.id, revision: 1 });
   await page.reload(); await page.locator('#assistant-open').click();
-  await check(page.locator(`[data-draft-id="${draftId}"]`)).toContainText('Instruction received:');
-  proof.draftGuards = 'Busy targets and terminal sessions are not sent drafts; cancellation wins before dispatch and receipts survive page reload';
+  for (const id of [draftId, pendingDraft.id, terminalDraft.id]) await check(page.locator(`[data-draft-id="${id}"]`)).toHaveCount(0);
+  proof.draftGuards = 'Busy targets and terminal sessions are not sent drafts; cancellation wins before dispatch; answered and discarded drafts leave the check-in';
   await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
 
   // Text in a session cannot make Miso act: its only tool is sessions.

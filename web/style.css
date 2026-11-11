@@ -826,8 +826,6 @@ pre.message-text { white-space: pre-wrap; }
 .assistant-question-source { display: block; max-width: 100%; min-height: 44px; padding: 0; color: var(--accent); text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .assistant-question h3 { margin: 8px 0 16px; font-size: 17px; }
 .assistant-question-message { white-space: pre-wrap; }
-.assistant-draft.done { margin: 8px 0; padding: 8px 16px 12px; }
-.assistant-draft-outcome { display: -webkit-box; margin: 0; overflow: hidden; color: var(--muted); -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .assistant-question-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .assistant-question-actions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .assistant-question :is(input, textarea) { width: 100%; margin-bottom: 12px; font-size: 16px; }

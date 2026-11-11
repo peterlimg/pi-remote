@@ -1654,12 +1654,6 @@ function renderCheckin(state) {
       card.setAttribute('aria-label', 'Draft to ' + (draft.title || draft.project));
       const source = el('button', draft.title || draft.project || 'Open session', 'quiet assistant-question-source'); source.type = 'button';
       source.addEventListener('click', () => selectSession(draft.sessionId));
-      // Finished drafts shrink to an outcome line; the session holds the full exchange.
-      if (draft.state === 'cancelled' || draft.state === 'delivered' && draft.feedback) {
-        card.classList.add('done');
-        card.append(source, el('p', draft.state === 'cancelled' ? 'Draft discarded.' : draft.feedback.text ? 'Replied: ' + draft.feedback.text : 'Sent. ' + draft.feedback.note, 'assistant-draft-outcome'));
-        assistantCards.set(key, card); section.append(card); continue;
-      }
       const heading = el('h3', ({ drafted: 'Review before sending', delivering: 'Sending…', delivered: 'Sent to session', uncertain: 'Delivery uncertain', cancelled: 'Draft cancelled' })[draft.state]);
       heading.tabIndex = -1; card.append(source, heading);
       const feedback = el('p', '', 'hint'); feedback.setAttribute('role', 'status'); feedback.hidden = true;

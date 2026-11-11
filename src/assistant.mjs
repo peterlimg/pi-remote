@@ -219,7 +219,8 @@ export class Assistant {
   checkin() {
     const sessions = [...this.service.live.values()].filter(item => !item.resumable && this.watchable(item.state.id));
     return { watching: sessions.length, working: sessions.filter(item => item.state.status === 'working').length,
-      drafts: this.record.drafts.filter(draft => ['drafted', 'delivering', 'uncertain'].includes(draft.state) || draft.state === 'delivered' && !draft.feedback || this.record.drafts.slice(-3).includes(draft))
+      // Only drafts that still involve the user; finished replies live in the session and Miso's chat.
+      drafts: this.record.drafts.filter(draft => ['drafted', 'delivering', 'uncertain'].includes(draft.state) || draft.state === 'delivered' && !draft.feedback)
         .map(draft => this.draftView(draft)),
       questions: sessions.filter(item => item.state.dialog).map(({ state }) => ({ sessionId: state.id,
         title: state.title, project: basename(state.cwd || ''), dialog: structuredClone(state.dialog) })) };
