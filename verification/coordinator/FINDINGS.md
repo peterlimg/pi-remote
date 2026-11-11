@@ -1,6 +1,6 @@
 # Coordinator ordering and bounded recovery
 
-Product source confirmed at `c163e736a75eb217baf88f3c21510adf0fbbdac1`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
+Product source confirmed at `aadc911615378224a69833cf58c3a80683bd9945`; see coverage.json. All seven safety properties and all nine real-host replays pass. All seven independent broken variants are caught by both TLC and code replay, and restored checks pass without modifying product files.
 
 ## Checked promises
 
@@ -30,6 +30,14 @@ The new admission helper is included in source drift checks. SDK package trust, 
 Legacy splitting runs before runtime recovery. It validates the original records and matching partial files before writing missing session files, then archives the unchanged shared contents. Conflicts fail closed without overwriting either copy. Multiple-owner migration and physical file isolation are outside the single-owner models: two focused real-host storage E2Es cover matching/conflicting partial splits, preserved questions/reports/mailboxes/capabilities, scoped writes, permissions, cross-main denial and reload. The existing parent-activity E2E also passes through legacy migration.
 
 The new store is included in source drift checks. All seven properties, nine host replays and seven independent negative controls pass against the reconciled source. Native coordinator and crash-recovery proofs pass, as does SDK replay evidence `pi-sdk-worker-proof-WkQpGe`; live paid-model behavior and power-loss durability remain unverified.
+
+## Delegation policy reconciliation
+
+Ordinary sessions may now choose useful delegation within the user's authorized task, guided by the packaged `coordinate-work` skill. Quick/dependent work and no-workers requests stay inline; coding still requires an editing request. The changes in `extension/coordinator.mjs` affect guidance and tool descriptions only, not tool parameters, execution, task states, persistence, permission checks, generations, Stop or retry limits. Both models continue to start from an authorized task. Neither needs a new action or a weakened invariant.
+
+The native phone proof verifies actual Pi requests receive the automatic policy, inline override and package-discovered skill, then observes a real skill-file read before scripted dispatch. It also checks simple/no-workers requests create no membership, restricted workers do not inherit delegation skills, and normal tools/model/history remain intact. The SDK replay proof passes. These checks prove prompt/resource delivery and the scripted workflow, not real-model routing quality, obedience or cost savings. Task selection and semantic authorization judgments remain outside the bounded models.
+
+All seven properties, nine real-host replays and seven independent negative controls pass against this source without product changes during verification.
 
 ## Negative controls
 
