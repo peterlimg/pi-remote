@@ -22,7 +22,7 @@ seed(join(root, 'project', 'alpha.txt'), 'ALPHA_VALUE=stable\n');
 seed(join(root, 'project', 'beta.txt'), 'BETA_VALUE=hold\n');
 seed(join(root, 'outside.txt'), 'PRIVATE_OUTSIDE_SHOULD_NOT_APPEAR\n');
 if (!existsSync(join(root, 'project', 'escape.txt'))) symlinkSync(join(root, 'outside.txt'), join(root, 'project', 'escape.txt'));
-seed(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'coordinator-fixture', defaultModel: 'fixture', compaction: { enabled: false }, retry: { enabled: false } }));
+seed(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'coordinator-fixture', defaultModel: 'fixture', packages: [resolve('.')], compaction: { enabled: false }, retry: { enabled: false } }));
 if (process.env.PI_RECOVERY_GIT === '1') {
   const bin = join(root, 'git-bin'); mkdirSync(bin, { recursive: true });
   process.env.PI_RECOVERY_REAL_GIT = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();

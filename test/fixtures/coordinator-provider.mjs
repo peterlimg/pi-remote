@@ -1,7 +1,8 @@
 import { appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { getCurrentTools, Type } from '@earendil-works/pi-ai';
+import { getCurrentTools, getCurrentSystemMessage, Type } from '@earendil-works/pi-ai';
 import { parseTaskInput, taskInputText } from '../../src/task-input.mjs';
 
 export default function verificationProvider(pi) {
@@ -32,7 +33,10 @@ export default function verificationProvider(pi) {
       const original = messages.filter(message => message.role === 'user').map(message => parseTaskInput(text(message))).find(item => item?.messages.length)?.messages[0]?.text || input;
       const recovering = !!envelope?.note; let failure;
       const naming = messages.some(message => message.role === 'system' && text(message).startsWith('Name this coding session from the first user request'));
+      const sections = getCurrentSystemMessage(messages)?.sections || {}, policy = sections.pi_remote_coordination || '';
       audit({ kind: 'request', purpose: naming ? 'session-title' : 'agent', input, tools: getCurrentTools(context.messages).map(tool => tool.name),
+        automaticDelegation: policy.includes('Explicit worker requests are not required.'), noWorkersOverride: policy.includes('Honor requests to keep work inline or use no workers.'),
+        coordinationSkillAvailable: (sections.skills || '').includes('<name>coordinate-work</name>'),
         results: results.map(message => ({ name: message.toolName, isError: !!message.isError, text: text(message) })) });
       const call = (name, args) => ({ type: 'toolCall', id: 'fixture-' + process.pid + '-' + (++sequence), name, arguments: args });
       const words = value => [{ type: 'text', text: value }];
@@ -127,16 +131,17 @@ export default function verificationProvider(pi) {
             if (latest.review) return [call('remote_tasks', { action: 'integrate', taskId: latest.id, revision: latest.review.revision })];
             return words(input.startsWith('Stop') ? 'Stopped the notes worker only.' : 'Reviewed and integrated the calculation fix.');
           }
-          if (input === 'Read alpha before delegating.') {
+          if (['Read alpha before delegating.', 'No workers. Read alpha.txt and summarize it here.'].includes(input)) {
             if (!results.length) return [call('read', { path: 'alpha.txt' })];
-            return words('Read ALPHA_VALUE=stable in this existing conversation. No workers were started.');
+            return words(input.startsWith('No workers.') ? 'Handled inline as requested. ALPHA_VALUE=stable.' : 'Read ALPHA_VALUE=stable in this existing conversation. No workers were started.');
           }
           if (input === 'Start independent inspection.') {
             if (!results.length) return [call('remote_tasks', { action: 'assign', title: 'Independent inspection', instruction: 'Inspect alpha.txt and ask whether to keep its original identifier.', model: 'coordinator-fixture/fixture' })];
             return words('Started an independent worker under this conversation.');
           }
           if (input === 'Investigate both fixture files.') {
-            if (!results.length) return [
+            if (!results.length) return [call('read', { path: fileURLToPath(new URL('../../skills/coordinate-work/SKILL.md', import.meta.url)) })];
+            if (results.length === 1) return [
               call('remote_tasks', { action: 'assign', title: 'First inspection', instruction: 'Inspect alpha.txt and ask whether to keep its original identifier.' }),
               call('remote_tasks', { action: 'assign', title: 'Second inspection', instruction: 'Inspect beta.txt and keep investigating until stopped.' })
             ];

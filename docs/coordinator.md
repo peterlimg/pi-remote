@@ -1,6 +1,6 @@
 # Workers in ordinary sessions
 
-Every Pi Remote session can coordinate background investigations and coding assignments. Ask for workers in your current conversation. There is no setup button, coordinator mode, or replacement conversation. The session keeps its history, model, instructions, extensions, and usual tools.
+Every Pi Remote session can coordinate background investigations and coding assignments. Describe the work normally; the model decides whether useful parts should run in workers. There is no trigger phrase, setup button, coordinator mode, or replacement conversation. The session keeps its history, model, instructions, extensions, and usual tools.
 
 ## Use workers
 
@@ -8,7 +8,7 @@ Requires Pi 1.4 or newer. Workers can use native Pi models or `claude-sdk/*` whe
 
 The parent supplies the SDK package's declared entry from Pi's loaded resource metadata, not from model arguments. The host validates and retains that source for the task, then explicitly loads only it alongside the coordination extension. It does not enable general extension discovery or install a package. Missing or invalid sources fail before task creation; legacy SDK tasks without a saved source stay blocked.
 
-1. Ask your current session to delegate independent investigations or development tasks. It can assign up to two active tasks and continue answering while they run. Ordinary messages do not create workers or coordinator records.
+1. Give your current session a task. The packaged `coordinate-work` skill guides the choice between inline work and useful independent investigations or bounded coding assignments. Quick questions and tightly dependent work stay inline; say **no workers** to keep a task inline. Explicit worker requests remain supported. The model announces useful delegation and can assign up to two active tasks while continuing to answer here. Only an actual assignment creates coordinator records.
 2. The compact **Workers** row immediately above the composer opens a translucent bottom sheet with the worker roster. It appears only after workers exist. Different conversations in the same project own separate workers.
 3. Give every reply and command in this main conversation. The assistant presents decisions, relays answers to the intended task, reviews reports, and summarizes findings. It must clarify ambiguous references.
 4. Tap a worker to inspect its live, read-only log without leaving the main conversation. **Task details** contains its assignment, question, and report. Use the header's Back arrow to return to the roster, or Close, Escape, or a downward pull to dismiss. Short pulls snap back; scrolling an already-scrolled log does not dismiss it. **Session details → Background tasks** opens the same sheet. Returned and accepted results remain distinct.
@@ -20,6 +20,12 @@ A parent appears **Working** in **Now** while any owned worker is starting, work
 The sheet keeps the selected parent, composer, draft, attachments, and main reading position intact. Its separate read-only subscription watches one owned worker alongside the parent on the existing authenticated connection. Closing it or selecting another conversation clears that subscription. It reconnects after a host restart; recovery can add a continuation note without duplicating recorded instruction bodies. Explicitly opening a worker from session search still hides all input controls and offers a return to its parent.
 
 Stopping the main response does not stop workers. Ask the assistant to stop a specific task.
+
+## Delegation decisions
+
+Pi Remote advertises `skills/coordinate-work/SKILL.md` through its package manifest. A short always-on rule permits task-scoped delegation without asking for permission each time; the skill supplies selection and review guidance. These are model instructions, not keyword routing or an automatic scheduler. Model decisions may vary, and extra workers add model usage.
+
+A question or investigation does not authorize edits. Coding requires a user request for changes. Delegation does not authorize private host/account access, approval dialogs, shared-service restarts, commits or pushes. Workers inherit the supported parent model and thinking effort; choosing another model still requires authorization. Required uncommitted parent changes or tightly coupled edits are reasons to stay inline. A report never authorizes new work. All user decisions and worker questions remain in this main conversation.
 
 ## Coding assignments
 

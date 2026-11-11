@@ -182,6 +182,9 @@ if (process.argv[2] === 'doctor') {
     await check(page.locator('#transcript')).toContainText('No workers were started.');
     assert.equal(ledger().coordinators.length, 0, 'Ordinary conversation must not create coordinator membership');
     assert(!existsSync(join(root, 'host', 'coordinator-tasks.json')), 'A shared task file must not be created');
+    await send('No workers. Read alpha.txt and summarize it here.');
+    await check(page.locator('#transcript')).toContainText('Handled inline as requested. ALPHA_VALUE=stable.');
+    assert.equal(ledger().coordinators.length, 0, 'A no-workers request must stay inline');
     await send('Investigate both fixture files.'); await openTasks();
     await check(taskRow('First inspection')).toContainText('Needs answer');
     await check(taskRow('Second inspection')).toContainText('Working');
@@ -521,6 +524,12 @@ if (process.argv[2] === 'doctor') {
       else for (const name of ['read', 'bash', 'edit', 'write', 'remote_tasks']) assert(request.tools.includes(name), 'Normal sessions must retain ' + name);
       assert.equal(new Set(request.tools).size, request.tools.length);
     }
+    const ordinary = requests.filter(event => event.role === 'session' && event.purpose === 'agent');
+    assert(ordinary.length && ordinary.every(event => event.automaticDelegation && event.noWorkersOverride), 'Real parent requests must carry automatic delegation and the inline override');
+    assert(ordinary.every(event => event.coordinationSkillAvailable), 'The installed package must advertise coordinate-work to ordinary sessions');
+    assert(ordinary.some(event => event.input === 'Investigate both fixture files.' && event.results.some(result => result.name === 'read' && !result.isError && result.text.includes('# Coordinate work'))), 'The parent must load the packaged skill through its real read tool before the scripted delegation');
+    assert(requests.filter(event => event.role === 'worker').every(event => !event.coordinationSkillAvailable), 'Restricted workers must not inherit delegation skills');
+    record('packaged coordination skill and automatic policy reach real Pi; simple and no-workers requests stay inline before a scripted skill-guided delegation');
     const results = requests.filter(event => event.role === 'worker').flatMap(event => event.results);
     assert(results.filter(result => result.name === 'read' && result.isError).length >= 2, 'Outside paths and escaping symlinks must be denied');
     for (const name of ['write', 'bash']) assert(results.some(result => result.name === name && result.isError), name + ' must be unavailable');
