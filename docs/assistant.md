@@ -26,7 +26,7 @@ Session-change notifications and session reads have short activity labels. Expan
 
 ## Question notifications
 
-In Miso's check-in, tap **Notify me when a session asks a question**. On iPhone this works only after adding Pi Remote to the Home Screen and opening it from there (iOS 16.4+). The phone registers `/sw.js` and subscribes with the host's VAPID key.
+In Miso's **⋯** menu, tap **Turn on question notifications**. The item appears only where Web Push is available; on iPhone that is after adding Pi Remote to the Home Screen and opening it from there (iOS 16.4+). The phone registers `/sw.js` and subscribes with the host's VAPID key.
 
 The host itself sends notifications, not Miso, so they cost no model tokens. When an independent session opens a new question and no phone is viewing that session, the host sends one Web Push to each subscribed device. The persisted question watermark makes this at most once per question, including across restarts. A failed push is logged and never retried. Tapping the notification opens that session, where the question waits. Finished turns do not notify.
 

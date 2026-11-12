@@ -159,6 +159,7 @@ const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 const reasoningLevels = { off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 let lastDialog, blankDir, settingsPicker, supportsHistory = false, supportsImages = false, supportsUploads = false, supportsVideos = false, supportsCommandResults = false, allowResume = false, selectedSummary, legacyList;
 let listLimit = 20, searchQuery = '', listMatched = 0, listLoading = true, listError = '', searchTimer, listRequest = 0;
+let pushKey, pushOn = false, pushBusy = false;
 let assistantId, supportsCoordinator = false, supportsWorkerInspection = false, coordinatorRenderKey, coordinatorLog;
 let coordinatorDrag, coordinatorDragAnimation;
 const coordinatorPositions = new Map();
@@ -1143,7 +1144,9 @@ function projectName(cwd) {
 }
 function renderProject(cwd = '', item) {
   $('project').textContent = displayPaths(cwd);
-  $('project-name').textContent = projectName(cwd);
+  // Miso's header carries its live status instead of a status line in the chat.
+  const watch = item?.id === assistantId && cache.get(assistantId)?.assistant;
+  $('project-name').textContent = !watch ? projectName(cwd) : watch.questions.length ? `${watch.questions.length} ${watch.questions.length === 1 ? 'needs' : 'need'} you` : `Watching ${watch.watching}`;
   $('project-name').hidden = !$('project-name').textContent;
   $('title-kind').replaceChildren(...headingKind(item));
 }
@@ -1529,9 +1532,7 @@ function formatToolDuration(durationMs) {
 }
 const assistantCards = new Map();
 // Question notifications: the host pushes encrypted payloads; this subscribes the device.
-let pushKey, pushOn = false, pushBusy = false;
-const pushControl = el('div', undefined, 'assistant-push');
-const pushSupported = () => pushKey && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function pushSupported() { return pushKey && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
 const keyText = buffer => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function pushSubscription() { return (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription(); }
 async function syncPush() {
@@ -1566,20 +1567,12 @@ async function setPush(enable) {
   finally { pushBusy = false; renderPushControl(); }
 }
 function renderPushControl() {
-  if (!pushSupported()) {
-    pushControl.replaceChildren(...(pushKey && 'standalone' in navigator && !standalone
-      ? [el('p', 'For question notifications, add Pi Remote to your Home Screen and open it from there.', 'hint')] : []));
-    return;
-  }
-  if (Notification.permission === 'denied') {
-    pushControl.replaceChildren(el('p', 'Notifications are blocked. Allow them for Pi Remote in your browser or system settings.', 'hint'));
-    return;
-  }
-  const button = el('button', pushOn ? 'Turn off' : 'Notify me when a session asks a question', pushOn ? 'quiet' : 'secondary');
-  button.type = 'button'; button.disabled = pushBusy;
-  button.addEventListener('click', () => void setPush(!pushOn));
-  pushControl.replaceChildren(...(pushOn ? [el('span', 'Question notifications are on.', 'hint')] : []), button);
+  const button = $('assistant-push'), blocked = pushSupported() && Notification.permission === 'denied';
+  button.hidden = selected !== assistantId || !pushSupported();
+  button.textContent = blocked ? 'Notifications blocked in Settings' : pushOn ? 'Turn off question notifications' : 'Turn on question notifications';
+  button.disabled = pushBusy || blocked;
 }
+$('assistant-push').addEventListener('click', () => void setPush(!pushOn));
 navigator.serviceWorker?.addEventListener('message', event => {
   if (event.data?.type === 'openSession' && /^[a-f0-9]{64}$/.test(event.data.sessionId || '')) void selectSession(event.data.sessionId);
 });
@@ -1589,9 +1582,7 @@ function renderCheckin(state) {
   if (!state.messages?.length) {
     section.append(el('h2', "Hi, I'm Miso."), el('p', 'I keep an eye on your sessions. Ask me what needs you, or answer a question below.'));
   }
-  const { watching, working, questions } = state.assistant;
-  section.append(el('p', watching ? `Watching ${watching} live ${watching === 1 ? 'session' : 'sessions'}. ${working} working. ${questions.length ? `${questions.length} ${questions.length === 1 ? 'needs' : 'need'} your input.` : 'Nothing needs your input right now.'}`
-    : 'No live sessions yet. Open a session and I’ll watch for questions and finished work.', 'hint'), pushControl);
+  const { questions } = state.assistant;
   const keep = new Set();
   for (const question of questions) {
     const { sessionId, dialog } = question, key = sessionId + ':' + dialog.id;
@@ -1883,6 +1874,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (loading) fragment.append(loading);
   if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   const { recovered } = replyAttempts(state, messages);
+  // Miso's automatic check-ins: each supersedes the last, so older ones fold behind one line.
+  let automatic = false, updates;
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
@@ -1891,21 +1884,13 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       continue;
     }
     // Internal notices and extension prompts belong in quiet activity rows, not chat bubbles.
-    const sessionEvent = state.assistant && message.role === 'user' && userMessageText(message).startsWith('[Pi Remote session events]\n');
-    if (message.source === 'extension' || message.activityLabel || sessionEvent) {
+    if (state.assistant && message.role === 'user' && userMessageText(message).startsWith('[Pi Remote session events]\n')) { automatic = true; activity = undefined; continue; }
+    if (message.source === 'extension' || message.activityLabel) {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
       node.dataset.disclosureId = 'prompt:' + message.id; node.dataset.scrollKey = node.dataset.disclosureId;
       node.open = expanded.get(node.dataset.disclosureId) ?? false;
-      let activityLabel = message.activityLabel || 'Prompted by an extension';
-      if (sessionEvent) {
-        activityLabel = 'Sessions changed';
-        try {
-          const count = new Set(JSON.parse(userMessageText(message).split('\n')[1]).map(event => event.sessionId)).size;
-          activityLabel = `${count} ${count === 1 ? 'session changed' : 'sessions changed'}`;
-        } catch { /* Keep the neutral label for shortened events. */ }
-      }
-      const label = el('span', activityLabel, 'tool-activity-label');
+      const label = el('span', message.activityLabel || 'Prompted by an extension', 'tool-activity-label');
       label.title = label.textContent; summary.append(label);
       node.append(summary, el('p', userMessageText(message), 'extension-prompt'));
       appendThreadImages(node, message);
@@ -1918,6 +1903,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       && !(state.pendingReply && [message.id, message.liveId].includes(state.pendingReply));
     if (message.text || message.images?.length || message.role === 'user' || failed) {
       activity = undefined;
+      if (message.role === 'user') { automatic = false; updates = undefined; }
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const workerInstruction = state.coordination?.role === 'worker' && message.role === 'user';
       const article = el('article', undefined, 'message ' + (message.role === 'user' && !workerInstruction ? 'user' : 'assistant'));
@@ -1959,12 +1945,12 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (body.textContent) article.append(body);
       if (message.role !== 'user') appendThreadImages(article, message);
       if (message.role === 'assistant') appendThreadVideos(article, message, undefined, keepVideos);
-      if (message.role === 'assistant' && message.text) article.append(copyButton(message.text, 'Copy message', 'copy-message'));
+      if (message.role === 'assistant' && message.text && !state.assistant) article.append(copyButton(message.text, 'Copy message', 'copy-message'));
       if (failed) {
         const error = el('p', 'Reply failed. Try again.', 'message-error');
         error.setAttribute('role', 'alert'); article.append(error);
       }
-      if (message.role === 'assistant' && message.stopReason !== 'error' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
+      if (message.role === 'assistant' && !state.assistant && message.stopReason !== 'error' && Number.isFinite(message.taskDurationMs) && message.taskDurationMs >= 0) {
         const phrases = ['Tinkered for', 'Chipped away for', 'Puzzled over it for', 'Plugged away for', 'Kept at it for'];
         let hash = 0;
         // Timestamps keep the wording stable even when saved history uses different message IDs.
@@ -1973,6 +1959,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       }
       if (message.delivery) {
         const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);
+      }
+      if (article.childNodes.length && automatic && message.role === 'assistant') {
+        if (!updates) {
+          const node = el('details', undefined, 'tool-activity assistant-updates'); node.hidden = true;
+          node.dataset.disclosureId = 'updates:' + message.id; node.open = expanded.get(node.dataset.disclosureId) ?? false;
+          updates = { node, summary: el('summary'), count: 0 }; node.append(updates.summary); fragment.append(node);
+        } else {
+          updates.node.append(updates.last); updates.count++; updates.node.hidden = false;
+          updates.summary.textContent = `${updates.count} earlier ${updates.count === 1 ? 'update' : 'updates'}`;
+        }
+        updates.last = article;
       }
       if (article.childNodes.length) fragment.append(article);
     }
@@ -1999,6 +1996,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       return phrases;
     }).map((label, index) => (index ? label[0].toLowerCase() : label[0].toUpperCase()) + label.slice(1));
     const sessionChecks = state.assistant && group.tools.every(tool => tool.name === 'sessions');
+    // Miso's own lookups are plumbing; the working indicator and cards already show the outcome.
+    if (sessionChecks && !group.tools.some(tool => tool.status === 'error')) { group.node.remove(); continue; }
     if (sessionChecks) {
       const ids = new Set(group.tools.flatMap(tool => tool.sessionIds || []));
       labels.splice(0, labels.length, group.tools.some(tool => tool.status === 'error') ? 'Session check failed'
@@ -2435,7 +2434,9 @@ function updateControls() {
   renderCoordinator(state);
   if (state) $('composer').hidden = inspectingWorker;
   const summary = sessions.find(item => item.id === selected) || selectedSummary;
-  $('session-pin').hidden = !selected || !!state?.creation;
+  $('session-pin').hidden = !selected || !!state?.creation || selected === assistantId;
+  $('session-icon-open').hidden = selected === assistantId;
+  renderPushControl();
   $('session-pin').disabled = !connected;
   $('session-pin').textContent = summary?.pinned ? 'Unpin session' : 'Pin session';
   const live = !inspectingWorker && connected && state && ['idle', 'working', 'waiting'].includes(state.status);

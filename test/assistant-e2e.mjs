@@ -119,13 +119,16 @@ try {
   await page.locator('#assistant-open').click();
   await check(page.locator('#title')).toHaveText('Miso');
   await check(page.locator('.assistant-checkin')).toContainText("Hi, I'm Miso.");
-  await check(page.locator('.assistant-checkin')).toContainText('Nothing needs your input right now.');
+  await check(page.locator('#project-name')).toHaveText(/^Watching \d+$/);
   await page.screenshot({ path: join(evidence, 'first-open.png') });
   proof.welcome = 'First open shows a greeting and a host-derived live-session check-in without a model call';
   await endClip(page);
 
   // The real service worker renders a delivered push; ?open= routes a notification tap to its session.
-  await check(page.getByRole('button', { name: 'Notify me when a session asks a question', exact: true })).toBeVisible();
+  await page.locator('.session-info > summary').click();
+  await check(page.getByRole('button', { name: 'Turn on question notifications', exact: true })).toBeVisible();
+  await check(page.getByRole('button', { name: 'Pin session', exact: true })).toBeHidden();
+  await page.locator('.session-info > summary').click();
   const cdp = await context.newCDPSession(page);
   const registrationId = new Promise(resolve => cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
     const found = registrations.find(item => item.scopeURL === url + '/' && !item.isDeleted); if (found) resolve(found.registrationId);
@@ -214,7 +217,10 @@ try {
   assert.equal(deliveries(question.id), 1);
   assert.equal(misoRequests().length - questionCalls, 1, 'A normal check-in summarizes the host snapshot in one model response');
   await check(page.locator('.tool-activity-label').filter({ hasText: /^Checked \d+ sessions?$/ })).toHaveCount(0);
-  await check(page.locator('.tool-activity-label').filter({ hasText: '1 session changed' })).toHaveCount(1);
+  // Miso reads as a chat: no event rows, lookups, copy buttons or timings around its check-ins.
+  await check(page.locator('#transcript .tool-activity:not(.assistant-updates)')).toHaveCount(0);
+  await check(page.locator('#transcript :is(.copy-message, .task-duration)')).toHaveCount(0);
+  await check(page.locator('#project-name')).toHaveText('1 needs you');
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
   await endClip(page);
   await page.reload(); await page.locator('#assistant-open').click();
@@ -270,7 +276,7 @@ try {
       if (method === 'editor') await check(input).toHaveValue('Keep the original identifier.');
       await input.fill('Keep my answer while Miso updates.');
       // Let the actual Miso wake and streaming patches arrive with the draft focused.
-      await check(page.locator('.assistant-checkin')).toContainText('1 needs your input.');
+      await check(page.locator('#project-name')).toHaveText('1 needs you');
       await page.waitForTimeout(800);
       await check(input).toHaveValue('Keep my answer while Miso updates.');
       await check(input).toBeFocused();
@@ -381,6 +387,11 @@ try {
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Finish with a note for Miso.' } })).value.ok, true);
   await until(() => misoRequests().slice(attempts).some(request => request.results.some(result => result.name === 'bash' && result.isError)), 30000);
   await until(() => misoMessages('assistant').some(body => body.startsWith('Nothing needs you.')), 30000);
+  // Older automatic check-ins fold away; only the latest stays open.
+  await check(page.locator('.assistant-updates > summary').last()).toHaveText(/^\d+ earlier updates?$/);
+  await check(page.locator('.assistant-updates').last()).not.toHaveAttribute('open', '');
+  await check(page.locator('#transcript > article.message').last()).toContainText('Nothing needs you.');
+  await page.screenshot({ path: join(evidence, 'folded-updates.png') });
   assert(!existsSync(join(ledger().cwd, 'miso-escape.txt')) && !existsSync(join(root, 'project', 'miso-escape.txt')));
   for (const request of misoRequests()) assert.deepEqual(request.tools, ['sessions']);
   proof.injection = 'An injected bash request was refused; every Miso request had only the sessions tool';
