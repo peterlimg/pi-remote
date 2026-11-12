@@ -396,6 +396,29 @@ try {
   for (const request of misoRequests()) assert.deepEqual(request.tools, ['sessions']);
   proof.injection = 'An injected bash request was refused; every Miso request had only the sessions tool';
 
+  // A large Miso context is compacted after a turn to a short tail, and check-ins wait for it.
+  const misoEntries = () => lines(ledger().file), replies = () => misoEntries().filter(entry => entry.type === 'message' && entry.message.role === 'assistant').length;
+  assert.equal(misoEntries().some(entry => entry.type === 'compaction'), false);
+  // Many ordinary-sized turns: a 4k tail keeps about one of them, Pi's default 20k would keep about seven.
+  for (let index = 0; index < 13 && !misoEntries().some(entry => entry.type === 'compaction'); index++) {
+    const before = replies();
+    assert.equal((await client.request('command', { sessionId: misoId, command: { type: 'prompt', text: `Context filler ${index}: ` + 'x '.repeat(4500) } })).value.ok, true);
+    await until(() => replies() > before, 30000);
+  }
+  const compaction = await until(() => misoEntries().find(entry => entry.type === 'compaction'), 60000);
+  assert(compaction.tokensBefore > 30000, 'Compaction starts only above the threshold');
+  const kept = misoEntries().slice(misoEntries().findIndex(entry => entry.id === compaction.firstKeptEntryId)).filter(entry => entry.type === 'message');
+  assert(JSON.stringify(kept.map(entry => entry.message.content)).length < 20000, 'Miso keeps a short tail, not Pi\'s default 20k tokens');
+  assert.equal(misoEntries().filter(entry => entry.type === 'compaction').length, 1, 'A compacted context does not compact again');
+  const compactedCalls = misoRequests().length;
+  assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
+  await until(() => misoMessages('assistant').filter(body => body.includes('asks: Post these 3 review comments')).length >= 2 && misoRequests().length > compactedCalls, 30000);
+  await client.request('watch', { sessionId: project.id });
+  const compactedDialog = client.messages.findLast(packet => packet.type === 'snapshot' && packet.sessionId === project.id).state.dialog;
+  assert.equal((await client.request('answer', { sessionId: project.id, answer: { dialogId: compactedDialog.id, cancelled: true } })).value.ok, true);
+  await check.poll(async () => (await overview()).find(row => row.id === project.id).status).toBe('idle');
+  proof.compaction = 'Above 30k tokens Miso compacts once after its turn, keeps only a short tail, and the next check-in still arrives';
+
   const tags = pushes.filter(push => push.path === '/live').map(push => openPush(push).tag);
   assert.equal(new Set(tags).size, tags.length, 'At most one push per question');
   assert(!tags.includes(viewedQuestion.key));

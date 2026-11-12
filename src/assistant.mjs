@@ -14,6 +14,9 @@ import { requestKey } from './commands.mjs';
 const extension = fileURLToPath(new URL('../extension/coordinator.mjs', import.meta.url));
 const EVENT_PREFIX = '[Pi Remote session events]\n';
 const KEEP_EVENTS = 200;
+// Every check-in carries its own facts, so Miso needs only a short tail of its history.
+const COMPACT_AT = 30000, KEEP_RECENT_TOKENS = 4000;
+const COMPACT_NOTE = 'Keep the user\'s standing instructions and preferences for Miso, unresolved requests, and draft IDs awaiting review. Drop per-session status narration; the host sends current facts with every check-in.';
 const publicError = (message, status = 400) => Object.assign(new Error(message), { public: true, status });
 // The user's installed pi-usage, so their Codex Fast setting also applies to Miso.
 function usageExtension(env = {}) {
@@ -91,7 +94,10 @@ export class Assistant {
     this.check();
     if (!this.origin) throw publicError('The assistant host is not ready.', 503);
     // shortcut: Miso needs a native Pi model; add provider-extension loading if an extension-only default must work.
-    const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve', '-e', extension, ...usageExtension(options.env), '--tools', 'sessions'];
+    // Trusting Miso's private folder loads only this host-written settings file; other project resources stay disabled.
+    mkdirSync(join(this.record.cwd, '.pi'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(this.record.cwd, '.pi', 'settings.json'), JSON.stringify({ compaction: { keepRecentTokens: KEEP_RECENT_TOKENS } }), { mode: 0o600 });
+    const args = ['--no-extensions', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-context-files', '--approve', '-e', extension, ...usageExtension(options.env), '--tools', 'sessions'];
     if (meta.model) args.push('--model', meta.model);
     if (meta.thinkingLevel) args.push('--thinking', meta.thinkingLevel);
     return { ...options, args: [...(options.args || []), ...args], env: { ...options.env,
@@ -139,7 +145,12 @@ export class Assistant {
   }
   observe(id) {
     if (this.error || !this.record) return;
-    if (id === this.record.id) { this.schedule(); return; }
+    if (id === this.record.id) {
+      const status = this.service.live.get(id)?.state.status, settled = this.misoStatus === 'working' && status === 'idle';
+      this.misoStatus = status;
+      if (settled) void this.compactIfLarge();
+      this.schedule(); return;
+    }
     const item = this.service.live.get(id);
     if (!item || !this.watchable(id)) { this.seen.delete(id); return; }
     this.collectReplies(id);
@@ -155,13 +166,24 @@ export class Assistant {
     if (change.kind === 'question' && !viewed) void this.push?.send({ sessionId: id, tag: change.key, title: clip(item.state.title || 'Pi Remote', 100),
       body: clip(item.state.dialog.title?.split(/\r?\n/)[0] || 'A session needs your input.', 200) });
   }
+  // Compaction prompts are never cached; the gain is that later cold check-ins resend a small context.
+  async compactIfLarge() {
+    if (this.compacting) return;
+    this.compacting = true;
+    try {
+      const { contextUsage } = await this.service.getUsage(this.id);
+      if (!(contextUsage?.tokens > COMPACT_AT) || !idle(this.service.live.get(this.id))) return;
+      await this.service.dispatch(this.id, randomUUID(), { type: 'compact', customInstructions: COMPACT_NOTE });
+    } catch (error) { console.error('Miso compaction failed:', error.message); }
+    finally { this.compacting = false; this.schedule(); }
+  }
   // Batches events, then wakes Miso once it is idle.
   schedule() {
     const pending = this.record?.events.filter(event => event.delivery === 'pending') || [];
     if (this.timer || !pending.length || this.service.stopping || !this.origin) return;
     const due = Math.min(...pending.map(event => event.at)) + this.delay;
     const current = this.service.live.get(this.id);
-    this.timer = setTimeout(() => { this.timer = undefined; void this.wake().catch(error => console.error('Assistant wake failed:', error)); }, Math.max(this.service.restoring.size || current && !idle(current) ? this.delay : 0, due - Date.now()));
+    this.timer = setTimeout(() => { this.timer = undefined; void this.wake().catch(error => console.error('Assistant wake failed:', error)); }, Math.max(this.service.restoring.size || this.compacting || current && !idle(current) ? this.delay : 0, due - Date.now()));
     this.timer.unref?.();
   }
   // Revalidate on the host before starting Pi, and again after awaited startup.
@@ -191,7 +213,7 @@ export class Assistant {
     try {
       let item = this.service.live.get(record.id);
       if (!item || item.resumable) { await this.service.startWorker(record.id); item = this.service.live.get(record.id); }
-      if (!idle(item)) return;
+      if (!idle(item) || this.compacting) return;
       const events = this.pendingEvents().slice(0, 20);
       if (!events.length) return;
       for (const event of events) event.delivery = 'sending';
