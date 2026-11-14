@@ -91,6 +91,9 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     if (projectless) {
       await expect(page.locator('#title')).toHaveText('Original session');
       await page.getByRole('button', { name: 'Show sessions' }).click();
+      await expect(page.locator(`#sessions .session[data-id="${fresh}"]`)).toHaveCount(0);
+      await page.getByRole('button', { name: 'Search sessions', exact: true }).click();
+      await page.getByRole('searchbox', { name: 'Search sessions', exact: true }).fill('Untitled session');
       await page.locator(`#sessions .session[data-id="${fresh}"]`).click();
     }
     await expect.poll(() => watches.length).toBe(1);
@@ -109,6 +112,7 @@ for (const projectless of [false, true]) test(`a new ${projectless ? 'projectles
     await expect(page.locator('#transcript')).toContainText('reply: Draft written during startup');
     expect(host.service.read(sourceId).messages.map(message => message.text)).toEqual(['Original conversation']);
     await page.getByRole('button', { name: 'Show sessions' }).click();
+    if (projectless) await page.getByRole('button', { name: 'Close search', exact: true }).click();
     await page.getByRole('button', { name: /Original session/ }).click();
     await expect(page.locator('#prompt')).toHaveValue('Keep the original draft');
     await page.getByRole('button', { name: 'Show sessions' }).click();

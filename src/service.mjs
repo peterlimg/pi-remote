@@ -100,6 +100,15 @@ export class SessionService extends EventEmitter {
     const requestOffset = offset;
     let { matches, total } = this.matches(query), groups, highlights = [];
     query = query.trim().toLowerCase();
+    if (!query) {
+      // Keep unused sessions searchable, without counting them as conversations.
+      matches = matches.filter(item => {
+        const state = this.live.get(item.id)?.state || this.catalog.get(item.id);
+        return state.messages?.length || state.tools?.length || state.historyPending || state.historyTruncated || state.error ||
+          !unnamed(item.title) || sessionGroup(item) !== 'recent';
+      });
+      total = matches.length;
+    }
     if (section && !query) {
       const now = matches.filter(item => sessionGroup(item) === 'now').sort(activityOrder);
       const pins = matches.filter(item => item.pinned);
