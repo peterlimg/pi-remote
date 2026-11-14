@@ -1624,7 +1624,7 @@ function threadRow(id, thread, question, drafts, cards, expanded) {
   const row = el('div', undefined, 'thread-row'); row.dataset.sessionId = id;
   row.dataset.state = question || ['drafted', 'uncertain'].includes(active?.state) ? 'needs' : working ? 'working' : 'done';
   const kind = sessionKind({ id });
-  const icon = kind ? dressKind(el('span', undefined, 'thread-icon'), kind, 28, question ? 'waiting' : working ? 'working' : 'idle', !question && !working) : el('span');
+  const icon = kind ? dressKind(el('span', undefined, 'thread-icon'), kind, 28, question ? 'waiting' : working ? 'working' : 'idle', !question && !working && !!summary && isUnread(summary)) : el('span');
   const body = el('div', undefined, 'thread-body'), head = el('button', undefined, 'thread-head'); head.type = 'button';
   head.append(el('span', title, 'thread-title'), el('span', label, 'thread-state'));
   head.addEventListener('click', () => selectSession(id, false, true));

@@ -281,6 +281,15 @@ try {
   assert(client.messages.findLast(packet => packet.type === 'snapshot').state.messages.some(message => message.text?.includes('User chose: Post them')));
   proof.answer = 'The phone answered the exact host dialog from Miso; the target recorded it and Miso heard once';
   await endClip(page);
+  // A finished row wears the unread badge only until its session has been read.
+  const badge = projectRow.locator('.thread-icon .bot-badge');
+  await check(badge).toHaveCount(1, { timeout: 30000 });
+  await projectRow.locator('.thread-head').click();
+  await check(page.locator('#title')).toHaveText(project.title);
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await check(page.locator('#title')).toHaveText('Miso');
+  await check(badge).toHaveCount(0);
+  proof.unread = 'A finished session shows unread in Miso until it is opened';
 
   // A replacement question rejects an old card; another client’s answer removes the current card.
   assert.equal((await client.request('command', { sessionId: project.id, command: { type: 'prompt', text: 'Ask me to post the review comments.' } })).value.ok, true);
