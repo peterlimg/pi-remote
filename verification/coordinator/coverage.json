@@ -1,5 +1,5 @@
 {
-  "syncCommit": "aadc911615378224a69833cf58c3a80683bd9945",
+  "syncCommit": "d65066eb9a9b53eec007a2d7496b5f7a70c0b434",
   "files": [
     "src/coordinator.mjs",
     "src/coordinator-store.mjs",
