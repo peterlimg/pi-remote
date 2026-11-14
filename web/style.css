@@ -935,6 +935,8 @@ pre.message-text { white-space: pre-wrap; }
   .shell > aside, .shell > main { grid-area: 1 / 1; }
   .shell.viewing aside { visibility: hidden; }
   .shell.viewing:is(.swiping, .opening) aside { visibility: visible; }
+  /* Swiping back to Miso must not flash the session list. */
+  .shell.viewing.to-miso aside { visibility: hidden; }
   .shell.viewing main { --conversation-header-height: 60px; display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
   .shell:is(.swiping, .opening) main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .shell.viewing:not(.opening) .swipe-haptic-edge { display: block; }

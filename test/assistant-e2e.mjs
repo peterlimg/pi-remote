@@ -231,8 +231,11 @@ try {
   const edgeSwipe = () => page.evaluate(() => {
     const main = document.querySelector('main'), touch = x => [new Touch({ identifier: 1, target: main, clientX: x, clientY: 300 })];
     const fire = (type, x) => main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : touch(x), changedTouches: touch(x) }));
-    fire('touchstart', 5); fire('touchmove', 20); fire('touchmove', 300); fire('touchend', 300);
-  });
+    fire('touchstart', 5); fire('touchmove', 20); fire('touchmove', 300);
+    const list = getComputedStyle(document.querySelector('aside')).visibility;
+    fire('touchend', 300);
+    return list;
+  }).then(list => assert.equal(list, 'hidden', 'Swiping back to Miso must not reveal the session list'));
   for (const goBack of [() => page.getByRole('button', { name: 'Show sessions', exact: true }).click(), () => page.goBack(), edgeSwipe]) {
     await projectRow.locator('.thread-head').click();
     await check(page.locator('#title')).toHaveText(project.title);

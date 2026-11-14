@@ -1163,15 +1163,18 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 // A session opened from Miso goes back to Miso, not the list.
-let misoReturn = false;
+let misoReturn = false, skipPop = false;
 function backToMiso() {
   if (!misoReturn || selected === assistantId) return false;
-  if (history.state?.fromMiso) history.back(); else void selectSession(assistantId);
+  // Switch now: waiting for popstate would paint the list or the old session first.
+  void selectSession(assistantId);
+  if (history.state?.fromMiso) { skipPop = true; history.back(); }
+  if (!reducedMotion()) document.querySelector('main').animate([{ transform: 'translateX(-30%)', opacity: .4 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
   return true;
 }
-async function selectSession(id, keepOrder = false) {
-  const fromMiso = !!assistantId && selected === assistantId && id !== assistantId;
-  if (fromMiso) misoReturn = true; else if (id === assistantId) misoReturn = false;
+async function selectSession(id, keepOrder = false, fromMiso = false) {
+  // Only taps inside Miso (thread rows and cards) return there; any other navigation clears it.
+  misoReturn = fromMiso;
   const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   if (!keepOrder) switchOrder = undefined;
@@ -1602,7 +1605,7 @@ function threadRow(id, thread, question, drafts, cards, expanded) {
   const icon = kind ? dressKind(el('span', undefined, 'thread-icon'), kind, 28, question ? 'waiting' : working ? 'working' : 'idle', !question && !working) : el('span');
   const body = el('div', undefined, 'thread-body'), head = el('button', undefined, 'thread-head'); head.type = 'button';
   head.append(el('span', title, 'thread-title'), el('span', label, 'thread-state'));
-  head.addEventListener('click', () => selectSession(id));
+  head.addEventListener('click', () => selectSession(id, false, true));
   body.append(head);
   // A live question's card already states the latest event.
   if (latest && !(question && latest.kind === 'question')) body.append(el('p', eventLine(latest), 'thread-line'));
@@ -1635,7 +1638,7 @@ function renderCheckin(state, threads = new Map(), groups = [], expanded = new M
       card.dataset.questionId = dialog.id;
       card.setAttribute('aria-label', 'Question from ' + (question.title || question.project));
       const source = el('button', question.title || question.project || 'Open session', 'quiet assistant-question-source'); source.type = 'button';
-      source.addEventListener('click', () => selectSession(sessionId));
+      source.addEventListener('click', () => selectSession(sessionId, false, true));
       const heading = el('h3', dialog.title || 'Your input is needed'); heading.tabIndex = -1;
       card.append(source, heading);
       if (dialog.message) card.append(el('p', dialog.message, 'assistant-question-message'));
@@ -1686,7 +1689,7 @@ function renderCheckin(state, threads = new Map(), groups = [], expanded = new M
       card = el('form', undefined, 'assistant-question assistant-draft'); card.dataset.draftId = draft.id;
       card.setAttribute('aria-label', 'Draft to ' + (draft.title || draft.project));
       const source = el('button', draft.title || draft.project || 'Open session', 'quiet assistant-question-source'); source.type = 'button';
-      source.addEventListener('click', () => selectSession(draft.sessionId));
+      source.addEventListener('click', () => selectSession(draft.sessionId, false, true));
       const heading = el('h3', ({ drafted: 'Review before sending', delivering: 'Sending…', delivered: 'Sent to session', uncertain: 'Delivery uncertain', cancelled: 'Draft cancelled' })[draft.state]);
       heading.tabIndex = -1; card.append(source, heading);
       const feedback = el('p', '', 'hint'); feedback.setAttribute('role', 'status'); feedback.hidden = true;
@@ -3400,7 +3403,7 @@ function resetSwipe() {
   trackingSwipe = false;
   const main = document.querySelector('main');
   main.style.transition = main.style.transform = '';
-  $('app').classList.remove('swiping', 'opening'); $('sidebar').inert = false;
+  $('app').classList.remove('swiping', 'opening', 'to-miso'); $('sidebar').inert = false;
   const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
 $('back').addEventListener('click', () => {
@@ -3410,6 +3413,7 @@ $('back').addEventListener('click', () => {
   else { $('app').classList.remove('viewing'); misoReturn = false; reportViewing(); }
 });
 window.addEventListener('popstate', () => {
+  if (skipPop) { skipPop = false; return; }
   resetSwipe(); closePicker(); $('nearby-sessions').hidePopover();
   if (misoReturn && history.state?.session && selected !== assistantId) { void selectSession(assistantId); return; }
   $('app').classList.remove('viewing'); misoReturn = false; reportViewing();
@@ -3693,7 +3697,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     if (!app.classList.contains('swiping')) {
       if (dy > 8 && dy >= dx) { resetSwipe(); return; }
       if (dx < 8) return;
-      app.classList.add('swiping');
+      app.classList.add('swiping'); app.classList.toggle('to-miso', misoReturn && selected !== assistantId);
     }
     event.preventDefault();
     main.style.transform = `translateX(${dx}px)`;
