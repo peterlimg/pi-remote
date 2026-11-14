@@ -227,6 +227,19 @@ try {
   await check(page.locator('#transcript :is(.copy-message, .task-duration)')).toHaveCount(0);
   await check(page.locator('#project-name')).toHaveText('1 needs you');
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
+  // A session opened from Miso goes back to Miso, by the back button or browser Back; Miso's back goes to the list.
+  for (const goBack of [() => page.getByRole('button', { name: 'Show sessions', exact: true }).click(), () => page.goBack()]) {
+    await projectRow.locator('.thread-head').click();
+    await check(page.locator('#title')).toHaveText(project.title);
+    await goBack();
+    await check(page.locator('#title')).toHaveText('Miso');
+    await check(page.locator('#app')).toHaveClass(/viewing/);
+  }
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
+  await check(page.locator('#app')).not.toHaveClass(/viewing/);
+  await page.locator('#assistant-open').click();
+  await check(page.locator('#title')).toHaveText('Miso');
+  proof.backToMiso = 'A session opened from Miso returns to Miso on Back; Back from Miso returns to the list';
   await endClip(page);
   await page.reload(); await page.locator('#assistant-open').click();
   await check(card).toHaveAttribute('data-question-id', dialog.id);

@@ -852,7 +852,7 @@ async function closeSession(id, closed = true) {
       resetSwipe(); closePicker(); clearThreadImages(); clearThreadVideos(); resetScrollback();
       selected = undefined; selectedSummary = undefined;
       document.querySelector('.session-info').open = false;
-      $('session-icon-picker').close(); $('app').classList.remove('viewing'); reportViewing();
+      $('session-icon-picker').close(); $('app').classList.remove('viewing'); misoReturn = false; reportViewing();
       $('title').textContent = 'Pi Remote'; renderProject(); notice('');
       $('transcript').replaceChildren(); $('transcript').hidden = true; $('dialog').hidden = true;
       $('empty').hidden = false; $('composer').hidden = true;
@@ -1162,7 +1162,16 @@ function markSeen() {
   if (changed) localStorage.setItem('pi-remote-seen', JSON.stringify(seen));
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
+// A session opened from Miso goes back to Miso, not the list.
+let misoReturn = false;
+function backToMiso() {
+  if (!misoReturn || selected === assistantId) return false;
+  if (history.state?.fromMiso) history.back(); else void selectSession(assistantId);
+  return true;
+}
 async function selectSession(id, keepOrder = false) {
+  const fromMiso = !!assistantId && selected === assistantId && id !== assistantId;
+  if (fromMiso) misoReturn = true; else if (id === assistantId) misoReturn = false;
   const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
   if (!keepOrder) switchOrder = undefined;
@@ -1184,7 +1193,7 @@ async function selectSession(id, keepOrder = false) {
   renderSessionIconChoice();
   renderProject(selectedSummary?.cwd, selectedSummary);
   // An entry for the open conversation lets edge-swipe and browser Back return to the list instead of leaving the app.
-  if (!standalone && !history.state?.session) history.pushState({ session: true }, '');
+  if (!standalone && (!history.state?.session || fromMiso)) history.pushState({ session: true, fromMiso }, '');
   $('app').classList.add('viewing'); reportViewing();
   if (entering) {
     $('app').classList.add('opening'); $('sidebar').inert = true;
@@ -3396,10 +3405,15 @@ function resetSwipe() {
 }
 $('back').addEventListener('click', () => {
   haptic(); resetSwipe();
+  if (backToMiso()) return;
   if (history.state?.session) history.back();
-  else { $('app').classList.remove('viewing'); reportViewing(); }
+  else { $('app').classList.remove('viewing'); misoReturn = false; reportViewing(); }
 });
-window.addEventListener('popstate', () => { resetSwipe(); closePicker(); $('nearby-sessions').hidePopover(); $('app').classList.remove('viewing'); reportViewing(); });
+window.addEventListener('popstate', () => {
+  resetSwipe(); closePicker(); $('nearby-sessions').hidePopover();
+  if (misoReturn && history.state?.session && selected !== assistantId) { void selectSession(assistantId); return; }
+  $('app').classList.remove('viewing'); misoReturn = false; reportViewing();
+});
 // Swiping the title steps through the session list's order. The order freezes while switching this way,
 // since a prompt would otherwise move the session to the top and swiping back would skip past it.
 function switchIds() {
@@ -3695,8 +3709,9 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     main.style.transform = back ? 'translateX(100%)' : '';
     swipeTimer = setTimeout(() => {
       resetSwipe();
-      if (back) {
-        closePicker(); app.classList.remove('viewing'); reportViewing();
+      if (back && backToMiso()) closePicker();
+      else if (back) {
+        closePicker(); app.classList.remove('viewing'); misoReturn = false; reportViewing();
         if (history.state?.session) history.back();
       }
     }, 200);
