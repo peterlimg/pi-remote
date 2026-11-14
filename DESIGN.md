@@ -12,7 +12,7 @@ Use the production custom properties for text, muted text, backgrounds, panels, 
 
 ## Floating chrome
 
-The conversation header controls, composer, go-to-bottom button, and session search float as glass: a light tint over a backdrop blur, with a crisp gradient rim lit from the top left. The thread scrolls beneath the header and the composer dock and stays sharp up to each control; it fades out only below the composer. Menus and dialogs stay opaque.
+The conversation header controls, composer, go-to-bottom button, and session search float as glass: a light tint over a backdrop blur, with a crisp gradient rim lit from the top left. The thread scrolls beneath the header and the composer dock and stays sharp up to each control; it fades out only below the composer. Every other floating surface uses the same glass, denser so its text stays readable: menus, popovers, bottom sheets, dialogs, toasts, the Workers row and the image viewer controls. Selected and pressed states inside them use a light glass fill rather than solid panel colours. Only the QR camera sheet stays black.
 
 ## Diagrams
 

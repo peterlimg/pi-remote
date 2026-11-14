@@ -41,19 +41,26 @@ test('Duet dark colors cover login, sessions, chat and menus without changing li
     await expect(page.locator('.tool-output').first()).toBeVisible();
     await expect(page.locator('details.tool').first()).toHaveCSS('background-color', 'rgb(27, 24, 27)');
     await page.locator('.session-info summary').click();
-    await expect(page.locator('.session-details')).toHaveCSS('background-color', 'rgb(27, 24, 27)');
+    await expect(page.locator('.session-details')).toHaveCSS('background-color', 'rgba(40, 37, 40, 0.72)');
     await page.locator('.session-info summary').click();
     await page.locator('#prompt').fill('/');
-    await expect(page.locator('.command-option[aria-selected=true]')).toHaveCSS('background-color', 'rgb(59, 56, 59)');
-    await expect(page.locator('#command-menu')).toHaveCSS('background-color', 'rgb(35, 32, 35)');
+    await expect(page.locator('#command-menu')).toHaveCSS('background-color', 'rgba(40, 37, 40, 0.72)');
+    await expect(page.locator('.command-option[aria-selected=true]')).toBeVisible();
     const pairs = await page.evaluate(() => {
+      // Glass is translucent: measure against its layers painted over the page, ignoring the blur.
+      const context = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d');
+      const seen = node => {
+        const layers = [];
+        for (let item = node; item; item = item.parentElement) layers.unshift(getComputedStyle(item).backgroundColor);
+        for (const color of layers) { context.fillStyle = color; context.fillRect(0, 0, 1, 1); }
+        return `rgb(${[...context.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(', ')})`;
+      };
       const pairs = ['html', '#sidebar', '#composer', '.message.user .message-text', '.tool',
         '.command-option[aria-selected=true]', '#pair-submit'].map(selector => {
-        const style = getComputedStyle(document.querySelector(selector));
-        return [style.color, style.backgroundColor];
+        const node = document.querySelector(selector);
+        return [getComputedStyle(node).color, seen(node)];
       });
-      pairs.push([getComputedStyle(document.querySelector('#prompt'), '::placeholder').color,
-        getComputedStyle(document.querySelector('#composer')).backgroundColor]);
+      pairs.push([getComputedStyle(document.querySelector('#prompt'), '::placeholder').color, seen(document.querySelector('#composer'))]);
       return pairs;
     });
     for (const [foreground, background] of pairs) {
