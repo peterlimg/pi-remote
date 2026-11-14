@@ -228,7 +228,12 @@ try {
   await check(page.locator('#project-name')).toHaveText('1 needs you');
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
   // A session opened from Miso goes back to Miso, by the back button or browser Back; Miso's back goes to the list.
-  for (const goBack of [() => page.getByRole('button', { name: 'Show sessions', exact: true }).click(), () => page.goBack()]) {
+  const edgeSwipe = () => page.evaluate(() => {
+    const main = document.querySelector('main'), touch = x => [new Touch({ identifier: 1, target: main, clientX: x, clientY: 300 })];
+    const fire = (type, x) => main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : touch(x), changedTouches: touch(x) }));
+    fire('touchstart', 5); fire('touchmove', 20); fire('touchmove', 300); fire('touchend', 300);
+  });
+  for (const goBack of [() => page.getByRole('button', { name: 'Show sessions', exact: true }).click(), () => page.goBack(), edgeSwipe]) {
     await projectRow.locator('.thread-head').click();
     await check(page.locator('#title')).toHaveText(project.title);
     await goBack();
@@ -239,7 +244,7 @@ try {
   await check(page.locator('#app')).not.toHaveClass(/viewing/);
   await page.locator('#assistant-open').click();
   await check(page.locator('#title')).toHaveText('Miso');
-  proof.backToMiso = 'A session opened from Miso returns to Miso on Back; Back from Miso returns to the list';
+  proof.backToMiso = 'A session opened from Miso returns to Miso by back button, browser Back or edge swipe; Back from Miso returns to the list';
   await endClip(page);
   await page.reload(); await page.locator('#assistant-open').click();
   await check(card).toHaveAttribute('data-question-id', dialog.id);
