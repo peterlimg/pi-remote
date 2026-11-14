@@ -3,7 +3,7 @@
 Pi Remote loads the Claude SDK provider from Pi's package settings, not from its own extension. The maintained adapter is [peterlimg/pi-claude-sdk](https://github.com/peterlimg/pi-claude-sdk). The `pi-claude-sdk` dependency in [package.json](../experiments/claude-sdk-provider/package.json) is the source of truth for the integration pin; the underlying Agent SDK stays at 0.3.296.
 
 ```sh
-pi install git:github.com/peterlimg/pi-claude-sdk@acf0917e1b11bbba7e0332a6c05aca77fec3f217
+pi install git:github.com/peterlimg/pi-claude-sdk@6f5797d78e1ebf4435700f94a78b1ae5b7ce6b91
 ```
 
 Do not keep a second declaration for the old local `pi-remote/experiments/claude-sdk-provider` package. Provider IDs and checkpoint entry formats stay unchanged. The default provider/model, unrelated packages, filters, permissions and authentication do not need to change.
