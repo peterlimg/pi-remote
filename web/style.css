@@ -574,6 +574,7 @@ main:has(#notice:not([hidden])) #transcript { --conversation-header-height: 0px;
 #transcript:focus-visible { outline: none; }
 /* The neighbour's saved thread, laid over the transcript's box and slid in from the side while swiping. */
 .transcript-peek { position: absolute; overflow: hidden; pointer-events: none; }
+.miso-backdrop { display: none; }
 .shell > main:has(> .transcript-peek) { overflow: clip; }
 .conversation-loading { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 24px 0; color: var(--muted); }
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
@@ -935,8 +936,9 @@ pre.message-text { white-space: pre-wrap; }
   .shell > aside, .shell > main { grid-area: 1 / 1; }
   .shell.viewing aside { visibility: hidden; }
   .shell.viewing:is(.swiping, .opening) aside { visibility: visible; }
-  /* Swiping back to Miso must not flash the session list. */
+  /* Swiping back to Miso shows Miso's frozen copy instead of the session list. */
   .shell.viewing.to-miso aside { visibility: hidden; }
+  .shell.to-miso > .miso-backdrop { display: block; grid-area: 1 / 1; }
   .shell.viewing main { --conversation-header-height: 60px; display: flex; padding-top: env(safe-area-inset-top); background: var(--bg); }
   .shell:is(.swiping, .opening) main { box-shadow: -8px 0 24px rgb(0 0 0 / .2); }
   .shell.viewing:not(.opening) .swipe-haptic-edge { display: block; }

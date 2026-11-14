@@ -1163,17 +1163,37 @@ function markSeen() {
 }
 document.addEventListener('visibilitychange', () => { markSeen(); renderList(); });
 // A session opened from Miso goes back to Miso, not the list.
-let misoReturn = false, skipPop = false;
-function backToMiso() {
+let misoReturn = false, skipPop = false, misoBackdrop, misoScroll = 0, misoPinned = true;
+// A frozen copy of Miso's screen sits behind the session while swiping back to it.
+// A closed shadow root keeps the copy's ids out of the live page while reusing its styles.
+function keepMisoBackdrop() {
+  misoBackdrop?.remove();
+  misoScroll = $('transcript').scrollTop; misoPinned = pinnedToBottom;
+  const copy = document.querySelector('main').cloneNode(true);
+  copy.removeAttribute('style');
+  copy.querySelectorAll('dialog, [popover], img[src^="blob:"], video').forEach(node => node.remove());
+  const link = el('link'), shell = el('div', undefined, 'shell viewing');
+  link.rel = 'stylesheet'; link.href = document.querySelector('link[rel=stylesheet]').href;
+  shell.append(copy);
+  misoBackdrop = el('div', undefined, 'miso-backdrop'); misoBackdrop.inert = true; misoBackdrop.setAttribute('aria-hidden', 'true');
+  misoBackdrop.attachShadow({ mode: 'closed' }).append(link, shell);
+  misoBackdrop.transcript = copy.querySelector('#transcript');
+  document.querySelector('main').before(misoBackdrop);
+}
+function backToMiso(swiped = false) {
   if (!misoReturn || selected === assistantId) return false;
   // Switch now: waiting for popstate would paint the list or the old session first.
   void selectSession(assistantId);
   if (history.state?.fromMiso) { skipPop = true; history.back(); }
-  if (!reducedMotion()) document.querySelector('main').animate([{ transform: 'translateX(-30%)', opacity: .4 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+  // A swipe already revealed Miso's copy; the back button needs its own motion.
+  if (!swiped && !reducedMotion()) document.querySelector('main').animate([{ transform: 'translateX(-30%)', opacity: .4 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
   return true;
 }
 async function selectSession(id, keepOrder = false, fromMiso = false) {
   // Only taps inside Miso (thread rows and cards) return there; any other navigation clears it.
+  const returning = misoReturn && id === assistantId;
+  if (fromMiso && selected === assistantId) keepMisoBackdrop();
+  else if (!fromMiso) { misoBackdrop?.remove(); misoBackdrop = undefined; }
   misoReturn = fromMiso;
   const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
   const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
@@ -1213,7 +1233,9 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
   markSeen(); renderList(); notice(''); sessionFeedback(''); nudgeHeading();
   const state = cache.get(id);
   if (state) renderConversation(state);
-  else {
+  // Land where Miso was left, matching the copy shown during the swipe.
+  if (state && returning && !misoPinned) { $('transcript').scrollTop = misoScroll; pinnedToBottom = false; updateScrollButton(); }
+  if (!state) {
     $('title').textContent = sessionTitle(sessions.find(x => x.id === id)?.title || 'Loading…');
     const loading = el('p', 'Loading conversation…', 'conversation-loading'); loading.setAttribute('role', 'status');
     const spinner = el('span', undefined, 'connection-spinner'); spinner.setAttribute('aria-hidden', 'true'); loading.prepend(spinner);
@@ -3697,7 +3719,8 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     if (!app.classList.contains('swiping')) {
       if (dy > 8 && dy >= dx) { resetSwipe(); return; }
       if (dx < 8) return;
-      app.classList.add('swiping'); app.classList.toggle('to-miso', misoReturn && selected !== assistantId);
+      app.classList.add('swiping'); app.classList.toggle('to-miso', !!misoBackdrop && misoReturn && selected !== assistantId);
+      if (app.classList.contains('to-miso')) misoBackdrop.transcript.scrollTop = misoPinned ? misoBackdrop.transcript.scrollHeight : misoScroll;
     }
     event.preventDefault();
     main.style.transform = `translateX(${dx}px)`;
@@ -3713,7 +3736,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     main.style.transform = back ? 'translateX(100%)' : '';
     swipeTimer = setTimeout(() => {
       resetSwipe();
-      if (back && backToMiso()) closePicker();
+      if (back && backToMiso(true)) closePicker();
       else if (back) {
         closePicker(); app.classList.remove('viewing'); misoReturn = false; reportViewing();
         if (history.state?.session) history.back();

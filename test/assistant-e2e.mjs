@@ -228,14 +228,18 @@ try {
   await check(page.locator('#project-name')).toHaveText('1 needs you');
   await check(page.locator('.tool-activity-progress')).toHaveCount(0);
   // A session opened from Miso goes back to Miso, by the back button or browser Back; Miso's back goes to the list.
-  const edgeSwipe = () => page.evaluate(() => {
+  const swipe = (...steps) => page.evaluate(steps => {
     const main = document.querySelector('main'), touch = x => [new Touch({ identifier: 1, target: main, clientX: x, clientY: 300 })];
-    const fire = (type, x) => main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : touch(x), changedTouches: touch(x) }));
-    fire('touchstart', 5); fire('touchmove', 20); fire('touchmove', 300);
-    const list = getComputedStyle(document.querySelector('aside')).visibility;
-    fire('touchend', 300);
-    return list;
-  }).then(list => assert.equal(list, 'hidden', 'Swiping back to Miso must not reveal the session list'));
+    for (const [type, x] of steps) main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : touch(x), changedTouches: touch(x) }));
+    const backdrop = document.querySelector('.miso-backdrop');
+    return { list: getComputedStyle(document.querySelector('aside')).visibility, backdrop: backdrop && getComputedStyle(backdrop).display };
+  }, steps);
+  const edgeSwipe = async () => {
+    const during = await swipe(['touchstart', 5], ['touchmove', 20], ['touchmove', 200]);
+    assert.deepEqual(during, { list: 'hidden', backdrop: 'block' }, 'Swiping back to Miso shows its copy, not the session list');
+    await page.screenshot({ path: join(evidence, 'swipe-to-miso.png') });
+    await swipe(['touchend', 200]);
+  };
   for (const goBack of [() => page.getByRole('button', { name: 'Show sessions', exact: true }).click(), () => page.goBack(), edgeSwipe]) {
     await projectRow.locator('.thread-head').click();
     await check(page.locator('#title')).toHaveText(project.title);
