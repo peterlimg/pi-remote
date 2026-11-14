@@ -10,6 +10,10 @@ Use the platform system sans for interface text and the existing monospace stack
 
 Use the production custom properties for text, muted text, backgrounds, panels, lines, selection, accent, and warnings. Follow the device's light/dark preference until the user chooses a mode with the sun/moon toggle. Remember that choice in the browser, including on the login screen. Keep status meaning readable without color alone.
 
+## Floating chrome
+
+The conversation header controls, composer, go-to-bottom button, and session search float as glass: a translucent tint over a backdrop blur, with a faint rim and a brighter top edge. The thread scrolls beneath the header and the composer dock, blurring and dimming at both edges like iOS's scroll edge effect. Menus and dialogs stay opaque.
+
 ## Diagrams
 
 Mermaid diagrams use flat shapes, thin warm borders, muted blue group backgrounds, and high-contrast connectors. Match the app's light/dark mode and system typography. Preserve author-defined state colors rather than inventing status meanings. No gradients, glow, or drop shadows. Show a bounded loading placeholder instead of raw source, retain finished diagram nodes across unrelated updates, and keep source available behind its disclosure. The existing image viewer owns zoom and pan.

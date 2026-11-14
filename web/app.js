@@ -81,6 +81,12 @@ const transcriptObserver = new ResizeObserver(() => {
 });
 transcriptObserver.observe($('transcript'));
 transcriptObserver.observe(activityIndicator);
+// The thread scrolls under the floating dock, so its end spacer reserves the dock's height.
+new ResizeObserver(([{ target }]) => {
+  document.documentElement.style.setProperty('--dock-height', `${target.offsetHeight}px`);
+  if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
+  updateScrollButton();
+}).observe($('dock'));
 new ResizeObserver(([{ target }]) => {
   const height = target.getBoundingClientRect().height;
   document.querySelector('main').style.setProperty('--coordinator-height', `${height ? height + parseFloat(getComputedStyle(target).marginBottom) : 0}px`);
@@ -3672,11 +3678,12 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     const fitEdge = () => {
       const transcript = $('transcript').getBoundingClientRect();
       const top = Math.max(transcript.top, document.querySelector('.conversation-header').getBoundingClientRect().bottom);
-      const height = Math.max(0, transcript.bottom - top);
+      const height = Math.max(0, Math.min(transcript.bottom, $('dock').getBoundingClientRect().top) - top);
       edge.style.left = app.getBoundingClientRect().left + 'px'; edge.style.top = top + 'px'; edge.style.height = height + 'px';
       nativeInput.style.width = main.clientWidth * 2 / 3 + 'px'; nativeInput.style.transform = `scaleY(${height / 32})`;
     };
-    new ResizeObserver(fitEdge).observe($('transcript'));
+    const edgeObserver = new ResizeObserver(fitEdge);
+    edgeObserver.observe($('transcript')); edgeObserver.observe($('dock'));
     window.visualViewport?.addEventListener('scroll', fitEdge);
     let origin, x, y;
     for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) nativeInput.addEventListener(type, event => {

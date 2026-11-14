@@ -18,6 +18,11 @@
   --warning: light-dark(#77591a, #e4c078);
   --working: light-dark(#15542f, #80d4a0);
   --selection: light-dark(#d3e4de, #3b383b);
+  /* Glass chrome: a translucent tint, a faint rim, and a brighter top edge. */
+  --glass: light-dark(rgb(255 255 255 / .62), rgb(50 46 50 / .62));
+  --glass-fill: color-mix(in srgb, var(--text) 8%, transparent);
+  --glass-rim: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .1));
+  --glass-shine: light-dark(rgb(255 255 255 / .9), rgb(255 255 255 / .1));
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --content-width: 48rem;
@@ -49,6 +54,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .quiet, .secondary { color: var(--accent); background: transparent; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+/* Floating controls are glass over the content scrolling beneath them. */
+.shell :is(.conversation-heading, #back, .session-info summary), .composer, #scroll-bottom, .search-bar :is(.search-round, .search-field) { border: 1px solid var(--glass-rim); background: var(--glass); box-shadow: inset 0 1px var(--glass-shine), 0 8px 24px rgb(0 0 0 / .12); }
+/* The composer blurs from a layer behind it: a blurring form would cut the glass button inside it off from the thread. */
+.shell :is(.conversation-heading, #back, .session-info summary), .composer::before, #scroll-bottom, .search-bar :is(.search-round, .search-field) { -webkit-backdrop-filter: blur(16px) saturate(1.6); backdrop-filter: blur(16px) saturate(1.6); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -483,11 +492,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-meta > .session-kind::before { content: none; }
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell > main { --conversation-header-height: 64px; position: relative; }
+/* Like iOS's scroll edge effect, the thread blurs and dims as it passes under the header and the dock. */
+.shell > main::before, .dock::before { content: ''; position: absolute; pointer-events: none; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.shell > main::before { z-index: 1; inset: 0 0 auto; height: calc(env(safe-area-inset-top) + var(--conversation-header-height) + 16px); background: linear-gradient(color-mix(in srgb, var(--bg) 70%, transparent), transparent); -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent); }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 /* Keep the header controls centered over the composer controls. */
 .shell .conversation-header { position: absolute; z-index: 2; inset: 0 0 auto; width: calc(100% - 48px); max-width: var(--content-width); margin-inline: auto; padding: 10px 9px; gap: 16px; border: 0; pointer-events: none; }
 .shell .conversation-header > * { pointer-events: auto; }
-.shell :is(.conversation-heading, #back, .session-info summary) { border: 1px solid color-mix(in srgb, var(--line) 85%, var(--text)); border-radius: 999px; background: color-mix(in srgb, var(--composer-bg) 94%, var(--text)); }
+.shell :is(.conversation-heading, #back, .session-info summary) { border-radius: 999px; }
 .conversation-heading { grid-column: 2; min-width: 0; text-align: center; }
 .shell .conversation-heading { justify-self: center; max-width: 100%; min-height: 44px; display: flex; flex-direction: column; justify-content: center; padding: 4px 0; line-height: 1.3; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 /* Swiping the title slides the neighbouring sessions' titles through this window. */
@@ -541,8 +553,6 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 #project-name { margin: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #back, .session-info summary { width: 44px; height: 44px; padding: 0; color: var(--text); }
 #back svg { display: block; margin: auto; }
-/* Keep a 44px tap area around the smaller 40px outlined circle. */
-.shell :is(#back, .session-info summary) { border: 2px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 85%, var(--text)); }
 .shell :is(#back, .session-info summary) svg { width: 22px; height: 22px; }
 .session-info { position: relative; grid-column: 3; font-size: 12px; }
 .session-info summary { display: grid; place-items: center; list-style: none; }
@@ -569,7 +579,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 #session-emoji-form button { flex-shrink: 0; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { margin-top: var(--conversation-header-height); padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
-:is(#transcript, .transcript-peek) { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding-top: var(--conversation-header-height); overscroll-behavior: contain; -webkit-mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); mask-image: linear-gradient(transparent, #000 var(--conversation-header-height), #000 calc(100% - 32px), transparent); }
+:is(#transcript, .transcript-peek) { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding: var(--conversation-header-height) 0 var(--dock-height, 0px); overscroll-behavior: contain; }
 main:has(#notice:not([hidden])) #transcript { --conversation-header-height: 0px; }
 #transcript:focus-visible { outline: none; }
 /* The neighbour's saved thread, laid over the transcript's box and slid in from the side while swiping. */
@@ -580,6 +590,7 @@ main:has(#notice:not([hidden])) #transcript { --conversation-header-height: 0px;
 /* Spacing scrolls with the content instead of imposing a minimum pane height. */
 :is(#transcript, .transcript-peek)::before, :is(#transcript, .transcript-peek)::after { content: ''; display: block; height: var(--transcript-gap); }
 :is(#transcript, .transcript-peek)::before { height: calc(var(--transcript-gap) + var(--conversation-header-height)); }
+:is(#transcript, .transcript-peek)::after { height: calc(var(--transcript-gap) + var(--dock-height, 0px)); }
 .message, .tool, .skill-loaded, :is(#transcript, .transcript-peek) > .hint { max-width: var(--content-width); margin: 0 auto 18px; }
 .skill-loaded { color: var(--accent); font-size: 14px; overflow-wrap: anywhere; }
 .tool { font-family: var(--mono); }
@@ -701,13 +712,18 @@ pre.message-text { white-space: pre-wrap; }
 .codemode-script .tool-input { border: 0; }
 .codemode-tool .hint { padding-block: 8px; }
 @media (hover: hover) { .codemode-activity > summary:hover, .codemode-tool > summary:hover { background: var(--panel); } }
-.composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border: 1px solid var(--line); border-radius: 28px; background: var(--composer-bg); flex-shrink: 0; }
+/* The composer and the rows above it float over the end of the thread, which reserves their height as --dock-height. */
+.dock { position: absolute; z-index: 2; inset: auto 0 0; display: flex; flex-direction: column; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.dock::before { z-index: -1; inset: -24px 0 0; background: linear-gradient(transparent, color-mix(in srgb, var(--bg) 70%, transparent)); -webkit-mask-image: linear-gradient(transparent, #000 32px); mask-image: linear-gradient(transparent, #000 32px); }
+.composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border-radius: 28px; flex-shrink: 0; }
+.composer::before { content: ''; position: absolute; z-index: -1; inset: -1px; border-radius: inherit; }
 #agent-activity { display: flex; align-items: center; gap: 10px; max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
 .activity-text { min-width: 0; }
 #activity-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
-#composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--panel); color: var(--text); font-size: 13px; }
+#composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 13px; }
 #composer-connection-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-toolbar:has(#composer-connection:not([hidden])) .composer-settings { display: none; }
 .connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid var(--muted); border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
@@ -717,7 +733,7 @@ pre.message-text { white-space: pre-wrap; }
 .session-swipe { position: absolute; bottom: calc(100% + var(--coordinator-height, 0px)); left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .session-swipe-haptic { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; }
 .composer:has(#session-swipe:not([hidden])) #scroll-bottom { bottom: calc(100% + var(--coordinator-height, 0px) + 32px); }
-#scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + var(--coordinator-height, 0px) + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--composer-bg); color: var(--text); box-shadow: 0 4px 12px #00000014; }
+#scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + var(--coordinator-height, 0px) + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; background: var(--composer-bg); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px #0000001a; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
 .command-option { display: block; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; border-radius: 14px; background: transparent; color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
@@ -774,12 +790,12 @@ pre.message-text { white-space: pre-wrap; }
 #status-line span + span::before { content: '·'; margin-right: 8px; color: var(--line); }
 .composer:has(+ #status-line:not([hidden])) { margin-bottom: 4px; }
 #usage-meter[data-level=error] { color: var(--error); }
-#usage-meter[aria-expanded=true] { background-color: var(--panel); }
+#usage-meter[aria-expanded=true] { background-color: var(--glass-fill); }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
-.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--panel); color: var(--text); }
+.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--glass-fill); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
-.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--panel); border-radius: 22px; }
+.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--glass-fill); border-radius: 22px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
@@ -795,7 +811,7 @@ pre.message-text { white-space: pre-wrap; }
 /* Keep the focus ring inside the rounded control. */
 .composer-settings .setting-control:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .composer-settings :is(#model, #reasoning-control):not(:disabled):active,
-.composer-settings :is(#model, #reasoning-control)[aria-expanded=true] { background: color-mix(in srgb, var(--selection) 35%, var(--panel)); color: var(--text); }
+.composer-settings :is(#model, #reasoning-control)[aria-expanded=true] { background: var(--glass-fill); color: var(--text); }
 #resume { align-self: flex-start; padding-inline: 10px; }
 #composer-hint, #composer-send-status { margin: 0; padding: 4px 10px; }
 .dialog { display: flex; flex-direction: column; width: calc(100% - 48px); max-width: var(--content-width); min-height: 0; max-height: min(32rem, calc(var(--viewport-height, 100dvh) * .55)); margin: 0 auto 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }

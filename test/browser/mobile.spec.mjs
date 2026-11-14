@@ -109,8 +109,8 @@ test('conversation header floats above scrolling messages without crowding its c
     expect(Math.abs(header.x - composer.x)).toBeLessThan(1);
     expect(Math.abs(header.width - composer.width)).toBeLessThan(1);
     expect(Math.abs(control.x + control.width / 2 - send.x - send.width / 2)).toBeLessThan(1);
-    await expect(details).toHaveCSS('border-left-width', '2px');
-    await expect(details).toHaveCSS('background-clip', 'padding-box');
+    await expect(details).toHaveCSS('border-left-width', '1px');
+    await expect(details).toHaveCSS('backdrop-filter', /blur/);
     await expect(details).toHaveCSS('box-shadow', /inset/);
     await expect(details).toHaveCSS('background-color', await page.locator('.conversation-heading').evaluate(node => getComputedStyle(node).backgroundColor));
     await expect(details.locator('svg')).toHaveCSS('width', '22px');
@@ -121,7 +121,7 @@ test('conversation header floats above scrolling messages without crowding its c
     expect(header.height).toBe(width < 700 ? 60 : 64);
     if (width < 700) {
       const back = await page.locator('#back').boundingBox();
-      await expect(page.locator('#back')).toHaveCSS('border-left-width', '2px');
+      await expect(page.locator('#back')).toHaveCSS('border-left-width', '1px');
       await expect(page.locator('#back svg')).toHaveCSS('width', '22px');
       expect(back.width).toBe(44);
       expect(back.height).toBe(44);

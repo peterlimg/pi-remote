@@ -29,8 +29,8 @@ test('the bottom button returns to the latest message and resumes following repl
   const gap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
   await expect(transcript).toContainText('A short reply.');
   await expect(button).toBeHidden();
-  await expect(transcript).toHaveCSS('mask-image', 'linear-gradient(rgba(0, 0, 0, 0), rgb(0, 0, 0) 60px, rgb(0, 0, 0) calc(100% - 32px), rgba(0, 0, 0, 0))');
-  await expect(page.locator('#composer')).toHaveCSS('mask-image', 'none');
+  // The thread runs on under the glass composer instead of fading out above it.
+  expect(await page.locator('#composer').evaluate(node => getComputedStyle(node, '::before').backdropFilter)).toMatch(/blur/);
   state.messages[0].text = 'Thread history\n\n'.repeat(60);
   snapshot();
   await expect(transcript).toContainText('Thread history');
@@ -68,8 +68,8 @@ test('the bottom button returns to the latest message and resumes following repl
     await expect(transcript.locator(':scope > #agent-activity:last-child')).toBeInViewport();
     const message = await transcript.locator('.message').last().boundingBox(), row = await activity.boundingBox();
     expect(message.y + message.height).toBeLessThanOrEqual(row.y);
-    const activityText = await activity.locator('.activity-text').boundingBox(), pane = await transcript.boundingBox();
-    expect(activityText.y + activityText.height).toBeLessThanOrEqual(pane.y + pane.height - 32);
+    const activityText = await activity.locator('.activity-text').boundingBox();
+    expect(activityText.y + activityText.height).toBeLessThanOrEqual(composer.y - 16);
     await page.screenshot({ path: testInfo.outputPath(`inline-thinking-${name}.png`) });
     state.messages.push({ id: `${name}-next`, role: 'assistant', text: `Following ${name} reply` }); snapshot();
     await expect(transcript).toContainText(`Following ${name} reply`);
@@ -79,10 +79,10 @@ test('the bottom button returns to the latest message and resumes following repl
   state.status = 'idle'; snapshot();
   await expect(activity).toBeHidden();
   await expect.poll(gap).toBeLessThan(1);
-  const pane = await transcript.boundingBox();
+  const composer = await page.locator('#composer').boundingBox();
   for (const selector of ['.message-text', '.copy-message svg']) {
     const content = await transcript.locator('.message').last().locator(selector).boundingBox();
-    expect(content.y + content.height).toBeLessThanOrEqual(pane.y + pane.height - 32);
+    expect(content.y + content.height).toBeLessThanOrEqual(composer.y - 16);
   }
 });
 

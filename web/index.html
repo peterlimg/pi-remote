@@ -167,6 +167,7 @@
       <section id="transcript" aria-label="Conversation" tabindex="0" hidden>
         <div id="agent-activity" role="status" hidden><svg class="activity-dots" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="10" cy="4" r="2"/><circle cx="4.8" cy="13" r="2"/><circle cx="15.2" cy="13" r="2"/></svg><span class="sr-only">Working…</span><span class="activity-text" aria-hidden="true"><span id="activity-label">Working…</span><span id="activity-time" aria-hidden="true" hidden></span></span></div>
       </section>
+      <div id="dock" class="dock">
       <section id="dialog" class="dialog" aria-labelledby="dialog-title" hidden></section>
       <section id="coordinator-context" class="coordinator-context" aria-label="Workers" hidden>
         <button id="coordinator-open" type="button" aria-haspopup="dialog" aria-controls="coordinator-sheet" aria-expanded="false"><span>Workers · <span id="coordinator-worker-count">0</span></span><span id="coordinator-worker-summary"></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></button>
@@ -215,6 +216,7 @@
         <p id="composer-hint" class="hint" hidden></p>
       </form>
       <button id="status-line" type="button" title="Usage" hidden></button>
+      </div>
     </main>
   </div>
   <dialog id="coordinator-sheet" class="project-picker" aria-labelledby="coordinator-title" aria-describedby="coordinator-help" tabindex="-1">
