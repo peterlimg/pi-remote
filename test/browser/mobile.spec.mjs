@@ -111,7 +111,6 @@ test('conversation header floats above scrolling messages without crowding its c
     expect(Math.abs(control.x + control.width / 2 - send.x - send.width / 2)).toBeLessThan(1);
     await expect(details).toHaveCSS('border-left-width', '1px');
     await expect(details).toHaveCSS('backdrop-filter', /blur/);
-    await expect(details).toHaveCSS('box-shadow', /inset/);
     await expect(details).toHaveCSS('background-color', await page.locator('.conversation-heading').evaluate(node => getComputedStyle(node).backgroundColor));
     await expect(details.locator('svg')).toHaveCSS('width', '22px');
     expect(Math.abs(title.x + title.width / 2 - header.x - header.width / 2)).toBeLessThan(1);

@@ -12,7 +12,7 @@ Use the production custom properties for text, muted text, backgrounds, panels, 
 
 ## Floating chrome
 
-The conversation header controls, composer, go-to-bottom button, and session search float as glass: a translucent tint over a backdrop blur, with a faint rim and a brighter top edge. The thread scrolls beneath the header and the composer dock, blurring and dimming at both edges like iOS's scroll edge effect. Menus and dialogs stay opaque.
+The conversation header controls, composer, go-to-bottom button, and session search float as glass: a light tint over a backdrop blur, with a crisp gradient rim lit from the top left. The thread scrolls beneath the header and the composer dock and stays sharp up to each control; it fades out only below the composer. Menus and dialogs stay opaque.
 
 ## Diagrams
 

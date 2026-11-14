@@ -18,11 +18,10 @@
   --warning: light-dark(#77591a, #e4c078);
   --working: light-dark(#15542f, #80d4a0);
   --selection: light-dark(#d3e4de, #3b383b);
-  /* Glass chrome: a translucent tint, a faint rim, and a brighter top edge. */
-  --glass: light-dark(rgb(255 255 255 / .62), rgb(50 46 50 / .62));
+  /* Glass chrome: a light tint over a blur, and a crisp rim lit from the top left. */
+  --glass: light-dark(rgb(255 255 255 / .5), rgb(40 37 40 / .45));
   --glass-fill: color-mix(in srgb, var(--text) 8%, transparent);
-  --glass-rim: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .1));
-  --glass-shine: light-dark(rgb(255 255 255 / .9), rgb(255 255 255 / .1));
+  --glass-rim: linear-gradient(160deg, light-dark(#fff, rgb(255 255 255 / .5)), light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .08)) 40% 60%, light-dark(rgb(255 255 255 / .8), rgb(255 255 255 / .25)));
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --content-width: 48rem;
@@ -55,9 +54,11 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls are glass over the content scrolling beneath them. */
-.shell :is(.conversation-heading, #back, .session-info summary), .composer, #scroll-bottom, .search-bar :is(.search-round, .search-field) { border: 1px solid var(--glass-rim); background: var(--glass); box-shadow: inset 0 1px var(--glass-shine), 0 8px 24px rgb(0 0 0 / .12); }
+.shell :is(.conversation-heading, #back, .session-info summary), .composer, #scroll-bottom, .search-bar :is(.search-round, .search-field) { position: relative; border: 1px solid transparent; background: var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+/* The rim is a gradient ring on the border, so it stays sharp without tinting the pane. */
+.shell :is(.conversation-heading, #back, .session-info summary)::after, .composer::after, #scroll-bottom::after, .search-bar :is(.search-round, .search-field)::after { content: ''; position: absolute; inset: -1px; border: 1px solid transparent; border-radius: inherit; background: var(--glass-rim) border-box; -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); pointer-events: none; }
 /* The composer blurs from a layer behind it: a blurring form would cut the glass button inside it off from the thread. */
-.shell :is(.conversation-heading, #back, .session-info summary), .composer::before, #scroll-bottom, .search-bar :is(.search-round, .search-field) { -webkit-backdrop-filter: blur(16px) saturate(1.6); backdrop-filter: blur(16px) saturate(1.6); }
+.shell :is(.conversation-heading, #back, .session-info summary), .composer::before, #scroll-bottom, .search-bar :is(.search-round, .search-field) { -webkit-backdrop-filter: blur(12px) saturate(1.8); backdrop-filter: blur(12px) saturate(1.8); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -492,9 +493,6 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-meta > .session-kind::before { content: none; }
 main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell > main { --conversation-header-height: 64px; position: relative; }
-/* Like iOS's scroll edge effect, the thread blurs and dims as it passes under the header and the dock. */
-.shell > main::before, .dock::before { content: ''; position: absolute; pointer-events: none; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-.shell > main::before { z-index: 1; inset: 0 0 auto; height: calc(env(safe-area-inset-top) + var(--conversation-header-height) + 16px); background: linear-gradient(color-mix(in srgb, var(--bg) 70%, transparent), transparent); -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent); }
 .conversation-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 /* Keep the header controls centered over the composer controls. */
 .shell .conversation-header { position: absolute; z-index: 2; inset: 0 0 auto; width: calc(100% - 48px); max-width: var(--content-width); margin-inline: auto; padding: 10px 9px; gap: 16px; border: 0; pointer-events: none; }
@@ -579,7 +577,8 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 #session-emoji-form button { flex-shrink: 0; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .notice { margin-top: var(--conversation-header-height); padding: 12px 20px; color: var(--warning); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; max-height: 20dvh; overflow: auto; flex-shrink: 0; }
-:is(#transcript, .transcript-peek) { --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding: var(--conversation-header-height) 0 var(--dock-height, 0px); overscroll-behavior: contain; }
+/* The thread stays sharp up to the glass; it only fades under the status bar and the usage line below the composer. */
+:is(#transcript, .transcript-peek) { --thread-fade: linear-gradient(transparent, #000 12px, #000 calc(100% - var(--safe-bottom) - 56px), transparent calc(100% - var(--safe-bottom) - 24px)); --transcript-gap: 24px; overflow: auto; flex: 1; padding: 0 24px; min-height: 0; scroll-padding: var(--conversation-header-height) 0 var(--dock-height, 0px); overscroll-behavior: contain; -webkit-mask-image: var(--thread-fade); mask-image: var(--thread-fade); }
 main:has(#notice:not([hidden])) #transcript { --conversation-header-height: 0px; }
 #transcript:focus-visible { outline: none; }
 /* The neighbour's saved thread, laid over the transcript's box and slid in from the side while swiping. */
@@ -715,7 +714,6 @@ pre.message-text { white-space: pre-wrap; }
 /* The composer and the rows above it float over the end of the thread, which reserves their height as --dock-height. */
 .dock { position: absolute; z-index: 2; inset: auto 0 0; display: flex; flex-direction: column; pointer-events: none; }
 .dock > * { pointer-events: auto; }
-.dock::before { z-index: -1; inset: -24px 0 0; background: linear-gradient(transparent, color-mix(in srgb, var(--bg) 70%, transparent)); -webkit-mask-image: linear-gradient(transparent, #000 32px); mask-image: linear-gradient(transparent, #000 32px); }
 .composer { container-type: inline-size; position: relative; display: flex; flex-direction: column; gap: 4px; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto max(8px, var(--safe-bottom)); padding: 8px; border-radius: 28px; flex-shrink: 0; }
 .composer::before { content: ''; position: absolute; z-index: -1; inset: -1px; border-radius: inherit; }
 #agent-activity { display: flex; align-items: center; gap: 10px; max-width: var(--content-width); margin: 0 auto; padding: 12px 0 16px; color: var(--accent); }
