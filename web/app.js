@@ -1576,14 +1576,47 @@ $('assistant-push').addEventListener('click', () => void setPush(!pushOn));
 navigator.serviceWorker?.addEventListener('message', event => {
   if (event.data?.type === 'openSession' && /^[a-f0-9]{64}$/.test(event.data.sessionId || '')) void selectSession(event.data.sessionId);
 });
-function renderCheckin(state) {
+// Thread rows show host facts in one line: a question's title, or the first paragraph of a reply.
+const plainLine = text => (text || '').replace(/```[\s\S]*?```/g, ' ').split(/\n\s*\n/).find(part => part.trim())
+  ?.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim() || '';
+const eventLine = event => event.kind === 'question' ? event.snapshot?.question?.title || 'Asked a question' : plainLine(event.snapshot?.preview) || 'Finished a turn';
+const clockTime = at => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function threadRow(id, thread, question, drafts, cards, expanded) {
+  const summary = sessions.find(item => item.id === id), latest = thread?.updates.at(-1), active = drafts[0];
+  const title = question?.title || active?.title || summary?.title || latest?.snapshot?.title || latest?.title || 'Session';
+  const working = !!summary && sessionActivity(summary) === 'working';
+  const label = question ? 'Needs you' : active ? { drafted: 'Draft ready', delivering: 'Sending', uncertain: 'Check delivery', delivered: 'Sent' }[active.state]
+    : working ? 'Working' : latest?.kind === 'question' ? 'Answered' : 'Done';
+  const row = el('div', undefined, 'thread-row'); row.dataset.sessionId = id;
+  row.dataset.state = question || ['drafted', 'uncertain'].includes(active?.state) ? 'needs' : working ? 'working' : 'done';
+  const kind = sessionKind({ id });
+  const icon = kind ? dressKind(el('span', undefined, 'thread-icon'), kind, 28, question ? 'waiting' : working ? 'working' : 'idle', !question && !working) : el('span');
+  const body = el('div', undefined, 'thread-body'), head = el('button', undefined, 'thread-head'); head.type = 'button';
+  head.append(el('span', title, 'thread-title'), el('span', label, 'thread-state'));
+  head.addEventListener('click', () => selectSession(id));
+  body.append(head);
+  // A live question's card already states the latest event.
+  if (latest && !(question && latest.kind === 'question')) body.append(el('p', eventLine(latest), 'thread-line'));
+  body.append(...cards);
+  const earlier = thread?.updates.slice(0, -1).reverse() || [];
+  if (earlier.length) {
+    const more = el('details', undefined, 'thread-earlier'), list = el('div');
+    more.dataset.disclosureId = 'thread:' + id; more.open = expanded.get(more.dataset.disclosureId) ?? false;
+    more.append(el('summary', `${earlier.length} earlier ${earlier.length === 1 ? 'update' : 'updates'}`), list);
+    for (const event of earlier) list.append(el('p', `${clockTime(event.at)} · ${eventLine(event)}`));
+    body.append(more);
+  }
+  row.append(icon, body);
+  return row;
+}
+function renderCheckin(state, threads = new Map(), groups = [], expanded = new Map()) {
   const section = el('section', undefined, 'assistant-checkin');
   section.setAttribute('aria-label', 'Miso check-in');
   if (!state.messages?.length) {
     section.append(el('h2', "Hi, I'm Miso."), el('p', 'I keep an eye on your sessions. Ask me what needs you, or answer a question below.'));
   }
   const { questions } = state.assistant;
-  const keep = new Set();
+  const keep = new Set(), cards = new Map(), cardsFor = id => cards.get(id) || cards.set(id, []).get(id);
   for (const question of questions) {
     const { sessionId, dialog } = question, key = sessionId + ':' + dialog.id;
     keep.add(key);
@@ -1634,7 +1667,7 @@ function renderCheckin(state) {
       card.addEventListener('submit', event => { event.preventDefault(); if (input) void answer({ value: input.value }); });
       card.append(controls, feedback); assistantCards.set(key, card);
     }
-    section.append(card);
+    cardsFor(sessionId).push(card);
   }
   for (const draft of state.assistant.drafts || []) {
     const key = 'draft:' + draft.id + ':' + draft.revision + ':' + draft.state + ':' + JSON.stringify(draft.feedback);
@@ -1693,9 +1726,31 @@ function renderCheckin(state) {
       card.addEventListener('submit', event => event.preventDefault());
       card.append(feedback); assistantCards.set(key, card);
     }
-    section.append(card);
+    cardsFor(draft.sessionId).push(card);
   }
   for (const key of assistantCards.keys()) if (!keep.has(key)) assistantCards.delete(key);
+  // One row per session: at its latest check-in, or at the bottom while it still involves you.
+  for (const id of new Set([...threads.keys(), ...cards.keys()])) {
+    const thread = threads.get(id), row = threadRow(id, thread, questions.find(question => question.sessionId === id),
+      (state.assistant.drafts || []).filter(draft => draft.sessionId === id), cards.get(id) || [], expanded);
+    if (cards.has(id) || !thread) section.append(row);
+    else { thread.group.rows.append(row); thread.group.count++; }
+  }
+  // The latest check-in keeps Miso's lead; older ones shrink to a time and one line you can open.
+  for (const [index, group] of groups.entries()) {
+    const latest = index === groups.length - 1;
+    if (!group.count && !latest) { group.node.remove(); continue; }
+    if (latest && group.lead) group.node.append(group.lead);
+    else {
+      const note = el('details', undefined, 'thread-time'), summary = el('summary');
+      note.dataset.disclosureId = 'time:' + group.at; note.open = expanded.get(note.dataset.disclosureId) ?? false;
+      summary.append(el('time', clockTime(group.at)), ...(group.lead ? [el('span', plainLine(group.lead.textContent), 'thread-time-lead')] : []));
+      note.append(summary);
+      if (group.lead) note.append(group.lead); else note.dataset.empty = '';
+      group.node.append(note);
+    }
+    group.node.append(group.rows);
+  }
   return section;
 }
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
@@ -1874,8 +1929,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (loading) fragment.append(loading);
   if (historyError) { const error = el('p', historyError + ' Scroll again to retry, or return to the latest messages.', 'hint'); error.setAttribute('role', 'alert'); fragment.append(error); }
   const { recovered } = replyAttempts(state, messages);
-  // Miso's automatic check-ins: each supersedes the last, so older ones fold behind one line.
-  let automatic = false, updates;
+  // Miso threads: each check-in's events are collected per session; rows are placed after the loop.
+  const threads = new Map(), groups = [];
+  let group;
   for (const [index, message] of messages.entries()) {
     if (index === usagePosition) { activity = undefined; fragment.append(renderUsage(usage)); }
     if (message.role === 'toolResult') {
@@ -1884,7 +1940,18 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       continue;
     }
     // Internal notices and extension prompts belong in quiet activity rows, not chat bubbles.
-    if (state.assistant && message.role === 'user' && userMessageText(message).startsWith('[Pi Remote session events]\n')) { automatic = true; activity = undefined; continue; }
+    if (state.assistant && message.role === 'user' && userMessageText(message).startsWith('[Pi Remote session events]\n')) {
+      activity = undefined;
+      group = { node: el('div', undefined, 'thread-group'), rows: el('div'), count: 0, at: message.timestamp };
+      groups.push(group); fragment.append(group.node);
+      try {
+        for (const event of JSON.parse(userMessageText(message).split('\n')[1])) {
+          const thread = threads.get(event.sessionId) || { updates: [] };
+          thread.updates.push(event); thread.group = group; threads.set(event.sessionId, thread);
+        }
+      } catch { /* A shortened payload keeps only Miso's lead. */ }
+      continue;
+    }
     if (message.source === 'extension' || message.activityLabel) {
       activity = undefined;
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
@@ -1903,7 +1970,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       && !(state.pendingReply && [message.id, message.liveId].includes(state.pendingReply));
     if (message.text || message.images?.length || message.role === 'user' || failed) {
       activity = undefined;
-      if (message.role === 'user') { automatic = false; updates = undefined; }
+      if (message.role === 'user') group = undefined;
       if (skill) fragment.append(el('p', 'Loaded skill: ' + skill.name, 'skill-loaded'));
       const workerInstruction = state.coordination?.role === 'worker' && message.role === 'user';
       const article = el('article', undefined, 'message ' + (message.role === 'user' && !workerInstruction ? 'user' : 'assistant'));
@@ -1960,18 +2027,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (message.delivery) {
         const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);
       }
-      if (article.childNodes.length && automatic && message.role === 'assistant') {
-        if (!updates) {
-          const node = el('details', undefined, 'tool-activity assistant-updates'); node.hidden = true;
-          node.dataset.disclosureId = 'updates:' + message.id; node.open = expanded.get(node.dataset.disclosureId) ?? false;
-          updates = { node, summary: el('summary'), count: 0 }; node.append(updates.summary); fragment.append(node);
-        } else {
-          updates.node.append(updates.last); updates.count++; updates.node.hidden = false;
-          updates.summary.textContent = `${updates.count} earlier ${updates.count === 1 ? 'update' : 'updates'}`;
-        }
-        updates.last = article;
-      }
-      if (article.childNodes.length) fragment.append(article);
+      // Miso's reply to a check-in becomes that check-in's lead line.
+      if (article.childNodes.length && group && message.role === 'assistant') group.lead = article;
+      else if (article.childNodes.length) fragment.append(article);
     }
     for (const call of message.toolCalls || []) appendTool(call.id, call.name, call.text, results.get(call.id));
     if (message.truncated && (!skill || skill.text)) { activity = undefined; fragment.append(el('p', 'Message shortened for mobile.', 'hint')); }
@@ -2050,7 +2108,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       if (count && !group.codemode) group.summary.append(el('span', `${count} ${text}`, 'tool-activity-' + status));
     }
   }
-  if (state.assistant && !historyWindow) fragment.append(renderCheckin(state));
+  if (state.assistant) {
+    const section = renderCheckin(state, threads, groups, expanded);
+    if (!historyWindow) fragment.append(section);
+  }
   updateActivity();
   // Keep the indicator connected so streaming updates do not restart its CSS animation.
   if (activityIndicator.parentNode !== box) box.append(activityIndicator);

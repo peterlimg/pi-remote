@@ -822,6 +822,33 @@ pre.message-text { white-space: pre-wrap; }
 .assistant-question-source { display: block; max-width: 100%; min-height: 44px; padding: 0; color: var(--accent); text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .assistant-question h3 { margin: 8px 0 16px; font-size: 17px; }
 .assistant-question-message { white-space: pre-wrap; }
+/* Miso threads: one row per session, the host's facts in a line, any card for it inside. */
+.thread-group { max-width: var(--content-width); margin: 0 auto 8px; }
+.thread-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 10px 0; }
+.thread-row + .thread-row { border-top: 1px solid var(--line); }
+.thread-icon { margin-top: 2px; }
+.thread-head { display: flex; align-items: baseline; gap: 8px; width: 100%; min-height: 28px; padding: 0; background: transparent; color: var(--text); font-weight: 400; text-align: left; }
+.thread-title { flex: 1; min-width: 0; overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.thread-state { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.thread-row[data-state=needs] .thread-state { color: var(--warning); font-weight: 600; }
+.thread-row[data-state=working] .thread-state { color: var(--working); font-weight: 600; }
+.thread-line { display: -webkit-box; margin: 2px 0 0; overflow: hidden; font-size: 15px; line-height: 1.4; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.thread-earlier { color: var(--muted); font-size: 13px; }
+.thread-earlier summary, .thread-time summary { display: flex; align-items: center; gap: 6px; min-height: 36px; list-style: none; cursor: pointer; }
+.thread-earlier summary::-webkit-details-marker, .thread-time summary::-webkit-details-marker { display: none; }
+.thread-earlier summary::after { content: ''; width: 6px; height: 6px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); }
+.thread-earlier[open] summary::after { transform: rotate(135deg); }
+.thread-earlier p { margin: 0 0 6px; line-height: 1.45; overflow-wrap: anywhere; }
+.thread-time { margin-top: 12px; color: var(--muted); font-size: 13px; }
+.thread-time[data-empty] summary { pointer-events: none; }
+.thread-time time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.thread-time-lead { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-time[open] .thread-time-lead { display: none; }
+.thread-row .assistant-question { margin: 8px 0 0; padding: 0; border: 0; }
+.thread-row .assistant-question-source { display: none; }
+.thread-row .assistant-question-actions .secondary { padding: 0 16px; border: 1px solid var(--line); border-radius: 22px; color: var(--text); }
+.thread-row .assistant-question h3 { margin: 2px 0 12px; font-size: 15px; font-weight: 500; }
+.thread-row .assistant-draft h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 .assistant-question-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .assistant-question-actions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .assistant-question :is(input, textarea) { width: 100%; margin-bottom: 12px; font-size: 16px; }
