@@ -31,7 +31,8 @@ test('Duet dark colors cover login, sessions, chat and menus without changing li
     await page.screenshot({ path: testInfo.outputPath(`sessions-dark-${width}.png`) });
     await page.getByRole('button', { name: /Project Alpha/ }).click();
     await expect(page.locator('#app')).not.toHaveClass(/opening/);
-    await expect(page.locator('#composer')).toHaveCSS('background-color', 'rgba(40, 37, 40, 0.5)');
+    await expect(page.locator('#composer')).toHaveCSS('background-color', 'rgba(32, 32, 34, 0.6)');
+    await expect(page.locator('.composer-settings')).toHaveCSS('box-shadow', 'none');
     await expect(page.locator('.message.user .message-text').first()).toHaveCSS('background-color', 'rgb(34, 31, 34)');
     await expect(page.locator('.code-block').first()).toHaveCSS('background-color', 'rgb(27, 24, 27)');
     await page.locator('#transcript').evaluate(node => { node.scrollTop = 0; });
@@ -41,10 +42,16 @@ test('Duet dark colors cover login, sessions, chat and menus without changing li
     await expect(page.locator('.tool-output').first()).toBeVisible();
     await expect(page.locator('details.tool').first()).toHaveCSS('background-color', 'rgb(27, 24, 27)');
     await page.locator('.session-info summary').click();
-    await expect(page.locator('.session-details')).toHaveCSS('background-color', 'rgba(40, 37, 40, 0.5)');
+    await expect(page.locator('.session-details')).toHaveCSS('background-color', 'rgba(32, 32, 34, 0.6)');
     await page.locator('.session-info summary').click();
     await page.locator('#prompt').fill('/');
-    await expect(page.locator('#command-menu')).toHaveCSS('background-color', 'rgba(40, 37, 40, 0.5)');
+    await expect(page.locator('#command-menu')).toHaveCSS('background-color', 'rgba(32, 32, 34, 0.6)');
+    for (const selector of ['.conversation-heading', '.session-details', '#command-menu', '#composer']) {
+      await expect(page.locator(selector)).toHaveCSS('background-image', /linear-gradient/);
+      await expect(page.locator(selector)).toHaveCSS('border-top-width', '1px');
+      await expect(page.locator(selector)).not.toHaveCSS('box-shadow', /inset/);
+    }
+    await expect(page.locator('#command-menu')).toHaveCSS('backdrop-filter', 'blur(12px) saturate(1.25)');
     await expect(page.locator('.command-option[aria-selected=true]')).toBeVisible();
     const pairs = await page.evaluate(() => {
       // Glass is translucent: measure against its layers painted over the page, ignoring the blur.
@@ -72,7 +79,7 @@ test('Duet dark colors cover login, sessions, chat and menus without changing li
     await page.locator('.tool-activity > summary').first().click();
     await page.emulateMedia({ colorScheme: 'light' });
     for (const [selector, color] of [['html', 'rgb(250, 250, 248)'], ['#sidebar', 'rgb(242, 243, 240)'],
-      ['#composer', 'rgba(255, 255, 255, 0.55)'], ['.message.user .message-text', 'rgb(237, 240, 235)']]) {
+      ['#composer', 'rgba(255, 255, 255, 0.6)'], ['.message.user .message-text', 'rgb(237, 240, 235)']]) {
       await expect(page.locator(selector).first()).toHaveCSS('background-color', color);
     }
     await page.screenshot({ path: testInfo.outputPath(`chat-light-${width}.png`) });

@@ -18,12 +18,12 @@
   --warning: light-dark(#77591a, #e4c078);
   --working: light-dark(#15542f, #80d4a0);
   --selection: light-dark(#d3e4de, #3b383b);
-  /* One glass for every floating surface: a light tint over a blur, a faint edge, and specular highlights on the top-left and bottom-right rims. */
-  --glass: light-dark(rgb(255 255 255 / .55), rgb(40 37 40 / .5));
+  /* Rim-lit glass: one thin outline, with light on the surface instead of a second inset rim. */
+  --glass: light-dark(rgb(255 255 255 / .6), rgb(32 32 34 / .6));
   --glass-fill: color-mix(in srgb, var(--text) 8%, transparent);
-  --glass-edge: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .08));
-  --glass-highlight: inset 1px 1px 0 light-dark(#fff, rgb(255 255 255 / .3)), inset -1px -1px 0 light-dark(rgb(255 255 255 / .8), rgb(255 255 255 / .12));
-  --glass-blur: blur(16px) saturate(1.8);
+  --glass-edge: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .12));
+  --glass-sheen: linear-gradient(145deg, light-dark(rgb(255 255 255 / .28), rgb(255 255 255 / .07)), transparent 32%, transparent 75%, light-dark(rgb(255 255 255 / .1), rgb(255 255 255 / .025)));
+  --glass-blur: blur(12px) saturate(1.25);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --content-width: 48rem;
@@ -34,6 +34,9 @@
 }
 :root[data-theme=light] { color-scheme: light; }
 :root[data-theme=dark] { color-scheme: dark; }
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--composer-bg); --glass-blur: none; }
+}
 * { box-sizing: border-box; scrollbar-color: var(--line) var(--bg); scrollbar-width: thin; }
 ::selection { background: var(--selection); color: var(--text); }
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
@@ -56,7 +59,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls and surfaces all share the same glass over the content beneath them. */
-.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass); box-shadow: var(--glass-highlight), 0 8px 24px rgb(0 0 0 / .14); }
+.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
 /* The composer blurs from a layer behind it: a blurring form would cut the glass controls inside it off from the thread. */
 .shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
@@ -791,9 +794,9 @@ pre.message-text { white-space: pre-wrap; }
 #usage-meter[aria-expanded=true] { background-color: var(--glass-fill); }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
-.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--glass-fill); box-shadow: var(--glass-highlight); color: var(--text); }
+.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--glass-fill); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
-.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--glass-fill); box-shadow: var(--glass-highlight); border-radius: 22px; }
+.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--glass-fill); border-radius: 22px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }

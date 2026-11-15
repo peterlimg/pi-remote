@@ -12,7 +12,7 @@ Use the production custom properties for text, muted text, backgrounds, panels, 
 
 ## Floating chrome
 
-Every floating control and surface uses one glass material: a light tint over a backdrop blur, a faint edge, and specular highlights on the top-left and bottom-right rims. This covers the header controls, composer, go-to-bottom button, session search, menus, popovers, bottom sheets, dialogs, toasts, the Workers row and the image viewer controls. Controls inside the composer use a light glass fill with the same rim highlights. Selected and pressed states use the glass fill rather than solid panel colours. The thread scrolls beneath the header and the composer dock and stays sharp up to each control; it fades out only below the composer. Only the QR camera sheet stays black.
+Every floating control and surface uses the rim-lit glass material: a light tint over a 12px backdrop blur, a subtle diagonal sheen, and one thin outline without inset rim highlights. This covers the header controls, composer, go-to-bottom button, session search, menus, popovers, bottom sheets, dialogs, toasts, the Workers row and the image viewer controls. Controls inside the composer use a light glass fill without extra outlines. Selected and pressed states use the glass fill rather than solid panel colours. The thread scrolls beneath the header and the composer dock and stays sharp up to each control; it fades out only below the composer. Only the QR camera sheet stays black.
 
 ## Diagrams
 
