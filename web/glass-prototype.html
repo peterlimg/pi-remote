@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#100d10">
+  <title>Glass comparison · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/glass-prototype.css">
+  <script type="module" src="/glass-prototype.js"></script>
+</head>
+<body>
+  <!-- Isolated material study: reuse real markup, never connect to sessions or change live styles. -->
+  <div id="preview" class="shell viewing" aria-label="Sample conversation"></div>
+  <nav id="study" aria-label="Glass comparison">
+    <div class="study-controls">
+      <button id="previous" type="button" aria-label="Previous style">←</button>
+      <p><strong id="variant-label" aria-live="polite"></strong><span id="variant-note"></span></p>
+      <button id="next" type="button" aria-label="Next style">→</button>
+      <button id="theme" type="button">Light</button>
+    </div>
+    <p id="study-status" role="status">Preview only · loading sample controls…</p>
+  </nav>
+</body>
+</html>
