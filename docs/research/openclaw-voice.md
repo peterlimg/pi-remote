@@ -2,6 +2,10 @@
 
 Checked 2026-10-28 UTC. Source snapshot: [`fd0403b40c980de2ab8fe8d20b3d49f06a488596`](https://github.com/openclaw/openclaw/commit/fd0403b40c980de2ab8fe8d20b3d49f06a488596), committed 2026-10-28T15:38:56Z. Findings below come from fetched first-party documentation and pinned implementation, not a running OpenClaw installation or this user's account.
 
+## Follow-up live test
+
+The [2026-11-15 verification](subscription-voice-verification.md) successfully transcribed synthetic speech through the `gpt-live-1-codex` subscription WebRTC route. The separate Platform file-transcription request failed with `credit_balance_exhausted`; Claude browser-audio integration remains unverified. The source-only findings below retain their original scope and date.
+
 ## Main finding
 
 OpenClaw separates speech recognition, agent execution, and speech output. It also implements a ChatGPT/Codex OAuth voice route, so our earlier suggestion that subscription voice can only be used inside the official apps was too absolute.
