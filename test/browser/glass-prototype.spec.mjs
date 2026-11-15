@@ -24,12 +24,11 @@ test('glass comparison reuses the controls without connecting to or changing ses
         return [style.backgroundColor, style.backgroundImage, style.boxShadow];
       }));
       for (const material of materials) expect(material).toEqual(materials[0]);
-      if (variant === 'C') {
-        for (const selector of ['.conversation-heading', '.composer', '.session-details', '.coordinator-context', '#settings-picker']) {
-          await expect(page.locator(selector)).toHaveCSS('border-top-width', '1px');
-          await expect(page.locator(selector)).not.toHaveCSS('box-shadow', /inset/);
-        }
+      for (const selector of ['.conversation-heading', '.composer', '.session-details', '.coordinator-context', '#settings-picker']) {
+        await expect(page.locator(selector)).toHaveCSS('border-top-width', '1px');
+        await expect(page.locator(selector)).not.toHaveCSS('box-shadow', /inset/);
       }
+      await expect(page.locator('.composer-settings')).toHaveCSS('box-shadow', 'none');
       await expect(page.locator('#prompt')).toHaveCSS('filter', 'none');
       await expect(page.locator('#prompt')).toHaveCSS('opacity', '1');
       await page.screenshot({ path: testInfo.outputPath(`${width}-${variant}-menu.png`) });

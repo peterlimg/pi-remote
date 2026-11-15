@@ -2,7 +2,7 @@
 // Sample data only. Do not load app.js, open a WebSocket, or write browser storage.
 const $ = id => document.getElementById(id);
 const variants = {
-  A: ['A · Current', 'The glass currently on your phone'],
+  A: ['A · Original tint', 'Original colour and blur; clean border'],
   B: ['B · Quiet', 'Less background bleed; plain inner controls'],
   C: ['C · Rim-lit', 'Clearer glass; one clean, thin outline'],
 };

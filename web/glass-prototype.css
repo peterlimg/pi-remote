@@ -1,5 +1,9 @@
 /* Three materials on identical production markup; no live sessions or persisted settings. */
-:root { --study-height: 108px; }
+:root {
+  --study-height: 108px;
+  --glass-edge: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .12));
+  --glass-highlight: 0 0 0 transparent;
+}
 #preview { --shell-height: calc(100dvh - var(--study-height) - env(safe-area-inset-bottom)); grid-template-columns: 1fr; }
 #preview > main { display: flex; background: var(--bg); }
 #study { position: fixed; inset: auto 0 0; z-index: 10; height: calc(var(--study-height) + env(safe-area-inset-bottom)); padding: 8px 12px env(safe-area-inset-bottom); background: var(--bg); border-top: 1px solid var(--line); }
@@ -18,21 +22,17 @@
 /* B: quiet frosted glass. Keep foreground controls plain; no raised rims inside a rim. */
 :root[data-variant=B] {
   --glass: light-dark(rgb(255 255 255 / .72), rgb(36 36 38 / .72));
-  --glass-edge: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .14));
-  --glass-highlight: inset 0 1px 0 light-dark(rgb(255 255 255 / .8), rgb(255 255 255 / .12));
   --glass-blur: blur(16px) saturate(1.2);
 }
 
 /* C: one thin outline; the surface sheen supplies the light without a second inset rim. */
 :root[data-variant=C] {
   --glass: light-dark(rgb(255 255 255 / .6), rgb(32 32 34 / .6));
-  --glass-edge: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .12));
-  --glass-highlight: 0 0 0 transparent;
   --glass-blur: blur(12px) saturate(1.25);
 }
-:root:is([data-variant=B], [data-variant=C]) .composer-settings,
-:root:is([data-variant=B], [data-variant=C]) .composer-toolbar #attach,
-:root:is([data-variant=B], [data-variant=C]) .composer-actions :is(#commands, #abort) { box-shadow: none; }
+#preview .composer-settings,
+#preview .composer-toolbar #attach,
+#preview .composer-actions :is(#commands, #abort) { box-shadow: none; }
 :root[data-variant=C] :is(.conversation-heading, #back, .session-info summary, .composer, #scroll-bottom, .session-details, .command-menu, .coordinator-context, .coordinator-sheet) {
   background-image: linear-gradient(145deg, light-dark(rgb(255 255 255 / .28), rgb(255 255 255 / .07)), transparent 32%, transparent 75%, light-dark(rgb(255 255 255 / .1), rgb(255 255 255 / .025)));
 }
