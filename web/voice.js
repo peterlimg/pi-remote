@@ -2,11 +2,18 @@ export function voiceComposer({ request, context, changed, notice }) {
   const button = document.getElementById('voice-record'), cancelButton = document.getElementById('voice-cancel');
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
   const preview = document.getElementById('voice-preview'), input = document.getElementById('prompt');
+  const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
+  const bars = Array.from({ length: 32 }, () => document.createElement('i'));
+  waveform.replaceChildren(...bars);
   let active;
   const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
     panel.hidden = !active;
+    if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
+    const showingWaveform = active?.phase === 'recording' && !!active.analyser;
+    waveform.hidden = !showingWaveform;
+    status.classList.toggle('sr-only', showingWaveform);
     cancelButton.hidden = !active;
     button.setAttribute('aria-label', active ? 'Stop dictation' : 'Dictate with ChatGPT');
     button.title = active ? 'Stop recording and insert text' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';
@@ -17,7 +24,30 @@ export function voiceComposer({ request, context, changed, notice }) {
     preview.textContent = active?.text || '';
     changed();
   }
+  function stopMeter(call) {
+    cancelAnimationFrame(call.frame);
+    call.source?.disconnect();
+    if (call.audio) { void call.audio.close().catch(() => {}); call.audio = undefined; }
+    call.analyser = undefined;
+  }
+  function meter(call) {
+    const samples = new Uint8Array(call.analyser.fftSize), heights = bars.map(() => 3);
+    let last = 0;
+    const draw = now => {
+      if (!current(call) || call.phase !== 'recording') return;
+      if (now - last >= 65) {
+        last = now; call.analyser.getByteTimeDomainData(samples);
+        const rms = Math.sqrt(samples.reduce((sum, sample) => sum + ((sample - 128) / 128) ** 2, 0) / samples.length);
+        heights.shift(); heights.push(Math.max(3, Math.min(30, rms * 180)));
+        bars.forEach((bar, i) => { bar.style.height = heights[i] + 'px'; });
+      }
+      call.frame = requestAnimationFrame(draw);
+    };
+    bars.forEach(bar => { bar.style.height = '3px'; });
+    call.frame = requestAnimationFrame(draw);
+  }
   function release(call) {
+    stopMeter(call);
     clearTimeout(call.timer); clearTimeout(call.connectTimer);
     call.stream?.getTracks().forEach(track => track.stop());
     call.peer?.close(); call.rejectConnection?.(new Error('Dictation cancelled.'));
@@ -25,9 +55,11 @@ export function voiceComposer({ request, context, changed, notice }) {
   function cancel() {
     const call = active;
     if (!call) return;
+    const restoreFocus = [button, cancelButton].includes(document.activeElement);
     active = undefined; release(call);
     if (call.started) void request('voiceCancel', { sessionId: call.sessionId, voiceId: call.id }).catch(() => {});
     render();
+    if (restoreFocus && !button.hidden) button.focus({ preventScroll: true });
   }
   function insert(call, text, message) {
     if (!current(call)) return;
@@ -40,16 +72,17 @@ export function voiceComposer({ request, context, changed, notice }) {
       const addition = (before && !/\s$/.test(before) ? ' ' : '') + words + (after && !/^\s/.test(after) ? ' ' : '');
       input.value = before + addition + after;
       input.setSelectionRange(before.length + addition.length, before.length + addition.length);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     render();
+    if (words) input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus({ preventScroll: true });
     if (message) notice(message, call.sessionId);
     else if (!words) notice('No speech was recognized. Try recording again.', call.sessionId);
   }
   async function finish() {
     const call = active;
     if (!call || call.phase !== 'recording') return;
-    call.phase = 'finishing'; clearTimeout(call.timer);
+    call.phase = 'finishing'; clearTimeout(call.timer); stopMeter(call);
     call.stream.getTracks().forEach(track => track.stop()); render();
     try {
       const result = await request('voiceFinish', { sessionId: call.sessionId, voiceId: call.id });
@@ -66,7 +99,9 @@ export function voiceComposer({ request, context, changed, notice }) {
     const state = context();
     if (!state.enabled || !supported()) return;
     const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'connecting', text: '' };
-    notice(''); render();
+    input.blur(); notice(''); render(); cancelButton.focus({ preventScroll: true });
+    // Start Web Audio inside the tap gesture so Safari can render the microphone level.
+    try { call.audio = new AudioContext(); void call.audio.resume().catch(() => {}); } catch {}
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
       if (!current(call)) { stream.getTracks().forEach(track => track.stop()); return; }
@@ -99,6 +134,13 @@ export function voiceComposer({ request, context, changed, notice }) {
         }
       };
       call.phase = 'recording'; stream.getTracks().forEach(track => { track.enabled = true; });
+      if (call.audio) {
+        try {
+          call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 256;
+          call.source = call.audio.createMediaStreamSource(stream); call.source.connect(call.analyser);
+          meter(call);
+        } catch { stopMeter(call); }
+      }
       call.timer = setTimeout(finish, 120000); render();
     } catch (error) {
       if (!current(call)) return;

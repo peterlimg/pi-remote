@@ -1,12 +1,14 @@
-.composer-toolbar #voice-record {
+.composer-toolbar :is(#voice-record, #voice-cancel) {
   display: grid; place-items: center; flex-shrink: 0;
   width: 44px; height: 44px; padding: 0;
   border: 6px solid transparent; border-radius: 50%;
   background: var(--glass-fill); background-clip: padding-box; color: var(--text);
 }
-.composer-toolbar #voice-record[data-recording="true"] { color: var(--error); }
-#voice-status { color: var(--text); padding: 0 6px 8px; }
-.voice-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-#voice-cancel { min-height: 44px; flex-shrink: 0; font-size: 12px; }
-#voice-preview { margin: 0; max-height: 100px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; }
-#voice-preview:empty { display: none; }
+#voice-record .voice-stop-icon { display: none; }
+#composer[data-voice] #voice-record > svg { display: none; }
+#composer[data-voice] #voice-record .voice-stop-icon { display: block; }
+#composer[data-voice] :is(#prompt, #attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #send, #composer-hint) { display: none; }
+#composer[data-voice] .composer-toolbar { flex-wrap: nowrap; }
+#voice-status { flex: 1; min-width: 0; color: var(--text); text-align: center; font-size: 12px; }
+#voice-waveform { display: flex; align-items: center; justify-content: space-between; gap: 3px; height: 32px; padding: 0 8px; overflow: hidden; }
+#voice-waveform i { flex: 1; max-width: 4px; min-width: 2px; height: 3px; border-radius: 2px; background: currentColor; }

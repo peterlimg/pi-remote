@@ -2704,8 +2704,11 @@ function fitPickerMenu() {
     dialog.close(); dialog.toggleAttribute('data-sheet', sheet);
     if (sheet) dialog.showModal(); else dialog.show();
   }
-  const height = sheet ? (window.visualViewport?.height ?? innerHeight) * .8
-    : $('composer').getBoundingClientRect().top - document.querySelector('.conversation-header').getBoundingClientRect().bottom - 16;
+  const headerBottom = document.querySelector('.conversation-header').getBoundingClientRect().bottom;
+  const composerTop = $('composer').getBoundingClientRect().top;
+  dialog.toggleAttribute('data-usage', settingsPicker.kind === 'usage');
+  dialog.style.setProperty('--usage-top', `${headerBottom - composerTop + 8}px`);
+  const height = sheet ? (window.visualViewport?.height ?? innerHeight) * .8 : composerTop - headerBottom - 16;
   $('settings-picker').style.setProperty('--picker-menu-height', Math.max(0, height) + 'px');
 }
 matchMedia('(max-width: 700px)').addEventListener('change', fitPickerMenu);

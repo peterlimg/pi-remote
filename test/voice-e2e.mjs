@@ -45,12 +45,14 @@ try {
     const id = sessionKey(file), instanceId = randomUUID();
     const lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
     const agent = await socket(origin.replace('http:', 'ws:') + '/bridge', config.bridgeToken); agents.push(agent);
-    const state = { id, file, instanceId, title, model, cwd: dir, status: 'idle', messages: [{ id: 'hello', role: 'user', text: 'Voice test' }], tools: [], revision: 0, updatedAt: Date.now() };
+    const state = { id, file, instanceId, title, model, cwd: dir, status: 'idle', contextUsage: { tokens: 32000, contextWindow: 100000, percent: 32 }, messages: [{ id: 'hello', role: 'user', text: 'Voice test' }], tools: [], revision: 0, updatedAt: Date.now() };
     states.push(state); agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state }));
     agent.ws.on('message', raw => {
       const packet = JSON.parse(raw.toString()); if (packet.type !== 'command') return;
       if (packet.command.type === 'prompt') commands.push(packet.command);
-      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value: packet.command.type === 'getCommands' ? { commands: [] } : { accepted: true } }));
+      const value = packet.command.type === 'getCommands' ? { commands: [] } : packet.command.type === 'getUsage'
+        ? { model: state.model, contextUsage: state.contextUsage } : { accepted: true };
+      agent.ws.send(JSON.stringify({ type: 'result', id: packet.id, ok: true, value }));
     });
   }
   await until(() => host.service.live.size === 2);
@@ -59,10 +61,17 @@ try {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   await context.addInitScript(() => {
     if (!navigator.mediaDevices) return;
-    window.voiceTracks = [];
+    window.voiceTracks = []; window.voiceContexts = [];
+    const NativeAudioContext = window.AudioContext;
+    window.AudioContext = class extends NativeAudioContext {
+      constructor(...args) { super(...args); window.voiceContexts.push(this); }
+    };
     navigator.mediaDevices.getUserMedia = async () => {
-      const audio = new AudioContext();
-      const stream = audio.createMediaStreamDestination().stream;
+      const audio = new NativeAudioContext(), destination = audio.createMediaStreamDestination();
+      const oscillator = audio.createOscillator(), gain = window.voiceGain = audio.createGain();
+      gain.gain.value = .15; oscillator.connect(gain); gain.connect(destination); oscillator.start();
+      await audio.resume();
+      const stream = destination.stream;
       window.voiceTracks.push(...stream.getTracks()); return stream;
     };
     window.RTCPeerConnection = class {
@@ -86,7 +95,8 @@ try {
     await expect(page.locator('#voice-label')).toHaveText('Listening · audio goes to OpenAI', { timeout: 10000 });
     return providerSockets.at(-1);
   };
-  const stopped = async () => expect.poll(() => page.evaluate(() => window.voiceTracks.every(track => track.readyState === 'ended'))).toBe(true);
+  const stopped = async () => expect.poll(() => page.evaluate(() =>
+    window.voiceTracks.every(track => track.readyState === 'ended') && window.voiceContexts.every(audio => audio.state === 'closed'))).toBe(true);
 
   await fresh();
   await page.locator('#prompt').fill('Keep this draft.');
@@ -94,12 +104,29 @@ try {
   provider.packet({ type: 'input_transcript.added', item: { text: 'Purple notebook' } });
   provider.packet({ type: 'output_transcript.added', item: { text: 'DO NOT INSERT ASSISTANT SPEECH' } });
   await expect(page.locator('#voice-preview')).toHaveText('Purple notebook');
-  await expect(page.locator('#send')).toBeDisabled(); assert.equal(commands.length, 0);
+  await expect(page.locator('#send')).toBeHidden(); assert.equal(commands.length, 0);
+  await expect(page.locator('#prompt')).toBeHidden();
+  await expect(page.locator('#prompt')).not.toBeFocused();
+  await expect(page.locator('#attach')).toBeHidden();
+  await expect(page.locator('#voice-record .voice-stop-icon')).toBeVisible();
+  const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
+  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
+  const recordingBox = await page.locator('#composer').boundingBox();
+  assert.ok(recordingBox.height < 80);
   await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: join(evidence, 'recording-desktop-dark.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
+  await page.evaluate(() => { window.voiceGain.gain.value = 0; });
+  await expect.poll(async () => Math.max(...await levels())).toBe(3);
+  await page.evaluate(() => { window.voiceGain.gain.value = .15; });
+  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
   await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
   provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Purple notebook beside the lamp.' } });
   await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.');
   await expect(page.locator('#voice-status')).toBeHidden(); assert.equal(provider.readyState, 3); assert.equal(commands.length, 0);
+  await expect(page.locator('#prompt')).toBeVisible();
+  await expect(page.locator('#send')).toBeVisible();
   await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 1);
   assert.equal(commands[0].text, 'Keep this draft. Purple notebook beside the lamp.');
 
@@ -109,8 +136,10 @@ try {
   await expect(page.locator('#prompt')).toHaveValue('Original'); await stopped(); assert.equal(provider.readyState, 3);
 
   await fresh(); provider = await record();
-  await page.locator('#prompt').fill('User edit wins');
+  await page.keyboard.press('Escape');
   await expect(page.locator('#voice-status')).toBeHidden(); await stopped();
+  await expect(page.locator('#voice-record')).toBeFocused();
+  await page.locator('#prompt').fill('User edit wins');
   await until(() => provider.readyState === 3);
   provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Stale' } });
   await expect(page.locator('#prompt')).toHaveValue('User edit wins');
@@ -177,6 +206,30 @@ try {
   await fresh();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await page.locator('#voice-record').evaluate(node => node.nextElementSibling.id), 'send');
+  const mic = await page.locator('#voice-record').boundingBox(), send = await page.locator('#send').boundingBox();
+  assert.ok(Math.abs(mic.y - send.y) < 2 && mic.x + mic.width <= send.x);
+  assert.ok(mic.width >= 44 && mic.height >= 44);
+  await page.locator('.session-info summary').click();
+  await expect(page.locator('.session-details')).toBeVisible();
+  await page.locator('.session-info summary').click();
+  await page.locator('#prompt').fill('Keep while checking usage');
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    const ring = await page.locator('.conversation-actions #usage-meter').boundingBox();
+    const menu = await page.locator('.session-info summary').boundingBox();
+    assert.ok(Math.abs(ring.y - menu.y) < 2 && ring.x + ring.width <= menu.x && ring.width >= 44);
+    await page.locator('#usage-meter').click();
+    await expect(page.locator('#settings-picker')).toContainText('32,000 / 100,000 tokens');
+    const header = await page.locator('.conversation-header').boundingBox(), panel = await page.locator('#settings-picker').boundingBox();
+    assert.ok(panel.y >= header.y + header.height && panel.y - header.y - header.height < 12);
+    assert.ok(panel.x >= 0 && panel.x + panel.width <= width);
+    await page.screenshot({ path: join(evidence, 'usage-' + width + '.png'), fullPage: true });
+    await page.keyboard.press('Escape'); await expect(page.locator('#settings-picker')).toBeHidden();
+    await expect(page.locator('#usage-meter')).toBeFocused();
+    await expect(page.locator('#prompt')).toHaveValue('Keep while checking usage');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(evidence, 'ready-phone.png'), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: join(evidence, 'ready-desktop.png'), fullPage: true });
@@ -200,7 +253,7 @@ try {
   await until(() => commands.length === 2); assert.equal(commands[1].text, 'Old host can still send');
   assert.equal(voiceAssetRequested, false);
   assert.deepEqual(errors, []);
-  console.log(`PASS: voice draft/send, cancellation, edits, session switch, quota, startup race, partial failure, provider gate and disconnect. Evidence: ${evidence}`);
+  console.log(`PASS: recording layout, live waveform/silence, audio cleanup, voice draft/send, cancellation, edits, session switch, quota, startup race, partial failure, provider gate and disconnect. Evidence: ${evidence}`);
 } catch (error) {
   const page = context?.pages()[0];
   console.error('Voice proof failed:', { uploads: uploads.length, sockets: providerSockets.map(socket => socket.readyState), errors,
