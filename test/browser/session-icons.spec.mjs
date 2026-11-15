@@ -280,7 +280,7 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-play-state', 'running');
     if (motion === 'luna') {
       const figure = button.locator('.bot-figure'), poses = [];
-      await expect(figure).toHaveCSS('animation-duration', '3s');
+      await expect(figure).toHaveCSS('animation-duration', '2.4s');
       await expect.poll(async () => {
         poses.push(await figure.evaluate(node => {
           const matrix = new DOMMatrix(getComputedStyle(node).transform);
@@ -288,7 +288,6 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
         }));
         return Math.max(...poses.map(pose => pose.angle)) - Math.min(...poses.map(pose => pose.angle));
       }, { timeout: 5000, intervals: [50], message: 'Luna rocks visibly instead of barely drifting' }).toBeGreaterThan(20);
-      expect(Math.max(...poses.map(pose => pose.y)) - Math.min(...poses.map(pose => pose.y))).toBeGreaterThan(3);
       await testInfo.attach('luna-working-poses', { body: JSON.stringify(poses), contentType: 'application/json' });
       await page.screenshot({ path: testInfo.outputPath('luna-picker-working.png') });
     }

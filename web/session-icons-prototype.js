@@ -52,9 +52,11 @@ const sessionKinds = {
     '<g class="character-sun-rays"><path d="M16 2v3M16 29v3M1 17h3M28 17h3M5 6l2 2M25 26l2 2M5 28l2-2M25 8l2-2"/></g>'],
   orbit: ['Orbit', '<circle cx="16" cy="16" r="10"/>', [[12, 13.5], [20, 13.5]],
     '<g class="character-planet-ring"><ellipse class="character-ring-back" cx="16" cy="17" rx="15" ry="5" transform="rotate(-22 16 17)"/></g>',
-    '<g class="character-planet-ring"><path class="character-ring-front" d="M2 22C8 29 28 20 30 12"/></g>'],
+    '<g class="character-planet-ring"><path class="character-ring-front" d="M2 22C8 29 28 20 30 12"/></g>',
+    '<g transform="rotate(-22 16 17)"><g class="character-moon-x"><g class="character-moon-y"><circle class="character-moon" cx="16" cy="17" r="1.9"/></g></g></g>'],
   comet: ['Comet', '<circle cx="19" cy="14" r="9.5"/>', [[16, 13], [23, 13]],
-    '<g class="character-comet-tail"><path class="bot-accent" d="M16 17Q8 18 3 29Q14 28 22 21Z"/><path class="bot-body" d="M13 14Q6 16 2 23Q10 23 18 19Z"/><path class="bot-body" d="M20 20Q15 28 9 31Q10 24 16 18Z"/></g>'],
+    '<g class="character-comet-tail"><path class="bot-accent" d="M16 17Q8 18 3 29Q14 28 22 21Z"/><path class="bot-body" d="M13 14Q6 16 2 23Q10 23 18 19Z"/><path class="bot-body" d="M20 20Q15 28 9 31Q10 24 16 18Z"/></g>', '',
+    '<path class="character-speed" d="M8 4 4 8M5 11l-3 3M28 22l-4 4"/>'],
   vega: ['Vega', '<path d="M16 2Q18 12 29 16Q18 19 16 30Q13 19 3 16Q13 13 16 2Z"/>', [[12.5, 16], [19.5, 16]], '', '',
     '<g class="character-vega-motes"><circle cx="4" cy="4" r="1.1"/><circle cx="28" cy="28" r=".8"/></g>'],
 };
@@ -114,7 +116,7 @@ function row(item) {
   }
   bot.setAttribute('role', 'img'); bot.setAttribute('aria-label', `${sessionKinds[kind][0]}, ${statusLabels[status]}${item.unread && leading ? ', new reply' : ''}`);
   const seed = [...item.id].reduce((sum, char) => sum + char.charCodeAt(0) * 97, 0);
-  bot.style.setProperty('--bot-t', `-${(Date.now() + (showProposals ? seed : 0)) % 6000}ms`);
+  bot.style.setProperty('--bot-t', `-${performance.now() + (showProposals ? seed % 6000 : 0)}ms`);
   bot.style.setProperty('--bot-blink', `-${(Date.now() + seed) % 6000}ms`);
   bot.innerHTML = botSvg(kind, busy ? status : 'idle', variant.size, !!item.unread && leading);
   visibleBots.observe(bot);
@@ -150,7 +152,7 @@ function render() {
     bot.classList.toggle('personality-bot', personalityKinds.includes(kind));
     bot.dataset.kind = kind; bot.dataset.mood = 'working'; bot.dataset.proposed = ''; bot.dataset.size = '32'; bot.dataset.unread = 'false';
     bot.setAttribute('aria-hidden', 'true');
-    bot.style.setProperty('--bot-t', `-${(Date.now() + index * 700) % 6000}ms`);
+    bot.style.setProperty('--bot-t', `-${performance.now() + index * 700}ms`);
     bot.style.setProperty('--bot-blink', `-${(Date.now() + index * 1000) % 6000}ms`);
     bot.innerHTML = botSvg(kind, 'working', 32); visibleBots.observe(bot);
     figure.append(bot, el('figcaption', sessionKinds[kind][0])); return figure;
