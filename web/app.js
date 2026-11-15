@@ -4,7 +4,6 @@ import { isVideo, MAX_VIDEO_BYTES, VIDEO_CHUNK_BYTES, VIDEO_LIMIT, videoMessage,
 import MarkdownIt from './markdown-it.mjs';
 import { renderDiagrams } from './diagrams.js';
 import { hello, channel, validKey } from './e2e.js';
-import { voiceComposer } from './voice.js';
 const markdown = new MarkdownIt({ html: false }).disable('image');
 // Only disclosure-only lines become markup; all other HTML stays escaped.
 markdown.block.ruler.before('html_block', 'disclosure', (state, start, end, silent) => {
@@ -177,13 +176,21 @@ const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-s
 const submissions = new Map();
 const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
-let supportsVoice = false;
-const voice = voiceComposer({ request, notice, changed: updateControls, context: () => {
-  const state = cache.get(selected);
-  const available = supportsVoice && state?.model?.startsWith('openai-codex/') && state?.coordination?.role !== 'worker';
-  return { sessionId: selected, model: state?.model, available,
-    enabled: available && connected && ['idle', 'working', 'waiting'].includes(state.status) && !sending.has(selected) };
-} });
+let supportsVoice = false, voice, voiceLoading;
+function loadVoice() {
+  if (voice || voiceLoading) return;
+  // Static assets update before a busy host can restart; older hosts cannot serve this module yet.
+  voiceLoading = import('./voice.js').then(({ voiceComposer }) => {
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/voice.css'; document.head.append(style);
+    voice = voiceComposer({ request, notice, changed: updateControls, context: () => {
+      const state = cache.get(selected);
+      const available = supportsVoice && state?.model?.startsWith('openai-codex/') && state?.coordination?.role !== 'worker';
+      return { sessionId: selected, model: state?.model, available,
+        enabled: available && connected && ['idle', 'working', 'waiting'].includes(state.status) && !sending.has(selected) };
+    } });
+    updateControls();
+  }).catch(() => notice('Dictation could not load. Refresh to try again.')).finally(() => { voiceLoading = undefined; });
+}
 function parseLogin(input) {
   const value = input.trim().replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '').replace(/&amp;/gi, '&');
   const start = value.search(/(?:^|[#?&/])token=/);
@@ -391,7 +398,7 @@ function connection(text, compact = text) {
   updateControls(); renderPagination();
 }
 function disconnect() {
-  voice.cancel(); supportsVoice = false;
+  voice?.cancel(); supportsVoice = false;
   closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
   const old = socket; socket = undefined; connected = false; supportsWorkerInspection = false; supportsHistory = false; supportsImages = false; supportsUploads = false; supportsVideos = false; supportsCommandResults = false; allowResume = false;
@@ -455,6 +462,7 @@ function connect() {
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
       supportsVoice = packet.supportsVoice === true;
+      if (supportsVoice) loadVoice();
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
       supportsRecentAvailability = packet.supportsRecentAvailability === true;
@@ -496,7 +504,7 @@ function connect() {
         loadCommands(id);
       }
     } else if (packet.type === 'voice') {
-      voice.receive(packet);
+      voice?.receive(packet);
     } else if (packet.type === 'sessions') {
       receiveList(packet);
     } else if (['workerSnapshot', 'workerPatch', 'workerNotice'].includes(packet.type)) {
@@ -1210,7 +1218,7 @@ function backToMiso(swiped = false) {
   return true;
 }
 async function selectSession(id, keepOrder = false, fromMiso = false) {
-  voice.cancel();
+  voice?.cancel();
   // Only taps inside Miso (thread rows and cards) return there; any other navigation clears it.
   const returning = misoReturn && id === assistantId;
   if (fromMiso && selected === assistantId) keepMisoBackdrop();
@@ -2562,8 +2570,8 @@ function updateControls() {
   $('composer-send-status').hidden = !outgoing;
   const noun = outgoing?.attachments.some(item => item.video) ? 'attachment' : 'image';
   $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${noun}${imageCount === 1 ? '' : 's'}…` : 'Sending…';
-  voice.update();
-  $('send').disabled = !live || sending.has(selected) || voice.busy;
+  voice?.update();
+  $('send').disabled = !live || sending.has(selected) || !!voice?.busy;
   $('send').hidden = !!working && !hasDraft;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
   $('attach').disabled = !selected || !!state?.creation || sending.has(selected);
@@ -2589,7 +2597,7 @@ function updateControls() {
   $('model-name').textContent ||= 'Model';
   $('model').title = modelName ? `Switch model: ${modelName}` : 'Choose a model';
   $('model').setAttribute('aria-label', $('model').title);
-  $('model').disabled = !live || changingReasoning.has(selected) || voice.busy;
+  $('model').disabled = !live || changingReasoning.has(selected) || !!voice?.busy;
   $('model').hidden = !state?.model && !pendingModel;
   $('reasoning-control').disabled = !live || changingReasoning.has(selected);
   $('reasoning-value').textContent = { Minimal: 'Min', Medium: 'Med', 'Extra high': 'XHigh' }[effort] || effort;
@@ -3451,14 +3459,14 @@ function resetSwipe() {
   const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
 $('back').addEventListener('click', () => {
-  voice.cancel();
+  voice?.cancel();
   haptic(); resetSwipe();
   if (backToMiso()) return;
   if (history.state?.session) history.back();
   else { $('app').classList.remove('viewing'); misoReturn = false; reportViewing(); }
 });
 window.addEventListener('popstate', () => {
-  voice.cancel();
+  voice?.cancel();
   if (skipPop) { skipPop = false; return; }
   resetSwipe(); closePicker(); $('nearby-sessions').hidePopover();
   if (misoReturn && history.state?.session && selected !== assistantId) { void selectSession(assistantId); return; }
@@ -3763,7 +3771,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
       resetSwipe();
       if (back && backToMiso(true)) closePicker();
       else if (back) {
-        voice.cancel(); closePicker(); app.classList.remove('viewing'); misoReturn = false; reportViewing();
+        voice?.cancel(); closePicker(); app.classList.remove('viewing'); misoReturn = false; reportViewing();
         if (history.state?.session) history.back();
       }
     }, 200);

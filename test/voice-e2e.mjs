@@ -181,6 +181,24 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: join(evidence, 'ready-desktop.png'), fullPage: true });
   writeFileSync(join(evidence, 'composer.aria.txt'), await page.locator('#composer').ariaSnapshot());
+  // A busy pre-upgrade host serves the new shell but does not yet know the voice asset routes.
+  let voiceAssetRequested = false;
+  for (const asset of ['voice.js', 'voice.css']) await page.route('**/' + asset, route => { voiceAssetRequested = true; return route.abort(); });
+  await page.routeWebSocket('**/ws', route => {
+    const upstream = route.connectToServer();
+    upstream.onMessage(raw => {
+      const packet = JSON.parse(String(raw));
+      if (packet.type === 'ready') delete packet.supportsVoice;
+      route.send(JSON.stringify(packet));
+    });
+  });
+  await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
+  await page.getByRole('button', { name: /Voice Alpha/ }).click();
+  await expect(page.locator('#voice-record')).toBeHidden();
+  await page.locator('#prompt').fill('Old host can still send');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await until(() => commands.length === 2); assert.equal(commands[1].text, 'Old host can still send');
+  assert.equal(voiceAssetRequested, false);
   assert.deepEqual(errors, []);
   console.log(`PASS: voice draft/send, cancellation, edits, session switch, quota, startup race, partial failure, provider gate and disconnect. Evidence: ${evidence}`);
 } catch (error) {
