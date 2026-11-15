@@ -177,6 +177,13 @@ try {
   await expect(page.locator('#notice')).toContainText('before confirmation');
   assert.equal(commands.length, 1);
 
+  await fresh(); await page.locator('#prompt').fill('Keep unchanged'); provider = await record();
+  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
+  await expect(page.locator('#voice-status')).toBeHidden({ timeout: 10000 });
+  await expect(page.locator('#prompt')).toHaveValue('Keep unchanged');
+  await expect(page.locator('#notice')).toBeHidden();
+  assert.equal(provider.readyState, 3); assert.equal(commands.length, 1);
+
   await fresh(); await page.locator('#prompt').fill('Original'); provider = await record();
   await page.getByRole('button', { name: 'Cancel dictation' }).click();
   provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Late words' } });

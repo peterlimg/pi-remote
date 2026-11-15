@@ -87,7 +87,6 @@ export function voiceComposer({ request, context, changed, notice }) {
     if (words) input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus({ preventScroll: true });
     if (message) notice(message, call.sessionId);
-    else if (!words) notice('No speech was recognized. Try recording again.', call.sessionId);
   }
   async function finish() {
     const call = active;
