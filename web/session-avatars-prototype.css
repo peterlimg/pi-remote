@@ -1,0 +1,45 @@
+/* Avatar set studies. Production avatars and their palette stay untouched. */
+:root[data-theme=light] { color-scheme: light; --bg: #fafaf8; --panel: #f2f3f0; --sidebar-bg: var(--panel); --composer-bg: #fff; --text: #141816; --muted: #626c66; --line: #daddd7; --accent: #35675c; --user: #edf0eb; --warning: #77591a; --selection: #d3e4de; }
+:root[data-theme=dark] { color-scheme: dark; --bg: #100d10; --panel: #1b181b; --sidebar-bg: var(--bg); --composer-bg: #232023; --text: #efedef; --muted: #aaa7aa; --line: #3b383b; --accent: #efedef; --user: #221f22; --warning: #e4c078; --selection: #3b383b; }
+body { min-height: 100dvh; background: var(--sidebar-bg); }
+.page { max-width: 430px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 20px) 14px calc(120px + env(safe-area-inset-bottom)); }
+.preview-header { display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 4px; }
+.preview-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+.preview-header > span { color: var(--muted); font-size: 12px; }
+.lede { margin: 6px 4px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.hero { display: flex; justify-content: space-around; margin-top: 16px; padding: 28px 8px; border-radius: 20px; background: var(--composer-bg); }
+.section-title { margin: 24px 4px 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.cast { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px 2px; }
+.cast-item { display: grid; justify-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 11px; }
+.rows { display: grid; }
+.row { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 58px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.row .av { justify-self: center; }
+.row strong { display: block; overflow: hidden; font-size: 15px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.row small { color: var(--muted); font-size: 12px; }
+.compare { display: grid; gap: 6px; }
+.compare-set { display: grid; gap: 10px; min-height: 0; padding: 12px; border-radius: 14px; background: transparent; color: var(--text); text-align: left; box-shadow: inset 0 0 0 1px var(--line); }
+.compare-set[aria-pressed=true] { background: var(--composer-bg); box-shadow: inset 0 0 0 1.5px var(--text); }
+.compare-name { font-size: 13px; font-weight: 600; }
+.compare-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2px; justify-items: center; }
+.preview-controls { margin: 16px 0 0 -6px; }
+.preview-controls button { padding-inline: 10px; font-size: 13px; font-weight: 500; }
+.switcher { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; width: min(406px, calc(100% - 24px)); padding: 6px; border-radius: 16px; background: var(--text); color: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
+.switcher button { display: grid; place-items: center; flex: none; width: 44px; height: 58px; padding: 0; border-radius: 10px; background: transparent; color: inherit; }
+.switcher > div { flex: 1; min-width: 0; text-align: center; }
+.switcher strong { display: block; font-size: 13px; }
+.switcher small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; }
+@media (hover: hover) { .switcher button:hover { background: color-mix(in srgb, var(--bg) 12%, transparent); } }
+
+/* One tuned palette: equal lightness and chroma, only the hue changes. */
+.av { --l: .7; --ld: .55; --ll: .88; --c: .15; display: grid; place-items: center; flex: none; width: var(--size, 32px); height: var(--size, 32px); }
+:root[data-theme=dark] .av { --l: .75; --ld: .6; }
+.av svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.av .av-main { fill: oklch(var(--l) var(--c) var(--h)); }
+.av .av-deep { fill: oklch(var(--ld) var(--c) var(--h)); }
+.av .av-light { fill: oklch(var(--ll) .06 var(--h)); }
+.av .av-blush { fill: oklch(.78 .11 10); }
+.av .av-ink { fill: oklch(.24 .03 var(--h, 60)); }
+.av .av-round { stroke: oklch(var(--l) var(--c) var(--h)); stroke-width: 2.2; stroke-linejoin: round; }
+.av :is(.av-stroke, .av-stroke-deep, .av-ring) { fill: none; stroke: oklch(var(--l) var(--c) var(--h)); stroke-width: 2.4; stroke-linecap: round; }
+.av :is(.av-stroke-deep, .av-ring) { stroke: oklch(var(--ld) var(--c) var(--h)); }
+.av .av-ring { stroke-width: 2; }

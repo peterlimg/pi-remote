@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f2f3f0">
+  <title>Session avatar prototypes · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/session-avatars-prototype.css">
+  <script type="module" src="/session-avatars-prototype.js"></script>
+</head>
+<body>
+  <main class="page" id="page">
+    <header class="preview-header"><h1>Avatars</h1><span>Prototype</span></header>
+    <p class="lede">Each new set follows one rule, so every avatar matches the others. Use the arrows below to switch sets. Sample data only.</p>
+    <section class="hero" id="hero" aria-label="Close up"></section>
+    <h2 class="section-title">Actual size</h2>
+    <div class="cast" id="cast"></div>
+    <h2 class="section-title">In the list</h2>
+    <div class="rows" id="rows"></div>
+    <h2 class="section-title">All sets</h2>
+    <div class="compare" id="compare"></div>
+    <div class="preview-controls"><button id="theme" type="button" class="quiet">Preview dark theme</button></div>
+  </main>
+  <nav class="switcher" aria-label="Compare avatar sets">
+    <button id="previous" type="button" aria-label="Previous set"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+    <div><strong id="label" aria-live="polite"></strong><small id="description"></small></div>
+    <button id="next" type="button" aria-label="Next set"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+  </nav>
+</body>
+</html>
