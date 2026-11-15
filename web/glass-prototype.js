@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const variants = {
   A: ['A · Current', 'The glass currently on your phone'],
   B: ['B · Quiet', 'Less background bleed; plain inner controls'],
-  C: ['C · Rim-lit', 'Clearer glass; light concentrated at the edges'],
+  C: ['C · Rim-lit', 'Clearer glass; one clean, thin outline'],
 };
 const root = document.documentElement;
 root.dataset.theme = 'dark';

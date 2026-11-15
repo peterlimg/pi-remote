@@ -24,6 +24,12 @@ test('glass comparison reuses the controls without connecting to or changing ses
         return [style.backgroundColor, style.backgroundImage, style.boxShadow];
       }));
       for (const material of materials) expect(material).toEqual(materials[0]);
+      if (variant === 'C') {
+        for (const selector of ['.conversation-heading', '.composer', '.session-details', '.coordinator-context', '#settings-picker']) {
+          await expect(page.locator(selector)).toHaveCSS('border-top-width', '1px');
+          await expect(page.locator(selector)).not.toHaveCSS('box-shadow', /inset/);
+        }
+      }
       await expect(page.locator('#prompt')).toHaveCSS('filter', 'none');
       await expect(page.locator('#prompt')).toHaveCSS('opacity', '1');
       await page.screenshot({ path: testInfo.outputPath(`${width}-${variant}-menu.png`) });
@@ -40,6 +46,13 @@ test('glass comparison reuses the controls without connecting to or changing ses
   await page.locator('#theme').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.screenshot({ path: testInfo.outputPath('light-composer.png') });
+  await page.locator('#next').click();
+  await expect(page.locator('html')).toHaveAttribute('data-variant', 'C');
+  await page.locator('#usage-meter').click();
+  await page.screenshot({ path: testInfo.outputPath('light-C-usage.png') });
+  await expect(page.locator('#settings-picker')).not.toHaveCSS('box-shadow', /inset/);
+  await page.locator('#picker-cancel').click();
+  await page.locator('#previous').click();
   await page.locator('#coordinator-open').click();
   await expect(page.locator('#coordinator-task-list')).toContainText('Check mobile layout');
   await page.screenshot({ path: testInfo.outputPath('light-workers.png') });
