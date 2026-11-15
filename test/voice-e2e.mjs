@@ -104,8 +104,18 @@ try {
   await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);
   assert.ok(await page.locator('#voice-waveform i').count() < 10, 'Waveform starts with new samples, not a prefilled line');
   const wave = await page.locator('#voice-waveform').boundingBox(), newest = await page.locator('#voice-waveform i').last().boundingBox();
-  assert.ok(Math.abs(newest.x + newest.width - (wave.x + wave.width - 8)) < 2, 'New samples start at the right edge');
+  const newestOffset = wave.x + wave.width - newest.x - newest.width;
+  assert.ok(newestOffset >= 0 && newestOffset <= 7, 'New samples enter from the right edge');
   await page.screenshot({ path: join(evidence, 'waveform-start-phone.png'), fullPage: true });
+  const positions = await page.locator('#voice-waveform i').first().evaluate(async bar => {
+    const x = [];
+    for (let frame = 0; frame < 20; frame++) {
+      await new Promise(requestAnimationFrame); x.push(bar.getBoundingClientRect().x);
+    }
+    return x;
+  });
+  assert.ok(positions.slice(1).filter((x, i) => x < positions[i] - .05).length >= 15,
+    'Waveform history should move each animation frame, not jump with each new sample');
   provider.packet({ type: 'input_transcript.added', item: { text: 'Purple notebook' } });
   provider.packet({ type: 'output_transcript.added', item: { text: 'DO NOT INSERT ASSISTANT SPEECH' } });
   await expect(page.locator('#voice-preview')).toHaveText('Purple notebook');
@@ -117,16 +127,25 @@ try {
   const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
   await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
   await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(10);
+  await page.evaluate(() => {
+    const gain = window.voiceGain.gain, now = window.voiceGain.context.currentTime;
+    [.015, .08, .025, .12, .008, .06].forEach((value, i) => gain.setValueAtTime(value, now + i * .15));
+  });
+  await delay(1000);
+  const envelope = await levels();
+  assert.ok(Math.max(...envelope) - Math.min(...envelope) > 8, 'Waveform should preserve changes in microphone volume');
   const recordingBox = await page.locator('#composer').boundingBox();
   assert.ok(recordingBox.height < 80);
   await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: join(evidence, 'recording-desktop-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
-  await page.evaluate(() => { window.voiceGain.gain.value = 0; });
+  await page.evaluate(() => { window.voiceGain.gain.cancelScheduledValues(0); window.voiceGain.gain.value = 0; });
   await expect.poll(async () => Math.max(...await levels())).toBe(3);
+  await page.evaluate(() => { window.voiceGain.gain.value = .01; });
+  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(8);
   await page.evaluate(() => { window.voiceGain.gain.value = .15; });
-  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
+  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(20);
   await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
   // Simulate a provider final arriving after audio has already drained. Do not add another quiet-period delay.
   await delay(1850);

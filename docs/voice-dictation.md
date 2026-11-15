@@ -1,6 +1,6 @@
 # ChatGPT dictation
 
-Select a live model under the `openai-codex` provider, then tap the microphone beside Send. While recording, the keyboard closes and the composer becomes a compact Cancel, waveform, and Stop bar. The waveform grows from the right as microphone samples arrive. It shows volume, not transcription progress. Tap Stop to return to the editable draft; Send remains a separate action.
+Select a live model under the `openai-codex` provider, then tap the microphone beside Send. While recording, the keyboard closes and the composer becomes a compact Cancel, waveform, and Stop bar. The waveform grows from the right and scrolls continuously. Its bars follow microphone volume on a decibel scale, with a short smoothing envelope for quiet speech and syllables. It shows volume, not transcription progress. Tap Stop to return to the editable draft; Send remains a separate action.
 
 The computer must have a current ChatGPT sign-in saved by Codex in `CODEX_HOME/auth.json`, or `~/.codex/auth.json` by default. Pi Remote uses that account for speech, which may differ from the account signed into Pi. It never falls back to a Platform API key. If the saved token has expired, sign in to Codex again. Keychain-only Codex credentials are not supported by this adapter.
 

@@ -29,19 +29,28 @@ export function voiceComposer({ request, context, changed, notice }) {
     call.analyser = undefined;
   }
   function meter(call) {
-    const samples = new Uint8Array(call.analyser.fftSize);
+    const samples = new Float32Array(call.analyser.fftSize), history = [];
     waveform.replaceChildren();
-    let last = 0;
+    let lastFrame = performance.now(), lastSample = 0, level = 0;
     const draw = now => {
       if (!current(call) || call.phase !== 'recording') return;
-      if (now - last >= 65) {
-        last = now; call.analyser.getByteTimeDomainData(samples);
-        const rms = Math.sqrt(samples.reduce((sum, sample) => sum + ((sample - 128) / 128) ** 2, 0) / samples.length);
-        const capacity = Math.max(1, Math.floor((waveform.clientWidth - 16 + 3) / 6));
+      call.analyser.getFloatTimeDomainData(samples);
+      const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+      // A decibel scale keeps quiet speech visible; fast attack and slower release follow its envelope.
+      const target = Math.max(0, Math.min(1, (20 * Math.log10(Math.max(rms, 1e-5)) + 60) / 45));
+      level += (target - level) * (1 - Math.exp(-(now - lastFrame) / (target > level ? 25 : 100)));
+      lastFrame = now;
+      if (now - lastSample >= 65) {
+        lastSample = now;
         const bar = document.createElement('i');
-        bar.style.height = Math.max(3, Math.min(30, rms * 180)) + 'px';
-        waveform.append(bar);
-        while (waveform.children.length > capacity) waveform.firstElementChild.remove();
+        waveform.append(bar); history.push({ bar, at: now });
+      }
+      const width = waveform.clientWidth;
+      while (history.length && (now - history[0].at) * 6 / 65 > width) history.shift().bar.remove();
+      if (history.length) history.at(-1).bar.style.height = (level < .005 ? 3 : 3 + level * 27) + 'px';
+      for (const { bar, at } of history) {
+        bar.style.transform = `translate3d(${-(now - at) * 6 / 65}px, -50%, 0)`;
+        bar.style.opacity = String(Math.min(1, (now - at) / 50));
       }
       call.frame = requestAnimationFrame(draw);
     };
@@ -137,7 +146,7 @@ export function voiceComposer({ request, context, changed, notice }) {
       call.phase = 'recording'; stream.getTracks().forEach(track => { track.enabled = true; });
       if (call.audio) {
         try {
-          call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 256;
+          call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 1024;
           call.source = call.audio.createMediaStreamSource(stream); call.source.connect(call.analyser);
           meter(call);
         } catch { stopMeter(call); }

@@ -10,5 +10,5 @@
 #composer[data-voice] :is(#prompt, #attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #send, #composer-hint) { display: none; }
 #composer[data-voice] .composer-toolbar { flex-wrap: nowrap; }
 #voice-status { flex: 1; min-width: 0; color: var(--text); text-align: center; font-size: 12px; }
-#voice-waveform { display: flex; align-items: center; justify-content: flex-end; gap: 3px; height: 32px; padding: 0 8px; overflow: hidden; }
-#voice-waveform i { flex: 0 0 3px; height: 3px; border-radius: 2px; background: currentColor; }
+#voice-waveform { position: relative; height: 32px; margin: 0 8px; overflow: hidden; }
+#voice-waveform i { position: absolute; top: 50%; right: 0; width: 3px; height: 3px; border-radius: 2px; background: currentColor; }
