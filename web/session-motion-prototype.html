@@ -14,6 +14,8 @@
   <main class="page" id="page">
     <header class="preview-header"><h1>Motion</h1><span>Prototype</span></header>
     <p class="lede">Eight of the characters run through one session's lifecycle. Switch motion sets below. Sample data only.</p>
+    <section id="comparison" aria-label="Working motion comparison" hidden></section>
+    <div id="lifecycle-study">
     <section class="stage" aria-label="Lifecycle">
       <span id="stage-bot" class="bot m-bot personality-bot stage-bot" role="img"></span>
       <strong id="stage-state" class="stage-state"></strong>
@@ -29,10 +31,13 @@
     <div class="family" id="family"></div>
     <h2 class="section-title">In the list · mixed states</h2>
     <div class="rows" id="rows"></div>
+    </div>
     <div class="preview-controls">
+      <button id="replay" type="button" class="quiet" hidden>Replay comparison</button>
       <button id="theme" type="button" class="quiet">Preview dark theme</button>
       <button id="motion" type="button" class="quiet" aria-pressed="false">Pause motion</button>
     </div>
+    <p id="comparison-note" class="lede" hidden>Preview only. Live session motion is unchanged. <a href="?set=signature">Back to B · Signature</a></p>
   </main>
   <nav class="switcher" aria-label="Compare motion sets">
     <button id="previous" type="button" aria-label="Previous motion set"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>

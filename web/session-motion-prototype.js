@@ -31,6 +31,12 @@ const sets = [
   { key: 'beat', name: 'A · Beat', description: 'One hop-and-land rhythm for everyone. Ears, tails and rings follow through.' },
   { key: 'signature', name: 'B · Signature', description: 'Each does its own thing: Luna rocks, Jelly swims, Comet dashes, Orbit has a moon.' },
   { key: 'quiet', name: 'C · Quiet', description: 'Bodies stay still. Eyes read and a dot circles. Calmest with many sessions.' },
+  { key: 'focused', name: 'D · Focused actions', description: 'Compare current, revised and still at 32px.' },
+];
+const comparisons = [
+  ['miso', 'Look → two focused dips → ear flick.'],
+  ['luna', 'Watch the mote → follow → catch up.'],
+  ['jelly', 'Compress → push → glide. Tentacles follow.'],
 ];
 const labels = { ready: 'Ready', starting: 'Starting', working: 'Working', waiting: 'Needs input', settled: 'Settles · new reply' };
 // Production moods for the comparison set; starting and settle have no motion there.
@@ -49,6 +55,7 @@ const rowSamples = [
 let set = sets.find(item => item.key === new URL(location.href).searchParams.get('set')) || sets[1];
 let focus = 'luna', state = 'ready', playing = true, paused = false, step = 0, timer;
 let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 // Production styles pause bots that are not marked as on-screen.
 const visibleBots = new IntersectionObserver(entries => {
   for (const { target, isIntersecting } of entries) target.classList.toggle('in-view', isIntersecting);
@@ -83,7 +90,7 @@ function setState(next) {
 }
 function tick() {
   clearTimeout(timer);
-  if (!playing || paused) return;
+  if (!playing || paused || document.hidden || set.key === 'focused') return;
   const [next, duration] = timeline[step];
   setState(next); step = (step + 1) % timeline.length;
   timer = setTimeout(tick, duration);
@@ -94,8 +101,37 @@ function choose(next) {
   if (next === 'working' && state !== 'working') { setState('starting'); timer = setTimeout(() => setState('working'), 650); }
   else setState(next);
 }
+function renderComparison() {
+  $('comparison').replaceChildren(...comparisons.map(([kind, description]) => {
+    const section = el('section', undefined, 'motion-comparison');
+    section.setAttribute('aria-label', characters[kind][0]);
+    section.append(el('h2', characters[kind][0]), el('p', description));
+    const columns = el('div', undefined, 'comparison-columns');
+    for (const [variant, label] of [['current', 'Current'], ['revised', 'Revised'], ['still', 'Still']]) {
+      const figure = el('figure'); figure.dataset.variant = variant;
+      const node = bot(kind, 32, 0);
+      node.dataset.state = 'working';
+      if (variant !== 'revised') node.dataset.mood = 'working';
+      node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${label.toLowerCase()}`);
+      figure.append(el('figcaption', label), node); columns.append(figure);
+    }
+    section.append(columns); return section;
+  }));
+}
 function render() {
   const page = $('page'); page.dataset.set = set.key;
+  const comparing = set.key === 'focused';
+  $('lifecycle-study').hidden = comparing;
+  $('comparison').hidden = !comparing;
+  $('comparison-note').hidden = !comparing;
+  $('replay').hidden = !comparing;
+  document.querySelector('.switcher').hidden = comparing;
+  document.querySelector('.preview-header h1').textContent = comparing ? 'Working motion' : 'Motion';
+  document.querySelector('.lede').textContent = comparing
+    ? 'Same artwork. Same 32px size. Does the revised action look more focused than the current loop?'
+    : "Eight of the characters run through one session's lifecycle. Switch motion sets below. Sample data only.";
+  if (comparing) { clearTimeout(timer); renderComparison(); }
+  else $('comparison').replaceChildren();
   const stage = $('stage-bot'); stage.dataset.kind = focus; stage.dataset.follow = ''; stage.style.setProperty('--size', '76px'); stage.innerHTML = botSvg(focus);
   $('family').replaceChildren(...Object.keys(characters).map((kind, index) => {
     const button = el('button', undefined, 'family-item'); button.type = 'button';
@@ -117,7 +153,8 @@ function render() {
   $('label').textContent = set.name; $('description').textContent = set.description;
   const url = new URL(location.href); url.searchParams.set('set', set.key); history.replaceState(null, '', url);
 }
-function cycle(direction) { set = sets[(sets.indexOf(set) + direction + sets.length) % sets.length]; render(); }
+function cycle(direction) { set = sets[(sets.indexOf(set) + direction + sets.length) % sets.length]; render(); tick(); }
+$('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });
 $('previous').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
 $('states').addEventListener('click', event => {
@@ -129,10 +166,13 @@ $('play').addEventListener('click', () => {
 });
 function syncMotion() {
   document.documentElement.classList.toggle('paused', paused || document.hidden);
-  $('motion').setAttribute('aria-pressed', String(paused)); $('motion').textContent = paused ? 'Resume motion' : 'Pause motion';
+  $('motion').disabled = reducedMotion.matches; $('replay').disabled = reducedMotion.matches;
+  $('motion').setAttribute('aria-pressed', String(paused));
+  $('motion').textContent = reducedMotion.matches ? 'Reduced motion enabled' : paused ? 'Resume motion' : 'Pause motion';
 }
+reducedMotion.addEventListener('change', syncMotion);
 $('motion').addEventListener('click', () => { paused = !paused; syncMotion(); tick(); });
-document.addEventListener('visibilitychange', syncMotion);
+document.addEventListener('visibilitychange', () => { syncMotion(); if (document.hidden) clearTimeout(timer); else tick(); });
 function syncTheme() {
   document.documentElement.dataset.theme = theme;
   $('theme').textContent = theme === 'dark' ? 'Preview light theme' : 'Preview dark theme';
