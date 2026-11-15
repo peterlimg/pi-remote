@@ -18,13 +18,12 @@
   --warning: light-dark(#77591a, #e4c078);
   --working: light-dark(#15542f, #80d4a0);
   --selection: light-dark(#d3e4de, #3b383b);
-  /* Glass chrome: a light tint over a blur, and a crisp rim lit from the top left. */
-  --glass: light-dark(rgb(255 255 255 / .5), rgb(40 37 40 / .45));
+  /* One glass for every floating surface: a light tint over a blur, a faint edge, and specular highlights on the top-left and bottom-right rims. */
+  --glass: light-dark(rgb(255 255 255 / .55), rgb(40 37 40 / .5));
   --glass-fill: color-mix(in srgb, var(--text) 8%, transparent);
-  /* Menus, sheets and dialogs hold text to read, so their glass is denser. */
-  --glass-surface: light-dark(rgb(255 255 255 / .72), rgb(40 37 40 / .72));
-  --glass-line: light-dark(rgb(255 255 255 / .7), rgb(255 255 255 / .12));
-  --glass-rim: linear-gradient(160deg, light-dark(#fff, rgb(255 255 255 / .5)), light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .08)) 40% 60%, light-dark(rgb(255 255 255 / .8), rgb(255 255 255 / .25)));
+  --glass-edge: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .08));
+  --glass-highlight: inset 1px 1px 0 light-dark(#fff, rgb(255 255 255 / .3)), inset -1px -1px 0 light-dark(rgb(255 255 255 / .8), rgb(255 255 255 / .12));
+  --glass-blur: blur(16px) saturate(1.8);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --content-width: 48rem;
@@ -56,14 +55,10 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .quiet, .secondary { color: var(--accent); background: transparent; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
-/* Floating controls are glass over the content scrolling beneath them. */
-.shell :is(.conversation-heading, #back, .session-info summary), .composer, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round { position: relative; border: 1px solid transparent; background: var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
-/* The rim is a gradient ring on the border, so it stays sharp without tinting the pane. */
-.shell :is(.conversation-heading, #back, .session-info summary)::after, .composer::after, #scroll-bottom::after, .search-bar :is(.search-round, .search-field)::after, .image-viewer .search-round::after { content: ''; position: absolute; inset: -1px; border: 1px solid transparent; border-radius: inherit; background: var(--glass-rim) border-box; -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); pointer-events: none; }
-/* The composer blurs from a layer behind it: a blurring form would cut the glass button inside it off from the thread. */
-.shell :is(.conversation-heading, #back, .session-info summary), .composer::before, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round { -webkit-backdrop-filter: blur(12px) saturate(1.8); backdrop-filter: blur(12px) saturate(1.8); }
-/* Every other floating surface shares the same glass: a lit hairline instead of the rim ring, which overflow clipping would cut off. */
-.command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { border: 1px solid var(--glass-line); background: var(--glass-surface); box-shadow: inset 0 1px light-dark(#fff, rgb(255 255 255 / .08)), 0 12px 32px rgb(0 0 0 / .18); -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8); }
+/* Floating controls and surfaces all share the same glass over the content beneath them. */
+.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass); box-shadow: var(--glass-highlight), 0 8px 24px rgb(0 0 0 / .14); }
+/* The composer blurs from a layer behind it: a blurring form would cut the glass controls inside it off from the thread. */
+.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -796,9 +791,9 @@ pre.message-text { white-space: pre-wrap; }
 #usage-meter[aria-expanded=true] { background-color: var(--glass-fill); }
 /* Keep 44px tap targets around the smaller 32px circles. */
 .composer-toolbar #attach, .composer-actions #commands, .composer-actions #send, .composer-actions #abort { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 6px solid transparent; border-radius: 50%; background-clip: padding-box; }
-.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--glass-fill); color: var(--text); }
+.composer-toolbar #attach, .composer-actions #commands, .composer-actions #abort { background-color: var(--glass-fill); box-shadow: var(--glass-highlight); color: var(--text); }
 .composer-toolbar #attach svg, .composer-actions svg { width: 18px; height: 18px; }
-.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--glass-fill); border-radius: 22px; }
+.composer-settings { display: flex; align-items: center; min-width: 0; background: var(--glass-fill); box-shadow: var(--glass-highlight); border-radius: 22px; }
 .composer-settings:has(#model[hidden]):has(#reasoning-control[hidden]) { display: none; }
 .composer-settings .setting-control { position: relative; min-width: 44px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 12px; background: transparent; color: var(--text); font-size: 13px; font-weight: 400; text-align: left; border-radius: 22px; }
 .composer-settings:has(#reasoning-control:not([hidden])) #model { padding-right: 4px; }
