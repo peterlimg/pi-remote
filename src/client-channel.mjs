@@ -5,6 +5,7 @@ import { parseObject, send, protectSocket } from './config.mjs';
 import { VideoUploads, readVideo } from './videos.mjs';
 import { splitVideoMessage } from '../web/videos.js';
 import { writeActivityDebug } from './activity-debug.mjs';
+import { VoiceSession } from './voice.mjs';
 
 // Scrolling phones keep the top `limit` rows. They get only rows that changed since the
 // last send, so a live update costs one row however far the list was scrolled.
@@ -43,6 +44,13 @@ export function sessionWindow(service) {
 
 export function attachClient(socket, service, { pairing } = {}) {
   let selected, previous, inspection;
+  const voice = new VoiceSession({ ...service.voiceOptions, emit: event => send(socket, { type: 'voice', ...event }) });
+  const voiceState = sessionId => {
+    const state = service.read(sessionId);
+    if (sessionId !== selected || state.coordination?.role === 'worker' || !state.model?.startsWith('openai-codex/') ||
+      !['idle', 'working', 'waiting'].includes(state.status)) throw new Error('Select a live ChatGPT/Codex session to use dictation.');
+    return state;
+  };
   const clearInspection = () => { clearTimeout(inspection?.timer); inspection = undefined; };
   let version = 0, watchGeneration = 0, listOptions = {};
   const list = options => {
@@ -68,6 +76,13 @@ export function attachClient(socket, service, { pairing } = {}) {
     }, 150);
   };
   const onState = id => {
+    if (voice.active?.sessionId === id) {
+      try { if (voiceState(id).model !== voice.active.model) throw new Error(); }
+      catch {
+        send(socket, { type: 'voice', id: voice.active.id, sessionId: id, cancelled: true });
+        voice.cancel();
+      }
+    }
     if (inspection?.id === id && inspection.previous && !inspection.timer) {
       const current = inspection;
       current.timer = setTimeout(() => {
@@ -94,7 +109,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsVoice: true, supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -107,6 +122,15 @@ export function attachClient(socket, service, { pairing } = {}) {
           if (message.viewingSessionId !== undefined) service.assistant.viewing(socket, message.viewingSessionId);
           else if (message.op === 'viewing') throw new Error('Expected a viewed session or null.');
           value = message.op === 'ping' ? { pong: true } : { viewing: message.viewingSessionId };
+        } else if (message.op === 'voiceStart') {
+          const state = voiceState(message.sessionId);
+          value = await voice.start({ id: message.voiceId, sessionId: message.sessionId, model: state.model, sdp: message.sdp });
+        } else if (message.op === 'voiceFinish') {
+          voiceState(message.sessionId);
+          value = await voice.finish(message.voiceId);
+        } else if (message.op === 'voiceCancel') {
+          if (typeof message.voiceId !== 'string') throw new Error('Invalid dictation id.');
+          voice.cancel(message.voiceId);
         } else if (message.op === 'activityDebug') {
           if (!Array.isArray(message.records) || !message.records.length || message.records.length > 20) throw new Error('Invalid activity diagnostics');
           const now = Date.now(), budget = Math.min(40, debugBudget + (now - debugBudgetAt) / 1000);
@@ -121,7 +145,7 @@ export function attachClient(socket, service, { pairing } = {}) {
         else if (message.op === 'list') value = message.limit === undefined ? list(message) : scroll.request(message);
         else if (message.op === 'watch') {
           const generation = ++watchGeneration;
-          if (selected !== message.sessionId) clearInspection();
+          if (selected !== message.sessionId) { clearInspection(); voice.cancel(); }
           selected = message.sessionId; previous = undefined;
           clearTimeout(stateTimer); stateTimer = undefined;
           const state = withCheckin(await service.view(selected));
@@ -221,7 +245,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   });
   socket.once('close', () => {
     closed = true; service.assistant.viewing(socket, null); clearTimeout(listTimer); clearTimeout(stateTimer); clearInspection();
-    videos.close();
+    videos.close(); voice.cancel();
     service.off('list', onList); service.off('state', onState);
   });
 }

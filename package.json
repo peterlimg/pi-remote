@@ -18,6 +18,7 @@
     "check": "tsc --noEmit && node scripts/check.mjs",
     "test:browser": "playwright test",
     "test:lifecycle": "node test/lifecycle-e2e.mjs",
+    "test:voice": "node test/voice-e2e.mjs",
     "test:coordinator": "node test/coordinator-e2e.mjs",
     "test:coordinator-sdk": "node test/coordinator-sdk-e2e.mjs",
     "test:coordinator-recovery": "node test/coordinator-recovery-e2e.mjs",

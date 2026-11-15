@@ -1,0 +1,12 @@
+.composer-toolbar #voice-record {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 44px; height: 44px; padding: 0;
+  border: 6px solid transparent; border-radius: 50%;
+  background: var(--glass-fill); background-clip: padding-box; color: var(--text);
+}
+.composer-toolbar #voice-record[data-recording="true"] { color: var(--error); }
+#voice-status { color: var(--text); padding: 0 6px 8px; }
+.voice-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+#voice-cancel { min-height: 44px; flex-shrink: 0; font-size: 12px; }
+#voice-preview { margin: 0; max-height: 100px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; }
+#voice-preview:empty { display: none; }
