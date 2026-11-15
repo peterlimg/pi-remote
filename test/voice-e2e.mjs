@@ -101,6 +101,11 @@ try {
   await fresh();
   await page.locator('#prompt').fill('Keep this draft.');
   let provider = await record();
+  await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);
+  assert.ok(await page.locator('#voice-waveform i').count() < 10, 'Waveform starts with new samples, not a prefilled line');
+  const wave = await page.locator('#voice-waveform').boundingBox(), newest = await page.locator('#voice-waveform i').last().boundingBox();
+  assert.ok(Math.abs(newest.x + newest.width - (wave.x + wave.width - 8)) < 2, 'New samples start at the right edge');
+  await page.screenshot({ path: join(evidence, 'waveform-start-phone.png'), fullPage: true });
   provider.packet({ type: 'input_transcript.added', item: { text: 'Purple notebook' } });
   provider.packet({ type: 'output_transcript.added', item: { text: 'DO NOT INSERT ASSISTANT SPEECH' } });
   await expect(page.locator('#voice-preview')).toHaveText('Purple notebook');
@@ -111,6 +116,7 @@ try {
   await expect(page.locator('#voice-record .voice-stop-icon')).toBeVisible();
   const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
   await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
+  await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(10);
   const recordingBox = await page.locator('#composer').boundingBox();
   assert.ok(recordingBox.height < 80);
   await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
@@ -122,13 +128,35 @@ try {
   await page.evaluate(() => { window.voiceGain.gain.value = .15; });
   await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
   await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
+  // Simulate a provider final arriving after audio has already drained. Do not add another quiet-period delay.
+  await delay(1850);
+  const finalAt = Date.now();
   provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Purple notebook beside the lamp.' } });
-  await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.');
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
+  console.log(`Final transcript to draft: ${Date.now() - finalAt}ms`);
   await expect(page.locator('#voice-status')).toBeHidden(); assert.equal(provider.readyState, 3); assert.equal(commands.length, 0);
   await expect(page.locator('#prompt')).toBeVisible();
   await expect(page.locator('#send')).toBeVisible();
   await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 1);
   assert.equal(commands[0].text, 'Keep this draft. Purple notebook beside the lamp.');
+
+  await fresh(); provider = await record();
+  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Earlier sentence.' } });
+  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
+  await delay(200);
+  provider.packet({ type: 'input_transcript.added', item: { text: 'Last words' } });
+  await delay(1700);
+  await expect(page.locator('#voice-label')).toHaveText('Finishing transcription…');
+  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Last words complete.' } });
+  await expect(page.locator('#prompt')).toHaveValue('Earlier sentence. Last words complete.', { timeout: 1000 });
+  assert.equal(commands.length, 1);
+
+  await fresh(); provider = await record();
+  provider.packet({ type: 'input_transcript.added', item: { text: 'Unconfirmed words' } });
+  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
+  await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 10000 });
+  await expect(page.locator('#notice')).toContainText('before confirmation');
+  assert.equal(commands.length, 1);
 
   await fresh(); await page.locator('#prompt').fill('Original'); provider = await record();
   await page.getByRole('button', { name: 'Cancel dictation' }).click();

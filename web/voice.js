@@ -3,8 +3,6 @@ export function voiceComposer({ request, context, changed, notice }) {
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
   const preview = document.getElementById('voice-preview'), input = document.getElementById('prompt');
   const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
-  const bars = Array.from({ length: 32 }, () => document.createElement('i'));
-  waveform.replaceChildren(...bars);
   let active;
   const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
@@ -31,19 +29,22 @@ export function voiceComposer({ request, context, changed, notice }) {
     call.analyser = undefined;
   }
   function meter(call) {
-    const samples = new Uint8Array(call.analyser.fftSize), heights = bars.map(() => 3);
+    const samples = new Uint8Array(call.analyser.fftSize);
+    waveform.replaceChildren();
     let last = 0;
     const draw = now => {
       if (!current(call) || call.phase !== 'recording') return;
       if (now - last >= 65) {
         last = now; call.analyser.getByteTimeDomainData(samples);
         const rms = Math.sqrt(samples.reduce((sum, sample) => sum + ((sample - 128) / 128) ** 2, 0) / samples.length);
-        heights.shift(); heights.push(Math.max(3, Math.min(30, rms * 180)));
-        bars.forEach((bar, i) => { bar.style.height = heights[i] + 'px'; });
+        const capacity = Math.max(1, Math.floor((waveform.clientWidth - 16 + 3) / 6));
+        const bar = document.createElement('i');
+        bar.style.height = Math.max(3, Math.min(30, rms * 180)) + 'px';
+        waveform.append(bar);
+        while (waveform.children.length > capacity) waveform.firstElementChild.remove();
       }
       call.frame = requestAnimationFrame(draw);
     };
-    bars.forEach(bar => { bar.style.height = '3px'; });
     call.frame = requestAnimationFrame(draw);
   }
   function release(call) {

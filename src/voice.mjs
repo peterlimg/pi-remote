@@ -69,7 +69,7 @@ export class VoiceSession {
     if (this.call) throw failure('Finish or cancel the current dictation first.');
     if (activeCalls >= 4 || Date.now() - (this.lastStart || 0) < 3000) throw failure('Please wait a moment before recording again.');
     this.lastStart = Date.now(); activeCalls++;
-    const call = this.call = { id, sessionId, model, controller: new AbortController(), turns: [], partial: '', lastTextAt: 0 };
+    const call = this.call = { id, sessionId, model, controller: new AbortController(), turns: [], partial: '' };
     call.deadline = setTimeout(() => this.fail(call, 'Dictation reached its time limit. Recognized text has been kept.'), 150000);
     call.deadline.unref();
     call.connectTimer = setTimeout(() => this.fail(call, 'ChatGPT voice connection timed out. Try again.'), 25000);
@@ -105,7 +105,6 @@ export class VoiceSession {
         else if (event.type === 'turn.done' && event.turn?.role === 'user' && typeof event.turn.transcript === 'string') {
           call.turns.push(event.turn.transcript); call.partial = '';
         } else return; // Never forward assistant speech, delegation, or provider diagnostics.
-        call.lastTextAt = Date.now();
         if (this.text(call).length > MAX_TEXT) { const text = this.text(call).slice(0, MAX_TEXT); call.partial = ''; call.turns = [text]; this.fail(call, 'Dictation is too long. Recognized text has been kept.'); return; }
         this.notify(call);
       });
@@ -128,7 +127,7 @@ export class VoiceSession {
     if (!call || call.id !== id) throw failure('Dictation is no longer active.');
     if (call.finishing) throw failure('Dictation is already finishing.');
     call.finishing = true;
-    // Keep the peer alive while server VAD seals speech already in flight after the mic stops.
+    // Drain in-flight audio from Stop, not from each transcript update; final text need not wait twice.
     const stoppedAt = Date.now();
     return new Promise(resolve => {
       const done = incomplete => {
@@ -138,7 +137,7 @@ export class VoiceSession {
       };
       call.resolveFinish = resolve;
       call.drainTimer = setInterval(() => {
-        if (call.turns.length && !call.partial && Date.now() - Math.max(stoppedAt, call.lastTextAt) >= 1800) done(false);
+        if (call.turns.length && !call.partial && Date.now() - stoppedAt >= 1800) done(false);
       }, 100);
       call.drainDeadline = setTimeout(() => done(true), 8000);
     });
