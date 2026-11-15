@@ -59,9 +59,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls and surfaces all share the same glass over the content beneath them. */
-.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
+.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
 /* The composer blurs from a layer behind it: a blurring form would cut the glass controls inside it off from the thread. */
-.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, .coordinator-context, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.shell :is(.conversation-heading, #back, .session-info summary), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -977,8 +977,10 @@ pre.message-text { white-space: pre-wrap; }
   .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
 .session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
-.coordinator-context { flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto 8px; padding: 0 16px; border-radius: 22px; }
-#coordinator-open { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 4px 0; border-radius: 0; background: transparent; color: var(--text); font-size: 13px; font-weight: 500; text-align: left; }
+.coordinator-context { flex-shrink: 0; width: fit-content; max-width: min(var(--content-width), calc(100% - 32px)); margin: 0 auto; }
+#coordinator-open { position: relative; isolation: isolate; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
+/* Keep a 44px touch target around the smaller visible pill. */
+#coordinator-open::before { content: ''; position: absolute; z-index: -1; inset: 6px 0; border-radius: 22px; pointer-events: none; }
 #coordinator-open > span:first-child { flex-shrink: 0; }
 #coordinator-worker-summary { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; text-align: right; }
 #coordinator-open > svg { flex-shrink: 0; color: var(--muted); }
@@ -1019,6 +1021,5 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-task-warning, .coordinator-log-detail[data-status=error] > summary { color: var(--warning); }
 .coordinator-log-pages { display: flex; flex-wrap: wrap; justify-content: space-between; }
 #coordinator-log button { min-height: 44px; padding: 8px 0; font-size: 14px; }
-@media (max-width: 700px) { .coordinator-context { width: calc(100% - 32px); } }
 @media (prefers-reduced-motion: no-preference) { #coordinator-sheet[open] .coordinator-sheet { animation: sheet-up 220ms cubic-bezier(.16, 1, .3, 1); } }
 .boot-status { display: flex; align-items: center; gap: 10px; }

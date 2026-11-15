@@ -47,7 +47,26 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(mainImage).toBeVisible(); await expect.poll(() => mainImage.evaluate(node => node.naturalWidth)).toBe(1);
   const mainURL = await mainImage.getAttribute('src');
   await page.locator('#prompt').fill('Keep this main draft.');
-  expect((await page.locator('#coordinator-context').boundingBox()).height).toBeLessThanOrEqual(48);
+  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['desktop', 1440, 900, 'dark']]) {
+    await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
+    for (const state of ['completed', 'working', 'unknown']) {
+      task.state = state;
+      client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+      await expect(page.locator('#coordinator-worker-summary')).toHaveText(state === 'working' ? '1 working' : state === 'unknown' ? '1 need inspection' : 'No active work');
+      const box = await page.locator('#coordinator-open').boundingBox();
+      expect(box.height).toBe(44); expect(box.width).toBeLessThan(280);
+      expect(await page.locator('#coordinator-open').evaluate(node => {
+        const pill = getComputedStyle(node, '::before');
+        return parseFloat(pill.height) + parseFloat(pill.borderTopWidth) + parseFloat(pill.borderBottomWidth);
+      })).toBe(32);
+      expect(box.y + box.height).toBeLessThanOrEqual((await page.locator('#composer').boundingBox()).y);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+      await page.screenshot({ path: info.outputPath(`worker-entry-${name}-${state}.png`) });
+    }
+  }
+  task.state = 'working';
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#coordinator-context button')).toHaveCount(1);
   await expect(page.locator('#coordinator-workers, #coordinator-owner')).toHaveCount(0);
   await page.emulateMedia({ colorScheme: 'dark' });
