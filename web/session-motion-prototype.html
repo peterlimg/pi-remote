@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f2f3f0">
+  <title>Session motion prototypes · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/session-motion-prototype.css">
+  <script type="module" src="/session-motion-prototype.js"></script>
+</head>
+<body>
+  <main class="page" id="page">
+    <header class="preview-header"><h1>Motion</h1><span>Prototype</span></header>
+    <p class="lede">Eight of the characters run through one session's lifecycle. Switch motion sets below. Sample data only.</p>
+    <section class="stage" aria-label="Lifecycle">
+      <span id="stage-bot" class="bot m-bot personality-bot stage-bot" role="img"></span>
+      <strong id="stage-state" class="stage-state"></strong>
+      <div class="states" id="states">
+        <button type="button" data-state="ready">Ready</button>
+        <button type="button" data-state="working">Working</button>
+        <button type="button" data-state="waiting">Needs input</button>
+        <button type="button" data-state="settled">Settles</button>
+        <button type="button" id="play" aria-pressed="true">Auto</button>
+      </div>
+    </section>
+    <h2 class="section-title">Actual size · same state</h2>
+    <div class="family" id="family"></div>
+    <h2 class="section-title">In the list · mixed states</h2>
+    <div class="rows" id="rows"></div>
+    <div class="preview-controls">
+      <button id="theme" type="button" class="quiet">Preview dark theme</button>
+      <button id="motion" type="button" class="quiet" aria-pressed="false">Pause motion</button>
+    </div>
+  </main>
+  <nav class="switcher" aria-label="Compare motion sets">
+    <button id="previous" type="button" aria-label="Previous motion set"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+    <div><strong id="label" aria-live="polite"></strong><small id="description"></small></div>
+    <button id="next" type="button" aria-label="Next motion set"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+  </nav>
+</body>
+</html>
