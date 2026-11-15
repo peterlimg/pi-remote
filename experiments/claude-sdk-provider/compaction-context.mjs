@@ -64,13 +64,32 @@ try {
       const rows = entries();
       if (mode === 'missing-result') {
         const index = rows.findIndex(row => row.message?.role === 'toolResult'); rows.splice(index, 1);
-      } else {
+      } else if (mode === 'unknown-error') {
         const previous = last(), errorMessage = 'Unrecognized SDK failure';
         rows.push({ type: 'message', id: randomUUID(), parentId: rows.at(-1).id, timestamp: new Date().toISOString(), message: {
           ...previous, content: [{ type: 'text', text: errorMessage }], stopReason: 'error', errorMessage } });
       }
-      save(mode === 'away-no-checkpoint' ? rows.filter(row => row.customType !== 'claude-sdk-checkpoint') : rows);
-      await start(); if (mode === 'away-no-checkpoint') await foreign();
+      let parentId = null;
+      save(mode === 'away-no-checkpoint' ? rows.filter(row => row.customType !== 'claude-sdk-checkpoint').map(row => {
+        if (row.type !== 'session') { row = { ...row, parentId }; parentId = row.id; }
+        return row;
+      }) : rows);
+      await start();
+      if (mode === 'away-no-checkpoint') {
+        await foreign();
+        const count = queries(), before = readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8');
+        await compact();
+        assert(readFileSync(process.env.PI_RECOVERY_SESSION, 'utf8').startsWith(before));
+        assert(entries().findLast(row => row.type === 'compaction').summary.includes(process.env.PI_RECOVERY_MARKER));
+        assert.equal(entries().findLast(row => row.customType === 'claude-sdk-compaction').data.state, null);
+        await worker.close(); worker = undefined; await start();
+        assert.match((await send('recall after foreign-only compaction', 'error')).errorMessage, /Invalid SDK compaction checkpoint/);
+        assert.equal(queries(), count);
+        await foreign();
+        assert.deepEqual(current().filter(row => row.type === 'execution').map(row => row.label), ['seed', 'foreign', 'foreign']);
+        result.cases.push({ mode, pass: true, foreignSummaryAllowed: true, sdkBlockedAfterRestart: true, noToolReplay: true });
+        await worker.close(); worker = undefined; continue;
+      }
       const count = queries(); await assert.rejects(compact(), /cancelled/i);
       assert.equal(queries(), count); assert(!entries().some(row => row.type === 'compaction'));
       result.cases.push({ mode, pass: true, blockedBeforeSummary: true }); await worker.close(); worker = undefined; continue;

@@ -29,7 +29,9 @@ Repeated summaries can expose a Pi event quirk: its event may identify an older 
 - Failed or cancelled summarization appends no successful compaction receipt and leaves prior history usable.
 - A durable receipt permits restart before the first post-compaction SDK checkpoint. The focused E2E kills only its owned worker with SIGKILL at this boundary.
 - A missing/malformed receipt, changed source/summary/configuration or unknown/unmatched work fails before another SDK request. A publication gap requires a fresh session rather than an unverified resume.
-- Unknown outcomes still require the existing explicit recovery rules. Switching providers and compacting cannot silently approve an uncheckpointed SDK failure.
+- Unknown outcomes still require the existing explicit recovery rules. When SDK handoff validation fails, a selected non-SDK model may compact if all visible tool calls have matching Pi results. Success records a null SDK receipt: non-SDK continuation remains usable, but Claude SDK needs a new session. Failed or cancelled summaries change no receipt. Switching providers and compacting never approves the interrupted SDK work.
+
+The standalone adapter includes a bounded TLA+ model, real-Pi replay and guard-removal negative controls for this fallback. See its [verification skill](https://github.com/peterlimg/pi-claude-sdk/blob/b94e8c6d4d00a34b3f9af669b2bfc2c8d692a147/.agents/skills/verify-foreign-compaction/SKILL.md) and [results and statechart](https://github.com/peterlimg/pi-claude-sdk/blob/b94e8c6d4d00a34b3f9af669b2bfc2c8d692a147/verification/compaction/FINDINGS.md).
 
 ## Verification
 
