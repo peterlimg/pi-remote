@@ -4,6 +4,7 @@
 .shimmer-study [data-color=B], .shimmer-study[data-color=B] { --sample-base: light-dark(#7951a8, #b193db); --sample-highlight: light-dark(#45206d, #ead3ff); }
 .shimmer-study [data-color=C], .shimmer-study[data-color=C] { --sample-base: light-dark(#a34f39, #d58f7f); --sample-highlight: light-dark(#632512, #ffd1bd); }
 .shimmer-study [data-color=D], .shimmer-study[data-color=D] { --sample-base: light-dark(#934b91, #c989c7); --sample-highlight: light-dark(#591d59, #f5c9ef); }
+.shimmer-study [data-color=E], .shimmer-study[data-color=E] { --sample-base: light-dark(#3d731c, #599c39); --sample-highlight: light-dark(#234a0b, #9bdc62); }
 .shimmer-study .session-state[data-status=working] { --shimmer-base: var(--sample-base); --shimmer-highlight: var(--sample-highlight); }
 .shimmer-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 20px 0 28px; }
 .shimmer-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text); font-weight: 400; }

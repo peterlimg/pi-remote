@@ -169,13 +169,13 @@ function syncTheme() {
   $('theme').textContent = theme === 'dark' ? 'Preview light theme' : 'Preview dark theme';
   document.querySelector('meta[name=theme-color]').content = theme === 'dark' ? '#100d10' : '#f2f3f0';
 }
-// Color-only study: keep the same shimmer and session layout while comparing four palettes.
+// Color-only study: keep the same shimmer and session layout while comparing palettes.
 function shimmerStudy() {
-  const colors = { A: 'Rose', B: 'Lilac', C: 'Coral', D: 'Orchid' };
+  const colors = { A: 'Rose', B: 'Lilac', C: 'Coral', D: 'Orchid', E: 'Grass' };
   const page = $('page'); page.classList.add('shimmer-study');
   document.title = 'Working shimmer colors · Pi Remote';
   document.querySelector('h1').textContent = 'Working colors';
-  document.querySelector('.lede').textContent = 'Same smooth shimmer, four palettes. Tap a color to see it in the list. Sample sessions only; your live app is unchanged.';
+  document.querySelector('.lede').textContent = 'Same smooth shimmer, five palettes. Tap a color to see it in the list. Sample sessions only; your live app is unchanged.';
   $('lifecycle-study').hidden = true;
   const comparison = $('comparison'); comparison.hidden = false;
   comparison.setAttribute('aria-label', 'Shimmer color comparison');

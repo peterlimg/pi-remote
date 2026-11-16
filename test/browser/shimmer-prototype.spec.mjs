@@ -8,9 +8,9 @@ test('shimmer palettes compare without changing live sessions', async ({ page },
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
   await page.goto('/session-motion-prototype.html?study=shimmer&variant=A');
   await expect(page.getByRole('heading', { name: 'Working colors' })).toBeVisible();
-  await expect(page.locator('.shimmer-choice')).toHaveCount(4);
+  await expect(page.locator('.shimmer-choice')).toHaveCount(5);
   const working = page.locator('.shimmer-row .session-state').first();
-  for (const [key, name, rgb] of [['A', 'Rose', '215, 139, 158'], ['B', 'Lilac', '177, 147, 219'], ['C', 'Coral', '213, 143, 127'], ['D', 'Orchid', '201, 137, 199']]) {
+  for (const [key, name, rgb] of [['A', 'Rose', '215, 139, 158'], ['B', 'Lilac', '177, 147, 219'], ['C', 'Coral', '213, 143, 127'], ['D', 'Orchid', '201, 137, 199'], ['E', 'Grass', '89, 156, 57']]) {
     await page.getByRole('button', { name: `${key} · ${name}`, exact: true }).click();
     await expect(page.locator('#label')).toHaveText(`${key} · ${name}`);
     await expect(working).toHaveCSS('background-image', new RegExp(`rgb\\(${rgb}\\)`));
@@ -20,8 +20,11 @@ test('shimmer palettes compare without changing live sessions', async ({ page },
   }
   await page.getByRole('button', { name: 'Next color' }).click();
   await expect(page).toHaveURL(/variant=A/);
+  await page.getByRole('button', { name: 'Previous color' }).click();
+  await expect(page).toHaveURL(/variant=E/);
   await page.reload();
-  await expect(page.getByRole('button', { name: 'A · Rose', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'E · Grass', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(working).toHaveCSS('background-image', /rgb\(155, 220, 98\)/);
   const position = await working.evaluate(node => getComputedStyle(node).backgroundPositionX);
   await expect.poll(() => working.evaluate(node => getComputedStyle(node).backgroundPositionX)).not.toBe(position);
   await page.screenshot({ path: info.outputPath('shimmer-colors-dark.png'), fullPage: true });
@@ -29,11 +32,11 @@ test('shimmer palettes compare without changing live sessions', async ({ page },
   await expect(working).toHaveCSS('animation-play-state', 'paused');
   await page.getByRole('button', { name: 'Resume motion' }).click();
   await page.getByRole('button', { name: 'Preview light theme' }).click();
-  await expect(working).toHaveCSS('background-image', /rgb\(163, 66, 97\)/);
+  await expect(working).toHaveCSS('background-image', /rgb\(61, 115, 28\)/);
   await page.screenshot({ path: info.outputPath('shimmer-colors-light.png'), fullPage: true });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(working).toHaveCSS('animation-name', 'none');
-  await expect(working).toHaveCSS('color', 'rgb(163, 66, 97)');
+  await expect(working).toHaveCSS('color', 'rgb(61, 115, 28)');
   await expect(page.getByRole('button', { name: 'Reduced motion enabled' })).toBeDisabled();
   for (const width of [320, 1280]) {
     await page.setViewportSize({ width, height: 900 });
