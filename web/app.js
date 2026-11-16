@@ -1714,15 +1714,18 @@ function renderCheckin(state, threads = new Map(), groups = [], expanded = new M
           feedback.textContent = error.message;
         }
       };
-      const option = (label, response) => {
-        const button = el('button', label, 'secondary'); button.type = 'button';
-        button.addEventListener('click', () => answer(response)); controls.append(button);
+      // Same controls as the question inside the session: choices as list rows, then confirm-style actions.
+      const choices = el('div', undefined, 'dialog-options');
+      const option = (label, response, className = 'secondary', box = controls) => {
+        const button = el('button', label, className); button.type = 'button';
+        button.addEventListener('click', () => answer(response)); box.append(button);
       };
       let input;
       if (dialog.method === 'select') {
-        for (const value of dialog.options || []) option(value, { value });
+        for (const value of dialog.options || []) option(value, { value }, 'command-option', choices);
+        card.append(choices);
       } else if (dialog.method === 'confirm') {
-        option('Allow', { confirmed: true }); option('Deny', { confirmed: false });
+        option('Allow', { confirmed: true }, ''); option('Deny', { confirmed: false });
       } else if (['input', 'editor'].includes(dialog.method)) {
         input = el(dialog.method === 'editor' ? 'textarea' : 'input');
         input.setAttribute('aria-label', dialog.title || 'Your answer'); input.value = dialog.prefill || '';
