@@ -28,7 +28,7 @@ Codemode activity uses Sol's connected work-log layout. Keep Codemode in the gro
 
 ## Coordinator interaction
 
-Any ordinary session coordinates workers when asked, without setup, a separate conversation, or reduced parent permissions. Preserve its identity, history, model, and tools. The user selected pane D: a compact Workers count beside the session dots above the composer opens a translucent bottom sheet, then an unboxed roster and read-only worker logs. The sheet rises from below and pulls down to dismiss; short or cancelled pulls snap back, and a scrolled log keeps native scrolling. Keep text and controls opaque. All instructions and replies remain in the main conversation. Inspect one worker alongside the live parent without changing the selected session, composer, draft, attachments, or main reading position. Preserve the direct, read-only worker view for explicit session search.
+Any ordinary session coordinates workers when asked, without setup, a separate conversation, or reduced parent permissions. Preserve its identity, history, model, and tools. The user selected pane D: a narrow, centered Workers control below the session dots and above the composer shows the running count or Idle and opens a translucent bottom sheet, then an unboxed roster and read-only worker logs. The sheet rises from below and pulls down to dismiss; short or cancelled pulls snap back, and a scrolled log keeps native scrolling. Keep text and controls opaque. All instructions and replies remain in the main conversation. Inspect one worker alongside the live parent without changing the selected session, composer, draft, attachments, or main reading position. Preserve the direct, read-only worker view for explicit session search.
 
 ## Coordinator study boundary
 

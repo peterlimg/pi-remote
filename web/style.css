@@ -745,13 +745,10 @@ pre.message-text { white-space: pre-wrap; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .session-icon[data-status=working]:not(.bot) rect, .activity-dots { animation: none; } }
 /* The dots strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button rises above it. */
-.session-swipe { position: absolute; bottom: 100%; left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.session-swipe { position: absolute; bottom: calc(100% + var(--coordinator-height, 0px)); left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .session-swipe-haptic { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; }
-.composer:has(#session-swipe:not([hidden])) #scroll-bottom { bottom: calc(100% + 32px); }
-/* Workers share the dots strip instead of pushing it into another row. */
-.dock:has(#coordinator-context:not([hidden])) .session-swipe { left: 0; right: 132px; height: 44px; }
-.dock:has(#coordinator-context:not([hidden])) #scroll-bottom { bottom: calc(100% + 52px); }
-#scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); }
+.composer:has(#session-swipe:not([hidden])) #scroll-bottom { bottom: calc(100% + var(--coordinator-height, 0px) + 32px); }
+#scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + var(--coordinator-height, 0px) + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); }
 .command-menu { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 0; width: 100%; padding: 6px; border-radius: 20px; overflow: hidden; }
 #command-options { max-height: min(18rem, calc(var(--viewport-height, 100dvh) * .35)); overflow-y: auto; overscroll-behavior: contain; }
 .command-option { display: block; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; border-radius: 14px; background: transparent; color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
@@ -995,12 +992,13 @@ pre.message-text { white-space: pre-wrap; }
   .login { margin: clamp(16px, 4svh, 32px) auto; }
 }
 .session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
-.coordinator-context { display: flex; justify-content: flex-end; flex-shrink: 0; width: calc(100% - 48px); max-width: var(--content-width); margin: 0 auto; }
-@media (max-width: 700px) { .coordinator-context { width: calc(100% - 16px); } }
+.coordinator-context { flex-shrink: 0; width: fit-content; max-width: min(var(--content-width), calc(100% - 32px)); margin: 0 auto; }
 #coordinator-open { position: relative; isolation: isolate; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 10px; border-radius: 22px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
 /* Keep a 44px touch target around the smaller visible pill. */
 #coordinator-open::before { content: ''; position: absolute; z-index: -1; inset: 6px 0; border-radius: 22px; pointer-events: none; }
 #coordinator-open > span:first-child { flex-shrink: 0; }
+#coordinator-worker-status { color: var(--muted); font-weight: 400; white-space: nowrap; }
+#coordinator-worker-status[data-working=true] { color: var(--working); }
 #coordinator-worker-attention { color: var(--warning); font-weight: 700; }
 #coordinator-open > svg { flex-shrink: 0; color: var(--muted); }
 .coordinator-worker { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 16px 0; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-weight: 400; }

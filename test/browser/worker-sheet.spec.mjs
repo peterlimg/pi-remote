@@ -55,18 +55,23 @@ test('worker sheet scopes history and images without disturbing the live parent'
       client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
       await expect(page.locator('#coordinator-worker-summary')).toHaveText(state === 'working' ? '1 working' : state === 'waiting' ? '1 needs answer' : state === 'unknown' ? '1 need inspection' : 'No active work');
       const box = await page.locator('#coordinator-open').boundingBox();
-      expect(box.height).toBe(44); expect(box.width).toBeLessThan(132);
+      expect(box.height).toBe(44); expect(box.width).toBeLessThan(170);
+      const composer = await page.locator('#composer').boundingBox();
+      const center = composer.x + composer.width / 2;
+      expect(Math.abs(box.x + box.width / 2 - center)).toBeLessThanOrEqual(1);
       const dots = await page.locator('#session-swipe').boundingBox();
-      expect(dots.height).toBe(44);
-      expect(Math.abs(dots.y - box.y)).toBeLessThanOrEqual(1);
-      expect(dots.x + dots.width).toBeLessThan(box.x);
-      expect(dots.width).toBeGreaterThanOrEqual(140);
+      expect(dots.height).toBe(28);
+      expect(dots.y + dots.height).toBeLessThanOrEqual(box.y + 1);
+      expect(Math.abs(dots.x + dots.width / 2 - center)).toBeLessThanOrEqual(1);
+      await expect(page.locator('#coordinator-worker-status')).toBeVisible();
+      await expect(page.locator('#coordinator-worker-status')).toHaveText(state === 'working' ? '1 working' : 'Idle');
+      await expect(page.locator('#coordinator-worker-status')).toHaveAttribute('data-working', String(state === 'working'));
       for (const [selector, rect] of [['#session-swipe', dots], ['#coordinator-open', box]]) {
         expect(await page.evaluate(([selector, x, y]) => document.querySelector(selector).contains(document.elementFromPoint(x, y)),
           [selector, rect.x + rect.width / 2, rect.y + rect.height / 2])).toBe(true);
       }
       await expect(page.locator('#coordinator-worker-attention')).toBeVisible({ visible: ['waiting', 'unknown'].includes(state) });
-      await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/Workers · 2/);
+      await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/Workers.*2 total/);
       expect(await page.locator('#coordinator-open').evaluate(node => {
         const pill = getComputedStyle(node, '::before');
         return parseFloat(pill.height) + parseFloat(pill.borderTopWidth) + parseFloat(pill.borderBottomWidth);

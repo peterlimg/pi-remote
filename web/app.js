@@ -87,6 +87,10 @@ new ResizeObserver(([{ target }]) => {
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
   updateScrollButton();
 }).observe($('dock'));
+new ResizeObserver(([{ target }]) => {
+  const height = target.getBoundingClientRect().height;
+  document.querySelector('main').style.setProperty('--coordinator-height', `${height ? height + parseFloat(getComputedStyle(target).marginBottom) : 0}px`);
+}).observe($('coordinator-context'));
 $('scroll-bottom').addEventListener('click', () => {
   if (historyWindow) showLatest();
   $('transcript').scrollTop = $('transcript').scrollHeight;
@@ -2302,6 +2306,8 @@ function renderCoordinator(state) {
   $('coordinator-return').disabled = worker && !connected && !cache.has(role.coordinatorId);
   $('coordinator-worker-count').textContent = tasks.length;
   const summary = [], working = tasks.filter(workerRunning).length;
+  $('coordinator-worker-status').textContent = working ? working + ' working' : 'Idle';
+  $('coordinator-worker-status').dataset.working = String(working > 0);
   if (working) summary.push(working + ' working');
   for (const [states, label] of [[['queued'], 'queued'], [['recovering'], 'recovering'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
     const count = tasks.filter(task => states.includes(task.state)).length;
