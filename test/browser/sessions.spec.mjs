@@ -111,7 +111,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
       messages: [{ role: 'user', text: i === 0 ? 'Investigate slow database migrations' : 'Review dashboard changes, session ' + (i + 1) }] }))
   ];
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true, coordination: { taskForSession: () => undefined, describe: () => undefined } });
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true, assistant: { id: 'assistant' }, coordination: { taskForSession: () => undefined, describe: () => undefined } });
   let scroll, failList = false;
   const requests = [];
   // Mirrors the host channel: whole pages until the phone scrolls or searches, then diffs.
@@ -153,12 +153,12 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(login).toHaveAccessibleName(/Working/);
   await expect(workingState).toHaveCSS('font-weight', '400');
   await expect(workingState).toHaveCSS('font-size', '14px');
-  await expect(workingState).toHaveCSS('background-image', /rgb\(21, 84, 47\).*rgb\(53, 103, 92\)/);
+  await expect(workingState).toHaveCSS('background-image', /rgb\(98, 108, 102\) 30%.*rgb\(20, 24, 22\) 50%.*70%/);
   await expect(workingState).toHaveCSS('background-clip', 'text');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingState.locator('*')).toHaveCount(0);
   await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
-  await expect(workingState).toHaveCSS('animation-duration', '3s');
+  await expect(workingState).toHaveCSS('animation-duration', '1.2s');
   await expect(workingState).toHaveCSS('animation-play-state', 'running');
   const position = await workingState.evaluate(node => getComputedStyle(node).backgroundPositionX);
   await expect.poll(() => workingState.evaluate(node => getComputedStyle(node).backgroundPositionX)).not.toBe(position);
@@ -170,7 +170,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(workingIcon.locator('svg')).toHaveCSS('width', '32px');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await expect(workingIcon.locator('.bot-look')).toHaveCSS('animation-name', 'bot-glance');
-  expect(Number((await workingIcon.getAttribute('style')).match(/--bot-t: -(\d+)ms/)[1])).toBeLessThan(6000);
+  expect(await workingIcon.evaluate(node => -parseFloat(node.style.getPropertyValue('--bot-t')) < performance.now() + 6000)).toBe(true);
   await expect(page.locator('.session-icon[data-status=waiting] path').first()).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.session-icon[data-status=idle]')).toHaveAttribute('data-mood', 'idle');
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(now - 60000).toISOString());
@@ -183,7 +183,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(workingState).toHaveCSS('background-image', /rgb\(128, 212, 160\).*rgb\(239, 237, 239\)/);
+  await expect(workingState).toHaveCSS('background-image', /rgb\(170, 167, 170\) 30%.*rgb\(239, 237, 239\) 50%.*70%/);
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile-dark.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await noOverflow();
@@ -197,7 +197,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(workingState).toHaveCSS('animation-name', 'none');
   await expect(workingState).toHaveCSS('background-image', 'none');
-  await expect(workingState).toHaveCSS('color', 'rgb(128, 212, 160)');
+  await expect(workingState).toHaveCSS('color', 'rgb(239, 237, 239)');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
   await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
