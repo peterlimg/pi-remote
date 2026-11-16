@@ -1,13 +1,19 @@
 export function voiceComposer({ request, context, changed, notice }) {
   const button = document.getElementById('voice-record'), cancelButton = document.getElementById('voice-cancel');
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
-  const input = document.getElementById('prompt');
+  const input = document.getElementById('prompt'), acceptButton = document.getElementById('voice-accept');
   const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
   let active;
   const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
   const transcript = call => [...call.turns.values(), call.partial].filter(Boolean).join(' ').trim();
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
+    const reviewing = ['finishing', 'review'].includes(active?.phase);
+    input.readOnly = reviewing;
+    if (reviewing) input.setAttribute('aria-describedby', 'voice-label'); else input.removeAttribute('aria-describedby');
+    acceptButton.hidden = !reviewing;
+    acceptButton.disabled = !input.value.trim();
+    cancelButton.title = reviewing ? 'Discard transcription preview' : 'Discard recording';
     panel.hidden = !active;
     if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
     const showingWaveform = active?.phase === 'recording' && !!active.analyser;
@@ -15,11 +21,14 @@ export function voiceComposer({ request, context, changed, notice }) {
     status.classList.toggle('sr-only', showingWaveform);
     cancelButton.hidden = !active;
     button.setAttribute('aria-label', active ? 'Stop dictation' : 'Dictate with ChatGPT');
-    button.title = active ? 'Stop recording and insert text' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';
+    button.title = active ? 'Stop recording and preview text' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';
     button.setAttribute('aria-pressed', String(!!active));
     button.dataset.recording = String(active?.phase === 'recording');
     button.disabled = !!active && active.phase !== 'recording';
-    status.textContent = active?.phase === 'recording' ? 'Listening · directly connected to OpenAI' : active?.phase === 'finishing' ? 'Finishing transcription…' : 'Connecting to ChatGPT…';
+    const label = active?.phase === 'recording' ? 'Listening · directly connected to OpenAI' :
+      active?.phase === 'review' ? 'Not confirmed. Check the last words.' :
+      active?.phase === 'finishing' ? 'Still finishing. Last words may be missing.' : 'Connecting to ChatGPT…';
+    if (status.textContent !== label) status.textContent = label;
     changed();
   }
   function stopMeter(call) {
@@ -57,6 +66,8 @@ export function voiceComposer({ request, context, changed, notice }) {
     call.frame = requestAnimationFrame(draw);
   }
   function release(call) {
+    if (call.released) return;
+    call.released = true;
     stopMeter(call);
     clearTimeout(call.timer); clearTimeout(call.connectTimer); clearTimeout(call.drainTimer);
     call.stream?.getTracks().forEach(track => track.stop());
@@ -77,40 +88,54 @@ export function voiceComposer({ request, context, changed, notice }) {
   function cancel() {
     const call = active;
     if (!call) return;
-    const restoreFocus = [button, cancelButton].includes(document.activeElement);
+    const restoreFocus = [button, cancelButton, acceptButton].includes(document.activeElement);
+    if (context().sessionId === call.sessionId && call.preview !== undefined && input.value === call.preview) {
+      input.value = call.draft;
+      input.setSelectionRange(call.cursor, call.cursor);
+    }
     active = undefined; release(call);
     render();
     if (restoreFocus && !button.hidden) button.focus({ preventScroll: true });
   }
-  function insert(call, text, message) {
-    if (!current(call)) return;
-    // An edit during capture owns the draft; never insert late text into a changed draft.
-    if (input.value !== call.draft) { cancel(); return; }
-    active = undefined; release(call);
-    const words = text.trim();
-    if (words) {
-      const before = call.draft.slice(0, call.cursor), after = call.draft.slice(call.cursor);
-      const addition = (before && !/\s$/.test(before) ? ' ' : '') + words + (after && !/^\s/.test(after) ? ' ' : '');
-      input.value = before + addition + after;
-      input.setSelectionRange(before.length + addition.length, before.length + addition.length);
-    }
+  function preview(call) {
+    if (!current(call)) return false;
+    // Only our preview may be replaced; an external draft edit always wins.
+    if (input.value !== (call.preview ?? call.draft)) { cancel(); return false; }
+    const follow = call.preview === undefined || input.scrollHeight - input.scrollTop - input.clientHeight < 24;
+    const words = transcript(call).slice(0, 16000).trim();
+    const before = call.draft.slice(0, call.cursor), after = call.draft.slice(call.cursor);
+    const addition = words ? (before && !/\s$/.test(before) ? ' ' : '') + words + (after && !/^\s/.test(after) ? ' ' : '') : '';
+    input.value = call.preview = before + addition + after;
+    call.previewCursor = before.length + addition.length;
     render();
-    if (words) input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.focus({ preventScroll: true });
-    if (message) notice(message, call.sessionId);
+    if (follow) input.scrollTop = input.scrollHeight;
+    return true;
   }
-  function interrupted(call, message) {
-    if (!current(call)) return;
-    if (call.phase === 'connecting') { cancel(); notice(message, call.sessionId); }
-    else insert(call, transcript(call).slice(0, 16000), message);
+  function accept(call) {
+    if (!current(call) || call.preview === undefined) return;
+    if (input.value !== call.preview) { cancel(); return; }
+    active = undefined; release(call); render();
+    input.setSelectionRange(call.previewCursor, call.previewCursor);
+    if (input.value !== call.draft) input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus({ preventScroll: true });
+  }
+  function review(call, message) {
+    if (!current(call) || call.released) return;
+    if (!transcript(call).trim()) cancel();
+    else {
+      call.phase = 'review';
+      if (!preview(call)) return;
+      release(call);
+    }
+    if (message) notice(message, call.sessionId);
   }
   function settled(call) {
     if (current(call) && call.phase === 'finishing' && call.drained && call.turns.size && !call.partial) {
-      insert(call, transcript(call));
+      accept(call);
     }
   }
   function providerEvent(call, raw) {
-    if (!current(call)) return;
+    if (!current(call) || call.released) return;
     try {
       if (typeof raw !== 'string' || raw.length > 128 * 1024) throw new Error();
       const event = JSON.parse(raw);
@@ -121,20 +146,20 @@ export function voiceComposer({ request, context, changed, notice }) {
         if (event.turn.transcript.trim()) call.turns.set(event.turn.id || String(call.turns.size), event.turn.transcript.trim());
         call.partial = '';
       } else return; // Ignore assistant audio/text and tool requests; never forward them to the host.
-      if (transcript(call).length > 16000) { interrupted(call, 'Dictation is too long. Check the draft before sending.'); return; }
-      settled(call);
-    } catch { interrupted(call, 'Dictation was interrupted. Check the draft before sending.'); }
+      if (transcript(call).length > 16000) { review(call, 'Dictation is too long. Check the draft before sending.'); return; }
+      if (call.phase === 'finishing' && preview(call)) settled(call);
+    } catch { review(call, 'Dictation was interrupted. Check the draft before sending.'); }
   }
   function finish() {
     const call = active;
     if (!call || call.phase !== 'recording') return;
     call.phase = 'finishing'; clearTimeout(call.timer); stopMeter(call);
-    call.stream.getTracks().forEach(track => track.stop()); render();
+    call.stream.getTracks().forEach(track => track.stop());
+    if (!preview(call)) return;
+    (acceptButton.disabled ? cancelButton : acceptButton).focus({ preventScroll: true });
     // shortcut: no verified flush; replace this Stop-based drain when a finalization contract is available.
     call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
-    call.timer = setTimeout(() => {
-      if (current(call)) insert(call, transcript(call), call.partial.trim() ? 'Transcription ended before confirmation. Check the draft before sending.' : '');
-    }, 8000);
+    call.timer = setTimeout(() => review(call), 8000);
   }
   async function start() {
     if (active) return;
@@ -153,9 +178,9 @@ export function voiceComposer({ request, context, changed, notice }) {
       stream.getTracks().forEach(track => peer.addTrack(track, stream));
       const channel = call.channel = peer.createDataChannel('oai-events');
       channel.onmessage = event => providerEvent(call, event.data);
-      channel.onclose = channel.onerror = () => interrupted(call, 'Voice connection lost. Check the draft before sending.');
+      channel.onclose = channel.onerror = () => review(call, 'Voice connection lost. Check the draft before sending.');
       peer.onconnectionstatechange = () => {
-        if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) interrupted(call, 'Voice connection lost. Check the draft before sending.');
+        if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) review(call, 'Voice connection lost. Check the draft before sending.');
       };
       const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
       if (!current(call)) return;
@@ -190,6 +215,7 @@ export function voiceComposer({ request, context, changed, notice }) {
   }
   button.addEventListener('click', () => active ? void finish() : void start());
   cancelButton.addEventListener('click', cancel);
+  acceptButton.addEventListener('click', () => { if (active) accept(active); });
   input.addEventListener('input', cancel);
   document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); cancel(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });

@@ -145,15 +145,25 @@ try {
   if (liveFile) {
     await page.evaluate(() => window.playVoiceSample());
     const started = performance.now(); await stop(); await stopped();
-    try { await expect(page.locator('#voice-status')).toBeHidden({ timeout: 6000 }); }
+    await expect(page.locator('#prompt')).toBeVisible({ timeout: 1000 });
+    const stopToPreviewMs = Math.round(performance.now() - started);
+    try { await expect(page.locator('#prompt')).toHaveValue(/^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i, { timeout: 6000 }); }
     catch (error) {
       console.log(JSON.stringify({ liveDiagnostics: await page.evaluate(() => window.voiceEvents.slice(-15).map(({ at, ...event }) => ({ ...event, afterAudioEndMs: Math.round(at - window.voiceAudioEndedAt) }))) }));
       throw error;
     }
+    const stopToCompletePreviewMs = Math.round(performance.now() - started);
+    await page.screenshot({ path: join(evidence, 'live-preview-phone.png'), fullPage: true });
+    const acceptedUnconfirmed = await page.locator('#voice-accept').isVisible();
+    if (acceptedUnconfirmed) {
+      await expect(page.locator('#send')).toBeDisabled();
+      await page.getByRole('button', { name: 'Use text', exact: true }).click();
+    }
+    await expect(page.locator('#prompt')).toBeEditable();
     await expect(page.locator('#notice')).toBeHidden();
     const text = await page.locator('#prompt').inputValue();
     assert.match(text, /^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i);
-    console.log(JSON.stringify({ live: true, stopToDraftMs: Math.round(performance.now() - started), text, promptsSent: commands.length }));
+    console.log(JSON.stringify({ live: true, stopToPreviewMs, stopToCompletePreviewMs, stopToEditableDraftMs: Math.round(performance.now() - started), acceptedUnconfirmed, text, promptsSent: commands.length }));
     assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('orange bicycle'));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
     await fresh(); await page.locator('#prompt').fill('Silent draft'); await record(); await delay(500);
@@ -178,8 +188,14 @@ try {
     await page.evaluate(() => { window.voiceGain.gain.value = 0; }); await expect.poll(async () => Math.max(...await levels())).toBe(3);
     await page.evaluate(() => { window.voiceGain.gain.value = .01; }); await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(8);
     await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
-    await stop(); await stopped(); await delay(1900); const receivedAt = performance.now(); await final('Purple notebook beside the lamp.');
+    await stop(); await stopped();
+    await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook');
+    await expect(page.locator('#prompt')).not.toBeEditable(); await expect(page.locator('#send')).toBeDisabled();
+    await page.locator('#composer').evaluate(form => form.requestSubmit()); assert.equal(commands.length, 0);
+    await partial(' beside the lamp'); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp');
+    await delay(1900); const receivedAt = performance.now(); await final('Purple notebook beside the lamp.');
     await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
+    await expect(page.locator('#prompt')).toBeEditable();
     console.log(`Final provider event to draft after drain: ${Math.round(performance.now() - receivedAt)}ms`);
     await closed(); assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('Purple notebook'));
     await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 1);
@@ -195,8 +211,42 @@ try {
     await expect(page.locator('#prompt')).toHaveValue('First sentence. Trailing words preserved.', { timeout: 1000 }); await closed();
 
     await fresh(); await record(); await partial('Unconfirmed words'); await stop();
-    await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 10000 });
-    await expect(page.locator('#notice')).toContainText('before confirmation'); await closed();
+    await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 1000 });
+    await expect(page.locator('#voice-label')).toContainText('Not confirmed', { timeout: 10000 }); await closed();
+    await expect(page.locator('#send')).toBeDisabled(); await expect(page.locator('#prompt')).not.toBeEditable();
+    await page.getByRole('button', { name: 'Use text', exact: true }).click();
+    await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words');
+    assert.equal(await page.evaluate(() => window.voiceSent.filter(event => event.type === 'session.close').length), 1);
+
+    await fresh(); await page.locator('#prompt').fill('Before after');
+    await page.locator('#prompt').evaluate(input => input.setSelectionRange(6, 6));
+    await record(); await partial('Early preview'); await stop();
+    await expect(page.locator('#prompt')).toHaveValue('Before Early preview after', { timeout: 1000 });
+    await partial(' only'); await expect(page.locator('#prompt')).toHaveValue('Before Early preview only after');
+    await page.locator('#prompt').focus(); await page.keyboard.press('Enter');
+    await page.locator('#composer').evaluate(form => form.requestSubmit());
+    await expect(page.locator('#send')).toBeDisabled(); assert.equal(commands.length, 1);
+    for (const [width, colorScheme] of [[320, 'light'], [390, 'dark'], [1280, 'light']]) {
+      await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme });
+      for (const id of ['prompt', 'voice-cancel', 'voice-status', 'voice-accept', 'send']) {
+        const box = await page.locator('#' + id).boundingBox();
+        assert.ok(box && box.x >= 0 && box.x + box.width <= width, `${id} fits at ${width}px`);
+        if (['voice-cancel', 'voice-accept', 'send'].includes(id)) assert.ok(box.width >= 44 && box.height >= 44);
+      }
+      await page.screenshot({ path: join(evidence, `preview-${width}-${colorScheme}.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
+    await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
+    await page.getByRole('button', { name: 'Use text', exact: true }).click();
+    await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
+    assert.equal(await page.locator('#prompt').evaluate(input => input.selectionStart), 'Before Early preview only'.length);
+    await page.locator('#prompt').fill('My correction');
+    await page.evaluate(() => window.lateVoiceEvent({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'late', role: 'user', transcript: 'Late replacement' } }) }));
+    await expect(page.locator('#prompt')).toHaveValue('My correction'); await stopped(); await closed();
+    assert.equal(commands.length, 1); assert.ok(!JSON.stringify(hostFrames).includes('Early preview only'));
+    await page.getByRole('button', { name: 'Show sessions' }).click(); await page.getByRole('button', { name: /Voice Beta/ }).click();
+    await page.getByRole('button', { name: 'Show sessions' }).click(); await page.getByRole('button', { name: /Voice Alpha/ }).click();
+    await expect(page.locator('#prompt')).toHaveValue('My correction');
 
     await fresh(); await page.locator('#prompt').fill('Original'); await record(); await partial('Discard me');
     await page.evaluate(() => { window.voiceSkipClose = true; });
@@ -204,20 +254,26 @@ try {
     await expect(page.locator('#prompt')).toHaveValue('Original');
     await fresh(); await record(); await page.keyboard.press('Escape'); await stopped(); await closed(); await expect(page.locator('#voice-record')).toBeFocused();
 
-    await fresh(); await record(); await stop();
+    await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Discard preview'); await stop();
+    await expect(page.locator('#prompt')).toHaveValue('Original draft Discard preview');
     await page.evaluate(() => { const receive = window.voicePeers.at(-1).channel.onmessage; setTimeout(() => receive({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'late', role: 'user', transcript: 'Late result' } }) }), 300); });
-    await page.getByRole('button', { name: 'Cancel dictation' }).click(); await page.locator('#prompt').fill('User edit wins'); await delay(400);
+    await page.getByRole('button', { name: 'Cancel dictation' }).click();
+    await expect(page.locator('#prompt')).toHaveValue('Original draft'); await expect(page.locator('#prompt')).toBeEditable();
+    await page.locator('#prompt').fill('User edit wins'); await delay(400);
     await expect(page.locator('#prompt')).toHaveValue('User edit wins'); await closed();
 
     await fresh(); await record(); await stop(); await page.locator('#prompt').evaluate(input => { input.value = 'Changed without cancelling'; });
     await final('Late result'); await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Changed without cancelling');
 
-    await fresh(); await record(); await page.getByRole('button', { name: 'Show sessions' }).click();
+    await fresh(); await page.locator('#prompt').fill('Session draft'); await record(); await partial('Discard session preview'); await stop();
+    await page.getByRole('button', { name: 'Show sessions' }).click();
     await page.getByRole('button', { name: /Voice Beta/ }).click(); await stopped(); await closed(); await expect(page.locator('#voice-record')).toBeHidden();
+    await page.getByRole('button', { name: 'Show sessions' }).click(); await page.getByRole('button', { name: /Voice Alpha/ }).click();
+    await expect(page.locator('#prompt')).toHaveValue('Session draft'); await expect(page.locator('#prompt')).toBeEditable();
 
-    await fresh(); await record(); await stop(); states[0].model = 'anthropic/claude-test'; states[0].revision++;
+    await fresh(); await page.locator('#prompt').fill('Model draft'); await record(); await partial('Discard model preview'); await stop(); states[0].model = 'anthropic/claude-test'; states[0].revision++;
     agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
-    await expect(page.locator('#voice-record')).toBeHidden(); await stopped(); await closed(); await expect(page.locator('#prompt')).toHaveValue('');
+    await expect(page.locator('#voice-record')).toBeHidden(); await stopped(); await closed(); await expect(page.locator('#prompt')).toHaveValue('Model draft');
     states[0].model = 'openai-codex/gpt-5.4'; states[0].revision++; agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
 
     for (const failure of ['quota', 'malformed', 'oversized']) {

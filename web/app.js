@@ -186,7 +186,7 @@ function loadVoice() {
   // Static assets update before a busy host can restart; older hosts cannot serve this module yet.
   voiceLoading = import('./voice.js').then(({ voiceComposer }) => {
     const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/voice.css'; document.head.append(style);
-    voice = voiceComposer({ request, notice, changed: updateControls, context: () => {
+    voice = voiceComposer({ request, notice, changed: () => { updateControls(); resizePrompt(); }, context: () => {
       const state = cache.get(selected);
       const available = supportsVoice && state?.model?.startsWith('openai-codex/') && state?.coordination?.role !== 'worker';
       return { sessionId: selected, model: state?.model, available,
@@ -3824,6 +3824,7 @@ $('composer').addEventListener('focusout', event => {
   if (!$('composer').contains(event.relatedTarget)) { commandDismissed = true; renderCommands(); }
 });
 $('prompt').addEventListener('keydown', event => {
+  if ($('prompt').readOnly) return;
   if (event.isComposing || event.keyCode === 229) return;
   if (!$('command-menu').hidden && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
     if (event.key === 'Escape') {
