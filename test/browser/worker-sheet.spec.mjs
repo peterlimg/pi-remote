@@ -6,7 +6,7 @@ const pixel = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AA
 test('worker sheet scopes history and images without disturbing the live parent', async ({ page }, info) => {
   const parentImage = { id: 'a'.repeat(64), mimeType: 'image/png' }, workerImage = { id: 'b'.repeat(64), mimeType: 'image/png' };
   const task = { id: 'task', sessionId: 'worker', title: 'Messaging and recovery inspection with a long worker name', state: 'working', instruction: 'Inspect screenshot.png.', readOnly: true };
-  const parent = { id: 'parent', title: 'Main conversation', cwd: '/project', status: 'idle', messages: [
+  const parent = { id: 'parent', title: 'Main conversation', cwd: '/project', status: 'idle', updatedAt: Date.now(), messages: [
     { id: 'parent-note', role: 'user', text: 'Keep the main image.', images: [parentImage] }
   ], coordination: { role: 'coordinator', readOnly: false, tasks: [task, { ...task, id: 'recovery-task', sessionId: 'recovery', title: 'Model the worker lifecycle and generate a statechart', state: 'completed', workspace: { integration: 'applied' } }] } };
   let worker = { id: 'worker', title: task.title, cwd: '/project', status: 'working', historyTruncated: true, messages: [
@@ -27,7 +27,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       let value = [];
       if (packet.type === 'auth') {
         ws.send(JSON.stringify({ type: 'ready', supportsCoordinator: true, supportsWorkerInspection: true, supportsHistory: true, supportsImages: true }));
-        ws.send(JSON.stringify({ type: 'sessions', sessions: [parent] }));
+        ws.send(JSON.stringify({ type: 'sessions', sessions: [parent, { id: 'other', title: 'Another conversation', cwd: '/project', status: 'idle', updatedAt: Date.now() }] }));
       } else if (packet.op === 'watch') {
         ws.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: parentVersion, state: parent }));
       } else if (packet.op === 'inspectWorker' && packet.sessionId) {
@@ -42,19 +42,31 @@ test('worker sheet scopes history and images without disturbing the live parent'
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
-  await page.locator('#sessions .session').click();
+  await page.locator('#sessions .session').filter({ hasText: parent.title }).click();
   const mainImage = page.locator('#transcript .thread-image img');
   await expect(mainImage).toBeVisible(); await expect.poll(() => mainImage.evaluate(node => node.naturalWidth)).toBe(1);
   const mainURL = await mainImage.getAttribute('src');
   await page.locator('#prompt').fill('Keep this main draft.');
-  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['desktop', 1440, 900, 'dark']]) {
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'dark'], ['desktop', 1440, 900, 'dark']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
-    for (const state of ['completed', 'working', 'unknown']) {
+    for (const state of ['completed', 'working', 'waiting', 'unknown']) {
       task.state = state;
       client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
-      await expect(page.locator('#coordinator-worker-summary')).toHaveText(state === 'working' ? '1 working' : state === 'unknown' ? '1 need inspection' : 'No active work');
+      await expect(page.locator('#coordinator-worker-summary')).toHaveText(state === 'working' ? '1 working' : state === 'waiting' ? '1 needs answer' : state === 'unknown' ? '1 need inspection' : 'No active work');
       const box = await page.locator('#coordinator-open').boundingBox();
-      expect(box.height).toBe(44); expect(box.width).toBeLessThan(280);
+      expect(box.height).toBe(44); expect(box.width).toBeLessThan(132);
+      const dots = await page.locator('#session-swipe').boundingBox();
+      expect(dots.height).toBe(44);
+      expect(Math.abs(dots.y - box.y)).toBeLessThanOrEqual(1);
+      expect(dots.x + dots.width).toBeLessThan(box.x);
+      expect(dots.width).toBeGreaterThanOrEqual(140);
+      for (const [selector, rect] of [['#session-swipe', dots], ['#coordinator-open', box]]) {
+        expect(await page.evaluate(([selector, x, y]) => document.querySelector(selector).contains(document.elementFromPoint(x, y)),
+          [selector, rect.x + rect.width / 2, rect.y + rect.height / 2])).toBe(true);
+      }
+      await expect(page.locator('#coordinator-worker-attention')).toBeVisible({ visible: ['waiting', 'unknown'].includes(state) });
+      await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/Workers · 2/);
       expect(await page.locator('#coordinator-open').evaluate(node => {
         const pill = getComputedStyle(node, '::before');
         return parseFloat(pill.height) + parseFloat(pill.borderTopWidth) + parseFloat(pill.borderBottomWidth);
@@ -183,5 +195,20 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const returnedStatus = page.getByRole('button', { name: task.title + ', Result ready', exact: true }).locator('small');
   await expect(returnedStatus).toHaveText('Result ready');
   expect(await returnedStatus.evaluate(node => getComputedStyle(node, '::before').content)).toBe('none');
+  await close.tap();
+  await expect(sheet).toBeHidden();
+  await page.locator('#session-swipe').hover();
+  await page.mouse.down();
+  await expect(page.locator('#session-swipe')).toHaveClass(/pressing/);
+  await expect(page.locator('#nearby-sessions')).toBeVisible();
+  await page.mouse.up();
+  await expect(page.locator('#nearby-list button')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#nearby-sessions')).toBeHidden();
+  await expect(page.locator('#prompt')).toHaveValue('Keep this main draft.');
+  parent.coordination.tasks = [];
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+  await expect(page.locator('#coordinator-context')).toBeHidden();
+  await expect(page.locator('#session-swipe')).toHaveCSS('height', '28px');
   expect(errors).toEqual([]);
 });

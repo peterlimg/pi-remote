@@ -87,10 +87,6 @@ new ResizeObserver(([{ target }]) => {
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
   updateScrollButton();
 }).observe($('dock'));
-new ResizeObserver(([{ target }]) => {
-  const height = target.getBoundingClientRect().height;
-  document.querySelector('main').style.setProperty('--coordinator-height', `${height ? height + parseFloat(getComputedStyle(target).marginBottom) : 0}px`);
-}).observe($('coordinator-context'));
 $('scroll-bottom').addEventListener('click', () => {
   if (historyWindow) showLatest();
   $('transcript').scrollTop = $('transcript').scrollHeight;
@@ -2312,6 +2308,8 @@ function renderCoordinator(state) {
     if (count) summary.push(count + ' ' + label);
   }
   $('coordinator-worker-summary').textContent = summary.join(' · ') || 'No active work';
+  $('coordinator-open').title = $('coordinator-worker-summary').textContent;
+  $('coordinator-worker-attention').hidden = !tasks.some(task => ['waiting', 'unknown'].includes(task.state));
   if (!$('coordinator-sheet').open) return;
   const key = JSON.stringify([selected, tasks, connected]);
   if (key === coordinatorRenderKey) return;
