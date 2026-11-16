@@ -1,7 +1,7 @@
 export function voiceComposer({ request, context, changed, notice }) {
   const button = document.getElementById('voice-record'), cancelButton = document.getElementById('voice-cancel');
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
-  const input = document.getElementById('prompt'), acceptButton = document.getElementById('voice-accept');
+  const input = document.getElementById('prompt');
   const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
   let active;
   const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
@@ -9,10 +9,7 @@ export function voiceComposer({ request, context, changed, notice }) {
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
     const reviewing = ['finishing', 'review'].includes(active?.phase);
-    input.readOnly = reviewing;
     if (reviewing) input.setAttribute('aria-describedby', 'voice-label'); else input.removeAttribute('aria-describedby');
-    acceptButton.hidden = !reviewing;
-    acceptButton.disabled = !input.value.trim();
     cancelButton.title = reviewing ? 'Discard transcription preview' : 'Discard recording';
     panel.hidden = !active;
     if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
@@ -88,7 +85,7 @@ export function voiceComposer({ request, context, changed, notice }) {
   function cancel() {
     const call = active;
     if (!call) return;
-    const restoreFocus = [button, cancelButton, acceptButton].includes(document.activeElement);
+    const restoreFocus = [button, cancelButton].includes(document.activeElement);
     if (context().sessionId === call.sessionId && call.preview !== undefined && input.value === call.preview) {
       input.value = call.draft;
       input.setSelectionRange(call.cursor, call.cursor);
@@ -102,22 +99,24 @@ export function voiceComposer({ request, context, changed, notice }) {
     // Only our preview may be replaced; an external draft edit always wins.
     if (input.value !== (call.preview ?? call.draft)) { cancel(); return false; }
     const follow = call.preview === undefined || input.scrollHeight - input.scrollTop - input.clientHeight < 24;
+    const selection = [input.selectionStart, input.selectionEnd, input.selectionDirection];
+    const atTail = call.preview === undefined || selection[0] === call.previewCursor && selection[1] === call.previewCursor;
     const words = transcript(call).slice(0, 16000).trim();
     const before = call.draft.slice(0, call.cursor), after = call.draft.slice(call.cursor);
     const addition = words ? (before && !/\s$/.test(before) ? ' ' : '') + words + (after && !/^\s/.test(after) ? ' ' : '') : '';
     input.value = call.preview = before + addition + after;
     call.previewCursor = before.length + addition.length;
+    if (atTail) input.setSelectionRange(call.previewCursor, call.previewCursor);
+    else input.setSelectionRange(...selection);
     render();
     if (follow) input.scrollTop = input.scrollHeight;
     return true;
   }
-  function accept(call) {
-    if (!current(call) || call.preview === undefined) return;
-    if (input.value !== call.preview) { cancel(); return; }
+  function freeze() {
+    const call = active;
+    if (!call || !current(call) || call.preview === undefined) return;
     active = undefined; release(call); render();
-    input.setSelectionRange(call.previewCursor, call.previewCursor);
     if (input.value !== call.draft) input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.focus({ preventScroll: true });
   }
   function review(call, message) {
     if (!current(call) || call.released) return;
@@ -131,7 +130,7 @@ export function voiceComposer({ request, context, changed, notice }) {
   }
   function settled(call) {
     if (current(call) && call.phase === 'finishing' && call.drained && call.turns.size && !call.partial) {
-      accept(call);
+      freeze();
     }
   }
   function providerEvent(call, raw) {
@@ -156,7 +155,7 @@ export function voiceComposer({ request, context, changed, notice }) {
     call.phase = 'finishing'; clearTimeout(call.timer); stopMeter(call);
     call.stream.getTracks().forEach(track => track.stop());
     if (!preview(call)) return;
-    (acceptButton.disabled ? cancelButton : acceptButton).focus({ preventScroll: true });
+    input.focus({ preventScroll: true });
     // shortcut: no verified flush; replace this Stop-based drain when a finalization contract is available.
     call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
     call.timer = setTimeout(() => review(call), 8000);
@@ -215,14 +214,16 @@ export function voiceComposer({ request, context, changed, notice }) {
   }
   button.addEventListener('click', () => active ? void finish() : void start());
   cancelButton.addEventListener('click', cancel);
-  acceptButton.addEventListener('click', () => { if (active) accept(active); });
-  input.addEventListener('input', cancel);
+  input.addEventListener('beforeinput', freeze);
+  input.addEventListener('compositionstart', freeze);
+  input.addEventListener('input', () => active?.preview !== undefined ? freeze() : cancel());
   document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); cancel(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
   window.addEventListener('pagehide', cancel);
   return {
-    get busy() { return !!active; },
+    get busy() { return ['connecting', 'recording'].includes(active?.phase); },
     cancel,
+    freeze,
     update() {
       const state = context();
       if (active && (!state.enabled || !current(active))) { cancel(); return; }

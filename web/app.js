@@ -3824,7 +3824,6 @@ $('composer').addEventListener('focusout', event => {
   if (!$('composer').contains(event.relatedTarget)) { commandDismissed = true; renderCommands(); }
 });
 $('prompt').addEventListener('keydown', event => {
-  if ($('prompt').readOnly) return;
   if (event.isComposing || event.keyCode === 229) return;
   if (!$('command-menu').hidden && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
     if (event.key === 'Escape') {
@@ -4015,6 +4014,7 @@ $('composer').addEventListener('submit', event => {
 async function sendMessage() {
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
   if ((!text.trim() && !attachments.length) || !id || cache.get(id)?.coordination?.role === 'worker' || $('send').disabled || sending.has(id)) return;
+  voice?.freeze();
   if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
   if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
   if (historyWindow) showLatest();

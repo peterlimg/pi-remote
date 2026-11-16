@@ -10,7 +10,6 @@
 #composer[data-voice] :is(#attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #composer-hint) { display: none; }
 #composer:is([data-voice="connecting"], [data-voice="recording"]) :is(#prompt, #send) { display: none; }
 #composer:is([data-voice="finishing"], [data-voice="review"]) #voice-record { display: none; }
-#voice-accept { flex-shrink: 0; padding: 8px; color: var(--text); background: var(--glass-fill); }
 #composer[data-voice] .composer-toolbar { flex-wrap: nowrap; }
 #voice-status { flex: 1; min-width: 0; color: var(--text); text-align: center; font-size: 12px; }
 #voice-waveform { position: relative; height: 32px; margin: 0 8px; overflow: hidden; }
