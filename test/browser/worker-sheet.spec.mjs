@@ -67,8 +67,16 @@ test('worker sheet scopes history and images without disturbing the live parent'
       await expect(slots).toBeVisible();
       await expect(slots.locator('i')).toHaveCount(2);
       await expect(slots.locator('i[data-working=true]')).toHaveCount(state === 'working' ? 1 : 0);
-      await expect(slots.locator('i').first()).toHaveCSS('width', '4px');
-      await expect(slots.locator('i').first()).toHaveCSS('height', '8px');
+      await expect(slots.locator('i').first()).toHaveCSS('width', '8px');
+      await expect(slots.locator('i').first()).toHaveCSS('height', '4px');
+      const alignment = await page.locator('#coordinator-open').evaluate(button => {
+        const label = button.firstElementChild.getBoundingClientRect(), mark = button.querySelector('i').getBoundingClientRect();
+        const path = button.querySelector('svg path'), ink = path.getBBox();
+        const chevron = new DOMPoint(ink.x + ink.width / 2, ink.y + ink.height / 2).matrixTransform(path.getScreenCTM());
+        return { label: label.y + label.height / 2, mark: mark.y + mark.height / 2, chevron: chevron.y };
+      });
+      expect(Math.abs(alignment.mark - alignment.label)).toBeLessThan(0.1);
+      expect(Math.abs(alignment.chevron - alignment.label)).toBeLessThan(0.1);
       await expect(page.locator('#coordinator-open')).not.toContainText('Idle');
       const fills = await slots.locator('i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
       expect(fills[1]).toBe('rgba(0, 0, 0, 0)');
@@ -88,9 +96,22 @@ test('worker sheet scopes history and images without disturbing the live parent'
       await page.screenshot({ path: info.outputPath(`worker-entry-${name}-${state}.png`) });
     }
   }
+  const allTasks = parent.coordination.tasks;
+  parent.coordination.tasks = [task];
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    for (const state of ['completed', 'working']) {
+      task.state = state;
+      client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+      await expect(page.locator('#coordinator-worker-slots i')).toHaveCount(1);
+      await expect(page.locator('#coordinator-worker-slots i')).toHaveAttribute('data-working', String(state === 'working'));
+      await page.screenshot({ path: info.outputPath(`single-worker-${colorScheme}-${state}.png`) });
+    }
+  }
+  parent.coordination.tasks = allTasks;
   task.state = 'working';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
-  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#coordinator-context button')).toHaveCount(1);
   await expect(page.locator('#coordinator-workers, #coordinator-owner')).toHaveCount(0);
   await page.emulateMedia({ colorScheme: 'dark' });
