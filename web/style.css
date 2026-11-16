@@ -882,6 +882,8 @@ pre.message-text { white-space: pre-wrap; }
 .thread-row .assistant-question-actions button { padding: 0 18px; border-radius: 22px; }
 .thread-row .assistant-question-actions .secondary { border: 1px solid var(--line); color: var(--text); }
 .thread-row .assistant-question h3 { margin: 2px 0 12px; font-size: 15px; font-weight: 500; }
+/* Text fields in a row share the rounded pill language of its buttons. */
+.thread-row .assistant-question :is(input, textarea) { padding: 12px 16px; border-radius: 16px; line-height: 1.5; }
 .thread-row .assistant-draft h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 .assistant-question-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .assistant-question-actions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
