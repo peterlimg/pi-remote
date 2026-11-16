@@ -879,7 +879,8 @@ pre.message-text { white-space: pre-wrap; }
 .thread-time[open] .thread-time-lead { display: none; }
 .thread-row .assistant-question { margin: 8px 0 0; padding: 0; border: 0; }
 .thread-row .assistant-question-source { display: none; }
-.thread-row .assistant-question-actions .secondary { padding: 0 16px; border: 1px solid var(--line); border-radius: 22px; color: var(--text); }
+.thread-row .assistant-question-actions button { padding: 0 18px; border-radius: 22px; }
+.thread-row .assistant-question-actions .secondary { border: 1px solid var(--line); color: var(--text); }
 .thread-row .assistant-question h3 { margin: 2px 0 12px; font-size: 15px; font-weight: 500; }
 .thread-row .assistant-draft h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 .assistant-question-actions { display: flex; flex-wrap: wrap; gap: 8px; }
