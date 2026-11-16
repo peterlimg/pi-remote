@@ -46,13 +46,44 @@ The relevant code can be found in source 2 by searching for `case"working"`, `wo
 
 Working and Thinking are explicitly different. In this demo, Thinking maps to a dots morph, Blocked maps to `alerting`, Waiting to `bored`, and Done to `celebrate`. It would be wrong to treat the three-dot Thinking morph as the Working loop, or to map Pi Remote idle to Grok's celebratory Done state.
 
+## Broader character family, not only the round mascot
+
+A follow-up inspected the [official Bot homepage](https://x.ai/bot), especially **Work with Bots like teammates**, and the design article's geometric family and visual-exploration sheet. The original round-avatar recording is only one example.
+
+The homepage shows nine characters: brown blob, red squircle, orange teardrop, yellow dome, green tablet, cyan clover, blue cylinder, violet pebble and magenta blob. I recorded this entire row and sampled its SVGs at eight points. All nine changed their rendered paths; most also changed transforms during that sample.
+
+What differs visibly is more than colour:
+
+- The red rounded square tilts between upright and diamond-like poses.
+- The yellow dome leans while retaining its flat-bottomed construction.
+- The wide green tablet and blue cylinder have different proportions and postures from the round bots.
+- Eyes change between long capsules, rounded dots, asymmetric shapes and curved expressions. The face is not two fixed dots carried by a moving outer wrapper.
+- The characters change pose and expression at different times rather than reaching the same beat together.
+
+The [homepage's delivered sequence definitions](https://x.ai/_next/static/chunks/2ty8ef6hvqv2p.js?dpl=cce67e653c7727cb68a5145c5338afdb9fb3cfc5), searchable by `bot-size:17%`, confirm four sequences distributed across the nine characters:
+
+| Sequence | States in order |
+| --- | --- |
+| A | idle, happy, idle, curious |
+| B | idle, curious, idle, playful |
+| C | idle, proud, idle, happy |
+| D | idle, excited, idle, surprised |
+
+The renderer rotates each character's sequence start and scales its durations. **This is a personality showcase, not nine examples of the Working state.** Its range is useful motion reference, but those moods must not be presented as verified work-status signals.
+
+The article separately shows eight geometric types: blob, pebble, squircle, tablet, wedge, hex, cloud and teardrop. Its component explicitly renders them in `idle`, at 92px on the desktop layout. The article bundle also defines additional geometry types and shape-specific behavior: tablet and cloud have composite solid definitions used to change their outline during turns; the wedge has a face-position correction. These are stronger evidence for adapting motion to each silhouette than for applying the circle's exact rotation to every character.
+
+The style-exploration sheet is a third, separate artifact. It contains initials, emoji, drawn portraits, clay-like characters, watercolor, silhouettes, pixel art and identicon-like forms. The article calls these explorations and explains why detailed styles were not suitable at sidebar scale. They should not be mistaken for the selected live character system.
+
+Follow-up evidence is in `/tmp/pi-grok-style-research/`: `geometric-family.png`, `style-explorations.png`, `home-sources.json`, `family-samples.json`, and `grok-bot-character-family.mp4`. The video is a cropped recording of the public homepage, not a reconstruction or a Working-only clip.
+
 ## What this changes about the design direction
 
 The previous previews treated an avatar as a flat image to wobble, scale or flip. Grok coordinates a body, a face, depth and a short-lived trail. Its visually strong event is supported by quieter continuous activity, with different cadences rather than one repeating transformation of the entire icon.
 
 The useful next experiment would be one existing Pi Remote character, preferably a rounded body, with face travel around the body, brief occlusion, a coordinated turn and a trailing arc. Compare that at 32px with Idea and with several idle neighbors. Keep the original artwork, palette, saved choices and real status boundaries. Do not copy Grok's mascot or introduce its whole animation engine merely to test the principle.
 
-That is a proposed experiment, not a finding that it will look better. It needs approval and a visual comparison before extending it across the catalogue. A crescent, cat and jellyfish may need different geometry; attaching the same rigid turn to all of them would repeat the earlier mistake.
+That is a proposed experiment, not a finding that it will look better. The broader-family inspection also shows why the round-character experiment alone cannot establish a system for our catalogue: expression changes, silhouette-specific poses and varied timing matter alongside depth and trails. Any later study should compare several structurally different existing characters rather than generalizing from the circle. A crescent, cat and jellyfish need different geometry; attaching the same rigid turn to all of them would repeat the earlier mistake. No new implementation is approved by this research.
 
 The official design article also says the avatar provides initial reassurance of activity, while the current action is available on hover for more detail. An animation is not evidence of useful progress. Pi Remote should retain its readable status and activity information, especially on a phone where hover is unavailable.
 
