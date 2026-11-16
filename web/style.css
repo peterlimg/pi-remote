@@ -60,8 +60,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls and surfaces all share the same glass over the content beneath them. */
 .shell :is(.conversation-heading, #back, .conversation-actions), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
-/* The composer blurs from a layer behind it: a blurring form would cut the glass controls inside it off from the thread. */
-.shell :is(.conversation-heading, #back, .conversation-actions), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+/* Blur these containers on a separate layer so their floating children can still sample the thread. */
+.shell :is(.conversation-heading, #back), .conversation-actions::before, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -568,7 +568,8 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 #back, .session-info summary { width: 44px; height: 44px; padding: 0; color: var(--text); }
 #back svg { display: block; margin: auto; }
 .shell :is(#back, .session-info summary) svg { width: 22px; height: 22px; }
-.conversation-actions { grid-column: 3; display: flex; align-items: center; gap: 6px; }
+.conversation-actions { position: relative; isolation: isolate; grid-column: 3; display: flex; align-items: center; gap: 6px; }
+.conversation-actions::before { content: ''; position: absolute; z-index: -1; inset: -1px; border-radius: inherit; pointer-events: none; }
 .conversation-actions :is(#usage-meter, .session-info summary) { border: 0; background: transparent; box-shadow: none; }
 .session-info { position: relative; font-size: 12px; }
 .session-info summary { display: grid; place-items: center; list-style: none; }
