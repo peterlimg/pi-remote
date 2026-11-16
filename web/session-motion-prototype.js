@@ -158,6 +158,75 @@ function render() {
   const url = new URL(location.href); url.searchParams.set('set', set.key); history.replaceState(null, '', url);
 }
 function cycle(direction) { set = sets[(sets.indexOf(set) + direction + sets.length) % sets.length]; render(); tick(); }
+function syncMotion() {
+  document.documentElement.classList.toggle('paused', paused || document.hidden);
+  $('motion').disabled = reducedMotion.matches; $('replay').disabled = reducedMotion.matches;
+  $('motion').setAttribute('aria-pressed', String(paused));
+  $('motion').textContent = reducedMotion.matches ? 'Reduced motion enabled' : paused ? 'Resume motion' : 'Pause motion';
+}
+function syncTheme() {
+  document.documentElement.dataset.theme = theme;
+  $('theme').textContent = theme === 'dark' ? 'Preview light theme' : 'Preview dark theme';
+  document.querySelector('meta[name=theme-color]').content = theme === 'dark' ? '#100d10' : '#f2f3f0';
+}
+// Color-only study: keep the same shimmer and session layout while comparing four palettes.
+function shimmerStudy() {
+  const colors = { A: 'Rose', B: 'Lilac', C: 'Coral', D: 'Orchid' };
+  const page = $('page'); page.classList.add('shimmer-study');
+  document.title = 'Working shimmer colors · Pi Remote';
+  document.querySelector('h1').textContent = 'Working colors';
+  document.querySelector('.lede').textContent = 'Same smooth shimmer, four palettes. Tap a color to see it in the list. Sample sessions only; your live app is unchanged.';
+  $('lifecycle-study').hidden = true;
+  const comparison = $('comparison'); comparison.hidden = false;
+  comparison.setAttribute('aria-label', 'Shimmer color comparison');
+  const choices = el('div', undefined, 'shimmer-choices');
+  for (const [key, name] of Object.entries(colors)) {
+    const button = el('button', undefined, 'shimmer-choice'); button.type = 'button'; button.dataset.color = key;
+    button.setAttribute('aria-label', `${key} · ${name}`);
+    const status = el('span', 'Working', 'session-state'); status.dataset.status = 'working';
+    button.append(el('strong', `${key} · ${name}`), status);
+    button.addEventListener('click', () => chooseColor(key)); choices.append(button);
+  }
+  comparison.append(choices, el('h2', 'In your session list', 'shimmer-list-heading'));
+  for (const [kind, title, working] of [
+    ['orbit', 'Improve UI/UX space efficiency', true],
+    ['moss', 'Add model-independent voice input to composer', true],
+    ['miso', 'Review cat avatar bot concept', false],
+  ]) {
+    const row = el('div', undefined, 'session shimmer-row');
+    const icon = bot(kind, 32, 0); icon.setAttribute('aria-hidden', 'true');
+    const body = el('div', undefined, 'session-body'), meta = el('div', undefined, 'session-meta');
+    if (working) { const status = el('span', 'Working', 'session-state'); status.dataset.status = 'working'; meta.append(status); }
+    meta.append(el('span', 'pi-remote'), el('span', working ? 'now' : '1d'));
+    body.append(el('strong', title), meta); row.append(icon, body); comparison.append(row);
+  }
+  function chooseColor(key) {
+    page.dataset.color = Object.hasOwn(colors, key) ? key : 'A';
+    for (const button of choices.children) button.setAttribute('aria-pressed', String(button.dataset.color === page.dataset.color));
+    $('label').textContent = `${page.dataset.color} · ${colors[page.dataset.color]}`;
+    $('description').textContent = '1.4s continuous shimmer · no spinner';
+    const url = new URL(location.href); url.searchParams.set('variant', page.dataset.color); history.replaceState(null, '', url);
+  }
+  function stepColor(direction) {
+    const keys = Object.keys(colors); chooseColor(keys[(keys.indexOf(page.dataset.color) + direction + keys.length) % keys.length]);
+  }
+  document.querySelector('.switcher').setAttribute('aria-label', 'Compare shimmer colors');
+  $('previous').setAttribute('aria-label', 'Previous color'); $('next').setAttribute('aria-label', 'Next color');
+  $('previous').onclick = () => stepColor(-1); $('next').onclick = () => stepColor(1);
+  $('theme').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); };
+  $('motion').onclick = () => { paused = !paused; syncMotion(); };
+  document.addEventListener('visibilitychange', syncMotion);
+  reducedMotion.addEventListener('change', syncMotion);
+  document.addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); stepColor(event.key === 'ArrowRight' ? 1 : -1); }
+  });
+  for (const label of page.querySelectorAll('.session-state')) visibleBots.observe(label);
+  chooseColor(new URL(location.href).searchParams.get('variant'));
+  syncTheme(); syncMotion();
+}
+if (new URL(location.href).searchParams.get('study') === 'shimmer') shimmerStudy();
+else {
 $('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });
 $('previous').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
@@ -168,20 +237,9 @@ $('play').addEventListener('click', () => {
   playing = !playing; $('play').setAttribute('aria-pressed', String(playing));
   if (playing) { step = 0; tick(); } else clearTimeout(timer);
 });
-function syncMotion() {
-  document.documentElement.classList.toggle('paused', paused || document.hidden);
-  $('motion').disabled = reducedMotion.matches; $('replay').disabled = reducedMotion.matches;
-  $('motion').setAttribute('aria-pressed', String(paused));
-  $('motion').textContent = reducedMotion.matches ? 'Reduced motion enabled' : paused ? 'Resume motion' : 'Pause motion';
-}
 reducedMotion.addEventListener('change', syncMotion);
 $('motion').addEventListener('click', () => { paused = !paused; syncMotion(); tick(); });
 document.addEventListener('visibilitychange', () => { syncMotion(); if (document.hidden) clearTimeout(timer); else tick(); });
-function syncTheme() {
-  document.documentElement.dataset.theme = theme;
-  $('theme').textContent = theme === 'dark' ? 'Preview light theme' : 'Preview dark theme';
-  document.querySelector('meta[name=theme-color]').content = theme === 'dark' ? '#100d10' : '#f2f3f0';
-}
 $('theme').addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); });
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -189,3 +247,4 @@ document.addEventListener('keydown', event => {
   if (event.key === 'ArrowLeft') { event.preventDefault(); cycle(-1); }
 });
 syncTheme(); syncMotion(); render(); tick();
+}

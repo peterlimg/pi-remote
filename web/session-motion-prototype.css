@@ -1,4 +1,23 @@
 /* Motion-set studies. Drawings and palette come from the production stylesheet; production motion is untouched. */
+/* Color-only shimmer prototypes, isolated behind ?study=shimmer. */
+.shimmer-study [data-color=A], .shimmer-study[data-color=A] { --sample-base: light-dark(#a34261, #d78b9e); --sample-highlight: light-dark(#5e1634, #ffd0db); }
+.shimmer-study [data-color=B], .shimmer-study[data-color=B] { --sample-base: light-dark(#7951a8, #b193db); --sample-highlight: light-dark(#45206d, #ead3ff); }
+.shimmer-study [data-color=C], .shimmer-study[data-color=C] { --sample-base: light-dark(#a34f39, #d58f7f); --sample-highlight: light-dark(#632512, #ffd1bd); }
+.shimmer-study [data-color=D], .shimmer-study[data-color=D] { --sample-base: light-dark(#934b91, #c989c7); --sample-highlight: light-dark(#591d59, #f5c9ef); }
+.shimmer-study .session-state[data-status=working] { --shimmer-base: var(--sample-base); --shimmer-highlight: var(--sample-highlight); }
+.shimmer-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 20px 0 28px; }
+.shimmer-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text); font-weight: 400; }
+.shimmer-choice strong { font-size: 13px; font-weight: 500; }
+.shimmer-choice[aria-pressed=true] { border-color: var(--text); background: var(--user); }
+.shimmer-choice .session-state { font-size: 14px; }
+.shimmer-list-heading { margin: 0 4px 8px; font-size: 17px; font-weight: 600; }
+.shimmer-study .shimmer-row { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: center; padding: 16px 4px; background: transparent; }
+.shimmer-row .session-body { min-width: 0; }
+.shimmer-row strong { white-space: normal; }
+.paused .shimmer-study .session-state { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { .shimmer-study .session-state[data-status=working] { color: var(--sample-base); } }
+@media (forced-colors: active) { .shimmer-study .session-state[data-status=working] { color: CanvasText; } }
+
 :root[data-theme=light] { color-scheme: light; --bg: #fafaf8; --panel: #f2f3f0; --sidebar-bg: var(--panel); --composer-bg: #fff; --text: #141816; --muted: #626c66; --line: #daddd7; --accent: #35675c; --user: #edf0eb; --warning: #77591a; --selection: #d3e4de; }
 :root[data-theme=dark] { color-scheme: dark; --bg: #100d10; --panel: #1b181b; --sidebar-bg: var(--bg); --composer-bg: #232023; --text: #efedef; --muted: #aaa7aa; --line: #3b383b; --accent: #efedef; --user: #221f22; --warning: #e4c078; --selection: #3b383b; }
 body { min-height: 100dvh; background: var(--sidebar-bg); }
