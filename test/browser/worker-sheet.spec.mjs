@@ -55,7 +55,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
       await expect(page.locator('#coordinator-worker-summary')).toHaveText(state === 'working' ? '1 working' : state === 'waiting' ? '1 needs answer' : state === 'unknown' ? '1 need inspection' : 'No active work');
       const box = await page.locator('#coordinator-open').boundingBox();
-      expect(box.height).toBe(44); expect(box.width).toBeLessThan(170);
+      expect(box.height).toBe(44); expect(box.width).toBeLessThan(145);
       const composer = await page.locator('#composer').boundingBox();
       const center = composer.x + composer.width / 2;
       expect(Math.abs(box.x + box.width / 2 - center)).toBeLessThanOrEqual(1);
@@ -63,9 +63,16 @@ test('worker sheet scopes history and images without disturbing the live parent'
       expect(dots.height).toBe(28);
       expect(dots.y + dots.height).toBeLessThanOrEqual(box.y + 1);
       expect(Math.abs(dots.x + dots.width / 2 - center)).toBeLessThanOrEqual(1);
-      await expect(page.locator('#coordinator-worker-status')).toBeVisible();
-      await expect(page.locator('#coordinator-worker-status')).toHaveText(state === 'working' ? '1 working' : 'Idle');
-      await expect(page.locator('#coordinator-worker-status')).toHaveAttribute('data-working', String(state === 'working'));
+      const slots = page.locator('#coordinator-worker-slots');
+      await expect(slots).toBeVisible();
+      await expect(slots.locator('i')).toHaveCount(2);
+      await expect(slots.locator('i[data-working=true]')).toHaveCount(state === 'working' ? 1 : 0);
+      await expect(slots.locator('i').first()).toHaveCSS('width', '4px');
+      await expect(slots.locator('i').first()).toHaveCSS('height', '8px');
+      await expect(page.locator('#coordinator-open')).not.toContainText('Idle');
+      const fills = await slots.locator('i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+      expect(fills[1]).toBe('rgba(0, 0, 0, 0)');
+      if (state === 'working') expect(fills[0]).not.toBe(fills[1]);
       for (const [selector, rect] of [['#session-swipe', dots], ['#coordinator-open', box]]) {
         expect(await page.evaluate(([selector, x, y]) => document.querySelector(selector).contains(document.elementFromPoint(x, y)),
           [selector, rect.x + rect.width / 2, rect.y + rect.height / 2])).toBe(true);
@@ -211,9 +218,19 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await page.keyboard.press('Escape');
   await expect(page.locator('#nearby-sessions')).toBeHidden();
   await expect(page.locator('#prompt')).toHaveValue('Keep this main draft.');
+  parent.coordination.tasks = [...Array.from({ length: 10 }, (_, i) => ({ ...task, id: 'old-' + i, state: 'completed' })), { ...task, state: 'working' }];
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect(page.locator('#coordinator-worker-slots i')).toHaveCount(8);
+  await expect(page.locator('#coordinator-worker-slots i[data-working=true]')).toHaveCount(1);
+  await expect(page.locator('#coordinator-worker-slots > span')).toHaveText('+3');
+  await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/11 total.*1 working/);
+  expect((await page.locator('#coordinator-open').boundingBox()).width).toBeLessThan(200);
+  await page.screenshot({ path: info.outputPath('worker-slots-history.png') });
   parent.coordination.tasks = [];
   client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
   await expect(page.locator('#coordinator-context')).toBeHidden();
+  await expect(page.locator('#coordinator-worker-slots i')).toHaveCount(0);
   await expect(page.locator('#session-swipe')).toHaveCSS('height', '28px');
   expect(errors).toEqual([]);
 });
