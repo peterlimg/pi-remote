@@ -494,14 +494,12 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-project { display: flex; align-items: center; min-width: 0; overflow: hidden; }
 .session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-state { flex-shrink: 0; white-space: nowrap; }
-.session-state[data-status=working] { color: var(--text); }
-@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-  @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .session-state[data-status=working] { background-image: linear-gradient(110deg, var(--muted) 30%, var(--text) 50%, var(--muted) 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: session-working-shimmer 1.2s linear infinite; }
-  }
+.session-state[data-status=working] { display: inline-flex; align-items: center; gap: 6px; color: light-dark(#245ac2, #8ab4ff); }
+.session-state[data-status=working]::after { content: ''; flex: none; width: 11px; height: 11px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; }
+@media (prefers-reduced-motion: no-preference) {
+  .session-state[data-status=working]::after { animation: connection-spin .8s linear infinite; }
 }
-@keyframes session-working-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
-.document-hidden .session-state[data-status=working], .session-state[data-status=working]:not(.in-view) { animation-play-state: paused; }
+.document-hidden .session-state[data-status=working]::after, .session-state[data-status=working]:not(.in-view)::after { animation-play-state: paused; }
 .session-busy .session-state[data-status=waiting] { color: var(--warning); font-weight: 600; }
 .session-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-meta > * + *::before { content: '·'; margin-right: 6px; }

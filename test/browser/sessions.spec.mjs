@@ -153,15 +153,18 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(login).toHaveAccessibleName(/Working/);
   await expect(workingState).toHaveCSS('font-weight', '400');
   await expect(workingState).toHaveCSS('font-size', '14px');
-  await expect(workingState).toHaveCSS('background-image', /rgb\(98, 108, 102\) 30%.*rgb\(20, 24, 22\) 50%.*70%/);
-  await expect(workingState).toHaveCSS('background-clip', 'text');
+  await expect(workingState).toHaveCSS('color', 'rgb(36, 90, 194)');
+  await expect(workingState).toHaveCSS('background-image', 'none');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingState.locator('*')).toHaveCount(0);
-  await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
-  await expect(workingState).toHaveCSS('animation-duration', '1.2s');
-  await expect(workingState).toHaveCSS('animation-play-state', 'running');
-  const position = await workingState.evaluate(node => getComputedStyle(node).backgroundPositionX);
-  await expect.poll(() => workingState.evaluate(node => getComputedStyle(node).backgroundPositionX)).not.toBe(position);
+  await expect(workingState).toHaveCSS('animation-name', 'none');
+  const spinnerStyle = property => workingState.evaluate((node, property) => getComputedStyle(node, '::after')[property], property);
+  expect(await spinnerStyle('animationName')).toBe('connection-spin');
+  expect(await spinnerStyle('animationDuration')).toBe('0.8s');
+  expect(await spinnerStyle('animationTimingFunction')).toBe('linear');
+  await expect.poll(() => spinnerStyle('animationPlayState')).toBe('running');
+  const rotation = await spinnerStyle('transform');
+  await expect.poll(() => spinnerStyle('transform')).not.toBe(rotation);
   // The leading bot keeps its size and position when the session finishes.
   const workingIcon = login.locator('.session-indicators .bot');
   await expect(login.locator('.session-kind')).toHaveCount(0);
@@ -183,7 +186,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(workingState).toHaveCSS('background-image', /rgb\(170, 167, 170\) 30%.*rgb\(239, 237, 239\) 50%.*70%/);
+  await expect(workingState).toHaveCSS('color', 'rgb(138, 180, 255)');
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile-dark.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await noOverflow();
@@ -197,19 +200,20 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(workingState).toHaveCSS('animation-name', 'none');
   await expect(workingState).toHaveCSS('background-image', 'none');
-  await expect(workingState).toHaveCSS('color', 'rgb(239, 237, 239)');
+  await expect(workingState).toHaveCSS('color', 'rgb(138, 180, 255)');
+  expect(await spinnerStyle('animationName')).toBe('none');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
   await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
+  expect(await spinnerStyle('animationName')).toBe('connection-spin');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-status-narrow.png') });
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
-  await expect(workingState).toHaveCSS('animation-play-state', 'paused');
+  await expect.poll(() => spinnerStyle('animationPlayState')).toBe('paused');
   publish(); // Live updates keep the grown list.
   await expect(page.locator('.session')).toHaveCount(40);
   await page.getByRole('button', { name: 'Search sessions' }).click();
