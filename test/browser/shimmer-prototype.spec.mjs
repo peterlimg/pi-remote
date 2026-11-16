@@ -9,6 +9,7 @@ test('shimmer palettes compare without changing live sessions', async ({ page },
   await page.goto('/session-motion-prototype.html?study=shimmer&variant=A');
   await expect(page.getByRole('heading', { name: 'Working colors' })).toBeVisible();
   await expect(page.locator('.shimmer-choice')).toHaveCount(5);
+  await expect(page.locator('.shimmer-study .session-state')).toHaveText(Array(7).fill('working'));
   const working = page.locator('.shimmer-row .session-state').first();
   for (const [key, name, rgb] of [['A', 'Rose', '215, 139, 158'], ['B', 'Lilac', '177, 147, 219'], ['C', 'Coral', '213, 143, 127'], ['D', 'Orchid', '201, 137, 199'], ['E', 'Grass', '89, 156, 57']]) {
     await page.getByRole('button', { name: `${key} · ${name}`, exact: true }).click();

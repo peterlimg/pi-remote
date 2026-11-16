@@ -183,7 +183,7 @@ function shimmerStudy() {
   for (const [key, name] of Object.entries(colors)) {
     const button = el('button', undefined, 'shimmer-choice'); button.type = 'button'; button.dataset.color = key;
     button.setAttribute('aria-label', `${key} · ${name}`);
-    const status = el('span', 'Working', 'session-state'); status.dataset.status = 'working';
+    const status = el('span', 'working', 'session-state'); status.dataset.status = 'working';
     button.append(el('strong', `${key} · ${name}`), status);
     button.addEventListener('click', () => chooseColor(key)); choices.append(button);
   }
@@ -196,7 +196,7 @@ function shimmerStudy() {
     const row = el('div', undefined, 'session shimmer-row');
     const icon = bot(kind, 32, 0); icon.setAttribute('aria-hidden', 'true');
     const body = el('div', undefined, 'session-body'), meta = el('div', undefined, 'session-meta');
-    if (working) { const status = el('span', 'Working', 'session-state'); status.dataset.status = 'working'; meta.append(status); }
+    if (working) { const status = el('span', 'working', 'session-state'); status.dataset.status = 'working'; meta.append(status); }
     meta.append(el('span', 'pi-remote'), el('span', working ? 'now' : '1d'));
     body.append(el('strong', title), meta); row.append(icon, body); comparison.append(row);
   }
