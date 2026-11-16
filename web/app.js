@@ -97,6 +97,10 @@ $('scroll-bottom').addEventListener('click', () => {
   $('transcript').focus({ preventScroll: true });
   updateScrollButton();
 });
+function fitDraft(input) {
+  input.style.height = 'auto';
+  input.style.height = `${input.scrollHeight + input.offsetHeight - input.clientHeight}px`;
+}
 function resizePrompt() {
   const input = $('prompt');
   if (!input.clientWidth) return;
@@ -1752,7 +1756,7 @@ function renderCheckin(state, threads = new Map(), groups = [], expanded = new M
         save.hidden = true;
         let busy = false;
         const refresh = () => { const dirty = input.value !== draft.text; send.disabled = busy || dirty; save.hidden = !dirty; };
-        input.addEventListener('input', refresh);
+        input.addEventListener('input', () => { refresh(); fitDraft(input); });
         const action = async name => {
           if (busy) return;
           busy = true; heading.focus({ preventScroll: true });
@@ -2179,6 +2183,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   if (activityIndicator.parentNode !== box) box.append(activityIndicator);
   for (const child of [...box.childNodes]) if (child !== activityIndicator) child.remove();
   box.insertBefore(fragment, activityIndicator);
+  // Cards are re-attached on every render, which would reset a scrolled box; show whole drafts instead.
+  for (const input of box.querySelectorAll('.assistant-draft textarea')) fitDraft(input);
   renderDiagrams(box, openImage, () => {
     if (pinnedToBottom) box.scrollTop = box.scrollHeight;
     updateScrollButton();

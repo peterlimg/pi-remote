@@ -367,8 +367,11 @@ try {
   for (const action of ['send', 'approve', 'cancel']) assert.equal((await post({ action, draftId, revision: 1 })).ok, false);
   assert.equal((await post({ action: 'draft', sessionId: project.id, text: '/reload', requestId: randomUUID() })).ok, false);
   await draftCard.getByLabel('Draft message').fill('Keep this unsaved edit.');
-  assert.equal((await post({ action: 'draft', draftId, revision: 1, text: 'Miso approved instruction: newer draft.' })).ok, true);
-  await check(draftCard.getByLabel('Draft message')).toHaveValue('Miso approved instruction: newer draft.');
+  const newer = 'Miso approved instruction: newer draft.' + '\nKeep every line of a long draft visible.'.repeat(8);
+  assert.equal((await post({ action: 'draft', draftId, revision: 1, text: newer })).ok, true);
+  await check(draftCard.getByLabel('Draft message')).toHaveValue(newer);
+  // Live renders re-attach the card, so a scrolling box would jump back to its first line; the box fits the whole draft.
+  assert(await draftCard.getByLabel('Draft message').evaluate(input => input.scrollHeight <= input.clientHeight + 1), 'The whole draft is visible without scrolling the box');
   await check(draftCard).toContainText('Keep this unsaved edit.');
   beginClip('Review and save your edit');
   await draftCard.getByLabel('Draft message').fill('Miso approved instruction: report the revised result.');
