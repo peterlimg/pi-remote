@@ -33,13 +33,13 @@ const sets = [
   { key: 'beat', name: 'A · Beat', description: 'One hop-and-land rhythm for everyone. Ears, tails and rings follow through.' },
   { key: 'signature', name: 'B · Signature', description: 'Each does its own thing: Luna rocks, Jelly swims, Comet dashes, Orbit has a moon.' },
   { key: 'quiet', name: 'C · Quiet', description: 'Bodies stay still. Eyes read and a dot circles. Calmest with many sessions.' },
-  { key: 'focused', name: 'D · Running loops', description: 'Pulse, flip, swim and orbit beside the unchanged Idea reference.' },
+  { key: 'focused', name: 'D · Character motion', description: 'Miso, Luna, redesigned Orbit and Comet in session rows.' },
 ];
 const comparisons = [
-  ['miso', 'Zoom in and out. One pulse every second.'],
-  ['luna', 'Flip, settle briefly, repeat.'],
-  ['jelly', 'Continuous squash-and-stretch swimming.'],
-  ['orbit', 'Rotating ring with a circling moon.'],
+  ['miso', 'A focused glance and turn. Ears and tail follow.'],
+  ['luna', 'Eyes follow the mote before the crescent swings after it.'],
+  ['orbit', 'Redesigned planet, with a ring and moon passing behind and in front.'],
+  ['comet', 'Looks ahead, draws back, then dashes. The tail catches up.'],
 ];
 const labels = { ready: 'Ready', starting: 'Starting', working: 'Working', waiting: 'Needs input', settled: 'Settles · new reply' };
 // Production moods for the comparison set; starting and settle have no motion there.
@@ -62,6 +62,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 // Production styles pause bots that are not marked as on-screen.
 const visibleBots = new IntersectionObserver(entries => {
   for (const { target, isIntersecting } of entries) target.classList.toggle('in-view', isIntersecting);
+  wakePresence();
 });
 
 function botSvg(kind) {
@@ -104,23 +105,169 @@ function choose(next) {
   if (next === 'working' && state !== 'working') { setState('starting'); timer = setTimeout(() => setState('working'), 650); }
   else setState(next);
 }
+// One authored timeline per character: phase, x, y, roll, face turn, vertical scale.
+const presenceTracks = {
+  miso: { period: 5.6, center: [16, 19], radius: 10, frames: [
+    [0, 0, 0, -4, -.35, 1], [.12, .4, -.8, 3, .4, 1.02],
+    [.26, .7, .5, 6, .7, .97], [.4, -.4, -.5, -5, -.65, 1.01],
+    [.57, 0, 0, -2, -.3, 1], [.65, -.5, .5, -6, -.6, .97],
+    [.73, .8, -1.2, 5, 2.4, 1.03], [.83, .3, -.5, 2, 5.7, 1.01],
+    [1, 0, 0, -4, Math.PI * 2 - .35, 1],
+  ] },
+  luna: { period: 4.2, center: [10, 20.5], radius: 6, frames: [
+    [0, -1, .5, -16, -.18, 1], [.15, -1, 0, -12, .25, 1],
+    [.3, .8, -2, 15, .4, 1.02], [.4, 1.3, -1, 22, .3, 1],
+    [.55, .5, -.3, 8, -.25, 1], [.72, -1, -1.5, -19, -.4, 1.02],
+    [.84, -1.2, .2, -22, -.3, .99], [1, -1, .5, -16, -.18, 1],
+  ] },
+  orbit: { period: 5.2, center: [16, 13.5], radius: 9, frames: [
+    [0, 0, 0, -3, -.3, 1], [.2, 0, -1, 3, .5, 1],
+    [.4, 0, .5, 5, .8, .99], [.53, 0, 0, -4, .3, 1],
+    [.62, 0, -.8, -6, -.4, 1], [.73, 0, -1.5, 4, 2.7, 1.02],
+    [.84, 0, -.5, 2, 5.8, 1], [1, 0, 0, -3, Math.PI * 2 - .3, 1],
+  ] },
+  comet: { period: 3.6, center: [19, 14], radius: 9, frames: [
+    [0, -.5, .5, -3, -.2, 1], [.12, -1.5, 1, -8, .5, .96],
+    [.23, 2.8, -3, 9, 1.1, 1.04], [.36, 1.2, -1.5, 3, .65, 1],
+    [.48, -.6, .6, -5, -.3, .97], [.61, 2, -2.3, 7, .9, 1.03],
+    [.76, .8, -1, 1, .4, 1], [1, -.5, .5, -3, -.2, 1],
+  ] },
+};
+let presenceRigs = [], presenceFrame = 0, presenceLast = 0, presenceId = 0;
+const mix = (a, b, t) => a + (b - a) * t;
+function presencePose(kind, time) {
+  const { period, frames } = presenceTracks[kind], phase = ((time % period) + period) % period / period;
+  const end = frames.findIndex(frame => frame[0] > phase), a = frames[end - 1], b = frames[end];
+  const t = (phase - a[0]) / (b[0] - a[0]), eased = t * t * (3 - 2 * t);
+  return a.slice(1).map((value, index) => mix(value, b[index + 1], eased));
+}
+function presenceBot(kind, moving = true, offset = 0) {
+  const node = bot(kind, 32, 0, 'presence-bot');
+  node.dataset.state = moving ? 'working' : 'ready';
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${moving ? 'working study' : 'at rest'}`);
+  const original = characters[kind];
+  const body = kind === 'orbit' ? '<circle cx="16" cy="15.5" r="9.5"/>' : original[1];
+  const eyes = kind === 'orbit' ? [[12.5, 13.5], [19.5, 13.5]] : original[2];
+  const id = `presence-clip-${++presenceId}`;
+  const ring = front => `<g class="presence-ring ${front ? 'presence-ring-front' : 'presence-ring-back'}"><path class="presence-ring-gap"/><path class="presence-ring-ink"/></g>`;
+  node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><clipPath id="${id}">${body}</clipPath></defs><g class="bot-figure">`
+    + (kind === 'orbit' ? ring(false) + '<circle class="presence-moon presence-moon-back" r="1.8"/>' : original[3] || '')
+    + `<g class="bot-body">${body}</g><g clip-path="url(#${id})" class="presence-face">`
+    + eyes.map(([x, y, s = 1]) => `<g class="presence-eye"><ellipse class="bot-eye" cx="${x}" cy="${y}" rx="${2.1 * s}" ry="${2.9 * s}"/></g>`).join('') + '</g>'
+    + (kind === 'orbit' ? ring(true) + '<circle class="presence-moon presence-moon-front" r="1.8"/>' : original[4] || '')
+    + (kind === 'luna' ? '<path class="presence-trail"/>' + original[5] : '')
+    + (kind === 'comet' ? signatureParts.comet : '') + '</g></svg>';
+  const rig = { node, kind, moving, time: offset, eyes, parts: {} };
+  for (const selector of ['.bot-figure', '.character-cat-tail', '.character-cat-ear', '.character-cat-ear-right',
+    '.character-comet-tail', '.character-moon-mote', '.presence-trail', '.m-speed',
+    '.presence-ring-back', '.presence-ring-front', '.presence-moon-back', '.presence-moon-front'])
+    rig.parts[selector] = node.querySelector(selector);
+  rig.eyeNodes = [...node.querySelectorAll('.presence-eye')];
+  presenceRigs.push(rig); drawPresence(rig, false);
+  return node;
+}
+function drawPresence(rig, animate) {
+  const { kind, parts, eyes, eyeNodes } = rig, time = rig.time;
+  const pose = animate ? presencePose(kind, time) : [0, 0, 0, 0, 1];
+  const [x, y, roll, turn, scale] = pose, lag = animate ? presencePose(kind, time - .12) : pose;
+  const [cx, cy] = presenceTracks[kind].center;
+  const transform = (selector, value) => parts[selector]?.setAttribute('transform', value);
+  // The face leads; ears, tail and the body resolve the same gesture a little later.
+  const moteAngle = time / presenceTracks.luna.period * Math.PI * 2;
+  const faceTurn = animate ? kind === 'luna' ? .22 + .16 * Math.cos(moteAngle) : presencePose(kind, time + .1)[3] : 0;
+  const beat = animate ? Math.sin(time * Math.PI * 3.2) : 0;
+  transform('.bot-figure', `translate(${x} ${y + (kind === 'miso' ? .35 * beat : 0)}) rotate(${roll} ${cx} ${cy}) translate(${cx} ${cy}) scale(1 ${scale}) translate(${-cx} ${-cy})`);
+  const blinkPhase = (time + .3) % 4.1;
+  const lid = animate && blinkPhase < .15 ? 1 - .86 * Math.sin(blinkPhase / .15 * Math.PI) : 1;
+  for (let i = 0; i < eyes.length; i++) {
+    const [ex, ey] = eyes[i], radius = presenceTracks[kind].radius;
+    const angle = Math.asin(Math.max(-.95, Math.min(.95, (ex - cx) / radius)));
+    const facing = Math.cos(angle + faceTurn), width = Math.max(.06, facing / Math.cos(angle));
+    const lookY = animate ? (kind === 'comet' ? -1.1 * Math.sin(turn) : kind === 'luna' ? -1 + .5 * Math.sin(moteAngle) : .5 * beat) : 0;
+    eyeNodes[i].setAttribute('transform', `translate(${cx + radius * Math.sin(angle + faceTurn)} ${ey + lookY}) scale(${width} ${lid}) translate(${-ex} ${-ey})`);
+    eyeNodes[i].setAttribute('opacity', facing > .05 ? '1' : '0');
+  }
+  if (kind === 'miso') {
+    transform('.character-cat-tail', `rotate(${animate ? -14 * Math.sin(lag[3]) - 8 * beat : 0} 24 26)`);
+    transform('.character-cat-ear', `rotate(${animate ? -lag[2] * 1.4 : 0} 9 12)`);
+    transform('.character-cat-ear-right', `rotate(${animate ? -lag[2] * .85 : 0} 23 12)`);
+  } else if (kind === 'luna') {
+    const angle = animate ? time / presenceTracks.luna.period * Math.PI * 2 : -.5;
+    const mote = a => [23 + 5 * Math.cos(a), 10 + 6 * Math.sin(a)];
+    const [mx, my] = mote(angle), [tx, ty] = mote(angle - .8), [qx, qy] = mote(angle - .4);
+    transform('.character-moon-mote', `translate(${mx - 25} ${my - 11}) rotate(${animate ? roll * -1.4 : 0} 25 11)`);
+    parts['.presence-trail'].setAttribute('d', `M${tx} ${ty} Q${qx} ${qy} ${mx} ${my}`);
+    parts['.presence-trail'].setAttribute('opacity', animate ? String(.25 + .35 * Math.max(0, Math.sin(angle))) : '0');
+  } else if (kind === 'comet') {
+    const thrust = animate ? Math.max(0, x - lag[0]) : 0;
+    transform('.character-comet-tail', `rotate(${(lag[2] - roll) * 1.5} 19 14) translate(19 14) scale(${1 + thrust * .12} ${1 + thrust * .18}) translate(-19 -14)`);
+    transform('.m-speed', `translate(${-thrust * .4} ${thrust * .4})`);
+    parts['.m-speed'].setAttribute('opacity', String(Math.min(.8, thrust)));
+  } else if (kind === 'orbit') {
+    const angle = animate ? time / presenceTracks.orbit.period * Math.PI * 2 : .4;
+    const tilt = -26 + (animate ? 8 * Math.sin(angle) : 0), ry = 5.3 + (animate ? .8 * Math.sin(angle) : 0);
+    for (const front of [false, true]) {
+      const ring = parts[front ? '.presence-ring-front' : '.presence-ring-back'];
+      ring.setAttribute('transform', `rotate(${tilt} 16 18)`);
+      for (const path of ring.children) path.setAttribute('d', `M1.7 18 A14.3 ${ry} 0 0 ${front ? 0 : 1} 30.3 18`);
+    }
+    const mx = 14.3 * Math.cos(angle), my = ry * Math.sin(angle), rad = tilt * Math.PI / 180;
+    for (const front of [false, true]) {
+      const moon = parts[front ? '.presence-moon-front' : '.presence-moon-back'];
+      moon.setAttribute('cx', String(16 + mx * Math.cos(rad) - my * Math.sin(rad)));
+      moon.setAttribute('cy', String(18 + mx * Math.sin(rad) + my * Math.cos(rad)));
+      moon.setAttribute('opacity', (Math.sin(angle) >= 0) === front ? '1' : '0');
+    }
+  }
+}
+function runPresence(now) {
+  presenceFrame = 0;
+  const active = presenceRigs.filter(rig => rig.moving && rig.node.classList.contains('in-view'));
+  if (paused || document.hidden || reducedMotion.matches || !active.length) { presenceLast = 0; return; }
+  const dt = presenceLast ? Math.min((now - presenceLast) / 1000, .05) : 0; presenceLast = now;
+  for (const rig of active) { rig.time += dt; drawPresence(rig, true); }
+  presenceFrame = requestAnimationFrame(runPresence);
+}
+function wakePresence() {
+  if (reducedMotion.matches) for (const rig of presenceRigs) drawPresence(rig, false);
+  if (!presenceFrame && presenceRigs.length) presenceFrame = requestAnimationFrame(runPresence);
+}
 function renderComparison() {
-  $('comparison').replaceChildren(...comparisons.map(([kind, description]) => {
-    const section = el('section', undefined, 'motion-comparison');
-    section.setAttribute('aria-label', characters[kind][0]);
+  presenceRigs = [];
+  const list = el('section', undefined, 'presence-list'); list.id = 'presence-sessions';
+  list.setAttribute('aria-label', 'Sample session list');
+  list.append(el('h2', 'Working together · 32px', 'section-title'));
+  const titles = ['Refine the mobile composer', 'Check reconnect handling', 'Review the session history', 'Trace a slow response'];
+  comparisons.forEach(([kind], index) => {
+    const row = el('div', undefined, 'session'); row.dataset.kind = kind;
+    const body = el('div', undefined, 'session-body');
+    body.append(el('strong', titles[index]), el('small', `${characters[kind][0]} · Working · pi-remote`));
+    row.append(presenceBot(kind, true, index * .63), body); list.append(row);
+  });
+  const rest = el('div', undefined, 'session'), restBody = el('div', undefined, 'session-body');
+  restBody.append(el('strong', 'Saved design notes'), el('small', 'Miso · Idle · pi-remote'));
+  rest.append(presenceBot('miso', false), restBody); list.append(rest);
+  const reference = el('div', undefined, 'session'), referenceBody = el('div', undefined, 'session-body');
+  const idea = bot('idea', 32, 0); idea.dataset.state = 'working'; idea.dataset.mood = 'working';
+  idea.setAttribute('role', 'img'); idea.setAttribute('aria-label', 'Idea, unchanged working reference');
+  referenceBody.append(el('strong', 'Idea · unchanged reference'), el('small', 'Working · existing motion'));
+  reference.append(idea, referenceBody); list.append(reference);
+  const details = el('details', undefined, 'presence-comparisons');
+  details.append(el('summary', 'Compare current, revised and resting'));
+  for (const [kind, description] of comparisons) {
+    const section = el('section', undefined, 'motion-comparison'); section.setAttribute('aria-label', characters[kind][0]);
     section.append(el('h2', characters[kind][0]), el('p', description));
     const columns = el('div', undefined, 'comparison-columns');
-    for (const [variant, label] of [['current', 'Current'], ['revised', 'Revised'], ['reference', 'Idea reference']]) {
+    for (const [variant, label] of [['current', 'Current'], ['revised', 'Revised'], ['rest', 'At rest']]) {
       const figure = el('figure'); figure.dataset.variant = variant;
-      const sampleKind = variant === 'reference' ? 'idea' : kind;
-      const node = bot(sampleKind, 32, 0);
-      node.dataset.state = 'working';
-      if (variant !== 'revised') node.dataset.mood = 'working';
-      node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[sampleKind][0]}, ${label.toLowerCase()}`);
+      const node = variant === 'current' ? bot(kind, 32, 0) : presenceBot(kind, variant !== 'rest');
+      node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${label.toLowerCase()}`);
+      if (variant === 'current') { node.dataset.state = 'working'; node.dataset.mood = 'working'; }
       figure.append(el('figcaption', label), node); columns.append(figure);
     }
-    section.append(columns); return section;
-  }));
+    section.append(columns); details.append(section);
+  }
+  $('comparison').replaceChildren(list, details);
 }
 function render() {
   const page = $('page'); page.dataset.set = set.key;
@@ -132,10 +279,12 @@ function render() {
   document.querySelector('.switcher').hidden = comparing;
   document.querySelector('.preview-header h1').textContent = comparing ? 'Working motion' : 'Motion';
   document.querySelector('.lede').textContent = comparing
-    ? 'Which loops clearly say “running”? All at 32px. Idea keeps its live animation as the reference in every row.'
+    ? 'Four characters, one session list. Orbit has new artwork; Miso, Luna and Comet keep theirs. Sample activity only.'
     : "Eight of the characters run through one session's lifecycle. Switch motion sets below. Sample data only.";
   if (comparing) { clearTimeout(timer); renderComparison(); }
-  else $('comparison').replaceChildren();
+  else { $('comparison').replaceChildren(); presenceRigs = []; }
+  const controls = document.querySelector('.preview-controls');
+  page.insertBefore(controls, comparing ? $('comparison') : $('comparison-note'));
   const stage = $('stage-bot'); stage.dataset.kind = focus; stage.dataset.follow = ''; stage.style.setProperty('--size', '76px'); stage.innerHTML = botSvg(focus);
   $('family').replaceChildren(...Object.keys(characters).filter(kind => kind !== 'idea').map((kind, index) => {
     const button = el('button', undefined, 'family-item'); button.type = 'button';
@@ -163,6 +312,7 @@ function syncMotion() {
   $('motion').disabled = reducedMotion.matches; $('replay').disabled = reducedMotion.matches;
   $('motion').setAttribute('aria-pressed', String(paused));
   $('motion').textContent = reducedMotion.matches ? 'Reduced motion enabled' : paused ? 'Resume motion' : 'Pause motion';
+  wakePresence();
 }
 function syncTheme() {
   document.documentElement.dataset.theme = theme;
