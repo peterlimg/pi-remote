@@ -211,7 +211,7 @@ body[data-study=control] { --control-switcher-height: calc(142px + env(safe-area
 [data-control-variant=A] #coordinator-open[data-running=true] .control-indicator { color: var(--working); border-width: 2px; border-right-color: transparent; animation: connection-spin 1.2s linear infinite; }
 [data-control-variant=B] .control-indicator { display: grid; place-items: center; min-width: 20px; height: 20px; padding-inline: 4px; border-radius: 6px; background: var(--glass-fill); font-variant-numeric: tabular-nums; }
 [data-control-variant=B] #coordinator-open[data-running=true] .control-indicator { color: var(--working); }
-[data-control-variant=C] .control-indicator { display: flex; gap: 3px; }
-[data-control-variant=C] .control-indicator i { width: 6px; height: 12px; border: 1px solid var(--muted); border-radius: 2px; }
+[data-control-variant=C] .control-indicator { display: flex; gap: 2px; }
+[data-control-variant=C] .control-indicator i { width: 4px; height: 8px; border: 1px solid var(--muted); border-radius: 1px; }
 [data-control-variant=C] .control-indicator i[data-running=true] { background: var(--working); border-color: var(--working); }
 @media (prefers-reduced-motion: reduce) { [data-control-variant=A] #coordinator-open[data-running=true] .control-indicator { animation: none; } }
