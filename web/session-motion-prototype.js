@@ -3,6 +3,8 @@ const $ = id => document.getElementById(id);
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
 // Drawings copied from the production catalogue: [name, body, eyes, back, front, working parts].
 const characters = {
+  idea: ['Idea', '<circle cx="16" cy="20" r="10"/>', [[12, 20], [20, 20]], '<path class="bot-stalk" d="M16 10V6.5"/><circle class="bot-bulb" cx="16" cy="4.5" r="3"/>', '',
+    '<path class="bot-rays" d="M16-1.2v-1.6M11.3.6l-1.1-1.1M20.7.6l1.1-1.1M10 4.5H8.4M22 4.5h1.6"/>'],
   luna: ['Luna', '<path d="M25 3C17 1 8 4 4 12C0 22 7 30 16 30C22 30 27 27 30 22C20 26 13 20 13 12C13 7 18 3 25 3Z"/>', [[7.5, 20, .9], [12.5, 21, .9]], '', '',
     '<path class="character-moon-mote" d="M25 7q0 4 4 4-4 0-4 4 0-4-4-4 4 0 4-4Z"/>'],
   miso: ['Miso', '<rect x="5" y="10" width="22" height="19" rx="8"/>', [[12, 19], [20, 19]],
@@ -21,7 +23,7 @@ const characters = {
   nim: ['Nim', '<ellipse cx="16" cy="19" rx="8" ry="10"/>', [[12.5, 18], [19.5, 18]],
     '<g class="character-wing"><path class="bot-accent" d="M10 18C2 10-1 13 2 21c-3 5 2 8 8 3Z"/></g><g class="character-wing character-wing-right"><path class="bot-accent" d="M22 18c8-8 11-5 8 3 3 5-2 8-8 3Z"/></g><path class="bot-stalk" d="m13 10-2-5m8 5 2-5"/>'],
 };
-// Extra parts used only by the Signature set.
+// Extra parts used by Signature and the running-loop comparison.
 const signatureParts = {
   orbit: '<g transform="rotate(-22 16 17)"><g class="m-moon-x"><g class="m-moon-y"><circle class="m-moon" cx="16" cy="17" r="1.9"/></g></g></g>',
   comet: '<path class="m-speed" d="M8 4 4 8M5 11l-3 3M28 22l-4 4"/>',
@@ -31,12 +33,13 @@ const sets = [
   { key: 'beat', name: 'A · Beat', description: 'One hop-and-land rhythm for everyone. Ears, tails and rings follow through.' },
   { key: 'signature', name: 'B · Signature', description: 'Each does its own thing: Luna rocks, Jelly swims, Comet dashes, Orbit has a moon.' },
   { key: 'quiet', name: 'C · Quiet', description: 'Bodies stay still. Eyes read and a dot circles. Calmest with many sessions.' },
-  { key: 'focused', name: 'D · Focused actions', description: 'Compare current, revised and still at 32px.' },
+  { key: 'focused', name: 'D · Running loops', description: 'Pulse, flip, swim and orbit beside the unchanged Idea reference.' },
 ];
 const comparisons = [
-  ['miso', 'Look → two focused dips → ear flick.'],
-  ['luna', 'Watch the mote → follow → catch up.'],
-  ['jelly', 'Compress → push → glide. Tentacles follow.'],
+  ['miso', 'Zoom in and out. One pulse every second.'],
+  ['luna', 'Flip, settle briefly, repeat.'],
+  ['jelly', 'Continuous squash-and-stretch swimming.'],
+  ['orbit', 'Rotating ring with a circling moon.'],
 ];
 const labels = { ready: 'Ready', starting: 'Starting', working: 'Working', waiting: 'Needs input', settled: 'Settles · new reply' };
 // Production moods for the comparison set; starting and settle have no motion there.
@@ -71,7 +74,7 @@ function botSvg(kind) {
     + '<g class="bot-badge m-wait"><circle cx="27" cy="5" r="4.5"/><path d="M27 2.8v2.6M27 7.3v.1"/></g><g class="bot-badge m-unread"><circle cx="27" cy="5" r="4"/></g></svg>';
 }
 function bot(kind, size, phase, className = '') {
-  const node = el('span', undefined, `bot m-bot personality-bot ${className}`.trim());
+  const node = el('span', undefined, `bot m-bot ${kind === 'idea' ? '' : 'personality-bot'} ${className}`.trim());
   node.dataset.kind = kind; node.style.setProperty('--size', `${size}px`);
   // Spread phases so neighbouring rows do not move in lockstep.
   node.style.setProperty('--t', `${-phase}s`); node.style.setProperty('--blink', `${-phase * 1.7}s`);
@@ -107,12 +110,13 @@ function renderComparison() {
     section.setAttribute('aria-label', characters[kind][0]);
     section.append(el('h2', characters[kind][0]), el('p', description));
     const columns = el('div', undefined, 'comparison-columns');
-    for (const [variant, label] of [['current', 'Current'], ['revised', 'Revised'], ['still', 'Still']]) {
+    for (const [variant, label] of [['current', 'Current'], ['revised', 'Revised'], ['reference', 'Idea reference']]) {
       const figure = el('figure'); figure.dataset.variant = variant;
-      const node = bot(kind, 32, 0);
+      const sampleKind = variant === 'reference' ? 'idea' : kind;
+      const node = bot(sampleKind, 32, 0);
       node.dataset.state = 'working';
       if (variant !== 'revised') node.dataset.mood = 'working';
-      node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${label.toLowerCase()}`);
+      node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[sampleKind][0]}, ${label.toLowerCase()}`);
       figure.append(el('figcaption', label), node); columns.append(figure);
     }
     section.append(columns); return section;
@@ -128,12 +132,12 @@ function render() {
   document.querySelector('.switcher').hidden = comparing;
   document.querySelector('.preview-header h1').textContent = comparing ? 'Working motion' : 'Motion';
   document.querySelector('.lede').textContent = comparing
-    ? 'Same artwork. Same 32px size. Does the revised action look more focused than the current loop?'
+    ? 'Which loops clearly say “running”? All at 32px. Idea keeps its live animation as the reference in every row.'
     : "Eight of the characters run through one session's lifecycle. Switch motion sets below. Sample data only.";
   if (comparing) { clearTimeout(timer); renderComparison(); }
   else $('comparison').replaceChildren();
   const stage = $('stage-bot'); stage.dataset.kind = focus; stage.dataset.follow = ''; stage.style.setProperty('--size', '76px'); stage.innerHTML = botSvg(focus);
-  $('family').replaceChildren(...Object.keys(characters).map((kind, index) => {
+  $('family').replaceChildren(...Object.keys(characters).filter(kind => kind !== 'idea').map((kind, index) => {
     const button = el('button', undefined, 'family-item'); button.type = 'button';
     button.setAttribute('aria-pressed', String(kind === focus));
     const node = bot(kind, 32, index * .43); node.dataset.follow = '';

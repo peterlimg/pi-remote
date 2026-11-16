@@ -138,7 +138,7 @@ body { min-height: 100dvh; background: var(--sidebar-bg); }
 @keyframes m-slow-blink { 0%, 50%, 80%, 100% { transform: none; } 60%, 72% { transform: scaleY(.15); } }
 @keyframes m-hover { 0%, 100% { transform: translate(-2px, 0) rotate(-5deg); } 25% { transform: translate(0, -3px); } 50% { transform: translate(2px, 0) rotate(5deg); } 75% { transform: translate(0, -1.5px); } }
 
-/* Three-character timing study. No selectors here reach production pages. */
+/* Running-loop study. No selectors here reach production pages. */
 .page[data-set=focused] { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
 .switcher[hidden] { display: none; }
 .motion-comparison { padding: 20px 4px 12px; border-bottom: 1px solid var(--line); }
@@ -149,98 +149,29 @@ body { min-height: 100dvh; background: var(--sidebar-bg); }
 .comparison-columns figcaption { font-size: 12px; color: var(--muted); }
 .comparison-columns [data-variant=revised] figcaption { font-weight: 650; color: var(--text); }
 #comparison-note { margin-top: 12px; }
-#comparison [data-variant=still] * { animation: none !important; }
 #comparison [data-variant=current] .bot-figure { transform-origin: var(--character-origin, 16px 29px); }
-#comparison [data-variant=revised] [data-kind=miso] { --focus-period: 3.2s; }
-#comparison [data-variant=revised] [data-kind=luna] { --focus-period: 2.4s; }
-#comparison [data-variant=revised] [data-kind=jelly] { --focus-period: 1.8s; }
-#comparison [data-variant=revised] :is([data-kind=luna], [data-kind=jelly]) .bot-figure { transform-origin: 16px 16px; }
+#comparison [data-kind=idea] .bot-figure { transform-box: fill-box; transform-origin: center; }
+#comparison [data-kind=orbit] .m-signature { display: inline; }
+#comparison [data-variant=revised] .bot-figure { transform-origin: 16px 16px; }
+#comparison [data-variant=revised] .m-moon-x { transform-box: view-box; transform-origin: 16px 17px; }
+#comparison [data-variant=revised] .m-moon-y { transform: translateX(13px); }
 @media (prefers-reduced-motion: no-preference) {
-  #comparison [data-variant=revised] .bot-eyes { animation: focus-blink var(--focus-period) linear infinite; }
-  #comparison [data-variant=revised] [data-kind=miso] .bot-figure { animation: focus-miso 3.2s cubic-bezier(.2, .7, .3, 1) infinite; }
-  #comparison [data-variant=revised] [data-kind=miso] .bot-look { animation: focus-miso-look 3.2s ease-out infinite; }
-  #comparison [data-variant=revised] .character-cat-ear { animation: focus-ear 3.2s ease-out infinite; }
-  #comparison [data-variant=revised] .character-cat-ear-right { animation-name: focus-ear-right; }
-  #comparison [data-variant=revised] .character-cat-tail { animation: focus-tail 3.2s ease-in-out infinite; }
-  #comparison [data-variant=revised] [data-kind=luna] .bot-figure { animation: focus-luna 2.4s cubic-bezier(.2, .7, .3, 1) infinite; }
-  #comparison [data-variant=revised] [data-kind=luna] .bot-look { animation: focus-luna-look 2.4s ease-out infinite; }
-  #comparison [data-variant=revised] .character-moon-mote { animation: focus-mote 2.4s ease-in-out infinite; }
-  #comparison [data-variant=revised] [data-kind=jelly] .bot-figure { animation: focus-jelly 1.8s cubic-bezier(.16, 1, .3, 1) infinite; }
-  #comparison [data-variant=revised] [data-kind=jelly] .bot-look { animation: focus-jelly-look 1.8s ease-out infinite; }
-  #comparison [data-variant=revised] .character-tentacle { animation: focus-tentacle 1.8s ease-out infinite; }
-  #comparison [data-variant=revised] .character-tentacle-middle { animation-delay: .06s; }
-  #comparison [data-variant=revised] .character-tentacle-right { animation-delay: .12s; }
+  #comparison [data-variant=current] .m-moon-x { animation: character-moon-x 1.6s ease-in-out infinite alternate; }
+  #comparison [data-variant=current] .m-moon-y { animation: character-moon-y 1.6s ease-in-out -.8s infinite alternate; }
+  #comparison [data-variant=revised] .bot-eyes { animation: bot-blink 6s infinite; }
+  #comparison [data-variant=revised] [data-kind=miso] .bot-figure { animation: focus-miso 1s ease-in-out infinite; }
+  #comparison [data-variant=revised] [data-kind=luna] .bot-figure { animation: focus-luna 1.4s ease-in-out infinite; }
+  #comparison [data-variant=revised] [data-kind=jelly] .bot-figure { animation: focus-jelly 1.2s ease-in-out infinite; }
+  #comparison [data-variant=revised] .character-tentacle { animation: m-tentacle 1.2s ease-in-out .08s infinite; }
+  #comparison [data-variant=revised] .character-tentacle-middle { animation-delay: .16s; }
+  #comparison [data-variant=revised] .character-tentacle-right { animation-delay: .24s; }
+  #comparison [data-variant=revised] .character-planet-ring { animation: m-spin 2.4s linear infinite; }
+  #comparison [data-variant=revised] .m-moon-x { animation: m-spin 1.2s linear infinite; }
 }
-@keyframes focus-blink { 0%, 89%, 97%, 100% { transform: none; } 93% { transform: scaleY(.15); } }
-@keyframes focus-miso {
-  0%, 15%, 100% { transform: rotate(-4deg); }
-  22% { transform: translateY(1px) rotate(6deg); }
-  30%, 39% { transform: translateY(-1px) rotate(-3deg); }
-  46% { transform: translateY(1px) rotate(6deg); }
-  55%, 67% { transform: translateY(-1px) rotate(-3deg); }
-  78% { transform: rotate(-4deg); }
-}
-@keyframes focus-miso-look {
-  0%, 7%, 100% { transform: none; }
-  12%, 55% { transform: translate(1px, 1px); }
-  65%, 80% { transform: translate(-1px, -.5px); }
-  90% { transform: none; }
-}
-@keyframes focus-ear {
-  0%, 62%, 85%, 100% { transform: none; }
-  69% { transform: rotate(-24deg); }
-  75% { transform: rotate(8deg); }
-}
-@keyframes focus-ear-right {
-  0%, 68%, 91%, 100% { transform: none; }
-  75% { transform: rotate(24deg); }
-  81% { transform: rotate(-8deg); }
-}
-@keyframes focus-tail {
-  0%, 15%, 100% { transform: rotate(-16deg); }
-  29% { transform: rotate(18deg); }
-  40% { transform: rotate(-8deg); }
-  53% { transform: rotate(18deg); }
-  67%, 80% { transform: rotate(-16deg); }
-}
-@keyframes focus-luna {
-  0%, 20%, 100% { transform: translateX(-1.5px) rotate(-18deg); }
-  30% { transform: translate(-1px, -.5px) rotate(-8deg); }
-  42% { transform: translate(1.5px, -1px) rotate(16deg); }
-  51%, 59% { transform: translate(1px, -.5px) rotate(10deg); }
-  72% { transform: translateX(-1px) rotate(-12deg); }
-  84% { transform: translateX(-1.5px) rotate(-18deg); }
-}
-@keyframes focus-luna-look {
-  0%, 8%, 100% { transform: translateX(-1px); }
-  18%, 36% { transform: translate(1px, -1px); }
-  48%, 58% { transform: translateX(1px); }
-  68%, 87% { transform: translateX(-1px); }
-}
-@keyframes focus-mote {
-  0%, 10% { transform: rotate(-35deg); }
-  26% { transform: rotate(-8deg); }
-  38%, 45% { transform: rotate(35deg); }
-  58% { transform: rotate(95deg); }
-  75% { transform: rotate(190deg); }
-  92%, 100% { transform: rotate(325deg); }
-}
+@keyframes focus-miso { 0%, 100% { transform: scale(.84); } 50% { transform: scale(1.12); } }
+@keyframes focus-luna { 0% { transform: rotateY(0); } 75%, 100% { transform: rotateY(360deg); } }
 @keyframes focus-jelly {
-  0%, 8%, 100% { transform: none; }
-  23% { transform: translateY(1px) scale(1.14, .84); animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
-  34% { transform: translateY(-5px) scale(.9, 1.12); }
-  46% { transform: translateY(-4.8px) scale(.98, 1.02); animation-timing-function: ease-in; }
-  80% { transform: translateY(-1.5px) scale(1.02, .98); }
-}
-@keyframes focus-jelly-look {
-  0%, 8%, 100% { transform: none; }
-  18%, 30% { transform: translateY(-1px); }
-  44%, 70% { transform: none; }
-}
-@keyframes focus-tentacle {
-  0%, 10%, 100% { transform: none; }
-  27% { transform: scaleY(.78) skewX(6deg); }
-  41% { transform: scaleY(1.22) skewX(-4deg); }
-  58% { transform: scaleY(1.05) skewX(8deg); }
-  80% { transform: none; }
+  0%, 100% { transform: translateY(1px) scale(1.16, .82); }
+  40% { transform: translateY(-5px) scale(.86, 1.16); }
+  65% { transform: translateY(-4px) scale(.96, 1.04); }
 }
