@@ -167,7 +167,8 @@ try {
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
     await fresh(); await page.locator('#prompt').fill('Silent draft'); await record(); await delay(500);
     const emptyStarted = performance.now(); await stop(); await stopped();
-    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 10000 });
+    await expect(page.locator('#voice-status')).toBeHidden();
+    await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/, { timeout: 10000 });
     await expect(page.locator('#prompt')).toHaveValue('Silent draft'); await expect(page.locator('#notice')).toBeHidden();
     console.log(JSON.stringify({ live: true, silenceStopToDraftMs: Math.round(performance.now() - emptyStarted), promptsSent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1); assert.equal(commands.length, 0);
@@ -189,6 +190,7 @@ try {
     await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
     await stop(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook');
+    await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty();
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     assert.equal(commands.length, 0);
     await partial(' beside the lamp'); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp');
@@ -201,17 +203,20 @@ try {
     assert.equal(commands[0].text, 'Keep this draft. Purple notebook beside the lamp.');
 
     await fresh(); await page.locator('#prompt').fill('Keep unchanged'); await record(); await stop(); await stopped();
-    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 10000 }); await closed();
+    await expect(page.locator('#voice-status')).toBeHidden();
+    await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/, { timeout: 10000 }); await closed();
     await expect(page.locator('#prompt')).toHaveValue('Keep unchanged'); await expect(page.locator('#notice')).toBeHidden();
 
     await fresh(); await record(); await final('First sentence.'); await stop(); await partial('Trailing');
-    await final('First sentence.'); await delay(1900); await expect(page.locator('#voice-status')).toBeVisible();
+    await final('First sentence.'); await delay(1900);
+    await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'finishing'); await expect(page.locator('#voice-status')).toBeHidden();
     await final('Trailing words preserved.', 'turn-2');
     await expect(page.locator('#prompt')).toHaveValue('First sentence. Trailing words preserved.', { timeout: 1000 }); await closed();
 
     await fresh(); await record(); await partial('Unconfirmed words'); await stop();
     await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 1000 });
-    await expect(page.locator('#voice-label')).toContainText('Not confirmed', { timeout: 10000 }); await closed();
+    await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 10000 }); await closed();
+    await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty(); await expect(page.locator('#notice')).toBeHidden();
     await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#prompt')).toBeEditable();
     await page.locator('#prompt').fill('Reviewed words');
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Reviewed words');
@@ -228,7 +233,8 @@ try {
     await expect(page.locator('#send')).toBeEnabled(); assert.equal(commands.length, 1);
     for (const [width, colorScheme] of [[320, 'light'], [390, 'dark'], [1280, 'light']]) {
       await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme });
-      for (const id of ['prompt', 'voice-cancel', 'voice-status', 'send']) {
+      await expect(page.locator('#voice-status')).toBeHidden();
+      for (const id of ['prompt', 'voice-cancel', 'send']) {
         const box = await page.locator('#' + id).boundingBox();
         assert.ok(box && box.x >= 0 && box.x + box.width <= width, `${id} fits at ${width}px`);
         if (['voice-cancel', 'send'].includes(id)) assert.ok(box.width >= 44 && box.height >= 44);

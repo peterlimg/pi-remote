@@ -9,9 +9,8 @@ export function voiceComposer({ request, context, changed, notice }) {
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
     const reviewing = ['finishing', 'review'].includes(active?.phase);
-    if (reviewing) input.setAttribute('aria-describedby', 'voice-label'); else input.removeAttribute('aria-describedby');
     cancelButton.title = reviewing ? 'Discard transcription preview' : 'Discard recording';
-    panel.hidden = !active;
+    panel.hidden = !active || reviewing;
     if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
     const showingWaveform = active?.phase === 'recording' && !!active.analyser;
     waveform.hidden = !showingWaveform;
@@ -23,8 +22,7 @@ export function voiceComposer({ request, context, changed, notice }) {
     button.dataset.recording = String(active?.phase === 'recording');
     button.disabled = !!active && active.phase !== 'recording';
     const label = active?.phase === 'recording' ? 'Listening · directly connected to OpenAI' :
-      active?.phase === 'review' ? 'Not confirmed. Check the last words.' :
-      active?.phase === 'finishing' ? 'Still finishing. Last words may be missing.' : 'Connecting to ChatGPT…';
+      active?.phase === 'connecting' ? 'Connecting to ChatGPT…' : '';
     if (status.textContent !== label) status.textContent = label;
     changed();
   }
