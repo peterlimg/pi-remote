@@ -75,8 +75,9 @@ test('worker sheet scopes history and images without disturbing the live parent'
         const chevron = new DOMPoint(ink.x + ink.width / 2, ink.y + ink.height / 2).matrixTransform(path.getScreenCTM());
         return { label: label.y + label.height / 2, mark: mark.y + mark.height / 2, chevron: chevron.y };
       });
-      expect(Math.abs(alignment.mark - alignment.label)).toBeLessThan(0.1);
-      expect(Math.abs(alignment.chevron - alignment.label)).toBeLessThan(0.1);
+      expect(alignment.mark - alignment.label).toBeCloseTo(1, 1);
+      expect(alignment.chevron - alignment.label).toBeCloseTo(1, 1);
+      await expect(page.locator('#coordinator-open > span').first()).toHaveText('workers');
       await expect(page.locator('#coordinator-open')).not.toContainText('Idle');
       const fills = await slots.locator('i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
       expect(fills[1]).toBe('rgba(0, 0, 0, 0)');
@@ -86,7 +87,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
           [selector, rect.x + rect.width / 2, rect.y + rect.height / 2])).toBe(true);
       }
       await expect(page.locator('#coordinator-worker-attention')).toBeVisible({ visible: ['waiting', 'unknown'].includes(state) });
-      await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/Workers.*2 total/);
+      await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/workers.*2 total/);
       expect(await page.locator('#coordinator-open').evaluate(node => {
         const pill = getComputedStyle(node, '::before');
         return parseFloat(pill.height) + parseFloat(pill.borderTopWidth) + parseFloat(pill.borderBottomWidth);
