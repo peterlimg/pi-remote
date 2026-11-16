@@ -994,14 +994,12 @@ pre.message-text { white-space: pre-wrap; }
 }
 .session-details > .coordinator-menu { width: 100%; padding: 8px; background: transparent; color: var(--text); text-align: left; font-size: 14px; font-weight: 400; }
 .coordinator-context { flex-shrink: 0; width: fit-content; max-width: min(var(--content-width), calc(100% - 32px)); margin: 0 auto; }
-#coordinator-open { position: relative; isolation: isolate; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px; border-radius: 22px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
+#coordinator-open { position: relative; isolation: isolate; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 10px; border-radius: 22px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
 /* Keep a 44px touch target around the smaller visible pill. */
 #coordinator-open::before { content: ''; position: absolute; z-index: -1; inset: 6px 0; border-radius: 22px; pointer-events: none; }
 #coordinator-open > span:first-child { flex-shrink: 0; }
-#coordinator-worker-slots { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-#coordinator-worker-slots i { width: 4px; height: 8px; border: 1px solid var(--muted); border-radius: 1px; }
-#coordinator-worker-slots i[data-working=true] { background: var(--working); border-color: var(--working); }
-#coordinator-worker-slots > span { margin-left: 2px; color: var(--muted); font-size: 11px; font-weight: 400; }
+#coordinator-worker-status { color: var(--muted); font-weight: 400; white-space: nowrap; }
+#coordinator-worker-status[data-working=true] { color: var(--working); }
 #coordinator-worker-attention { color: var(--warning); font-weight: 700; }
 #coordinator-open > svg { flex-shrink: 0; color: var(--muted); }
 .coordinator-worker { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 16px 0; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font-weight: 400; }
