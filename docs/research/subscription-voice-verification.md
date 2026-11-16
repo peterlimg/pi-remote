@@ -1,5 +1,7 @@
 # Subscription voice verification
 
+**Follow-up, 2026-11-16:** [Dedicated ChatGPT dictation verification](dictation-finalization.md) found and tested a separate subscription file-transcription endpoint. It replaces the realtime route below for Pi Remote dictation. The Platform-endpoint failure here does not apply to that ChatGPT endpoint.
+
 Checked 2026-11-15 UTC. This follows the [OpenClaw source investigation](openclaw-voice.md). The user authorized testing subscription-backed transcription for the selected chat provider. No composer feature was implemented.
 
 ## Result

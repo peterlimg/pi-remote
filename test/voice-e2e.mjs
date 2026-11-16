@@ -1,7 +1,7 @@
-// Real host, browser UI and authenticated sockets; only provider HTTP/WS and browser WebRTC are simulated.
+// Real host, browser, MediaRecorder and authenticated sockets; synthetic microphone and simulated provider HTTP.
+// Opt in to the real subscription endpoint with --live-file /path/to/synthetic-speech.wav.
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -10,40 +10,35 @@ import { startHost } from '../src/host.mjs';
 import { acquireLock, sessionKey } from '../src/locks.mjs';
 import { socket, until, delay } from './helpers.mjs';
 
-const dir = mkdtempSync(join(tmpdir(), 'pi-voice-e2e-'));
-const evidence = mkdtempSync(join(tmpdir(), 'pi-voice-evidence-'));
+const liveFile = process.argv[2] === '--live-file' ? process.argv[3] : undefined;
+if (process.argv.length > 2 && !liveFile) throw new Error('Usage: node test/voice-e2e.mjs [--live-file synthetic-speech.wav]');
+const dir = mkdtempSync(join(tmpdir(), 'pi-voice-e2e-')), evidence = mkdtempSync(join(tmpdir(), 'pi-voice-evidence-'));
 const config = { port: 8787, clientToken: 'voice-test-client-only-1234567890123456', bridgeToken: 'voice-test-bridge-only-1234567890123456', relayToken: 'voice-test-relay-only-12345678901234567' };
-let host, browser, context, probe; const agents = [], locks = [], providerSockets = [], uploads = [], commands = [], errors = [];
-let mode = 'ok', releaseOffer;
-const offer = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
-class ProviderSocket extends EventEmitter {
-  readyState = 0;
-  constructor() { super(); providerSockets.push(this); queueMicrotask(() => { this.readyState = 1; this.emit('open'); }); }
-  send(raw) { assert.equal(JSON.parse(raw).type, 'session.close'); }
-  close() { if (this.readyState === 3) return; this.readyState = 3; this.emit('close'); }
-  terminate() { this.close(); }
-  packet(value) { this.emit('message', Buffer.from(JSON.stringify(value))); }
-}
+let host, browser, context, probe, mode = 'ok', releaseRequest, releaseAuth;
+const agents = [], locks = [], uploads = [], commands = [], errors = [];
 try {
   host = await startHost({ dir, config, port: 0, roots: [], relayUrl: '', publicUrl: 'http://127.0.0.1:8787' });
-  host.service.voiceOptions = {
-    readAuth: async () => ({ token: 'private-test-token', account: 'private-test-account' }),
-    fetchImpl: async (url, options) => {
-      assert.equal(new URL(url).hostname, 'chatgpt.com');
-      assert.equal(options.redirect, 'error'); assert.equal(options.headers.Authorization, 'Bearer private-test-token');
-      const body = JSON.parse(options.body); assert.equal(body.session.model, 'gpt-live-1-codex'); uploads.push(body);
-      if (mode === 'held') await new Promise(resolve => { releaseOffer = resolve; });
-      if (mode === 'quota') return new Response('private-test-token: provider error details', { status: 429 });
-      return new Response(offer, { status: 201, headers: { 'openai-session-id': 'rtc_test' } });
+  if (!liveFile) host.service.voiceOptions = {
+    readAuth: async () => {
+      if (mode === 'auth-held') await new Promise(resolve => { releaseAuth = resolve; });
+      return { token: 'private-test-token', account: 'private-test-account' };
     },
-    createSocket: () => new ProviderSocket()
+    fetchImpl: async (url, options) => {
+      assert.equal(url, 'https://chatgpt.com/backend-api/transcribe');
+      assert.equal(options.redirect, 'error'); assert.equal(options.headers.Authorization, 'Bearer private-test-token');
+      const file = options.body.get('file'); assert.ok(file.size > 12); assert.ok(['audio/mp4', 'audio/webm'].includes(file.type));
+      uploads.push({ file, signal: options.signal });
+      if (mode === 'held') await new Promise(resolve => { releaseRequest = resolve; });
+      if (mode === 'quota') return new Response('private-test-token: provider error details', { status: 429 });
+      if (mode === 'malformed') return new Response('{private-test-token:invalid}');
+      if (mode === 'oversized') return Response.json({ text: 'x'.repeat(16001) });
+      return Response.json({ text: mode === 'empty' ? '' : 'Purple notebook beside the lamp.' });
+    }
   };
-  const origin = `http://127.0.0.1:${host.http.address().port}`;
-  const states = [];
+  const origin = `http://127.0.0.1:${host.http.address().port}`, states = [];
   for (const [title, model] of [['Voice Alpha', 'openai-codex/gpt-5.4'], ['Voice Beta', 'claude-sdk/claude-sonnet-5-5']]) {
     const file = join(dir, title + '.jsonl'); writeFileSync(file, '');
-    const id = sessionKey(file), instanceId = randomUUID();
-    const lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
+    const id = sessionKey(file), instanceId = randomUUID(), lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
     const agent = await socket(origin.replace('http:', 'ws:') + '/bridge', config.bridgeToken); agents.push(agent);
     const state = { id, file, instanceId, title, model, cwd: dir, status: 'idle', contextUsage: { tokens: 32000, contextWindow: 100000, percent: 32 }, messages: [{ id: 'hello', role: 'user', text: 'Voice test' }], tools: [], revision: 0, updatedAt: Date.now() };
     states.push(state); agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state }));
@@ -56,10 +51,10 @@ try {
     });
   }
   await until(() => host.service.live.size === 2);
-  browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+  browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'] });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-  await context.addInitScript(() => {
+  await context.addInitScript(async audio64 => {
     if (!navigator.mediaDevices) return;
     window.voiceTracks = []; window.voiceContexts = [];
     const NativeAudioContext = window.AudioContext;
@@ -68,21 +63,20 @@ try {
     };
     navigator.mediaDevices.getUserMedia = async () => {
       const audio = new NativeAudioContext(), destination = audio.createMediaStreamDestination();
-      const oscillator = audio.createOscillator(), gain = window.voiceGain = audio.createGain();
-      gain.gain.value = .15; oscillator.connect(gain); gain.connect(destination); oscillator.start();
+      if (audio64) {
+        const source = audio.createBufferSource();
+        source.buffer = await audio.decodeAudioData(Uint8Array.from(atob(audio64), c => c.charCodeAt(0)).buffer);
+        source.connect(destination);
+        window.playVoiceSample = () => new Promise(resolve => { source.onended = resolve; source.start(); });
+      } else {
+        const oscillator = audio.createOscillator(), gain = window.voiceGain = audio.createGain();
+        gain.gain.value = .15; oscillator.connect(gain); gain.connect(destination); oscillator.start();
+      }
       await audio.resume();
       const stream = destination.stream;
       window.voiceTracks.push(...stream.getTracks()); return stream;
     };
-    window.RTCPeerConnection = class {
-      connectionState = 'new';
-      addTrack() {}
-      async createOffer() { return { type: 'offer', sdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n' }; }
-      async setLocalDescription() {}
-      async setRemoteDescription() { this.connectionState = 'connected'; this.onconnectionstatechange?.(); }
-      close() { this.connectionState = 'closed'; this.onconnectionstatechange?.(); }
-    };
-  });
+  }, liveFile ? readFileSync(liveFile).toString('base64') : null);
   const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
   const fresh = async () => {
     mode = 'ok'; await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
@@ -92,229 +86,146 @@ try {
   };
   const record = async () => {
     await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
-    await expect(page.locator('#voice-label')).toHaveText('Listening · audio goes to OpenAI', { timeout: 10000 });
-    return providerSockets.at(-1);
+    await expect(page.locator('#voice-label')).toHaveText('Recording · sent to OpenAI on Stop');
   };
   const stopped = async () => expect.poll(() => page.evaluate(() =>
     window.voiceTracks.every(track => track.readyState === 'ended') && window.voiceContexts.every(audio => audio.state === 'closed'))).toBe(true);
+  const stop = () => page.getByRole('button', { name: 'Stop dictation' }).click();
 
-  await fresh();
-  await page.locator('#prompt').fill('Keep this draft.');
-  let provider = await record();
-  await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);
-  assert.ok(await page.locator('#voice-waveform i').count() < 10, 'Waveform starts with new samples, not a prefilled line');
-  const wave = await page.locator('#voice-waveform').boundingBox(), newest = await page.locator('#voice-waveform i').last().boundingBox();
-  const newestOffset = wave.x + wave.width - newest.x - newest.width;
-  assert.ok(newestOffset >= 0 && newestOffset <= 7, 'New samples enter from the right edge');
-  await page.screenshot({ path: join(evidence, 'waveform-start-phone.png'), fullPage: true });
-  const positions = await page.locator('#voice-waveform i').first().evaluate(async bar => {
-    const x = [];
-    for (let frame = 0; frame < 20; frame++) {
-      await new Promise(requestAnimationFrame); x.push(bar.getBoundingClientRect().x);
-    }
-    return x;
-  });
-  assert.ok(positions.slice(1).filter((x, i) => x < positions[i] - .05).length >= 15,
-    'Waveform history should move each animation frame, not jump with each new sample');
-  provider.packet({ type: 'input_transcript.added', item: { text: 'Purple notebook' } });
-  provider.packet({ type: 'output_transcript.added', item: { text: 'DO NOT INSERT ASSISTANT SPEECH' } });
-  await expect(page.locator('#voice-preview')).toHaveText('Purple notebook');
-  await expect(page.locator('#send')).toBeHidden(); assert.equal(commands.length, 0);
-  await expect(page.locator('#prompt')).toBeHidden();
-  await expect(page.locator('#prompt')).not.toBeFocused();
-  await expect(page.locator('#attach')).toBeHidden();
-  await expect(page.locator('#voice-record .voice-stop-icon')).toBeVisible();
-  const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
-  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(10);
-  await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(10);
-  await page.evaluate(() => {
-    const gain = window.voiceGain.gain, now = window.voiceGain.context.currentTime;
-    [.015, .08, .025, .12, .008, .06].forEach((value, i) => gain.setValueAtTime(value, now + i * .15));
-  });
-  await delay(1000);
-  const envelope = await levels();
-  assert.ok(Math.max(...envelope) - Math.min(...envelope) > 8, 'Waveform should preserve changes in microphone volume');
-  const recordingBox = await page.locator('#composer').boundingBox();
-  assert.ok(recordingBox.height < 80);
-  await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
-  await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: join(evidence, 'recording-desktop-dark.png'), fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
-  await page.evaluate(() => { window.voiceGain.gain.cancelScheduledValues(0); window.voiceGain.gain.value = 0; });
-  await expect.poll(async () => Math.max(...await levels())).toBe(3);
-  await page.evaluate(() => { window.voiceGain.gain.value = .01; });
-  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(8);
-  await page.evaluate(() => { window.voiceGain.gain.value = .15; });
-  await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(20);
-  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
-  // Simulate a provider final arriving after audio has already drained. Do not add another quiet-period delay.
-  await delay(1850);
-  const finalAt = Date.now();
-  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Purple notebook beside the lamp.' } });
-  await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
-  console.log(`Final transcript to draft: ${Date.now() - finalAt}ms`);
-  await expect(page.locator('#voice-status')).toBeHidden(); assert.equal(provider.readyState, 3); assert.equal(commands.length, 0);
-  await expect(page.locator('#prompt')).toBeVisible();
-  await expect(page.locator('#send')).toBeVisible();
-  await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 1);
-  assert.equal(commands[0].text, 'Keep this draft. Purple notebook beside the lamp.');
-
-  await fresh(); provider = await record();
-  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Earlier sentence.' } });
-  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
-  await delay(200);
-  provider.packet({ type: 'input_transcript.added', item: { text: 'Last words' } });
-  await delay(1700);
-  await expect(page.locator('#voice-label')).toHaveText('Finishing transcription…');
-  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Last words complete.' } });
-  await expect(page.locator('#prompt')).toHaveValue('Earlier sentence. Last words complete.', { timeout: 1000 });
-  assert.equal(commands.length, 1);
-
-  await fresh(); provider = await record();
-  provider.packet({ type: 'input_transcript.added', item: { text: 'Unconfirmed words' } });
-  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
-  await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 10000 });
-  await expect(page.locator('#notice')).toContainText('before confirmation');
-  assert.equal(commands.length, 1);
-
-  await fresh(); await page.locator('#prompt').fill('Keep unchanged'); provider = await record();
-  await page.getByRole('button', { name: 'Stop dictation' }).click(); await stopped();
-  await expect(page.locator('#voice-status')).toBeHidden({ timeout: 10000 });
-  await expect(page.locator('#prompt')).toHaveValue('Keep unchanged');
-  await expect(page.locator('#notice')).toBeHidden();
-  assert.equal(provider.readyState, 3); assert.equal(commands.length, 1);
-
-  await fresh(); await page.locator('#prompt').fill('Original'); provider = await record();
-  await page.getByRole('button', { name: 'Cancel dictation' }).click();
-  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Late words' } });
-  await expect(page.locator('#prompt')).toHaveValue('Original'); await stopped(); assert.equal(provider.readyState, 3);
-
-  await fresh(); provider = await record();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#voice-status')).toBeHidden(); await stopped();
-  await expect(page.locator('#voice-record')).toBeFocused();
-  await page.locator('#prompt').fill('User edit wins');
-  await until(() => provider.readyState === 3);
-  provider.packet({ type: 'turn.done', turn: { role: 'user', transcript: 'Stale' } });
-  await expect(page.locator('#prompt')).toHaveValue('User edit wins');
-
-  await fresh(); provider = await record();
-  await page.getByRole('button', { name: 'Show sessions' }).click();
-  await page.getByRole('button', { name: /Voice Beta/ }).click();
-  await expect(page.locator('#voice-record')).toBeHidden(); await stopped();
-  await until(() => provider.readyState === 3);
-
-  await fresh(); provider = await record();
-  provider.packet({ type: 'input_transcript.added', item: { text: 'Do not insert after model change' } });
-  states[0].model = 'anthropic/claude-test'; states[0].revision++;
-  agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
-  await expect(page.locator('#voice-record')).toBeHidden();
-  await expect(page.locator('#prompt')).toHaveValue(''); await stopped();
-  assert.equal(provider.readyState, 3);
-  states[0].model = 'openai-codex/gpt-5.4'; states[0].revision++;
-  agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
-  await until(() => host.service.read(states[0].id).model.startsWith('openai-codex/'));
-
-  await fresh(); mode = 'quota'; await page.locator('#prompt').fill('Kept on error');
-  await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
-  await expect(page.locator('#notice')).toContainText('quota'); await stopped();
-  await expect(page.locator('#prompt')).toHaveValue('Kept on error');
-  assert.ok(!(await page.locator('body').innerText()).includes('private-test'));
-
-  await fresh();
-  const beforeDenied = uploads.length;
-  await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Denied', 'NotAllowedError'); }; });
-  await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
-  await expect(page.locator('#notice')).toContainText('Microphone access was denied');
-  assert.equal(uploads.length, beforeDenied);
-
-  await fresh(); mode = 'held';
-  await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
-  await until(() => releaseOffer); await page.getByRole('button', { name: 'Cancel dictation' }).click();
-  const count = providerSockets.length; releaseOffer(); releaseOffer = undefined;
-  await stopped(); await delay(100); assert.equal(providerSockets.length, count);
-
-  await fresh(); provider = await record();
-  provider.packet({ type: 'input_transcript.added', item: { text: 'Keep partial words' } });
-  provider.emit('error', new Error('private-test-token should never leave host'));
-  await expect(page.locator('#prompt')).toHaveValue('Keep partial words'); await stopped();
-  await expect(page.locator('#notice')).toContainText('connection failed');
-
-  await fresh(); provider = await record(); provider.packet(null);
-  await expect(page.locator('#notice')).toContainText('invalid voice event');
-  await stopped(); assert.equal(provider.readyState, 3);
-
-  // The host must reject non-Codex sessions even when a client bypasses button visibility.
-  probe = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin);
-  await probe.request('watch', { sessionId: states[1].id });
-  const before = uploads.length;
-  const denied = await probe.request('voiceStart', { sessionId: states[1].id, voiceId: randomUUID(), sdp: offer });
-  assert.equal(denied.ok, false); assert.equal(uploads.length, before);
-  await probe.request('watch', { sessionId: states[0].id });
-  const invalid = await probe.request('voiceStart', { sessionId: states[0].id, voiceId: randomUUID(), sdp: offer + 'm=video 9 UDP/TLS/RTP/SAVPF 96\r\n' });
-  assert.equal(invalid.ok, false); assert.equal(uploads.length, before);
-  const started = await probe.request('voiceStart', { sessionId: states[0].id, voiceId: randomUUID(), sdp: offer });
-  assert.equal(started.ok, true); provider = providerSockets.at(-1); probe.ws.close();
-  await until(() => provider.readyState === 3);
-
-  await fresh();
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  assert.equal(await page.locator('#voice-record').evaluate(node => node.nextElementSibling.id), 'send');
-  const mic = await page.locator('#voice-record').boundingBox(), send = await page.locator('#send').boundingBox();
-  assert.ok(Math.abs(mic.y - send.y) < 2 && mic.x + mic.width <= send.x);
-  assert.ok(mic.width >= 44 && mic.height >= 44);
-  await page.locator('.session-info summary').click();
-  await expect(page.locator('.session-details')).toBeVisible();
-  await page.locator('.session-info summary').click();
-  await page.locator('#prompt').fill('Keep while checking usage');
-  for (const width of [390, 1280]) {
-    await page.setViewportSize({ width, height: 844 });
-    const ring = await page.locator('.conversation-actions #usage-meter').boundingBox();
-    const menu = await page.locator('.session-info summary').boundingBox();
-    assert.ok(Math.abs(ring.y - menu.y) < 2 && ring.x + ring.width <= menu.x && ring.width >= 44);
-    await page.locator('#usage-meter').click();
-    await expect(page.locator('#settings-picker')).toContainText('32,000 / 100,000 tokens');
-    const header = await page.locator('.conversation-header').boundingBox(), panel = await page.locator('#settings-picker').boundingBox();
-    assert.ok(panel.y >= header.y + header.height && panel.y - header.y - header.height < 12);
-    assert.ok(panel.x >= 0 && panel.x + panel.width <= width);
-    await page.screenshot({ path: join(evidence, 'usage-' + width + '.png'), fullPage: true });
-    await page.keyboard.press('Escape'); await expect(page.locator('#settings-picker')).toBeHidden();
-    await expect(page.locator('#usage-meter')).toBeFocused();
-    await expect(page.locator('#prompt')).toHaveValue('Keep while checking usage');
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: join(evidence, 'ready-phone.png'), fullPage: true });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({ path: join(evidence, 'ready-desktop.png'), fullPage: true });
-  writeFileSync(join(evidence, 'composer.aria.txt'), await page.locator('#composer').ariaSnapshot());
-  // A busy pre-upgrade host serves the new shell but does not yet know the voice asset routes.
-  let voiceAssetRequested = false;
-  for (const asset of ['voice.js', 'voice.css']) await page.route('**/' + asset, route => { voiceAssetRequested = true; return route.abort(); });
-  await page.routeWebSocket('**/ws', route => {
-    const upstream = route.connectToServer();
-    upstream.onMessage(raw => {
-      const packet = JSON.parse(String(raw));
-      if (packet.type === 'ready') delete packet.supportsVoice;
-      route.send(JSON.stringify(packet));
+  await fresh(); await page.locator('#prompt').fill('Keep this draft.'); await record();
+  if (liveFile) {
+    await page.evaluate(() => window.playVoiceSample());
+    const started = performance.now(); await stop(); await stopped();
+    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 25000 });
+    const text = await page.locator('#prompt').inputValue();
+    assert.match(text, /Keep this draft\. The orange bicycle is parked beside the library\./i);
+    console.log(JSON.stringify({ live: true, stopToDraftMs: Math.round(performance.now() - started), text, promptsSent: commands.length }));
+    assert.equal(commands.length, 0);
+    await fresh(); await page.locator('#prompt').fill('Silent draft'); await record(); await delay(500);
+    const emptyStarted = performance.now(); await stop(); await stopped();
+    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 25000 });
+    await expect(page.locator('#prompt')).toHaveValue('Silent draft'); await expect(page.locator('#notice')).toBeHidden();
+    console.log(JSON.stringify({ live: true, silenceStopToDraftMs: Math.round(performance.now() - emptyStarted), promptsSent: commands.length }));
+    assert.equal(commands.length, 0);
+  } else {
+    assert.equal(uploads.length, 0, 'No provider request or audio upload before Stop');
+    await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);
+    assert.ok(await page.locator('#voice-waveform i').count() < 10, 'No prefilled dot line');
+    const positions = await page.locator('#voice-waveform i').first().evaluate(async bar => {
+      const x = []; for (let frame = 0; frame < 20; frame++) { await new Promise(requestAnimationFrame); x.push(bar.getBoundingClientRect().x); } return x;
     });
-  });
-  await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
-  await page.getByRole('button', { name: /Voice Alpha/ }).click();
-  await expect(page.locator('#voice-record')).toBeHidden();
-  await page.locator('#prompt').fill('Old host can still send');
-  await page.getByRole('button', { name: 'Send message' }).click();
-  await until(() => commands.length === 2); assert.equal(commands[1].text, 'Old host can still send');
-  assert.equal(voiceAssetRequested, false);
+    assert.ok(positions.slice(1).filter((x, i) => x < positions[i] - .05).length >= 15, 'Continuous waveform motion');
+    await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused();
+    await expect(page.locator('#send')).toBeHidden(); await expect(page.locator('#voice-record .voice-stop-icon')).toBeVisible();
+    const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
+    await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(20);
+    await page.evaluate(() => { window.voiceGain.gain.value = 0; });
+    await expect.poll(async () => Math.max(...await levels())).toBe(3);
+    await page.evaluate(() => { window.voiceGain.gain.value = .01; });
+    await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(8);
+    await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
+    const started = performance.now(); await stop(); await stopped();
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
+    console.log(`Stop to draft with simulated provider: ${Math.round(performance.now() - started)}ms`);
+    assert.equal(uploads.length, 1); assert.equal(commands.length, 0);
+    await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 1);
+    assert.equal(commands[0].text, 'Keep this draft. Purple notebook beside the lamp.');
+
+    await fresh(); mode = 'empty'; await page.locator('#prompt').fill('Keep unchanged'); await record(); await delay(300); await stop(); await stopped();
+    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 1000 });
+    await expect(page.locator('#prompt')).toHaveValue('Keep unchanged'); await expect(page.locator('#notice')).toBeHidden();
+
+    await fresh(); await page.locator('#prompt').fill('Original'); await record(); const beforeCancel = uploads.length;
+    await page.getByRole('button', { name: 'Cancel dictation' }).click(); await stopped();
+    await expect(page.locator('#prompt')).toHaveValue('Original'); assert.equal(uploads.length, beforeCancel);
+
+    await fresh(); await record(); await page.keyboard.press('Escape'); await stopped();
+    await expect(page.locator('#voice-record')).toBeFocused();
+
+    await fresh(); mode = 'held'; await record(); await delay(300); await stop(); await until(() => releaseRequest);
+    await page.getByRole('button', { name: 'Cancel dictation' }).click();
+    await until(() => uploads.at(-1).signal.aborted); await page.locator('#prompt').fill('User edit wins');
+    releaseRequest(); releaseRequest = undefined; await delay(200);
+    await expect(page.locator('#prompt')).toHaveValue('User edit wins');
+
+    await fresh(); mode = 'held'; await record(); await delay(300); await stop(); await until(() => releaseRequest);
+    await page.locator('#prompt').evaluate(input => { input.value = 'Changed without cancelling'; });
+    releaseRequest(); releaseRequest = undefined;
+    await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Changed without cancelling');
+
+    await fresh(); await record(); await page.getByRole('button', { name: 'Show sessions' }).click();
+    await page.getByRole('button', { name: /Voice Beta/ }).click(); await stopped(); await expect(page.locator('#voice-record')).toBeHidden();
+
+    await fresh(); mode = 'held'; await record(); await delay(300); await stop(); await until(() => releaseRequest);
+    states[0].model = 'anthropic/claude-test'; states[0].revision++;
+    agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
+    await expect(page.locator('#voice-record')).toBeHidden(); await until(() => uploads.at(-1).signal.aborted);
+    releaseRequest(); releaseRequest = undefined; await delay(200); await expect(page.locator('#prompt')).toHaveValue('');
+    states[0].model = 'openai-codex/gpt-5.4'; states[0].revision++;
+    agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
+
+    for (const failure of ['quota', 'malformed', 'oversized']) {
+      await fresh(); mode = failure; await page.locator('#prompt').fill('Kept on error'); await record(); await delay(300); await stop(); await stopped();
+      await expect(page.locator('#notice')).toContainText(failure === 'quota' ? 'quota' : failure === 'malformed' ? 'Could not transcribe' : 'invalid transcription');
+      await expect(page.locator('#prompt')).toHaveValue('Kept on error');
+      assert.ok(!(await page.locator('body').innerText()).includes('private-test'));
+    }
+    await fresh(); const beforeDenied = uploads.length;
+    await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Denied', 'NotAllowedError'); }; });
+    await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
+    await expect(page.locator('#notice')).toContainText('Microphone access was denied'); await stopped(); assert.equal(uploads.length, beforeDenied);
+
+    await fresh(); mode = 'auth-held'; await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click(); await until(() => releaseAuth);
+    await page.getByRole('button', { name: 'Cancel dictation' }).click(); releaseAuth(); releaseAuth = undefined; mode = 'ok'; await stopped();
+    await expect(page.locator('#notice')).toBeHidden();
+
+    const valid = { type: uploads[0].file.type, data: Buffer.from(await uploads[0].file.arrayBuffer()).toString('base64') };
+    for (const recording of [{ ...valid, type: 'text/plain' }, { ...valid, data: 'not base64!' }, { ...valid, data: Buffer.alloc(16).toString('base64') }, { ...valid, data: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64') }]) {
+      probe = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin);
+      await probe.request('watch', { sessionId: states[0].id }); const voiceId = randomUUID();
+      assert.equal((await probe.request('voiceStart', { sessionId: states[0].id, voiceId, format: 'recording' })).ok, true);
+      const before = uploads.length;
+      assert.equal((await probe.request('voiceFinish', { sessionId: states[0].id, voiceId, recording })).ok, false);
+      assert.equal(uploads.length, before); probe.ws.close();
+    }
+    probe = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin);
+    await probe.request('watch', { sessionId: states[1].id });
+    assert.equal((await probe.request('voiceStart', { sessionId: states[1].id, voiceId: randomUUID(), format: 'recording' })).ok, false);
+    await probe.request('watch', { sessionId: states[0].id }); const voiceId = randomUUID();
+    assert.equal((await probe.request('voiceStart', { sessionId: states[0].id, voiceId, format: 'recording' })).ok, true);
+    mode = 'held'; const pending = probe.request('voiceFinish', { sessionId: states[0].id, voiceId, recording: valid }).catch(() => {});
+    await until(() => releaseRequest); probe.ws.close(); await until(() => uploads.at(-1).signal.aborted);
+    releaseRequest(); releaseRequest = undefined; await pending;
+
+    await fresh();
+    assert.equal(await page.locator('#voice-record').evaluate(node => node.nextElementSibling.id), 'send');
+    await page.locator('.session-info summary').click(); await expect(page.locator('.session-details')).toBeVisible(); await page.locator('.session-info summary').click();
+    await page.locator('#prompt').fill('Keep while checking usage');
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      const ring = await page.locator('.conversation-actions #usage-meter').boundingBox(), menu = await page.locator('.session-info summary').boundingBox();
+      assert.ok(Math.abs(ring.y - menu.y) < 2 && ring.x + ring.width <= menu.x && ring.width >= 44);
+      await page.locator('#usage-meter').click(); await expect(page.locator('#settings-picker')).toContainText('32,000 / 100,000 tokens');
+      const header = await page.locator('.conversation-header').boundingBox(), panel = await page.locator('#settings-picker').boundingBox();
+      assert.ok(panel.y >= header.y + header.height && panel.y - header.y - header.height < 12);
+      await page.keyboard.press('Escape'); await expect(page.locator('#settings-picker')).toBeHidden();
+      await expect(page.locator('#prompt')).toHaveValue('Keep while checking usage');
+      await page.screenshot({ path: join(evidence, 'ready-' + width + '.png'), fullPage: true });
+    }
+    // New static assets must not expose incompatible recording controls before the old host restarts.
+    await page.routeWebSocket('**/ws', route => {
+      const upstream = route.connectToServer();
+      upstream.onMessage(raw => { const packet = JSON.parse(String(raw)); if (packet.type === 'ready') delete packet.voiceInput; route.send(JSON.stringify(packet)); });
+    });
+    await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
+    await page.getByRole('button', { name: /Voice Alpha/ }).click(); await expect(page.locator('#voice-record')).toBeHidden();
+    await page.locator('#prompt').fill('Old host can still send'); await page.getByRole('button', { name: 'Send message' }).click();
+    await until(() => commands.length === 2); assert.equal(commands[1].text, 'Old host can still send');
+  }
   assert.deepEqual(errors, []);
-  console.log(`PASS: recording layout, live waveform/silence, audio cleanup, voice draft/send, cancellation, edits, session switch, quota, startup race, partial failure, provider gate and disconnect. Evidence: ${evidence}`);
-} catch (error) {
-  const page = context?.pages()[0];
-  console.error('Voice proof failed:', { uploads: uploads.length, sockets: providerSockets.map(socket => socket.readyState), errors,
-    notice: await page?.locator('#notice').textContent().catch(() => ''), evidence });
-  throw error;
+  console.log(`PASS: ${liveFile ? 'live subscription transcription and silence' : 'real recording, waveform, Stop-to-draft, silent empty results, explicit Send, cancellation, errors, validation, isolation and disconnect'}. Evidence: ${evidence}`);
 } finally {
-  releaseOffer?.(); probe?.ws.terminate();
+  releaseRequest?.(); releaseAuth?.(); probe?.ws.terminate();
   if (context) await context.tracing.stop({ path: join(evidence, 'trace.zip') }).catch(() => {});
   await browser?.close(); agents.forEach(agent => agent.ws.terminate());
   await host?.close(); locks.forEach(lock => lock.release()); rmSync(dir, { recursive: true, force: true });

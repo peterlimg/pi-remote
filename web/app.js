@@ -461,7 +461,7 @@ function connect() {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
-      supportsVoice = packet.supportsVoice === true;
+      supportsVoice = packet.supportsVoice === true && packet.voiceInput === 'recording';
       if (supportsVoice) loadVoice();
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
