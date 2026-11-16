@@ -494,11 +494,11 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session-project { display: flex; align-items: center; min-width: 0; overflow: hidden; }
 .session-project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-state { flex-shrink: 0; white-space: nowrap; }
-.session-state[data-status=working] { color: var(--warning); }
+.session-state[data-status=working] { color: light-dark(#3d731c, #599c39); text-transform: lowercase; }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   @supports (background-clip: text) or (-webkit-background-clip: text) {
     /* Two identical bands make the loop boundary seamless, with no blank pause. */
-    .session-state[data-status=working] { --shimmer-base: light-dark(#8a5a16, #ba8540); --shimmer-highlight: light-dark(#4d3008, #ffe0a0); background-image: repeating-linear-gradient(90deg, var(--shimmer-base) 0%, var(--shimmer-highlight) 25%, var(--shimmer-base) 50%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: session-working-shimmer 1.4s linear infinite; }
+    .session-state[data-status=working] { --shimmer-base: light-dark(#3d731c, #599c39); --shimmer-highlight: light-dark(#234a0b, #9bdc62); background-image: repeating-linear-gradient(90deg, var(--shimmer-base) 0%, var(--shimmer-highlight) 25%, var(--shimmer-base) 50%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: session-working-shimmer 1.4s linear infinite; }
   }
 }
 @keyframes session-working-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }

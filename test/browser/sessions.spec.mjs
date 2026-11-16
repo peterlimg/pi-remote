@@ -153,7 +153,8 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(login).toHaveAccessibleName(/Working/);
   await expect(workingState).toHaveCSS('font-weight', '400');
   await expect(workingState).toHaveCSS('font-size', '14px');
-  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(138, 90, 22\) 0%, rgb\(77, 48, 8\) 25%, rgb\(138, 90, 22\) 50%\)/);
+  await expect(workingState).toHaveCSS('text-transform', 'lowercase');
+  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(61, 115, 28\) 0%, rgb\(35, 74, 11\) 25%, rgb\(61, 115, 28\) 50%\)/);
   await expect(workingState).toHaveCSS('background-size', '200% 100%');
   await expect(workingState).toHaveCSS('background-clip', 'text');
   await expect(workingState).toHaveCSS('opacity', '1');
@@ -186,7 +187,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(186, 133, 64\) 0%, rgb\(255, 224, 160\) 25%, rgb\(186, 133, 64\) 50%\)/);
+  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(89, 156, 57\) 0%, rgb\(155, 220, 98\) 25%, rgb\(89, 156, 57\) 50%\)/);
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile-dark.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await noOverflow();
@@ -206,7 +207,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(workingState).toHaveCSS('animation-name', 'none');
   await expect(workingState).toHaveCSS('background-image', 'none');
-  await expect(workingState).toHaveCSS('color', 'rgb(228, 192, 120)');
+  await expect(workingState).toHaveCSS('color', 'rgb(89, 156, 57)');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
   await page.screenshot({ path: testInfo.outputPath('working-bot-reduced-motion.png') });
