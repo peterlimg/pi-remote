@@ -153,11 +153,17 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(login).toHaveAccessibleName(/Working/);
   await expect(workingState).toHaveCSS('font-weight', '400');
   await expect(workingState).toHaveCSS('font-size', '14px');
-  await expect(workingState).toHaveCSS('color', 'rgb(119, 89, 26)');
-  await expect(workingState).toHaveCSS('background-image', 'none');
+  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(138, 90, 22\) 0%, rgb\(77, 48, 8\) 25%, rgb\(138, 90, 22\) 50%\)/);
+  await expect(workingState).toHaveCSS('background-size', '200% 100%');
+  await expect(workingState).toHaveCSS('background-clip', 'text');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingState.locator('*')).toHaveCount(0);
-  await expect(workingState).toHaveCSS('animation-name', 'none');
+  await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
+  await expect(workingState).toHaveCSS('animation-duration', '1.4s');
+  await expect(workingState).toHaveCSS('animation-timing-function', 'linear');
+  await expect(workingState).toHaveCSS('animation-play-state', 'running');
+  const position = await workingState.evaluate(node => getComputedStyle(node).backgroundPositionX);
+  await expect.poll(() => workingState.evaluate(node => getComputedStyle(node).backgroundPositionX)).not.toBe(position);
   expect(await workingState.evaluate(node => getComputedStyle(node, '::after').content)).toBe('none');
   // The leading bot keeps its size and position when the session finishes.
   const workingIcon = login.locator('.session-indicators .bot');
@@ -180,17 +186,23 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(workingState).toHaveCSS('color', 'rgb(228, 192, 120)');
+  await expect(workingState).toHaveCSS('background-image', /repeating-linear-gradient\(90deg, rgb\(186, 133, 64\) 0%, rgb\(255, 224, 160\) 25%, rgb\(186, 133, 64\) 50%\)/);
   await page.screenshot({ path: testInfo.outputPath('working-bot-mobile-dark.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
   publish(); // The leading working bot keeps its motion and unread badge across updates.
+  await expect(login.locator('time')).toHaveAttribute('datetime', new Date(states[0].updatedAt).toISOString());
   await expect(login.locator('.session-icon')).toHaveAttribute('data-unread', '');
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
   await expect(workingIcon.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
   await expect(workingState).toHaveText('Working');
+  // Rebuilt rows stay on the same clock instead of snapping to a new shimmer phase.
+  await expect.poll(() => workingState.evaluate(node => {
+    const animation = node.getAnimations()[0];
+    return Math.abs(Number(animation.currentTime) - animation.effect.getTiming().delay - performance.now());
+  })).toBeLessThan(150);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(workingState).toHaveCSS('animation-name', 'none');
   await expect(workingState).toHaveCSS('background-image', 'none');
@@ -199,12 +211,14 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
   await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-status-narrow.png') });
   await page.locator('.session').last().scrollIntoViewIfNeeded();
   await expect(page.locator('.session')).toHaveCount(40);
+  await expect(workingState).toHaveCSS('animation-play-state', 'paused');
   publish(); // Live updates keep the grown list.
   await expect(page.locator('.session')).toHaveCount(40);
   await page.getByRole('button', { name: 'Search sessions' }).click();

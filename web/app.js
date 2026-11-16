@@ -703,8 +703,8 @@ function sessionRow(item) {
   if (!['idle', 'saved'].includes(status)) {
     const label = el('span', statusLabels[status] || status, 'session-state');
     label.dataset.status = status;
-    // Keep the three-second sweep continuous when live updates rebuild the row.
-    if (status === 'working') label.style.animationDelay = `-${Date.now() % 3000}ms`;
+    // Use one monotonic clock so row rebuilds preserve the phase at any sweep duration.
+    if (status === 'working') label.style.animationDelay = `-${performance.now()}ms`;
     meta.append(label);
   }
   if (!isBlank(item.cwd)) {
@@ -2306,8 +2306,12 @@ function renderCoordinator(state) {
   $('coordinator-return').disabled = worker && !connected && !cache.has(role.coordinatorId);
   $('coordinator-worker-count').textContent = tasks.length;
   const summary = [], working = tasks.filter(workerRunning).length;
-  $('coordinator-worker-status').textContent = working ? working + ' working' : 'Idle';
-  $('coordinator-worker-status').dataset.working = String(working > 0);
+  const slots = $('coordinator-worker-slots');
+  // Keep running workers visible when old tasks outgrow the compact indicator.
+  slots.replaceChildren(...[...tasks].sort((a, b) => Number(workerRunning(b)) - Number(workerRunning(a))).slice(0, 8).map(task => {
+    const slot = el('i'); slot.dataset.working = String(workerRunning(task)); return slot;
+  }));
+  if (tasks.length > 8) slots.append(el('span', '+' + (tasks.length - 8)));
   if (working) summary.push(working + ' working');
   for (const [states, label] of [[['queued'], 'queued'], [['recovering'], 'recovering'], [['waiting'], 'needs answer'], [['reported'], 'ready'], [['unknown'], 'need inspection']]) {
     const count = tasks.filter(task => states.includes(task.state)).length;
