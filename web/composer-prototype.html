@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fafaf8">
+  <title>Writing options · Pi Remote</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/composer-prototype.css">
+  <script type="module" src="/composer-prototype.js"></script>
+</head>
+<body>
+  <main class="study" data-variant="A">
+    <header class="study-header">
+      <div><h1>Writing options</h1><p>Prototype only. Nothing is sent or saved.</p></div>
+      <button id="theme" class="quiet" aria-label="Toggle light and dark theme"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></svg></button>
+    </header>
+    <section class="conversation" aria-label="Sample conversation">
+      <header><strong>Improve the mobile composer</strong><span>pi-remote · sample session</span></header>
+      <p class="sample-user">Make it easier to write detailed prompts from my phone.</p>
+      <article class="sample-reply"><span>Pi</span><p>Keep quick messages quick. For longer instructions, give the draft more room and make code and lists easier to check.</p><p>What should the first version include?</p></article>
+      <article id="sample-sent" class="sample-user" hidden></article>
+    </section>
+    <section class="writing" aria-label="Draft editor">
+      <header class="writing-header">
+        <div><h2 id="writing-title">Your draft</h2><span id="writing-note">Stay in the conversation.</span></div>
+        <button id="collapse" class="quiet" hidden>Back to chat</button>
+      </header>
+      <div class="editor-layout">
+        <section class="source-pane" aria-label="Write Markdown">
+          <div class="editor-tabs">
+            <button id="write-tab" class="quiet" aria-pressed="true">Write</button>
+            <button id="preview-tab" class="quiet" aria-pressed="false">Preview</button>
+            <button id="expand" class="quiet" hidden>Expand draft</button>
+          </div>
+          <label class="sr-only" for="draft">Message draft</label>
+          <textarea id="draft" spellcheck="false" placeholder="Write a message…"></textarea>
+          <div id="inline-preview" class="rendered" aria-label="Draft preview" tabindex="0" hidden></div>
+          <div id="formatting" class="formatting" role="group" aria-label="Markdown formatting">
+            <button type="button" data-format="bold" aria-label="Bold selection"><strong>B</strong></button>
+            <button type="button" data-format="list">List</button>
+            <button type="button" data-format="code">Code</button>
+            <button type="button" data-format="quote">Quote</button>
+            <button type="button" data-format="link">Link</button>
+          </div>
+        </section>
+        <section class="preview-pane" aria-label="Live Markdown preview" hidden>
+          <header><h3>How it reads</h3><span>Live preview</span></header>
+          <div id="live-preview" class="rendered" tabindex="0"></div>
+        </section>
+      </div>
+      <footer class="writing-footer">
+        <button id="format-toggle" class="quiet" aria-label="Show formatting" aria-expanded="false">Aa</button>
+        <span class="model-sample">Sample model <span>· High</span></span>
+        <button id="reset" class="quiet">Reset</button>
+        <button id="send" aria-label="Try sending in prototype"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+      </footer>
+    </section>
+    <p id="feedback" role="status">Sample draft. Changes stay here until you reload.</p>
+    <nav class="variant-switcher" aria-label="Compare writing options">
+      <button id="previous" aria-label="Previous option"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+      <div><strong id="variant-label" aria-live="polite"></strong><small id="variant-description"></small></div>
+      <button id="next" aria-label="Next option"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+    </nav>
+  </main>
+</body>
+</html>
