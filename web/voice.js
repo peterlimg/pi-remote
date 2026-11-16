@@ -4,8 +4,8 @@ export function voiceComposer({ request, context, changed, notice }) {
   const input = document.getElementById('prompt');
   const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
   let active;
-  const mimeType = ['audio/webm;codecs=opus', 'audio/mp4'].find(type => window.MediaRecorder?.isTypeSupported(type));
-  const supported = () => !!(window.isSecureContext && mimeType && navigator.mediaDevices?.getUserMedia);
+  const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+  const transcript = call => [...call.turns.values(), call.partial].filter(Boolean).join(' ').trim();
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
     panel.hidden = !active;
@@ -19,7 +19,7 @@ export function voiceComposer({ request, context, changed, notice }) {
     button.setAttribute('aria-pressed', String(!!active));
     button.dataset.recording = String(active?.phase === 'recording');
     button.disabled = !!active && active.phase !== 'recording';
-    status.textContent = active?.phase === 'recording' ? 'Recording · sent to OpenAI on Stop' : active?.phase === 'finishing' ? 'Transcribing…' : 'Preparing microphone…';
+    status.textContent = active?.phase === 'recording' ? 'Listening · directly connected to OpenAI' : active?.phase === 'finishing' ? 'Finishing transcription…' : 'Connecting to ChatGPT…';
     changed();
   }
   function stopMeter(call) {
@@ -58,21 +58,31 @@ export function voiceComposer({ request, context, changed, notice }) {
   }
   function release(call) {
     stopMeter(call);
-    clearTimeout(call.timer);
-    if (call.recorder?.state === 'recording') call.recorder.stop();
+    clearTimeout(call.timer); clearTimeout(call.connectTimer); clearTimeout(call.drainTimer);
     call.stream?.getTracks().forEach(track => track.stop());
-    call.chunks = [];
+    call.rejectConnection?.(new Error('Dictation cancelled.'));
+    if (call.started) void request('voiceCancel', { sessionId: call.sessionId, voiceId: call.id }).catch(() => {});
+    const peer = call.peer, channel = call.channel;
+    if (!peer) return;
+    peer.onconnectionstatechange = null;
+    if (channel) { channel.onopen = null; channel.onmessage = null; channel.onclose = null; channel.onerror = null; }
+    if (channel?.readyState !== 'open') { peer.close(); return; }
+    let timer;
+    const close = () => { clearTimeout(timer); channel.onmessage = null; channel.onclose = null; peer.close(); };
+    channel.onmessage = event => { try { if (JSON.parse(event.data).type === 'session.closed') close(); } catch {} };
+    channel.onclose = close;
+    timer = setTimeout(close, 1000);
+    try { channel.send(JSON.stringify({ type: 'session.close' })); } catch { close(); }
   }
   function cancel() {
     const call = active;
     if (!call) return;
     const restoreFocus = [button, cancelButton].includes(document.activeElement);
     active = undefined; release(call);
-    if (call.started) void request('voiceCancel', { sessionId: call.sessionId, voiceId: call.id }).catch(() => {});
     render();
     if (restoreFocus && !button.hidden) button.focus({ preventScroll: true });
   }
-  function insert(call, text) {
+  function insert(call, text, message) {
     if (!current(call)) return;
     // An edit during capture owns the draft; never insert late text into a changed draft.
     if (input.value !== call.draft) { cancel(); return; }
@@ -87,37 +97,50 @@ export function voiceComposer({ request, context, changed, notice }) {
     render();
     if (words) input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus({ preventScroll: true });
+    if (message) notice(message, call.sessionId);
   }
-  async function finish() {
+  function interrupted(call, message) {
+    if (!current(call)) return;
+    if (call.phase === 'connecting') { cancel(); notice(message, call.sessionId); }
+    else insert(call, transcript(call).slice(0, 16000), message);
+  }
+  function settled(call) {
+    if (current(call) && call.phase === 'finishing' && call.drained && call.turns.size && !call.partial) {
+      insert(call, transcript(call));
+    }
+  }
+  function providerEvent(call, raw) {
+    if (!current(call)) return;
+    try {
+      if (typeof raw !== 'string' || raw.length > 128 * 1024) throw new Error();
+      const event = JSON.parse(raw);
+      if (event.type === 'error' || event.type === 'session.closed') throw new Error();
+      if (event.type === 'input_transcript.added' && typeof event.item?.text === 'string') call.partial += event.item.text;
+      else if (event.type === 'turn.done' && event.turn?.role === 'user' && typeof event.turn.transcript === 'string') {
+        if (event.turn.id && call.turns.has(event.turn.id)) return;
+        if (event.turn.transcript.trim()) call.turns.set(event.turn.id || String(call.turns.size), event.turn.transcript.trim());
+        call.partial = '';
+      } else return; // Ignore assistant audio/text and tool requests; never forward them to the host.
+      if (transcript(call).length > 16000) { interrupted(call, 'Dictation is too long. Check the draft before sending.'); return; }
+      settled(call);
+    } catch { interrupted(call, 'Dictation was interrupted. Check the draft before sending.'); }
+  }
+  function finish() {
     const call = active;
     if (!call || call.phase !== 'recording') return;
     call.phase = 'finishing'; clearTimeout(call.timer); stopMeter(call);
-    call.timer = setTimeout(() => { if (current(call)) { cancel(); notice('Dictation timed out. Try again.', call.sessionId); } }, 25000);
-    try {
-      const stopped = new Promise(resolve => call.recorder.addEventListener('stop', resolve, { once: true }));
-      call.recorder.stop(); call.stream.getTracks().forEach(track => track.stop()); render();
-      await stopped;
-      if (!current(call)) return;
-      const blob = new Blob(call.chunks, { type: call.recorder.mimeType }); call.chunks = [];
-      if (!blob.size) { cancel(); return; }
-      if (blob.size > 2 * 1024 * 1024) throw new Error('Recording is too large. Try a shorter recording.');
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]);
-        reader.onerror = () => reject(new Error('Could not read the recording. Try again.')); reader.readAsDataURL(blob);
-      });
-      if (!current(call)) return;
-      const result = await request('voiceFinish', { sessionId: call.sessionId, voiceId: call.id,
-        recording: { type: blob.type.split(';')[0], data } });
-      insert(call, result.text);
-    } catch (error) {
-      if (current(call)) { cancel(); notice(error.message || 'Could not transcribe the recording. Try again.', call.sessionId); }
-    }
+    call.stream.getTracks().forEach(track => track.stop()); render();
+    // shortcut: no verified flush; replace this Stop-based drain when a finalization contract is available.
+    call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
+    call.timer = setTimeout(() => {
+      if (current(call)) insert(call, transcript(call), call.partial.trim() ? 'Transcription ended before confirmation. Check the draft before sending.' : '');
+    }, 8000);
   }
   async function start() {
     if (active) return;
     const state = context();
     if (!state.enabled || !supported()) return;
-    const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'connecting', chunks: [], bytes: 0 };
+    const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'connecting', turns: new Map(), partial: '' };
     input.blur(); notice(''); render(); cancelButton.focus({ preventScroll: true });
     // Start Web Audio inside the tap gesture so Safari can render the microphone level.
     try { call.audio = new AudioContext(); void call.audio.resume().catch(() => {}); } catch {}
@@ -125,18 +148,31 @@ export function voiceComposer({ request, context, changed, notice }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
       if (!current(call)) { stream.getTracks().forEach(track => track.stop()); return; }
       call.stream = stream;
-      call.started = true;
-      await request('voiceStart', { sessionId: call.sessionId, voiceId: call.id, format: 'recording' });
-      if (!current(call)) return;
-      const recorder = call.recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 });
-      recorder.ondataavailable = event => {
-        if (!current(call)) return;
-        call.bytes += event.data.size;
-        if (call.bytes > 2 * 1024 * 1024) { cancel(); notice('Recording is too large. Try a shorter recording.', call.sessionId); return; }
-        call.chunks.push(event.data);
+      stream.getTracks().forEach(track => { track.enabled = false; });
+      const peer = call.peer = new RTCPeerConnection();
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      const channel = call.channel = peer.createDataChannel('oai-events');
+      channel.onmessage = event => providerEvent(call, event.data);
+      channel.onclose = channel.onerror = () => interrupted(call, 'Voice connection lost. Check the draft before sending.');
+      peer.onconnectionstatechange = () => {
+        if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) interrupted(call, 'Voice connection lost. Check the draft before sending.');
       };
-      recorder.onerror = () => { if (current(call)) { cancel(); notice('Microphone recording failed. Try again.', call.sessionId); } };
-      recorder.start(250); call.phase = 'recording';
+      const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
+      if (!current(call)) return;
+      call.started = true;
+      const { sdp } = await request('voiceStart', { sessionId: call.sessionId, voiceId: call.id, format: 'webrtc-direct', sdp: offer.sdp });
+      if (!current(call)) return;
+      await peer.setRemoteDescription({ type: 'answer', sdp });
+      if (!current(call)) return;
+      await new Promise((resolve, reject) => {
+        call.rejectConnection = reject;
+        const ready = () => { clearTimeout(call.connectTimer); resolve(); };
+        call.connectTimer = setTimeout(() => reject(new Error('Voice connection timed out. Try again.')), 10000);
+        channel.onopen = ready; if (channel.readyState === 'open') ready();
+      });
+      if (!current(call)) return;
+      call.rejectConnection = undefined;
+      call.phase = 'recording'; stream.getTracks().forEach(track => { track.enabled = true; });
       if (call.audio) {
         try {
           call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 1024;

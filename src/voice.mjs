@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
-const TRANSCRIBE_URL = 'https://chatgpt.com/backend-api/transcribe';
-const MAX_AUDIO = 2 * 1024 * 1024, MAX_TEXT = 16000;
+const CALL_URL = 'https://chatgpt.com/backend-api/codex/realtime/calls?intent=quicksilver&architecture=avas';
 let activeCalls = 0;
 const failure = message => Object.assign(new Error(message), { public: true });
 
@@ -20,28 +20,19 @@ export async function readVoiceAuth() {
   } catch { throw failure('Sign in to Codex with ChatGPT on your computer, then try dictation again.'); }
 }
 
-async function boundedText(response, max) {
+async function readAnswer(response) {
   let size = 0; const chunks = [];
   for await (const chunk of response.body) {
     size += chunk.length;
-    if (size > max) throw failure('ChatGPT returned an invalid transcription. Try again.');
+    if (size > 256 * 1024) throw failure('ChatGPT returned an invalid voice connection. Try again.');
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString('utf8');
+  const sdp = Buffer.concat(chunks).toString('utf8');
+  if (!sdp.startsWith('v=0') || !/^m=audio /m.test(sdp) || !/^m=application /m.test(sdp)) throw failure('ChatGPT returned an invalid voice connection. Try again.');
+  return sdp;
 }
 
-function recordingFile(recording) {
-  if (!recording || !['audio/mp4', 'audio/webm'].includes(recording.type) || typeof recording.data !== 'string' ||
-    recording.data.length > Math.ceil(MAX_AUDIO / 3) * 4 || recording.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(recording.data)) {
-    throw failure('Invalid voice recording.');
-  }
-  const audio = Buffer.from(recording.data, 'base64');
-  const valid = recording.type === 'audio/mp4' ? audio.toString('ascii', 4, 8) === 'ftyp' : audio.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
-  if (!valid || audio.length < 12 || audio.length > MAX_AUDIO || audio.toString('base64') !== recording.data) throw failure('Invalid voice recording.');
-  return new Blob([audio], { type: recording.type });
-}
-
-// One bounded recording per authenticated phone connection; uploads are never written to disk.
+// Authorize SDP only. Audio and transcripts use the browser's direct WebRTC connection, never a host sideband.
 export class VoiceSession {
   constructor({ emit, readAuth = readVoiceAuth, fetchImpl = fetch }) {
     Object.assign(this, { emit, readAuth, fetchImpl });
@@ -51,11 +42,13 @@ export class VoiceSession {
     const call = this.call;
     if (!call || id !== undefined && call.id !== id) return;
     this.call = undefined; activeCalls--;
-    clearTimeout(call.deadline); clearTimeout(call.requestTimer);
-    call.controller.abort();
+    clearTimeout(call.deadline); call.controller.abort();
   }
-  async start({ id, sessionId, model, format }) {
-    if (format !== 'recording' || typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id)) throw failure('Refresh Pi Remote to use dictation.');
+  async start({ id, sessionId, model, format, sdp }) {
+    if (format !== 'webrtc-direct' || typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id)) throw failure('Refresh Pi Remote to use dictation.');
+    if (typeof sdp !== 'string' || sdp.length > 128 * 1024 || !sdp.startsWith('v=0') ||
+      (sdp.match(/^m=audio /gm) || []).length !== 1 || (sdp.match(/^m=application /gm) || []).length !== 1 ||
+      /^m=(?!audio |application )/m.test(sdp)) throw failure('Invalid voice connection.');
     if (this.call) throw failure('Finish or cancel the current dictation first.');
     if (activeCalls >= 4 || Date.now() - (this.lastStart || 0) < 3000) throw failure('Please wait a moment before recording again.');
     this.lastStart = Date.now(); activeCalls++;
@@ -66,27 +59,16 @@ export class VoiceSession {
     }, 150000);
     call.deadline.unref();
     try {
-      call.auth = await this.readAuth();
+      const { token, account } = await this.readAuth();
       if (this.call !== call) throw failure('Dictation cancelled.');
-      return {};
-    } catch (error) {
-      if (this.call === call) this.cancel(id);
-      throw error.public ? error : failure('Could not start ChatGPT dictation. Try again.');
-    }
-  }
-  async finish(id, recording) {
-    const call = this.call;
-    if (!call || call.id !== id) throw failure('Dictation is no longer active.');
-    if (call.finishing) throw failure('Dictation is already finishing.');
-    if (!call.auth) throw failure('Dictation is not ready.');
-    call.finishing = true;
-    try {
-      const file = recordingFile(recording), form = new FormData();
-      form.append('file', file, recording.type === 'audio/mp4' ? 'audio.m4a' : 'audio.webm');
-      call.requestTimer = setTimeout(() => call.controller.abort(), 20000);
-      const response = await this.fetchImpl(TRANSCRIBE_URL, {
-        method: 'POST', headers: { Authorization: `Bearer ${call.auth.token}`, 'ChatGPT-Account-Id': call.auth.account, 'User-Agent': 'pi-remote/0.1' },
-        body: form, signal: call.controller.signal, redirect: 'error'
+      const response = await this.fetchImpl(CALL_URL, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'chatgpt-account-id': account,
+          'OpenAI-Alpha': 'quicksilver=v2', 'User-Agent': 'pi-remote/0.1', 'Content-Type': 'application/json',
+          'session-id': randomUUID(), 'thread-id': randomUUID(), 'x-session-id': randomUUID() },
+        body: JSON.stringify({ sdp, session: { model: 'gpt-live-1-codex',
+          instructions: 'Transcribe the user speech accurately. Do not answer the user, speak, or call tools.',
+          audio: { output: { voice: 'cove' } }, delegation: { type: 'client', ack_filler: false } } }),
+        signal: AbortSignal.any([call.controller.signal, AbortSignal.timeout(15000)]), redirect: 'error'
       });
       if (!response.ok) {
         await response.body?.cancel();
@@ -94,12 +76,12 @@ export class VoiceSession {
           response.status === 403 ? 'This ChatGPT account cannot use dictation.' :
           response.status === 429 ? 'ChatGPT voice quota is unavailable. Try later; no paid API fallback was used.' : 'ChatGPT dictation is unavailable. Try again.');
       }
-      const result = JSON.parse(await boundedText(response, 128 * 1024));
+      const answer = await readAnswer(response);
       if (this.call !== call) throw failure('Dictation cancelled.');
-      if (typeof result?.text !== 'string' || result.text.length > MAX_TEXT) throw failure('ChatGPT returned an invalid transcription. Try again.');
-      return { text: result.text.trim() };
+      return { sdp: answer };
     } catch (error) {
-      throw error.public ? error : failure(call.controller.signal.aborted ? 'Dictation was cancelled or timed out. Try again.' : 'Could not transcribe the recording. Try again.');
-    } finally { if (this.call === call) this.cancel(id); }
+      if (this.call === call) this.cancel(id);
+      throw error.public ? error : failure('Could not start ChatGPT dictation. Try again.');
+    }
   }
 }

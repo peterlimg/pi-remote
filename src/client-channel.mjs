@@ -109,7 +109,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsVoice: true, voiceInput: 'recording', supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsVoice: true, voiceInput: 'webrtc-direct', supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -124,10 +124,7 @@ export function attachClient(socket, service, { pairing } = {}) {
           value = message.op === 'ping' ? { pong: true } : { viewing: message.viewingSessionId };
         } else if (message.op === 'voiceStart') {
           const state = voiceState(message.sessionId);
-          value = await voice.start({ id: message.voiceId, sessionId: message.sessionId, model: state.model, format: message.format });
-        } else if (message.op === 'voiceFinish') {
-          voiceState(message.sessionId);
-          value = await voice.finish(message.voiceId, message.recording);
+          value = await voice.start({ id: message.voiceId, sessionId: message.sessionId, model: state.model, format: message.format, sdp: message.sdp });
         } else if (message.op === 'voiceCancel') {
           if (typeof message.voiceId !== 'string') throw new Error('Invalid dictation id.');
           voice.cancel(message.voiceId);

@@ -1,27 +1,37 @@
 # ChatGPT dictation
 
-Select a live `openai-codex` model, then tap the microphone beside Send. Recording starts locally without opening a realtime conversation. The keyboard closes and the composer becomes a Cancel, waveform, and Stop bar. The waveform grows from the right, scrolls continuously, and follows microphone volume, not transcription progress.
+Select a live `openai-codex` model, then tap the microphone beside Send. Once connected, the phone streams microphone audio directly to OpenAI over WebRTC. Transcripts return directly to the phone's data channel. The Mac exchanges connection metadata using its Codex login; it does not upload audio or receive transcripts before Send.
 
-Stop ends the recording and submits the complete clip for transcription. The returned text goes into the editable draft; Send remains separate. Empty results leave the draft unchanged without a warning. There is no fixed silence-drain delay, but upload and provider processing still take time.
+```text
+Phone ── connection offer ──→ Mac ── subscription authorization ──→ OpenAI
+Phone ←──────────────────── connection answer ────────────────────────┘
+Phone ═════════════════════ audio directly ═════════════════════→ OpenAI
+Phone ←═══════════════════ transcript directly ═══════════════════════┘
+Phone draft ── user taps Send ──→ Mac chat session
+```
 
-## Account and transport
+The keyboard closes while recording, and the composer becomes a Cancel, waveform, and Stop bar. The waveform grows from the right, scrolls continuously, and follows microphone volume, not transcription progress.
 
-The computer needs a current ChatGPT sign-in saved by Codex in `CODEX_HOME/auth.json`, or `~/.codex/auth.json` by default. Pi Remote uses that account, which may differ from Pi's selected account. Expired credentials require a fresh Codex login; keychain-only credentials are not supported.
+Stop ends microphone capture and waits for final user text. The text goes into the editable draft; Send remains separate. Empty results preserve the draft silently. Assistant speech, assistant text, and tool requests from the voice service are ignored, never played or sent to the chat agent.
 
-The browser records WebM/Opus or MP4 audio in memory. On Stop it sends the clip through Pi Remote's authenticated command channel to the host, which submits it to ChatGPT's subscription `/backend-api/transcribe` endpoint. Remote relay connections retain the existing sealed transport. Audio is not saved to disk by Pi Remote, and durable credentials never enter browser JavaScript.
+## Account and privacy
 
-This is the dedicated dictation route found in OpenAI's historical Codex source, not a request to the selected reasoning model. It never falls back to a Platform API key, another provider, or local speech recognition. Claude and API-key-only OpenAI models do not show the microphone. No realtime assistant response is generated or played.
+The Mac needs a current ChatGPT sign-in saved by Codex in `CODEX_HOME/auth.json`, or `~/.codex/auth.json` by default. Pi Remote uses that account, which may differ from Pi's selected account. Expired credentials require a fresh Codex login; keychain-only credentials are not supported. Durable credentials remain on the Mac.
 
-## Limits and cancellation
+This subscription route uses the separate `gpt-live-1-codex` speech/conversation model, not the selected reasoning model. OpenAI performs recognition in the cloud, not offline on the phone. Pi Remote does not persist recordings or send audio through its host or optional relay. There is no host transcript sideband or file-upload fallback. Claude and API-key-only OpenAI models do not show the microphone.
 
-Recording requires HTTPS or localhost, microphone permission, and MediaRecorder support for WebM or MP4. Clips are limited to two minutes and 2 MiB. The host limits transcription requests to 20 seconds; the browser also bounds the finishing phase.
+## Timing and cleanup
 
-Cancel, Escape, session/model changes, leaving the page, and disconnects stop recording or cancel a pending upload. Late results never overwrite a changed draft. Provider and microphone errors remain visible; an empty transcript is not an error.
+This route has no verified immediate transcription-flush command. The browser allows at least 1.8 seconds after Stop for in-flight speech, then uses final user text when no partial remains. Transcript events do not restart that wait. After eight seconds it keeps any unconfirmed text with a review warning; an empty result stays silent. Silent clips can therefore take the full eight seconds. The [direct-browser probes](research/phone-direct-dictation.md) measured complete speech about 2.1–2.3 seconds after Stop, not guaranteed phone performance.
+
+Capture requires HTTPS or localhost, WebRTC, and microphone permission. The browser stops capture after two minutes. Cancel, Escape, session/model changes, leaving the page, and host disconnects stop the microphone and close the browser connection. Late results never overwrite a changed draft. Connection/provider failures preserve recognized text with a warning.
+
+The browser sends `session.close` directly and waits up to one second for acknowledgement before closing its peer. The host cancels pending signaling and expires its local reservation after 150 seconds; it does not open an audio/transcript sideband to force remote closure. Remote retirement cannot be confirmed if the browser disappears or setup is cancelled before a usable data channel exists.
 
 ## Verification
 
-Run `npm run test:voice`. The isolated host/browser test uses real MediaRecorder encoding and synthetic microphone audio, with only the external transcription HTTP request simulated. It covers waveform motion, quiet audio and silence, recording cleanup, prompt-safe cancellation, full-clip upload, draft insertion, explicit Send, silent empty results, provider errors, invalid/oversized uploads, session/model isolation, disconnect cleanup, and compatibility during host upgrades.
+Run `npm run test:voice`. It drives the real isolated host and browser UI with synthetic microphone audio and simulated external SDP/WebRTC. It checks direct-channel transcripts, outgoing host-message shapes, absence of transcript traffic before Send, waveform behavior, silent empty results, trailing words, duplicate finals, unconfirmed text, cancellation, error sanitization, SDP bounds, provider isolation, disconnect cleanup, and compatibility during host upgrades.
 
-To explicitly test the real subscription with a synthetic WAV speaking “The orange bicycle is parked beside the library.”, run `npm run test:voice -- --live-file /path/to/synthetic-speech.wav`. This uses the host's existing Codex login and makes two real transcription requests, one for speech and one for silence. It reports complete Stop-to-draft timing, not only the time after a provider event. No prompt is sent to the chat agent.
+For real browser-to-OpenAI verification, explicitly run `npm run test:voice -- --live-file /path/to/synthetic-speech.wav`, using a WAV saying “The orange bicycle is parked beside the library.” This uses the host's existing Codex subscription login, opens two real WebRTC calls, and checks speech plus a silent timeout. It reports complete Stop-to-draft timing, confirms close acknowledgements, and verifies that no transcript crosses the host command channel and no chat prompt is sent.
 
-Physical iPhone recording and performance still need device verification. A successful OAuth request does not establish unlimited access, zero extra cost, or a stable public API contract. See [dictation finalization verification](research/dictation-finalization.md).
+Physical iPhone/Safari capture and performance still need device verification. OAuth success does not establish unlimited access, zero extra cost, or a stable public API contract.
