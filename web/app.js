@@ -674,7 +674,7 @@ function loadMore() {
   if (!connected || listLoading || listError || listLoaded < listLimit || listLoaded >= listMatched) return;
   listLimit += 20; loadList();
 }
-const isUnread = item => item.previewRole !== 'user' && item.updatedAt > seen[item.id];
+const isUnread = item => sessionActivity(item) !== 'working' && item.previewRole !== 'user' && item.updatedAt > seen[item.id];
 function sessionRow(item) {
   const button = el('button', undefined, 'session' + (item.id === selected ? ' active' : ''));
   button.type = 'button'; button.dataset.id = item.id; button.dataset.swipe = item.pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-current', String(item.id === selected));
@@ -1072,7 +1072,6 @@ function sessionKind(item) {
   if (choice.type === 'custom' && choice.icon) return { type: 'custom', emoji: choice.icon, label: `Session icon: ${choice.icon}` };
   if (Object.hasOwn(sessionKinds, choice.type)) return { type: choice.type, label: sessionKinds[choice.type][0], id: item.id };
 }
-// Activity outranks a new reply: a working bot keeps moving and wears the unread badge.
 function dressKind(node, kind, size, status, unread = false) {
   node.dataset.kind = kind.type;
   if (kind.emoji) node.textContent = kind.emoji;

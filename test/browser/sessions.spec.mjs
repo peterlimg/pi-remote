@@ -9,7 +9,7 @@ test('sessions sort by your last prompt without jumping during background activi
     [{ id: 'prompt-' + name, role: 'user', text: 'Begin ' + name, timestamp: time - i * 60000 }]),
     { status: 'working', updatedAt: time - i * 60000 }));
   const service = Object.assign(Object.create(SessionService.prototype),
-    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true,
+    { catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(), closedSessions: new Set(), warnings: [], allowResume: true, assistant: { id: 'assistant' },
       coordination: { taskForSession: () => undefined, describe: () => undefined } });
   const publish = () => {
     const update = scroll.active ? scroll.update() : service.list();
@@ -192,11 +192,11 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await noOverflow();
   await page.screenshot({ path: testInfo.outputPath('working-bot-desktop-dark.png') });
   states[0].updatedAt = now + 1000;
-  publish(); // The leading working bot keeps its motion and unread badge across updates.
+  publish(); // The leading working bot keeps its motion without an unread badge across updates.
   await expect(login.locator('time')).toHaveAttribute('datetime', new Date(states[0].updatedAt).toISOString());
-  await expect(login.locator('.session-icon')).toHaveAttribute('data-unread', '');
+  await expect(login.locator('.session-icon[data-unread]')).toHaveCount(0);
   await expect(workingIcon).toHaveAttribute('data-mood', 'working');
-  await expect(workingIcon.locator('.bot-badge circle')).toHaveCSS('fill', 'rgb(10, 132, 255)');
+  await expect(workingIcon.locator('.bot-badge')).toHaveCount(0);
   await expect(workingState).toHaveText('Working');
   // Rebuilt rows stay on the same clock instead of snapping to a new shimmer phase.
   await expect.poll(() => workingState.evaluate(node => {
@@ -209,7 +209,7 @@ test('compact same-project sessions show tasks and aligned bots without overflow
   await expect(workingState).toHaveCSS('color', 'rgb(228, 192, 120)');
   await expect(workingState).toHaveCSS('opacity', '1');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'none');
-  await page.screenshot({ path: testInfo.outputPath('working-bot-unread-reduced-motion.png') });
+  await page.screenshot({ path: testInfo.outputPath('working-bot-reduced-motion.png') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(workingState).toHaveCSS('animation-name', 'session-working-shimmer');
   await expect(workingIcon.locator('.bot-figure')).toHaveCSS('animation-name', 'bot-bob');
