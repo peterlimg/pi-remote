@@ -61,7 +61,7 @@ try {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   await context.addInitScript(({ audio64, sdp }) => {
     if (!navigator.mediaDevices) return;
-    window.voiceTracks = []; window.voiceContexts = []; window.voicePeers = []; window.voiceSent = []; window.voiceClosed = 0;
+    window.voiceTracks = []; window.voiceContexts = []; window.voicePeers = []; window.voiceSent = []; window.voiceClosed = 0; window.voiceEvents = [];
     const NativeAudioContext = window.AudioContext, NativePeer = window.RTCPeerConnection;
     window.AudioContext = class extends NativeAudioContext {
       constructor(...args) { super(...args); window.voiceContexts.push(this); }
@@ -72,7 +72,7 @@ try {
         const source = audio.createBufferSource();
         source.buffer = await audio.decodeAudioData(Uint8Array.from(atob(audio64), c => c.charCodeAt(0)).buffer);
         source.connect(destination);
-        window.playVoiceSample = () => new Promise(resolve => { source.onended = resolve; source.start(); });
+        window.playVoiceSample = () => new Promise(resolve => { source.onended = () => { window.voiceAudioEndedAt = performance.now(); resolve(); }; source.start(); });
       } else {
         const oscillator = audio.createOscillator(), gain = window.voiceGain = audio.createGain();
         gain.gain.value = .15; oscillator.connect(gain); gain.connect(destination); oscillator.start();
@@ -84,7 +84,11 @@ try {
         constructor(...args) { super(...args); window.voicePeers.push(this); }
         createDataChannel(...args) {
           const channel = super.createDataChannel(...args);
-          channel.addEventListener('message', event => { try { if (JSON.parse(event.data).type === 'session.closed') window.voiceClosed++; } catch {} });
+          channel.addEventListener('message', event => { try {
+            const packet = JSON.parse(event.data);
+            if (packet.type === 'session.closed') window.voiceClosed++;
+            if (['input_transcript.added', 'turn.done', 'error'].includes(packet.type)) window.voiceEvents.push({ at: performance.now(), type: packet.type, role: packet.turn?.role, id: packet.turn?.id, text: packet.type === 'input_transcript.added' ? packet.item?.text : packet.turn?.role === 'user' ? packet.turn.transcript : undefined });
+          } catch {} });
           return channel;
         }
       };
@@ -141,9 +145,14 @@ try {
   if (liveFile) {
     await page.evaluate(() => window.playVoiceSample());
     const started = performance.now(); await stop(); await stopped();
-    await expect(page.locator('#voice-status')).toBeHidden({ timeout: 10000 });
+    try { await expect(page.locator('#voice-status')).toBeHidden({ timeout: 6000 }); }
+    catch (error) {
+      console.log(JSON.stringify({ liveDiagnostics: await page.evaluate(() => window.voiceEvents.slice(-15).map(({ at, ...event }) => ({ ...event, afterAudioEndMs: Math.round(at - window.voiceAudioEndedAt) }))) }));
+      throw error;
+    }
+    await expect(page.locator('#notice')).toBeHidden();
     const text = await page.locator('#prompt').inputValue();
-    assert.match(text, /Keep this draft\. The orange bicycle is parked beside the library[.!]?$/i);
+    assert.match(text, /^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i);
     console.log(JSON.stringify({ live: true, stopToDraftMs: Math.round(performance.now() - started), text, promptsSent: commands.length }));
     assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('orange bicycle'));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
