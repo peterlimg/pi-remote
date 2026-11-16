@@ -1,5 +1,7 @@
 // Separate pane studies share this static route without touching live chat.
-if (new URL(location.href).searchParams.get('study') === 'panes') {
+if (new URL(location.href).searchParams.get('study') === 'control') {
+  await WorkerControlStudy();
+} else if (new URL(location.href).searchParams.get('study') === 'panes') {
   const content = document.getElementById('worker-pane-study').content.cloneNode(true);
   content.querySelector('#pane-composer-slot').replaceWith(document.getElementById('composer'));
   document.body.replaceChildren(content);
@@ -405,6 +407,89 @@ new ResizeObserver(([entry]) => { if (entry.contentRect.width !== promptWidth) {
 addEventListener('resize', updateViewport); visualViewport?.addEventListener('resize', updateViewport); visualViewport?.addEventListener('scroll', updateViewport);
 renderSelected(); updateViewport();
 
+}
+
+async function WorkerControlStudy() {
+  // Three UI-only indicators at ?study=control&variant=A|B|C. No session transport or storage.
+  const content = document.getElementById('worker-control-study').content.cloneNode(true);
+  document.body.replaceChildren(content);
+  document.body.dataset.study = 'control';
+  const $ = id => document.getElementById(id), root = document.documentElement;
+  const variants = {
+    A: ['Status light', 'A hollow circle means none running. A turning ring means work is in progress.'],
+    B: ['Running count', 'The badge counts running workers, including zero. No extra status sentence.'],
+    C: ['Worker slots', 'One mark per worker. Filled marks are running; outlines are not running.']
+  };
+  const params = new URL(location.href).searchParams;
+  let variant = Object.hasOwn(variants, params.get('variant')) ? params.get('variant') : 'A';
+  let running = ['0', '1', '2'].includes(params.get('running')) ? Number(params.get('running')) : 0;
+  root.dataset.theme = 'dark';
+  try {
+    const response = await fetch('/');
+    if (!response.ok) throw new Error('Controls unavailable');
+    const source = new DOMParser().parseFromString(await response.text(), 'text/html');
+    $('control-main-slot').replaceWith(document.importNode(source.querySelector('main'), true));
+    document.body.append(document.importNode(source.getElementById('coordinator-sheet'), true));
+    $('empty').hidden = true;
+    for (const id of ['transcript', 'composer', 'model', 'reasoning-control', 'fast-mode', 'voice-record', 'coordinator-context', 'session-swipe', 'status-line']) $(id).hidden = false;
+    $('title').textContent = 'Workers control';
+    $('project-name').textContent = 'Design prototype'; $('project-name').hidden = false;
+    $('model-name').textContent = 'GPT-6 Astra'; $('reasoning-value').textContent = 'High';
+    $('prompt').placeholder = 'Message Pi…'; $('send').hidden = true;
+    $('status-line').textContent = 'Sample conversation · no agents connected';
+    $('session-dots').innerHTML = '<div class="session-dots-track"><i></i><i></i><i></i><i></i><b></b></div>';
+    $('back').onclick = () => location.assign('/');
+    document.querySelector('.session-details').innerHTML = '<p>Design preview only. No live session is loaded.</p>';
+    $('transcript').innerHTML = '<article class="message user"><div class="message-text"><p>Keep the original position. Make Workers smaller, and show when something is running.</p></div></article><article class="message assistant"><div class="message-text"><p>Compare the three indicators below. The label, composer, and session dots stay in the same place.</p><p id="control-description"></p><p class="hint">Sample data: two workers. Tap the control to inspect their states.</p></div></article>';
+    const trigger = $('coordinator-open'), arrow = trigger.querySelector('svg').cloneNode(true);
+    function render() {
+      document.body.dataset.controlVariant = variant;
+      trigger.dataset.running = String(running > 0);
+      trigger.setAttribute('aria-label', `Workers, ${running} running, ${2 - running} not running`);
+      trigger.replaceChildren();
+      const label = document.createElement('span'); label.textContent = 'Workers';
+      const indicator = document.createElement('span'); indicator.className = 'control-indicator'; indicator.setAttribute('aria-hidden', 'true');
+      if (variant === 'A') trigger.append(indicator, label);
+      else {
+        if (variant === 'B') indicator.textContent = running;
+        else for (let i = 0; i < 2; i++) { const slot = document.createElement('i'); slot.dataset.running = String(i < running); indicator.append(slot); }
+        trigger.append(label, indicator);
+      }
+      trigger.append(arrow);
+      $('control-variant').textContent = variant + ' · ' + variants[variant][0];
+      $('control-description').textContent = variants[variant][1];
+      $('control-state').textContent = `Sample only · ${running} running / 2 workers`;
+      for (const button of document.querySelectorAll('button[data-running]')) button.setAttribute('aria-pressed', String(Number(button.dataset.running) === running));
+      $('coordinator-subtitle').textContent = `${running} running · Sample data`;
+      $('coordinator-task-list').replaceChildren(...['Check phone layout', 'Review worker status'].map((name, i) => {
+        const row = document.createElement('div'); row.className = 'coordinator-worker'; row.dataset.state = i < running ? 'working' : 'stopped';
+        const text = document.createElement('span'), title = document.createElement('strong'), status = document.createElement('small');
+        title.textContent = name; status.textContent = i < running ? 'Working' : 'Not running'; text.append(title, status); row.append(text); return row;
+      }));
+      const url = new URL(location.href); url.searchParams.set('variant', variant); url.searchParams.set('running', running); history.replaceState(null, '', url);
+    }
+    function cycle(step) { const keys = Object.keys(variants); variant = keys[(keys.indexOf(variant) + step + keys.length) % keys.length]; render(); }
+    $('control-prev').onclick = () => cycle(-1); $('control-next').onclick = () => cycle(1);
+    for (const button of document.querySelectorAll('button[data-running]')) button.onclick = () => { running = Number(button.dataset.running); render(); };
+    $('control-theme').onclick = () => { const dark = root.dataset.theme === 'dark'; root.dataset.theme = dark ? 'light' : 'dark'; $('control-theme').textContent = dark ? 'Dark' : 'Light'; };
+    document.addEventListener('keydown', event => {
+      if (event.target.closest('input, textarea, select, [contenteditable]') || $('coordinator-sheet').open || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(event.key === 'ArrowRight' ? 1 : -1); }
+    });
+    trigger.onclick = () => { $('coordinator-sheet').showModal(); trigger.setAttribute('aria-expanded', 'true'); };
+    $('coordinator-done').onclick = () => $('coordinator-sheet').close();
+    $('coordinator-sheet').onclose = () => trigger.setAttribute('aria-expanded', 'false');
+    const feedback = () => { $('control-state').textContent = 'Preview only. Nothing was sent or changed.'; };
+    $('composer').onsubmit = event => { event.preventDefault(); feedback(); };
+    for (const id of ['attach', 'model', 'reasoning-control', 'commands', 'abort', 'voice-record', 'status-line']) $(id).onclick = feedback;
+    new ResizeObserver(() => {
+      root.style.setProperty('--dock-height', $('dock').offsetHeight + 'px');
+      root.style.setProperty('--coordinator-height', $('coordinator-context').offsetHeight + 'px');
+    }).observe($('dock'));
+    render();
+  } catch {
+    $('control-state').textContent = 'Could not load the preview. Reload to try again.';
+  }
 }
 
 function WorkerPaneStudy() {
