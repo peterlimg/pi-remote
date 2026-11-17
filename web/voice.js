@@ -30,7 +30,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     button.dataset.recording = String(active?.phase === 'recording');
     button.disabled = active?.phase === 'preparing';
     const label = active?.phase === 'recording' ? 'Listening' :
-      active?.phase === 'sending' ? 'Sending voice…' : active?.phase === 'preparing' ? 'Starting microphone…' : '';
+      active?.phase === 'sending' ? 'Transcribing…' : active?.phase === 'preparing' ? 'Starting microphone…' : '';
     if (status.textContent !== label) status.textContent = label;
     changed();
   }
@@ -55,14 +55,17 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       if (now - lastSample >= 65) {
         lastSample = now;
         const bar = document.createElement('i');
-        waveform.append(bar); history.push({ bar, at: now });
+        waveform.append(bar); history.push({ bar, at: now, height: 3 });
       }
       const width = waveform.clientWidth;
       while (history.length && (now - history[0].at) * 6 / 65 > width) history.shift().bar.remove();
-      if (history.length) history.at(-1).bar.style.height = (level < .005 ? 3 : 3 + level * 27) + 'px';
-      for (const { bar, at } of history) {
-        bar.style.transform = `translate3d(${-(now - at) * 6 / 65}px, -50%, 0)`;
-        bar.style.opacity = String(Math.min(1, (now - at) / 50));
+      if (history.length) history.at(-1).height = level < .005 ? 3 : 3 + level * 27;
+      for (const { bar, at, height } of history) {
+        const distance = (now - at) * 6 / 65, edge = Math.max(0, width - 3 - distance);
+        const taper = Math.min(1, Math.max(0, (edge - 6) / 36));
+        bar.style.height = (3 + (height - 3) * taper * taper * (3 - 2 * taper)) + 'px';
+        bar.style.transform = `translate3d(${-distance}px, -50%, 0)`;
+        bar.style.opacity = String(Math.min(1, (now - at) / 50, edge / 6));
       }
       call.frame = requestAnimationFrame(draw);
     };
@@ -262,7 +265,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     get busy() { return ['preparing', 'recording', 'sending'].includes(active?.phase); },
     get blocksSend() { return ['preparing', 'sending'].includes(active?.phase); },
     send() {
-      if (active?.phase === 'recording') { finish(true); return true; }
+      if (active?.phase === 'recording' && !transcript(active)) { finish(true); return true; }
       return ['preparing', 'sending'].includes(active?.phase);
     },
     cancel,
