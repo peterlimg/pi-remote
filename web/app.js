@@ -3474,18 +3474,23 @@ function resetSwipe() {
   trackingSwipe = false;
   const main = document.querySelector('main');
   main.style.transition = main.style.transform = '';
-  $('app').classList.remove('swiping', 'opening', 'to-miso'); $('sidebar').inert = false;
+  $('app').classList.remove('swiping', 'opening', 'to-miso'); renderSidebarToggle();
   const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
-$('sidebar-collapse').addEventListener('click', () => {
+const sidebarLayout = matchMedia('(min-width: 701px)');
+function renderSidebarToggle() {
+  const collapsed = $('app').classList.contains('sidebar-collapsed');
+  const label = collapsed ? 'Show sessions' : 'Collapse sessions';
+  $('sidebar-toggle').setAttribute('aria-label', label);
+  $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
+  $('sidebar-toggle').title = label;
+  $('sidebar').inert = sidebarLayout.matches && collapsed;
+}
+sidebarLayout.addEventListener('change', renderSidebarToggle);
+$('sidebar-toggle').addEventListener('click', () => {
   haptic();
-  $('app').classList.add('sidebar-collapsed');
-  $('sidebar-open').focus({ preventScroll: true });
-});
-$('sidebar-open').addEventListener('click', () => {
-  haptic();
-  $('app').classList.remove('sidebar-collapsed');
-  $('sidebar-collapse').focus({ preventScroll: true });
+  $('app').classList.toggle('sidebar-collapsed');
+  renderSidebarToggle();
 });
 $('back').addEventListener('click', () => {
   voice?.cancel();

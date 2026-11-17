@@ -60,9 +60,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls and surfaces all share the same glass over the content beneath them. */
-.shell :is(.conversation-heading, #back, #sidebar-open, #sidebar-collapse, .conversation-actions), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
+.shell :is(.conversation-heading, #back, .conversation-actions), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
 /* Blur these containers on a separate layer so their floating children can still sample the thread. */
-.shell :is(.conversation-heading, #back, #sidebar-open, #sidebar-collapse), .conversation-actions::before, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.shell :is(.conversation-heading, #back), .conversation-actions::before, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -108,13 +108,19 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { font-size: 12px; }
-#sidebar-open, #sidebar-collapse { display: none; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); }
-#sidebar-open { position: absolute; z-index: 3; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); }
+#sidebar-toggle { display: none; place-items: center; position: absolute; z-index: 3; isolation: isolate; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--muted); }
+#sidebar-toggle::before { content: ''; position: absolute; z-index: -1; inset: 6px; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+#sidebar-toggle:active { color: var(--text); }
 @media (min-width: 701px) {
-  #sidebar-collapse { display: grid; place-items: center; }
-  .shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
-  .shell.sidebar-collapsed > aside { display: none; }
-  .shell.sidebar-collapsed #sidebar-open { display: grid; }
+  #sidebar-toggle { display: grid; }
+  .shell > aside { width: 320px; }
+  .brand { padding-left: 52px; }
+  .shell.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
+  .shell.sidebar-collapsed > aside { transform: translateX(-100%); visibility: hidden; }
+}
+@media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
+  .shell { transition: grid-template-columns 260ms cubic-bezier(.2, .8, .2, 1); }
+  .shell > aside { transition: transform 260ms cubic-bezier(.2, .8, .2, 1), visibility 260ms; }
 }
 .theme-toggle { display: grid; place-items: center; min-width: 44px; padding: 0; }
 :is(.brand, .login-heading) .theme-toggle { margin-left: auto; flex-shrink: 0; }
