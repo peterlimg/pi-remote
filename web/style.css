@@ -111,16 +111,22 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #sidebar-toggle { display: none; place-items: center; position: absolute; z-index: 3; isolation: isolate; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--muted); }
 #sidebar-toggle::before { content: ''; position: absolute; z-index: -1; inset: 6px; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 #sidebar-toggle:active { color: var(--text); }
+#sidebar-dismiss { display: none; }
 @media (min-width: 701px) {
-  #sidebar-toggle { display: grid; }
-  .shell > aside { width: 320px; }
-  .brand { padding-left: 52px; }
-  .shell.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
-  .shell.sidebar-collapsed > aside { transform: translateX(-100%); visibility: hidden; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .shell > aside, .shell > main { grid-area: 1 / 1; }
+  .shell > aside { width: 320px; border: 0; }
+  .shell > main { z-index: 1; background: var(--bg); overflow: clip; border-radius: 28px 0 0 28px; transform: translateX(320px); }
+  #sidebar-toggle { display: grid; transform: translateX(320px); }
+  #sidebar-dismiss { display: block; position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 28px 0 0 28px; background: rgb(0 0 0 / .45); transform: translateX(320px); }
+  .shell.sidebar-collapsed > aside { visibility: hidden; }
+  .shell.sidebar-collapsed > main, .shell.sidebar-collapsed #sidebar-dismiss { border-radius: 0; }
+  .shell.sidebar-collapsed > main, .shell.sidebar-collapsed :is(#sidebar-toggle, #sidebar-dismiss) { transform: none; }
+  .shell.sidebar-collapsed #sidebar-dismiss { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 @media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
-  .shell { transition: grid-template-columns 260ms cubic-bezier(.2, .8, .2, 1); }
-  .shell > aside { transition: transform 260ms cubic-bezier(.2, .8, .2, 1), visibility 260ms; }
+  .shell > main, #sidebar-toggle, #sidebar-dismiss { transition: transform 280ms cubic-bezier(.16, 1, .3, 1), border-radius 280ms, opacity 280ms, visibility 280ms; }
+  .shell > aside { transition: visibility 280ms; }
 }
 .theme-toggle { display: grid; place-items: center; min-width: 44px; padding: 0; }
 :is(.brand, .login-heading) .theme-toggle { margin-left: auto; flex-shrink: 0; }

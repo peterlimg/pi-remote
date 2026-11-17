@@ -210,6 +210,8 @@ test('dragging the composer cannot scroll the page after sending or resizing', a
   expect(await page.evaluate(() => scrollY)).toBe(0);
   await page.locator('#prompt').fill('');
   await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await expect(page.locator('#sidebar')).toBeVisible();
 });
 

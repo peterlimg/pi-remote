@@ -886,6 +886,7 @@ async function closeSession(id, closed = true) {
       $('title').textContent = 'Pi Remote'; renderProject(); notice('');
       $('transcript').replaceChildren(); $('transcript').hidden = true; $('dialog').hidden = true;
       $('empty').hidden = false; $('composer').hidden = true;
+      if (sidebarLayout.matches) setSidebarCollapsed(false);
       if (history.state?.session) history.back();
       renderList(); updateControls();
     }
@@ -1232,6 +1233,7 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
   if (!keepOrder) switchOrder = undefined;
   $('nearby-sessions').hidePopover();
   resetScrollback();
+  if (sidebarLayout.matches) setSidebarCollapsed(true);
   resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
@@ -3484,14 +3486,32 @@ function renderSidebarToggle() {
   $('sidebar-toggle').setAttribute('aria-label', label);
   $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
   $('sidebar-toggle').title = label;
+  const main = document.querySelector('main');
+  const obscured = collapsed ? $('sidebar') : main;
+  if (sidebarLayout.matches && obscured.contains(document.activeElement)) $('sidebar-toggle').focus({ preventScroll: true });
   $('sidebar').inert = sidebarLayout.matches && collapsed;
+  main.inert = sidebarLayout.matches && !collapsed;
 }
-sidebarLayout.addEventListener('change', renderSidebarToggle);
-$('sidebar-toggle').addEventListener('click', () => {
-  haptic();
-  $('app').classList.toggle('sidebar-collapsed');
+function setSidebarCollapsed(collapsed) {
+  $('app').classList.toggle('sidebar-collapsed', collapsed);
   renderSidebarToggle();
+}
+sidebarLayout.addEventListener('change', () => {
+  if (sidebarLayout.matches) setSidebarCollapsed($('app').classList.contains('viewing'));
+  else renderSidebarToggle();
 });
+$('sidebar-toggle').addEventListener('click', () => {
+  haptic(); closePicker();
+  setSidebarCollapsed(!$('app').classList.contains('sidebar-collapsed'));
+});
+$('sidebar-dismiss').addEventListener('click', () => setSidebarCollapsed(true));
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || event.defaultPrevented || !sidebarLayout.matches || $('app').classList.contains('sidebar-collapsed') || document.querySelector('dialog[open], [popover]:popover-open')) return;
+  event.preventDefault();
+  setSidebarCollapsed(true);
+  $('sidebar-toggle').focus({ preventScroll: true });
+});
+renderSidebarToggle();
 $('back').addEventListener('click', () => {
   voice?.cancel();
   haptic(); resetSwipe();
@@ -3504,7 +3524,9 @@ window.addEventListener('popstate', () => {
   if (skipPop) { skipPop = false; return; }
   resetSwipe(); closePicker(); $('nearby-sessions').hidePopover();
   if (misoReturn && history.state?.session && selected !== assistantId) { void selectSession(assistantId); return; }
-  $('app').classList.remove('viewing'); misoReturn = false; reportViewing();
+  $('app').classList.remove('viewing'); misoReturn = false;
+  if (sidebarLayout.matches) setSidebarCollapsed(false);
+  reportViewing();
 });
 // Swiping the title steps through the session list's order. The order freezes while switching this way,
 // since a prompt would otherwise move the session to the top and swiping back would skip past it.

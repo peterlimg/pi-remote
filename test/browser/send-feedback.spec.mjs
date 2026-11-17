@@ -42,6 +42,7 @@ for (const rejected of [false, true]) test(`slow image acknowledgement frees the
   await page.locator('#prompt').fill('My next message');
   await page.setViewportSize({ width: 1280, height: 900 });
   if (rejected) {
+    await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
     await page.getByRole('button', { name: /Other session/ }).click();
     await page.locator('#prompt').fill('Other session draft');
     await expect(page.locator('#composer-send-status')).toBeHidden();
@@ -50,6 +51,7 @@ for (const rejected of [false, true]) test(`slow image acknowledgement frees the
   if (rejected) {
     await expect(page.locator('#notice')).toContainText('Upload rejected');
     await expect(page.locator('#prompt')).toHaveValue('Other session draft');
+    await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
     await page.getByRole('button', { name: /Slow send/ }).click();
   }
   await expect(page.locator('#composer-send-status')).toBeHidden();

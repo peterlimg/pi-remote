@@ -198,6 +198,8 @@ test('conversation renders safe Markdown and keeps tool output collapsed across 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await expect(page.locator('#sidebar')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

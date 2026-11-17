@@ -60,9 +60,10 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(page.getByText('Loading conversation…', { exact: true })).toBeHidden();
     await expect(page.locator('#prompt')).toHaveValue('Draft for Beta');
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
     await page.getByRole('button', { name: /Task Alpha/ }).click();
-    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10, 10, 10]);
-    await expect(page.locator('#sidebar')).toBeVisible();
+    expect(await page.evaluate(() => window.vibrations)).toEqual([10, 10, 10, 10, 10, 10, 10]);
+    await expect(page.locator('#sidebar')).toBeHidden();
     await expect(page.locator('#transcript')).toContainText('Reply for Alpha');
     await expect(page.locator('main')).toHaveCSS('transform', 'none');
     await page.screenshot({ path: testInfo.outputPath('session-desktop.png') });

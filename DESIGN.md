@@ -18,6 +18,10 @@ Every floating control and surface uses the rim-lit glass material: a light tint
 
 Mermaid diagrams use flat shapes, thin warm borders, muted blue group backgrounds, and high-contrast connectors. Match the app's light/dark mode and system typography. Preserve author-defined state colors rather than inventing status meanings. No gradients, glow, or drop shadows. Show a bounded loading placeholder instead of raw source, retain finished diagram nodes across unrelated updates, and keep source available behind its disclosure. The existing image viewer owns zoom and pan.
 
+## Sessions drawer
+
+Above 700px, reveal the sessions list behind the conversation rather than squeezing the conversation into a second column. Slide the full-width conversation and its composer right by 320px as one panel; text must not reflow. The small menu control travels with the panel. Round its exposed left corners and dim the conversation while the list is open. The dimmed panel does not accept conversation actions; tapping it, Escape, the toggle, or selecting a session closes the drawer. Preserve drafts and reading position. Use a reversible 280ms ease-out transition and remove spatial motion when reduced motion is enabled. Keep narrow-phone list/back navigation unchanged.
+
 ## Composer
 
 The production composer is an invariant in the coordinator study. Copy its exact markup and load the production stylesheet without overriding its subtree. Session identity and recipient information belong outside it. Attachments, drafts, model settings, and Stop belong to the selected session.

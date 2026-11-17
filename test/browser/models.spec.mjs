@@ -112,6 +112,7 @@ test('/model shows newest models first and switches only the selected session wi
   await expect(picker).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('models-desktop.png') });
   await test.info().attach('models-desktop.aria.txt', { body: await picker.ariaSnapshot(), contentType: 'text/plain' });
+  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await page.getByRole('button', { name: /Beta/ }).click();
   await expect(picker).toBeHidden();
   await expect(page.locator('#model-name')).toHaveText('first');
