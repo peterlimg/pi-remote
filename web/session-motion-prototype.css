@@ -190,7 +190,7 @@ body { min-height: 100dvh; background: var(--sidebar-bg); }
 .miso-redraw .miso-mouth { fill: none; stroke: var(--bot-ink); stroke-width: .7; stroke-linecap: round; }
 .miso-redraw .miso-paw { fill: var(--kind); stroke: var(--sidebar-bg); stroke-width: .65; }
 .miso-redraw .miso-contact { fill: none; stroke: var(--kind); stroke-width: .8; stroke-linecap: round; }
-.celestial-bot .presence-ring-gap { stroke: var(--sidebar-bg); }
+.celestial-bot .presence-moon { stroke: var(--sidebar-bg); }
 .presence-list .session-body { min-width: 0; }
 .presence-list strong { display: block; font-size: 15px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .presence-list small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }

@@ -490,21 +490,21 @@ function celestialBot(kind, moving = true, size = 32, offset = 0) {
   node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${moving ? 'working study' : 'idle study'}`);
   const id = `celestial-body-${++presenceId}`;
   const body = characters[kind][1];
-  const ring = front => `<g class="presence-ring presence-ring-${front ? 'front' : 'back'}"><path class="presence-ring-gap"/><path class="presence-ring-ink"/></g>`;
+  const moon = front => `<circle class="presence-moon presence-moon-${front ? 'front' : 'back'}" r="2.1"/>`;
   node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><clipPath id="${id}-clip"><use href="#${id}"/></clipPath></defs><g data-part="pose">`
-    + (kind === 'comet' ? characters.comet[3] : kind === 'orbit' ? ring(false) : '')
+    + (kind === 'comet' ? characters.comet[3] : kind === 'orbit' ? moon(false) : '')
     + `<g class="bot-body">${body}</g><g clip-path="url(#${id}-clip)"><ellipse class="bot-eye"/><ellipse class="bot-eye"/></g>`
-    + (kind === 'orbit' ? ring(true) : kind === 'comet' && moving ? signatureParts.comet : '') + '</g></svg>';
+    + (kind === 'orbit' ? moon(true) : kind === 'comet' && moving ? signatureParts.comet : '') + '</g></svg>';
   const rig = { node, kind, study: 'celestial', moving, time: offset,
     pose: node.querySelector('[data-part=pose]'), body: node.querySelector('.bot-body > :first-child'),
     eyes: [...node.querySelectorAll('.bot-eye')], tails: [...node.querySelectorAll('.character-comet-tail path')],
-    rings: [...node.querySelectorAll('.presence-ring')], streak: node.querySelector('.m-speed') };
+    moons: [...node.querySelectorAll('.presence-moon')], streak: node.querySelector('.m-speed') };
   rig.body.id = id;
   presenceRigs.push(rig); drawCelestial(rig, false);
   return node;
 }
 function drawCelestial(rig, animate) {
-  const { kind, time, pose, body, eyes, tails, rings, streak } = rig;
+  const { kind, time, pose, body, eyes, tails, moons, streak } = rig;
   const smooth = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
   let positions, eyeWidth = 2.1, eyeHeight = 2.9;
   if (kind === 'luna') {
@@ -528,14 +528,14 @@ function drawCelestial(rig, animate) {
     streak?.setAttribute('opacity', animate ? String(.3 + .7 * dash) : '0');
     streak?.setAttribute('transform', `translate(${2 - 5 * dash} ${-2 + 5 * dash})`);
   } else if (kind === 'orbit') {
-    const phase = time / 3.6 * Math.PI * 2;
-    const tilt = -24 + (animate ? 10 * Math.sin(phase) : 0);
-    const depth = 4.5 + (animate ? 1.8 * Math.sin(phase + .6) : 0);
-    rings.forEach((ring, index) => {
-      ring.setAttribute('transform', `rotate(${tilt} 16 17)`);
-      for (const path of ring.children) path.setAttribute('d', `M1.5 17A14.5 ${depth} 0 0 ${index === 0 ? 1 : 0} 30.5 17`);
+    const phase = animate ? time / 2.6 * Math.PI * 2 : .3;
+    const x = 13 * Math.cos(phase), y = 5.5 * Math.sin(phase), tilt = -28 * Math.PI / 180;
+    moons.forEach((moon, index) => {
+      moon.setAttribute('cx', String(16 + x * Math.cos(tilt) - y * Math.sin(tilt)));
+      moon.setAttribute('cy', String(16 + x * Math.sin(tilt) + y * Math.cos(tilt)));
+      moon.setAttribute('opacity', (Math.sin(phase) >= 0) === (index === 1) ? '1' : '0');
     });
-    const glance = animate ? .9 * Math.sin(phase + .3) : 0;
+    const glance = animate ? .9 * Math.cos(phase) : 0;
     positions = [[12 + glance, 13], [20 + glance, 13]];
   }
   const blinkPhase = time % 4.7;
@@ -550,7 +550,7 @@ function celestialStudy() {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Luna, Comet and Orbit · Pi Remote';
   document.querySelector('h1').textContent = 'Luna, Comet & Orbit';
-  document.querySelector('.lede').textContent = 'Comet keeps its working streaks. Orbit is a flat planet with a ring passing behind and in front. Sample activity only.';
+  document.querySelector('.lede').textContent = 'Comet keeps its working streaks. Orbit has one small moon, with no ring or drawn track. Sample activity only.';
   $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
   $('comparison').hidden = false; $('comparison-note').hidden = false; $('replay').hidden = false;
   page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
@@ -572,7 +572,7 @@ function celestialStudy() {
     for (const [kind, description] of [
       ['luna', 'The crescent curls inward, then opens again.'],
       ['comet', 'The tail unfolds into the dash, with working streaks alongside.'],
-      ['orbit', 'A solid planet and two eyes. The ring tilts behind and in front, without shading or extra details.'],
+      ['orbit', 'One small moon travels in front of the planet, disappears behind it, then returns. No visible track.'],
     ]) {
       const section = el('section', undefined, 'motion-comparison');
       section.setAttribute('aria-label', characters[kind][0]);

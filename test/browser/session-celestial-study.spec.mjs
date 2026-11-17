@@ -24,11 +24,12 @@ test('simple celestial study animates silhouettes while keeping other characters
   expect(await working.evaluateAll(nodes => nodes.every(node => node.offsetWidth === 32 && node.offsetHeight === 32))).toBe(true);
   const idleDrawing = await idle.evaluate(drawing);
   const orbit = list.locator('[data-kind=orbit]');
-  await expect(orbit.locator('canvas, linearGradient, radialGradient, filter')).toHaveCount(0);
+  await expect(orbit.locator('path, .presence-ring, canvas, linearGradient, radialGradient, filter')).toHaveCount(0);
   await expect(orbit.locator('.bot-body circle')).toHaveAttribute('r', '10');
   await expect(orbit.locator('.bot-eye')).toHaveCount(2);
+  await expect(orbit.locator('.presence-moon')).toHaveCount(2);
   expect(await orbit.evaluate(node => {
-    const back = node.querySelector('.presence-ring-back'), body = node.querySelector('.bot-body'), front = node.querySelector('.presence-ring-front');
+    const back = node.querySelector('.presence-moon-back'), body = node.querySelector('.bot-body'), front = node.querySelector('.presence-moon-front');
     return Boolean(back.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)
       && Boolean(body.compareDocumentPosition(front) & Node.DOCUMENT_POSITION_FOLLOWING);
   })).toBe(true);
@@ -39,22 +40,34 @@ test('simple celestial study animates silhouettes while keeping other characters
   const poses = await list.evaluate(async list => {
     const moon = list.querySelector('[data-kind=luna] .bot-body path');
     const tail = list.querySelector('[data-kind=comet] .character-comet-tail');
-    const ring = list.querySelector('[data-kind=orbit] .presence-ring-front');
+    const satellites = [...list.querySelectorAll('[data-kind=orbit] .presence-moon')];
     const streak = list.querySelector('[data-kind=comet] .m-speed');
-    const moons = new Set(), tails = new Set(), frames = new Set(), tilts = new Set(), streaks = [];
+    const moons = new Set(), tails = new Set(), frames = new Set(), layers = new Set(), streaks = [];
+    let hiddenBehind = false, crossingFront = false, outside = false, singleMoon = true;
     const start = performance.now();
     while (performance.now() - start < 4000) {
-      moons.add(moon.getAttribute('d')); tails.add(tail.innerHTML); frames.add(ring.innerHTML);
-      tilts.add(ring.getAttribute('transform')); streaks.push(Number(streak.getAttribute('opacity')));
+      moons.add(moon.getAttribute('d')); tails.add(tail.innerHTML);
+      const active = satellites.filter(node => node.getAttribute('opacity') === '1');
+      singleMoon &&= active.length === 1;
+      const satellite = active[0], front = satellite.classList.contains('presence-moon-front');
+      const x = Number(satellite.getAttribute('cx')), y = Number(satellite.getAttribute('cy'));
+      const distance = Math.hypot(x - 16, y - 16), radius = Number(satellite.getAttribute('r'));
+      frames.add(`${x},${y}`); layers.add(front);
+      hiddenBehind ||= !front && distance + radius < 10;
+      crossingFront ||= front && distance + radius < 10;
+      outside ||= distance - radius > 10;
+      streaks.push(Number(streak.getAttribute('opacity')));
       await new Promise(resolve => setTimeout(resolve, 80));
     }
-    return { moons: moons.size, tails: tails.size, frames: frames.size, tilts: tilts.size,
+    return { moons: moons.size, tails: tails.size, frames: frames.size, layers: [...layers].sort(),
+      hiddenBehind, crossingFront, outside, singleMoon,
       streakMin: Math.min(...streaks), streakMax: Math.max(...streaks) };
   });
   expect(poses.moons).toBeGreaterThan(20);
   expect(poses.tails).toBeGreaterThan(20);
   expect(poses.frames).toBeGreaterThan(20);
-  expect(poses.tilts).toBeGreaterThan(20);
+  expect(poses.layers).toEqual([false, true]);
+  expect(poses).toMatchObject({ hiddenBehind: true, crossingFront: true, outside: true, singleMoon: true });
   expect(poses.streakMin).toBeGreaterThan(0);
   expect(poses.streakMax - poses.streakMin).toBeGreaterThan(.4);
   expect(await idleOrbit.evaluate(drawing)).toBe(idleOrbitDrawing);
