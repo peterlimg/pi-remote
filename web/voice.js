@@ -184,10 +184,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       if (call.preview !== undefined && input.value === call.preview) input.value = call.draft;
       call.preview = undefined;
       input.blur(); render();
-    } else {
-      if (!preview(call)) return;
-      input.focus({ preventScroll: true });
-    }
+    } else if (!preview(call)) return;
     settled(call);
   }
   async function start() {

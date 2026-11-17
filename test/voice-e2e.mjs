@@ -160,6 +160,7 @@ try {
     await playback;
     const started = performance.now(); await stop(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible({ timeout: 1000 });
+    await expect(page.locator('#prompt')).not.toBeFocused();
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     const stopToEditableDraftMs = Math.round(performance.now() - started);
     try { await expect(page.locator('#prompt')).toHaveValue(/^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i, { timeout: 6000 }); }
@@ -188,7 +189,7 @@ try {
     await fresh(); await record(); await page.evaluate(() => window.playVoiceSample());
     const sendStarted = performance.now(); await page.getByRole('button', { name: 'Send message' }).click();
     await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused();
-    await expect(page.locator('#model')).toBeVisible();
+    await expect(page.locator('#model')).toBeHidden();
     await until(() => commands.length === 1, 20000);
     assert.match(commands[0].text, /The orange bicycle is parked beside the library[.!]?$/i);
     await expect(page.locator('#prompt')).toHaveValue('');
@@ -205,7 +206,8 @@ try {
     });
     assert.ok(positions.slice(1).filter((x, i) => x < positions[i] - .05).length >= 15, 'Continuous waveform motion');
     await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused(); await expect(page.locator('#send')).toBeVisible();
-    await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#model')).toBeVisible();
+    await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#model')).toBeHidden();
+    assert.equal(await page.locator('#voice-status').evaluate(node => node.parentElement.className), 'composer-toolbar');
     const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
     await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(20);
     await page.evaluate(() => { window.voiceGain.gain.value = 0; }); await expect.poll(async () => Math.max(...await levels())).toBe(3);
@@ -213,12 +215,14 @@ try {
     await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
     await stop(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook');
+    await expect(page.locator('#prompt')).not.toBeFocused(); await expect(page.locator('#model')).toBeVisible();
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty();
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     assert.equal(commands.length, 0);
     await partial(' beside the lamp'); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp');
     await delay(1900); const receivedAt = performance.now(); await final('Purple notebook beside the lamp.');
     await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
+    await expect(page.locator('#prompt')).not.toBeFocused();
     await expect(page.locator('#prompt')).toBeEditable();
     console.log(`Final provider event to draft after drain: ${Math.round(performance.now() - receivedAt)}ms`);
     await closed(); assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('Purple notebook'));
@@ -242,6 +246,8 @@ try {
     await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 10000 }); await closed();
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty(); await expect(page.locator('#notice')).toBeHidden();
     await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#prompt')).toBeEditable();
+    await expect(page.locator('#prompt')).not.toBeFocused();
+    await page.locator('#prompt').click(); await expect(page.locator('#prompt')).toBeFocused();
     await page.locator('#prompt').fill('Reviewed words');
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Reviewed words');
     assert.equal(await page.evaluate(() => window.voiceSent.filter(event => event.type === 'session.close').length), 1);
@@ -293,17 +299,15 @@ try {
     await fresh(); mode = 'held'; states[0].status = 'working'; states[0].revision++;
     agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
     await expect(page.locator('#status')).toHaveText('working');
-    const modelPosition = await page.locator('#model').boundingBox();
     await record(); await until(() => releaseRequest);
-    await expect(page.locator('#model')).toBeVisible();
-    assert.ok(Math.abs((await page.locator('#model').boundingBox()).x - modelPosition.x) < 1);
+    await expect(page.locator('#model')).toBeHidden();
     await page.evaluate(() => window.monitorVoiceOutput());
     await expect.poll(() => page.evaluate(() => window.voiceOutputLevel())).toBeLessThan(.001);
     await delay(400); await page.evaluate(() => { window.voiceGain.gain.value = 0; });
     await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
     await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
     await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused();
-    await expect(page.locator('#model')).toBeVisible(); await expect(page.locator('#send')).toBeDisabled();
+    await expect(page.locator('#model')).toBeHidden(); await expect(page.locator('#send')).toBeDisabled();
     assert.equal(commands.length, 1);
     releaseRequest(); releaseRequest = undefined;
     await expect.poll(() => page.evaluate(() => window.voiceOutputLevel())).toBeGreaterThan(.03);
@@ -318,7 +322,7 @@ try {
 
     await fresh(); await record(); await partial('Keep queued draft');
     await page.getByRole('button', { name: 'Send message' }).click(); await stop();
-    await expect(page.locator('#prompt')).toHaveValue('Keep queued draft'); await expect(page.locator('#prompt')).toBeFocused();
+    await expect(page.locator('#prompt')).toHaveValue('Keep queued draft'); await expect(page.locator('#prompt')).not.toBeFocused();
     await expect(page.locator('#model')).toBeVisible(); await final('Keep queued draft'); await closed();
     assert.equal(commands.length, 2);
 
