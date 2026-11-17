@@ -77,6 +77,25 @@ for (const [width, colorScheme] of [[744, 'dark'], [1280, 'light']]) {
   });
 }
 
+test('landscape drawer toggle stays close to the panel while preserving closed notch clearance', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.route('**/style.css', async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replaceAll('env(safe-area-inset-left)', '47px');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  const toggle = page.locator('#sidebar-toggle');
+  await expect.poll(async () => (await toggle.boundingBox()).x).toBe(332);
+  expect((await toggle.boundingBox()).width).toBe(44);
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await expect.poll(async () => (await toggle.boundingBox()).x).toBe(47);
+  await toggle.click();
+  await expect.poll(async () => (await toggle.boundingBox()).x).toBe(332);
+  expect((await page.locator('main').boundingBox()).x).toBe(320);
+  await page.screenshot({ path: testInfo.outputPath('landscape-drawer.png') });
+});
+
 test('drawer motion translates the whole conversation without reflow and supports reversal and reduced motion', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 744, height: 1000 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
