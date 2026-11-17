@@ -601,9 +601,70 @@ function celestialStudy() {
   renderCelestial(); syncTheme(); syncMotion();
 }
 
+function orbitRingStudy() {
+  const page = $('page'); page.dataset.set = 'focused';
+  document.title = 'Orbit ring designs · Pi Remote';
+  document.querySelector('h1').textContent = 'Orbit ring designs';
+  document.querySelector('.lede').textContent = 'Three still designs. Same palette and two eyes; different ring shapes. Choose the drawing before the motion.';
+  $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
+  $('comparison').hidden = false; $('comparison-note').hidden = false;
+  $('motion').hidden = true; $('replay').hidden = true;
+  page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
+  const face = (x, y, radius) => `<circle class="bot-body" cx="${x}" cy="${y}" r="${radius}"/><ellipse class="bot-eye" cx="${x - 3.5}" cy="${y - 1.3}" rx="1.9" ry="2.7"/><ellipse class="bot-eye" cx="${x + 3.5}" cy="${y - 1.3}" rx="1.9" ry="2.7"/>`;
+  const designs = [
+    { key: 'A', name: 'Open arc', description: 'A thin ring, open on one side.',
+      svg: '<g transform="rotate(-24 16 17)"><path class="ring-design-line" d="M2 17A14 5.5 0 0 1 28.5 14.5"/></g>'
+        + face(16, 15.5, 9.4)
+        + '<g transform="rotate(-24 16 17)"><path class="ring-design-line ring-design-front" d="M2 17A14 5.5 0 0 0 28.5 19.5"/></g>' },
+    { key: 'B', name: 'Upright', description: 'A tall ring around one side.',
+      svg: '<g transform="rotate(-63 17 16)"><path class="ring-design-line" d="M3 16A14 5.4 0 0 1 31 16"/></g>'
+        + face(14, 17.5, 9.4)
+        + '<g transform="rotate(-63 17 16)"><path class="ring-design-line ring-design-front" d="M3 16A14 5.4 0 0 0 31 16"/></g>' },
+    { key: 'C', name: 'Wide disc', description: 'A broad ring below the face.',
+      svg: '<g transform="rotate(-12 16 19)"><path class="bot-accent" fill-rule="evenodd" d="M1 19a15 4.5 0 1 0 30 0a15 4.5 0 1 0-30 0M4 19a12 2.5 0 1 0 24 0a12 2.5 0 1 0-24 0"/></g>'
+        + face(16, 13, 9)
+        + '<g transform="rotate(-12 16 19)"><path class="bot-accent" d="M1 19A15 4.5 0 0 0 31 19L28 19A12 2.5 0 0 1 4 19Z"/></g>' },
+  ];
+  function icon(design, size) {
+    const node = el('span', undefined, 'bot m-bot ring-design');
+    node.dataset.kind = 'orbit'; node.dataset.design = design.key;
+    node.style.setProperty('--size', `${size}px`);
+    node.setAttribute('role', 'img'); node.setAttribute('aria-label', `Orbit ${design.key}, ${design.name.toLowerCase()}`);
+    node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true">${design.svg}</svg>`;
+    return node;
+  }
+  const options = el('section', undefined, 'ring-options'); options.setAttribute('aria-label', 'Enlarged ring designs');
+  for (const design of designs) {
+    const figure = el('figure'), caption = el('figcaption');
+    caption.append(el('strong', `${design.key} · ${design.name}`), el('small', design.description));
+    figure.append(icon(design, 80), caption); options.append(figure);
+  }
+  const list = el('section', undefined, 'presence-list'); list.id = 'ring-design-sessions';
+  list.setAttribute('aria-label', 'Designs at session size');
+  list.append(el('h2', 'In the family · 32px', 'section-title'));
+  const row = (node, title, label) => {
+    const item = el('div', undefined, 'session'), content = el('div', undefined, 'session-body');
+    content.append(el('strong', title), el('small', label)); item.append(node, content); list.append(item);
+  };
+  const reference = kind => {
+    const node = bot(kind, 32, 0);
+    node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, unchanged reference`);
+    return node;
+  };
+  row(reference('luna'), 'Check reconnect handling', 'Luna · Unchanged reference');
+  for (const design of designs) row(icon(design, 32), 'Review the session history', `${design.key} · ${design.name}`);
+  row(reference('comet'), 'Trace a slow response', 'Comet · Unchanged reference');
+  $('comparison').replaceChildren(options, list);
+  const back = el('a', 'Back to the motion preview'); back.href = '?study=celestial';
+  $('comparison-note').replaceChildren(document.createTextNode('Designs only. Live avatars and the motion preview are unchanged. '), back);
+  $('theme').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); };
+  syncTheme();
+}
+
 if (new URL(location.href).searchParams.get('study') === 'shimmer') shimmerStudy();
 else if (new URL(location.href).searchParams.get('study') === 'miso') misoStudy();
 else if (new URL(location.href).searchParams.get('study') === 'celestial') celestialStudy();
+else if (new URL(location.href).searchParams.get('study') === 'orbit-rings') orbitRingStudy();
 else {
 $('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });
 $('previous').addEventListener('click', () => cycle(-1));

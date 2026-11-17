@@ -191,6 +191,12 @@ body { min-height: 100dvh; background: var(--sidebar-bg); }
 .miso-redraw .miso-paw { fill: var(--kind); stroke: var(--sidebar-bg); stroke-width: .65; }
 .miso-redraw .miso-contact { fill: none; stroke: var(--kind); stroke-width: .8; stroke-linecap: round; }
 .celestial-bot .presence-moon { stroke: var(--sidebar-bg); }
+.ring-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 24px 0 0; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.ring-options figure { display: grid; justify-items: center; align-content: start; gap: 16px; margin: 0; text-align: center; }
+.ring-options strong { display: block; font-size: 13px; font-weight: 600; }
+.ring-options small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.ring-design-line { fill: none; stroke: var(--kind); stroke-width: 1.4; stroke-linecap: round; }
+.ring-design-front { stroke: var(--bot-dark); }
 .presence-list .session-body { min-width: 0; }
 .presence-list strong { display: block; font-size: 15px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .presence-list small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
