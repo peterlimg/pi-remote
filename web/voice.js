@@ -262,7 +262,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     get busy() { return ['preparing', 'recording', 'sending'].includes(active?.phase); },
     get blocksSend() { return ['preparing', 'sending'].includes(active?.phase); },
     send() {
-      if (['recording', 'finishing'].includes(active?.phase)) { finish(true); return true; }
+      if (active?.phase === 'recording') { finish(true); return true; }
       return ['preparing', 'sending'].includes(active?.phase);
     },
     cancel,

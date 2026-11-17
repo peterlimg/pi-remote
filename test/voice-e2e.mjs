@@ -445,6 +445,22 @@ try {
       await page.keyboard.press('Escape'); await expect(page.locator('#settings-picker')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Keep while checking usage');
       await page.screenshot({ path: join(evidence, 'ready-' + width + '.png'), fullPage: true });
     }
+    await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Ready words'); await stop();
+    await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'finishing');
+    await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
+    const stoppedSendAt = performance.now();
+    await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === 3, 2000);
+    console.log(`Stopped draft Send to simulated agent: ${Math.round(performance.now() - stoppedSendAt)}ms`);
+    assert.equal(commands[2].text, 'Original draft Ready words');
+    await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/);
+    await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('');
+    await page.locator('#prompt').fill('Next draft');
+    await page.evaluate(() => {
+      window.lateVoiceEvent({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: 'Late partial' } }) });
+      window.lateVoiceEvent({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'late-stop-send', role: 'user', transcript: 'Late final' } }) });
+    });
+    await stopped(); await closed(); await expect(page.locator('#prompt')).toHaveValue('Next draft'); assert.equal(commands.length, 3);
+
     await page.routeWebSocket('**/ws', route => {
       const upstream = route.connectToServer();
       upstream.onMessage(raw => { const packet = JSON.parse(String(raw)); if (packet.type === 'ready') packet.voiceInput = 'webrtc-direct'; route.send(JSON.stringify(packet)); });
@@ -452,7 +468,7 @@ try {
     await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
     await page.getByRole('button', { name: /Voice Alpha/ }).click(); await expect(page.locator('#voice-record')).toBeHidden();
     await page.locator('#prompt').fill('Old host can still send'); await page.getByRole('button', { name: 'Send message' }).click();
-    await until(() => commands.length === 3); assert.equal(commands[2].text, 'Old host can still send');
+    await until(() => commands.length === 4); assert.equal(commands[3].text, 'Old host can still send');
   }
   assertPrivate(); assert.deepEqual(errors, []);
   console.log(`PASS: ${liveFile ? 'live buffered speech, silent timeout and queued Send, no host transcript traffic before Send' : 'browser-direct protocol, waveform, draft, Send, cancellation, errors, validation and disconnect'}. Evidence: ${evidence}`);
