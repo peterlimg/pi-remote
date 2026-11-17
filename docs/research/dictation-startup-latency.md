@@ -49,3 +49,38 @@ The focused regression passed after the change. The final long live run started 
 `npm run test:voice`, the long live-file run, TypeScript, syntax, and diff checks passed. The full suite and physical iPhone behavior were not checked.
 
 Removing most of the remaining startup backlog needs a separate design decision. Preconnecting before the microphone tap would open a subscription session while the user is not recording, with idle lifetime, quota, and cleanup implications. Accelerating playback would change speech timing; dropping queued audio would lose opening words. Neither behavior is enabled here. No language filter, provider change, UI change, or shorter Send timeout was introduced.
+
+## Preconnection experiment
+
+Preconnection is **not enabled in the phone UI**. The isolated protocol probe removed the startup audio backlog, but did not establish reliable transcription after an idle connection. Some cold controls also failed to return text, so these results do not identify preconnection as the sole cause.
+
+The [opt-in probe](../../test/voice-preconnect-e2e.mjs) uses the production `VoiceSession` authorizer and audio worklet, a localhost browser fixture, and real subscription WebRTC. It does not load the Pi Remote composer, request a physical microphone, or send a chat prompt. The host authorizer exchanges only SDP; the speech fixture is injected into Chromium as synthetic input. Browser `getUserMedia` is blocked and counted. No credentials, SDP, or provider audio are written to evidence.
+
+```sh
+node test/voice-preconnect-e2e.mjs --live-file /tmp/pi-voice-finish-probe/speech.wav "The orange bicycle"
+```
+
+This opens up to three calls: cold speech, speech after five seconds connected, and five-second idle expiry. Append `cold`, `warm`, or `idle-expiry` to run only that case. The WAV must begin with the supplied words and end with "The orange bicycle is parked beside the library." The live comparison currently can fail; it is not part of the default test suite.
+
+The final probe prepares an AudioContext and media destination under a button gesture, then supplies a constant zero-valued source before connecting. It creates the speech source and worklet only when recording begins. This keeps the idle RTP clock running without microphone input. A bare media destination sent no audio packets; a trackless connection also failed to establish reliable transcription. Both alternatives were discarded from the probe.
+
+### Observations
+
+In `pi-voice-preconnect-xtTU3i`:
+
+| Measurement | Cold | Preconnected for five seconds |
+| --- | ---: | ---: |
+| Authorization | 978 ms | 814 ms |
+| Capture to connected media | 1,155 ms | Already connected |
+| First text after speech starts | 3,577 ms | No text before the 12.62-second wait expired |
+| Stop to buffer drain | 1,120 ms | 5 ms |
+| Complete final sentence | Received | Not received |
+| Direct close acknowledged | Yes | Yes |
+
+The warm call sent audio with nonzero measured energy after recording began. Before recording, it sent 8,816 bytes of encoded digital silence, with zero measured audio energy, no speech source, no microphone requests, and no transcript events. The missing transcript was therefore not simply an undrained startup buffer. Events included `session.context_window.approaching`, `session.usage.updated`, and `session.started`; their presence does not establish readiness for recognition. Their cause was not determined.
+
+The earlier trackless trial in `pi-voice-preconnect-dr7XSZ` also drained in 5 ms without text. Its direct close was not acknowledged within one second. The browser peer and audio context were closed and the local reservation was released; remote retirement was not confirmed. Other initial cold trials also returned no text. These are not enough samples to estimate provider reliability or prove a latency gain.
+
+The idle-expiry case did receive `session.closed` and closed its peer and audio context. Its first result incorrectly reported cleanup failure because the probe's finalizer attempted to close an already closed AudioContext. The probe now checks that state before closing again. This was a probe cleanup bug, not an application change. The focused `idle-expiry` rerun passed in `pi-voice-preconnect-nHNxrF`, with zero microphone requests, zero measured audio energy, a direct close acknowledgement, and closed browser resources. Syntax and diff checks passed; the failed speech comparison remains a failed result.
+
+No long-speech speed claim follows from a short sample that fails recognition. Physical Safari behavior, background-tab expiry, reconnect races, and quota accounting remain unverified. An idle model session can consume subscription allowance even when its audio is generated silence. Further work needs a repeatable recognition/readiness contract before integrating preconnection into the composer.
