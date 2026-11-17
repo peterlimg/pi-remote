@@ -109,7 +109,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { font-size: 12px; }
 #sidebar-toggle { display: none; place-items: center; position: absolute; z-index: 3; isolation: isolate; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--muted); }
-#sidebar-toggle::before { content: ''; position: absolute; z-index: -1; inset: 6px; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+#sidebar-toggle::before { content: ''; position: absolute; z-index: -1; inset: 2px; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 #sidebar-toggle:active { color: var(--text); }
 #sidebar-dismiss { display: none; }
 @media (min-width: 701px) {
