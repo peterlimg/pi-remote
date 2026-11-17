@@ -1010,7 +1010,7 @@ pre.message-text { white-space: pre-wrap; }
 /* Lower the markers to the lowercase lettering's optical center. */
 #coordinator-open > :is(#coordinator-worker-slots, svg) { transform: translateY(1px); }
 #coordinator-task-list { display: grid; gap: 8px; }
-.coordinator-worker { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); text-align: left; font-weight: 400; }
+.coordinator-worker { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border: 0; border-radius: 12px; background: light-dark(rgb(0 0 0 / .06), rgb(0 0 0 / .28)); color: var(--text); text-align: left; font-weight: 400; }
 .coordinator-worker > span { flex: 1; min-width: 0; }
 .coordinator-worker strong { display: block; font-size: 15px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
 .coordinator-worker small { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: color-mix(in srgb, var(--muted) 88%, var(--text)); font-size: 12px; }
