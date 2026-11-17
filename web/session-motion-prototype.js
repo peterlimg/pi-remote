@@ -605,7 +605,7 @@ function orbitRingStudy() {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Orbit ring designs · Pi Remote';
   document.querySelector('h1').textContent = 'Orbit ring designs';
-  document.querySelector('.lede').textContent = 'C keeps its low, wide ring, now thinner and light purple with a larger opening. A and B are unchanged for reference.';
+  document.querySelector('.lede').textContent = 'The ring on C now reaches farther to each side. Its thin edge, light purple and planet are unchanged. A and B remain for reference.';
   $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
   $('comparison').hidden = false; $('comparison-note').hidden = false;
   $('motion').hidden = true; $('replay').hidden = true;
@@ -620,10 +620,10 @@ function orbitRingStudy() {
       svg: '<g transform="rotate(-63 17 16)"><path class="ring-design-line" d="M3 16A14 5.4 0 0 1 31 16"/></g>'
         + face(14, 17.5, 9.4)
         + '<g transform="rotate(-63 17 16)"><path class="ring-design-line ring-design-front" d="M3 16A14 5.4 0 0 0 31 16"/></g>' },
-    { key: 'C', name: 'Wide ring', description: 'Thinner, lighter, more open.',
-      svg: '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" fill-rule="evenodd" d="M1 19a15 4.5 0 1 0 30 0a15 4.5 0 1 0-30 0M2.4 19a13.6 3.4 0 1 0 27.2 0a13.6 3.4 0 1 0-27.2 0"/></g>'
+    { key: 'C', name: 'Wide ring', description: 'Wider ring, same thin edge.',
+      svg: '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" fill-rule="evenodd" d="M0 19a16 4.5 0 1 0 32 0a16 4.5 0 1 0-32 0M1.4 19a14.6 3.4 0 1 0 29.2 0a14.6 3.4 0 1 0-29.2 0"/></g>'
         + face(16, 13, 9)
-        + '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" d="M1 19A15 4.5 0 0 0 31 19L29.6 19A13.6 3.4 0 0 1 2.4 19Z"/></g>' },
+        + '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" d="M0 19A16 4.5 0 0 0 32 19L30.6 19A14.6 3.4 0 0 1 1.4 19Z"/></g>' },
   ];
   function icon(design, size) {
     const node = el('span', undefined, 'bot m-bot ring-design');
