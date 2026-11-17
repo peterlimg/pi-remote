@@ -174,7 +174,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       return { radius: style.borderRadius, border: style.borderWidth, fill: style.backgroundColor, shadow: style.boxShadow };
     }));
     for (const card of cards) {
-      expect(card).toMatchObject({ radius: '12px', border: '0px', shadow: 'none' });
+      expect(card).toMatchObject({ radius: '16px', border: '1px', shadow: 'none' });
       expect(card.fill).not.toBe('rgba(0, 0, 0, 0)');
     }
     await expect(page.locator('#coordinator-task-list')).toHaveCSS('gap', '8px');
