@@ -33,6 +33,11 @@ test('worker sheet scopes history and images without disturbing the live parent'
     expect(geometry.bottom).toBeGreaterThanOrEqual(8); expect(Math.abs(geometry.centered)).toBeLessThanOrEqual(1);
     expect(geometry.closeOnLeft).toBe(roster); expect(geometry.corners).toEqual(['28px', '28px']);
     expect(geometry.button).toEqual({ width: 44, height: 44, radius: '50%' });
+    const control = await page.locator('#coordinator-done').evaluate(node => {
+      const circle = getComputedStyle(node, '::before');
+      return { width: circle.width, height: circle.height, border: getComputedStyle(node).borderWidth };
+    });
+    expect(control).toEqual({ width: '32px', height: '32px', border: '0px' });
   };
   page.on('pageerror', error => errors.push(error.message));
   await page.routeWebSocket('**/ws', ws => {
@@ -169,7 +174,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       return { radius: style.borderRadius, border: style.borderWidth, fill: style.backgroundColor, shadow: style.boxShadow };
     }));
     for (const card of cards) {
-      expect(card).toMatchObject({ radius: '20px', border: '1px', shadow: 'none' });
+      expect(card).toMatchObject({ radius: '12px', border: '0px', shadow: 'none' });
       expect(card.fill).not.toBe('rgba(0, 0, 0, 0)');
     }
     await expect(page.locator('#coordinator-task-list')).toHaveCSS('gap', '8px');
@@ -201,7 +206,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       targets: [...node.querySelectorAll('header button')].every(button => { const box = button.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; })
     }));
     await checkFloatingSheet(false);
-    expect(space.header).toBeLessThanOrEqual(74); expect(space.targets).toBe(true); expect(space.overflow).toBe(false);
+    expect(space.header).toBeLessThanOrEqual(80); expect(space.targets).toBe(true); expect(space.overflow).toBe(false);
     expect(space.body).toBeGreaterThan(space.sheet - space.header - space.safeBottom - 3);
     const rows = await log.locator(':scope > .coordinator-log-detail').evaluateAll(nodes => nodes.map(node => {
       const style = getComputedStyle(node);
@@ -285,6 +290,30 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await page.keyboard.press('Escape');
   await expect(page.locator('#nearby-sessions')).toBeHidden();
   await expect(page.locator('#prompt')).toHaveValue('Keep this main draft.');
+  parent.coordination.tasks = [
+    { ...task, id: 'activity', title: 'Show parent session working while its workers run', state: 'completed', workspace: { integration: 'applied' } },
+    { ...task, id: 'brainstorm', title: 'Brainstorm compact worker access above the composer', state: 'completed' },
+    { ...task, id: 'prototypes', title: 'Build compact worker-launcher prototypes', state: 'completed', workspace: { integration: 'applied' } }
+  ];
+  client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
+  await page.locator('#coordinator-open').tap();
+  await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+  await expect(page.locator('#coordinator-subtitle')).toBeHidden();
+  await expect(page.locator('#coordinator-worker-summary')).toHaveText('No active work');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await checkFloatingSheet(true);
+    const header = await page.locator('.coordinator-sheet').evaluate(node => {
+      const close = node.querySelector('#coordinator-done').getBoundingClientRect(), title = node.querySelector('h2').getBoundingClientRect();
+      const row = node.querySelector('.coordinator-worker').getBoundingClientRect();
+      return { alignment: close.y + close.height / 2 - title.y - title.height / 2, inset: close.x + 6 - row.x };
+    });
+    expect(Math.abs(header.alignment)).toBeLessThanOrEqual(1); expect(Math.abs(header.inset)).toBeLessThanOrEqual(1);
+    await expect(page.locator('.coordinator-worker').last()).toBeInViewport();
+    await expect(page.locator('.coordinator-worker strong').last()).toHaveCSS('text-decoration-line', 'none');
+    await page.screenshot({ path: info.outputPath(`worker-roster-real-titles-${colorScheme}.png`) });
+  }
+  await close.tap();
   parent.coordination.tasks = [...Array.from({ length: 10 }, (_, i) => ({ ...task, id: 'old-' + i, state: 'completed' })), { ...task, state: 'working' }];
   client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
   await page.setViewportSize({ width: 320, height: 740 });

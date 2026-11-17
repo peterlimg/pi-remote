@@ -1010,14 +1010,14 @@ pre.message-text { white-space: pre-wrap; }
 /* Lower the markers to the lowercase lettering's optical center. */
 #coordinator-open > :is(#coordinator-worker-slots, svg) { transform: translateY(1px); }
 #coordinator-task-list { display: grid; gap: 8px; }
-.coordinator-worker { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 64px; padding: 10px 14px; border: 1px solid var(--glass-edge); border-radius: 20px; background: var(--glass-fill); color: var(--text); text-align: left; font-weight: 400; }
+.coordinator-worker { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); text-align: left; font-weight: 400; }
 .coordinator-worker > span { flex: 1; min-width: 0; }
-.coordinator-worker strong { display: block; font-size: 16px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
-.coordinator-worker small { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: color-mix(in srgb, var(--muted) 88%, var(--text)); font-size: 13px; }
+.coordinator-worker strong { display: block; font-size: 15px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+.coordinator-worker small { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: color-mix(in srgb, var(--muted) 88%, var(--text)); font-size: 12px; }
 .coordinator-worker[data-state=working] small { color: var(--working); font-weight: 500; }
 .coordinator-worker[data-state=working] small::before { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .coordinator-worker:is([data-state=waiting], [data-state=unknown]) small { color: var(--warning); }
-.coordinator-worker:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) { .coordinator-worker:hover strong { text-decoration: underline; text-underline-offset: 4px; } }
 .coordinator-worker > svg { flex-shrink: 0; color: var(--muted); transform: rotate(90deg); }
 .coordinator-inspection { flex-shrink: 0; width: calc(100% - 32px); max-width: var(--content-width); margin: 0 auto 8px; padding: 8px 16px; border-radius: 20px; }
 .coordinator-inspection p, .coordinator-instruction-label { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -1028,12 +1028,15 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-intro p { max-width: 65ch; color: var(--muted); font-size: 16px; line-height: 1.7; }
 #coordinator-sheet { overflow: clip; padding: 0 max(8px, env(safe-area-inset-right)) max(8px, var(--safe-bottom)) max(8px, env(safe-area-inset-left)); }
 .coordinator-sheet { display: flex; flex-direction: column; width: min(640px, 100%); height: min(52dvh, 640px); max-height: calc(100% - 24px); min-height: 0; border: 0; border-radius: 28px; background: color-mix(in srgb, var(--bg) 96%, transparent); overflow: clip; }
-.coordinator-sheet > header { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; flex-shrink: 0; align-items: center; gap: 8px; padding: 20px 12px 8px; }
+.coordinator-sheet > header { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; flex-shrink: 0; align-items: center; gap: 8px; padding: 20px 14px 12px; }
 .coordinator-sheet > header::before { content: ''; position: absolute; top: 9px; left: calc(50% - 18px); width: 36px; height: 4px; border-radius: 2px; background: var(--muted); }
 .coordinator-heading { grid-area: 1 / 2; min-width: 0; text-align: center; }
 .coordinator-heading h2 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #coordinator-subtitle { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#coordinator-done, #coordinator-log-back { display: grid; place-items: center; grid-row: 1; width: 44px; height: 44px; padding: 0; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass-fill); color: var(--text); }
+#coordinator-subtitle:empty { display: none; }
+#coordinator-done, #coordinator-log-back { position: relative; isolation: isolate; display: grid; place-items: center; grid-row: 1; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+#coordinator-done::before, #coordinator-log-back::before { content: ''; position: absolute; z-index: -1; inset: 6px; border-radius: 50%; background: var(--glass-fill); pointer-events: none; }
+#coordinator-done > svg, #coordinator-log-back > svg { width: 18px; height: 18px; }
 #coordinator-log-back { grid-column: 1; }
 #coordinator-done { grid-column: 3; }
 .coordinator-sheet:has(#coordinator-task-list:not([hidden])) #coordinator-done { grid-column: 1; }

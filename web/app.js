@@ -2342,7 +2342,7 @@ function renderCoordinator(state) {
     renderCoordinatorLog(); return;
   }
   $('coordinator-title').textContent = 'Workers';
-  $('coordinator-subtitle').textContent = summary.join(' · ') || 'No active work';
+  $('coordinator-subtitle').textContent = summary.join(' · ');
   const list = $('coordinator-task-list'), focused = list.querySelector('button:focus')?.dataset.workerId;
   list.replaceChildren();
   const active = new Set(['starting', 'working', 'waiting', 'stopping', 'queued', 'recovering']);
