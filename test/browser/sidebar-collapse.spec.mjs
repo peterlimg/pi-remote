@@ -1,0 +1,50 @@
+import { test, expect } from '@playwright/test';
+
+for (const [width, colorScheme] of [[744, 'dark'], [1280, 'light']]) {
+  test(`sessions sidebar collapses without leaving the conversation at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.emulateMedia({ colorScheme });
+    await page.goto('/#token=browser-test-token-only-123456789012345');
+    const collapse = page.getByRole('button', { name: 'Collapse sessions', exact: true });
+    const show = page.getByRole('button', { name: 'Show sessions', exact: true });
+    const sidebar = page.locator('#sidebar');
+    await expect(collapse).toBeVisible();
+    const target = await collapse.boundingBox();
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(await collapse.evaluate(node => node.getBoundingClientRect().right <= node.closest('aside').getBoundingClientRect().right)).toBe(true);
+    await collapse.click();
+    await expect(sidebar).toBeHidden();
+    await expect(show).toBeFocused();
+    await show.press('Enter');
+    await expect(collapse).toBeFocused();
+    await page.getByRole('button', { name: /Project Alpha/ }).click();
+    await expect(page.locator('#title')).toHaveText('Project Alpha');
+    await page.locator('#prompt').fill('Keep this draft');
+    await page.screenshot({ path: testInfo.outputPath('expanded.png') });
+    const history = await page.evaluate(() => window.history.state);
+    await collapse.click();
+    await expect(sidebar).toBeHidden();
+    expect((await page.locator('main').boundingBox()).width).toBe(width);
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+    await page.screenshot({ path: testInfo.outputPath('collapsed.png') });
+    await show.click();
+    await expect(sidebar).toBeVisible();
+    await expect(show).toBeHidden();
+    await expect(page.locator('#title')).toHaveText('Project Alpha');
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+    expect(await page.evaluate(() => window.history.state)).toEqual(history);
+    await collapse.click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(collapse).toBeHidden();
+    await show.click();
+    await expect(sidebar).toBeVisible();
+    await page.getByRole('button', { name: /Project Beta/ }).click();
+    await expect(page.locator('#title')).toHaveText('Project Beta');
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(sidebar).toBeHidden();
+    await show.click();
+    await page.getByRole('button', { name: /Project Alpha/ }).click();
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+  });
+}

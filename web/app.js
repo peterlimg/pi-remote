@@ -3477,7 +3477,18 @@ function resetSwipe() {
   $('app').classList.remove('swiping', 'opening', 'to-miso'); $('sidebar').inert = false;
   const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
+$('sidebar-collapse').addEventListener('click', () => {
+  haptic();
+  $('app').classList.add('sidebar-collapsed');
+  $('back').focus({ preventScroll: true });
+});
 $('back').addEventListener('click', () => {
+  if (matchMedia('(min-width: 701px)').matches && $('app').classList.contains('sidebar-collapsed')) {
+    haptic();
+    $('app').classList.remove('sidebar-collapsed');
+    $('sidebar-collapse').focus({ preventScroll: true });
+    return;
+  }
   voice?.cancel();
   haptic(); resetSwipe();
   if (backToMiso()) return;
