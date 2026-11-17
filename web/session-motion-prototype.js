@@ -483,106 +483,28 @@ function misoStudy() {
   renderMiso(); syncTheme(); syncMotion();
 }
 
-const orbitSurface = (u, v, radius = 3.8) => [
-  (8.3 + radius * Math.cos(v)) * Math.cos(u),
-  (8.3 + radius * Math.cos(v)) * Math.sin(u),
-  radius * Math.sin(v),
-];
-const orbitMesh = [];
-function drawOrbitDepth({ canvas, context, time }, animate) {
-  if (!orbitMesh.length) {
-    for (let u = 0; u < 64; u++) for (let v = 0; v < 24; v++) {
-      const a = u / 64 * Math.PI * 2, b = v / 24 * Math.PI * 2;
-      const du = Math.PI * 2 / 64, dv = Math.PI * 2 / 24;
-      orbitMesh.push({
-        points: [orbitSurface(a, b), orbitSurface(a + du, b), orbitSurface(a + du, b + dv), orbitSurface(a, b + dv)],
-        normal: [Math.cos(a + du / 2) * Math.cos(b + dv / 2), Math.sin(a + du / 2) * Math.cos(b + dv / 2), Math.sin(b + dv / 2)],
-        edges: [b, b + dv].map(v => [Math.cos(a + du / 2) * Math.cos(v), Math.sin(a + du / 2) * Math.cos(v), Math.sin(v)]),
-      });
-    }
-  }
-  const phase = time % 3.4 / 3.4, t = Math.max(0, Math.min(1, (phase - .18) / .7));
-  const pitch = .55 + (animate ? Math.PI * 2 * t * t * (3 - 2 * t) : 0);
-  const roll = -.3 + (animate ? .16 * Math.sin(phase * Math.PI * 2) : 0);
-  const cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
-  const rotate = ([x, y, z]) => {
-    const py = y * cp - z * sp;
-    return [x * cr - py * sr, x * sr + py * cr, y * sp + z * cp];
-  };
-  const project = ([x, y, z]) => [16 + x * 60 / (60 - z), 16 + y * 60 / (60 - z)];
-  const faces = [], eyeDecals = [];
-  const shade = normal => {
-    const diffuse = Math.max(0, -.45 * normal[0] - .65 * normal[1] + .61 * normal[2]);
-    const shine = Math.pow(Math.max(0, -.25 * normal[0] - .36 * normal[1] + .9 * normal[2]), 24);
-    return `rgb(${[149, 86, 246].map(value => Math.min(255, Math.round(value * (.45 + .55 * diffuse) + 65 * shine))).join(',')})`;
-  };
-  for (const patch of orbitMesh) {
-    const points = patch.points.map(rotate), normal = rotate(patch.normal);
-    const center = points[0].map((_, axis) => points.reduce((sum, point) => sum + point[axis], 0) / 4);
-    if (normal[0] * -center[0] + normal[1] * -center[1] + normal[2] * (60 - center[2]) <= 0) continue;
-    faces.push({ points: points.map(project), depth: center[2], colors: patch.edges.map(edge => shade(rotate(edge))) });
-  }
-  const blinkPhase = time % 4.7;
-  const blink = animate && blinkPhase > 4.5 ? 1 - .9 * Math.sin((blinkPhase - 4.5) / .2 * Math.PI) : 1;
-  for (const u of [1.08, Math.PI - 1.08]) {
-    const center = rotate(orbitSurface(u, Math.PI / 2, 3.84)), normal = rotate([0, 0, 1]);
-    const facingCamera = (normal[0] * -center[0] + normal[1] * -center[1] + normal[2] * (60 - center[2])) / Math.hypot(center[0], center[1], 60 - center[2]);
-    if (facingCamera < .5) continue;
-    const points = Array.from({ length: 24 }, (_, index) => {
-      const angle = index / 24 * Math.PI * 2;
-      return project(rotate(orbitSurface(u + .15 * Math.cos(angle), Math.PI / 2 + .48 * blink * Math.sin(angle), 3.84)));
-    });
-    eyeDecals.push({ points, color: '#1c1037' });
-  }
-  faces.sort((a, b) => a.depth - b.depth);
-  context.setTransform(canvas.width / 32, 0, 0, canvas.height / 32, 0, 0);
-  context.clearRect(0, 0, 32, 32);
-  context.lineWidth = .35; context.lineJoin = 'round';
-  for (const face of [...faces, ...eyeDecals]) {
-    let fill = face.color;
-    if (face.colors) {
-      const [a, b, c, d] = face.points;
-      fill = context.createLinearGradient((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (c[0] + d[0]) / 2, (c[1] + d[1]) / 2);
-      fill.addColorStop(0, face.colors[0]); fill.addColorStop(1, face.colors[1]);
-    }
-    context.globalCompositeOperation = face.colors ? 'source-over' : 'source-atop';
-    context.beginPath();
-    face.points.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
-    context.closePath(); context.fillStyle = fill; context.fill();
-    if (face.colors) { context.strokeStyle = fill; context.stroke(); }
-  }
-  context.globalCompositeOperation = 'source-over';
-}
-
 function celestialBot(kind, moving = true, size = 32, offset = 0) {
   const node = el('span', undefined, 'bot m-bot presence-bot celestial-bot');
   node.dataset.kind = kind; node.dataset.state = moving ? 'working' : 'ready';
   node.style.setProperty('--size', `${size}px`);
   node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${moving ? 'working study' : 'idle study'}`);
-  if (kind === 'orbit') {
-    const canvas = el('canvas'); canvas.setAttribute('aria-hidden', 'true');
-    canvas.width = canvas.height = Math.ceil(size * Math.min(2, devicePixelRatio || 1));
-    node.append(canvas);
-    const rig = { node, kind, study: 'celestial', moving, time: offset, canvas, context: canvas.getContext('2d') };
-    presenceRigs.push(rig); drawOrbitDepth(rig, false);
-    return node;
-  }
   const id = `celestial-body-${++presenceId}`;
   const body = characters[kind][1];
+  const ring = front => `<g class="presence-ring presence-ring-${front ? 'front' : 'back'}"><path class="presence-ring-gap"/><path class="presence-ring-ink"/></g>`;
   node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><clipPath id="${id}-clip"><use href="#${id}"/></clipPath></defs><g data-part="pose">`
-    + (kind === 'comet' ? characters.comet[3] : '')
+    + (kind === 'comet' ? characters.comet[3] : kind === 'orbit' ? ring(false) : '')
     + `<g class="bot-body">${body}</g><g clip-path="url(#${id}-clip)"><ellipse class="bot-eye"/><ellipse class="bot-eye"/></g>`
-    + (kind === 'comet' && moving ? signatureParts.comet : '') + '</g></svg>';
+    + (kind === 'orbit' ? ring(true) : kind === 'comet' && moving ? signatureParts.comet : '') + '</g></svg>';
   const rig = { node, kind, study: 'celestial', moving, time: offset,
     pose: node.querySelector('[data-part=pose]'), body: node.querySelector('.bot-body > :first-child'),
-    eyes: [...node.querySelectorAll('.bot-eye')], tails: [...node.querySelectorAll('.character-comet-tail path')], streak: node.querySelector('.m-speed') };
+    eyes: [...node.querySelectorAll('.bot-eye')], tails: [...node.querySelectorAll('.character-comet-tail path')],
+    rings: [...node.querySelectorAll('.presence-ring')], streak: node.querySelector('.m-speed') };
   rig.body.id = id;
   presenceRigs.push(rig); drawCelestial(rig, false);
   return node;
 }
 function drawCelestial(rig, animate) {
-  if (rig.kind === 'orbit') return drawOrbitDepth(rig, animate);
-  const { kind, time, pose, body, eyes, tails, streak } = rig;
+  const { kind, time, pose, body, eyes, tails, rings, streak } = rig;
   const smooth = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
   let positions, eyeWidth = 2.1, eyeHeight = 2.9;
   if (kind === 'luna') {
@@ -605,6 +527,16 @@ function drawCelestial(rig, animate) {
     eyeHeight = 2.9 - dash * 1.5;
     streak?.setAttribute('opacity', animate ? String(.3 + .7 * dash) : '0');
     streak?.setAttribute('transform', `translate(${2 - 5 * dash} ${-2 + 5 * dash})`);
+  } else if (kind === 'orbit') {
+    const phase = time / 3.6 * Math.PI * 2;
+    const tilt = -24 + (animate ? 10 * Math.sin(phase) : 0);
+    const depth = 4.5 + (animate ? 1.8 * Math.sin(phase + .6) : 0);
+    rings.forEach((ring, index) => {
+      ring.setAttribute('transform', `rotate(${tilt} 16 17)`);
+      for (const path of ring.children) path.setAttribute('d', `M1.5 17A14.5 ${depth} 0 0 ${index === 0 ? 1 : 0} 30.5 17`);
+    });
+    const glance = animate ? .9 * Math.sin(phase + .3) : 0;
+    positions = [[12 + glance, 13], [20 + glance, 13]];
   }
   const blinkPhase = time % 4.7;
   const blink = animate && blinkPhase > 4.5 ? 1 - .9 * Math.sin((blinkPhase - 4.5) / .2 * Math.PI) : 1;
@@ -618,7 +550,7 @@ function celestialStudy() {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Luna, Comet and Orbit · Pi Remote';
   document.querySelector('h1').textContent = 'Luna, Comet & Orbit';
-  document.querySelector('.lede').textContent = 'Comet keeps its working streaks. Orbit has a rounded, shaded ring. Sample activity only.';
+  document.querySelector('.lede').textContent = 'Comet keeps its working streaks. Orbit is a flat planet with a ring passing behind and in front. Sample activity only.';
   $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
   $('comparison').hidden = false; $('comparison-note').hidden = false; $('replay').hidden = false;
   page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
@@ -640,7 +572,7 @@ function celestialStudy() {
     for (const [kind, description] of [
       ['luna', 'The crescent curls inward, then opens again.'],
       ['comet', 'The tail unfolds into the dash, with working streaks alongside.'],
-      ['orbit', 'A rounded ring with a shaded inner wall. The eyes turn with its surface.'],
+      ['orbit', 'A solid planet and two eyes. The ring tilts behind and in front, without shading or extra details.'],
     ]) {
       const section = el('section', undefined, 'motion-comparison');
       section.setAttribute('aria-label', characters[kind][0]);

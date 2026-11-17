@@ -8,7 +8,7 @@ test('simple celestial study animates silhouettes while keeping other characters
     if (browserName === 'webkit') { await control.focus(); await page.keyboard.press('Enter'); }
     else await control.click();
   };
-  const drawing = node => node.innerHTML + [...node.querySelectorAll('canvas')].map(canvas => canvas.toDataURL()).join('');
+  const drawing = node => node.innerHTML;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'dark' });
   await page.goto('/session-motion-prototype.html?study=celestial');
@@ -24,49 +24,40 @@ test('simple celestial study animates silhouettes while keeping other characters
   expect(await working.evaluateAll(nodes => nodes.every(node => node.offsetWidth === 32 && node.offsetHeight === 32))).toBe(true);
   const idleDrawing = await idle.evaluate(drawing);
   const orbit = list.locator('[data-kind=orbit]');
-  await expect(orbit.locator('canvas')).toHaveCount(1);
-  const idleOrbit = page.locator('[data-variant=rest] [data-kind=orbit] canvas');
-  const surface = await idleOrbit.evaluate(canvas => {
-    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    const colors = new Set(), brightness = [];
-    for (let i = 0; i < data.length; i += 4) if (data[i + 3] === 255) {
-      colors.add(data.slice(i, i + 3).join(','));
-      brightness.push(data[i] + data[i + 1] + data[i + 2]);
-    }
-    const center = (Math.floor(canvas.height / 2) * canvas.width + Math.floor(canvas.width / 2)) * 4;
-    return { colors: colors.size, range: Math.max(...brightness) - Math.min(...brightness), centerAlpha: data[center + 3] };
-  });
-  expect(surface.colors).toBeGreaterThan(30);
-  expect(surface.range).toBeGreaterThan(100);
-  expect(surface.centerAlpha).toBe(0);
-  const idleOrbitDrawing = await idleOrbit.evaluate(canvas => canvas.toDataURL());
+  await expect(orbit.locator('canvas, linearGradient, radialGradient, filter')).toHaveCount(0);
+  await expect(orbit.locator('.bot-body circle')).toHaveAttribute('r', '10');
+  await expect(orbit.locator('.bot-eye')).toHaveCount(2);
+  expect(await orbit.evaluate(node => {
+    const back = node.querySelector('.presence-ring-back'), body = node.querySelector('.bot-body'), front = node.querySelector('.presence-ring-front');
+    return Boolean(back.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)
+      && Boolean(body.compareDocumentPosition(front) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })).toBe(true);
+  const idleOrbit = page.locator('[data-variant=rest] [data-kind=orbit]');
+  const idleOrbitDrawing = await idleOrbit.evaluate(drawing);
   await expect(list.locator('[data-kind=comet] .m-speed')).toHaveAttribute('d', 'M8 4 4 8M5 11l-3 3M28 22l-4 4');
   await expect(page.locator('[data-variant=rest] [data-kind=comet] .m-speed')).toHaveCount(0);
   const poses = await list.evaluate(async list => {
     const moon = list.querySelector('[data-kind=luna] .bot-body path');
     const tail = list.querySelector('[data-kind=comet] .character-comet-tail');
-    const ring = list.querySelector('[data-kind=orbit] canvas');
+    const ring = list.querySelector('[data-kind=orbit] .presence-ring-front');
     const streak = list.querySelector('[data-kind=comet] .m-speed');
-    const moons = new Set(), tails = new Set(), frames = new Set(), faces = new Set(), streaks = [];
+    const moons = new Set(), tails = new Set(), frames = new Set(), tilts = new Set(), streaks = [];
     const start = performance.now();
     while (performance.now() - start < 4000) {
-      moons.add(moon.getAttribute('d')); tails.add(tail.innerHTML); frames.add(ring.toDataURL());
-      const { data } = ring.getContext('2d').getImageData(0, 0, ring.width, ring.height);
-      let eyes = 0;
-      for (let i = 0; i < data.length; i += 4) if (data[i] === 28 && data[i + 1] === 16 && data[i + 2] === 55 && data[i + 3] > 200) eyes++;
-      faces.add(eyes > 0); streaks.push(Number(streak.getAttribute('opacity')));
+      moons.add(moon.getAttribute('d')); tails.add(tail.innerHTML); frames.add(ring.innerHTML);
+      tilts.add(ring.getAttribute('transform')); streaks.push(Number(streak.getAttribute('opacity')));
       await new Promise(resolve => setTimeout(resolve, 80));
     }
-    return { moons: moons.size, tails: tails.size, frames: frames.size, faces: [...faces].sort(),
+    return { moons: moons.size, tails: tails.size, frames: frames.size, tilts: tilts.size,
       streakMin: Math.min(...streaks), streakMax: Math.max(...streaks) };
   });
   expect(poses.moons).toBeGreaterThan(20);
   expect(poses.tails).toBeGreaterThan(20);
   expect(poses.frames).toBeGreaterThan(20);
-  expect(poses.faces).toEqual([false, true]);
+  expect(poses.tilts).toBeGreaterThan(20);
   expect(poses.streakMin).toBeGreaterThan(0);
   expect(poses.streakMax - poses.streakMin).toBeGreaterThan(.4);
-  expect(await idleOrbit.evaluate(canvas => canvas.toDataURL())).toBe(idleOrbitDrawing);
+  expect(await idleOrbit.evaluate(drawing)).toBe(idleOrbitDrawing);
   expect(await idle.evaluate(drawing)).toBe(idleDrawing);
   await activate(page.getByRole('button', { name: 'Pause motion', exact: true }));
   await page.waitForTimeout(80);
