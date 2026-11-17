@@ -15,8 +15,13 @@ for (const [width, colorScheme] of [[744, 'dark'], [1280, 'light']]) {
     expect(await collapse.evaluate(node => node.getBoundingClientRect().right <= node.closest('aside').getBoundingClientRect().right)).toBe(true);
     await collapse.click();
     await expect(sidebar).toBeHidden();
-    await expect(show.getByText('Sessions', { exact: true })).toBeVisible();
+    await expect(show).toHaveText('');
+    await expect(show).toHaveAttribute('id', 'sidebar-open');
     await expect(show).toBeInViewport();
+    const reopen = await show.boundingBox();
+    expect(reopen.x).toBe(10);
+    expect(reopen.width).toBe(44);
+    expect(reopen.height).toBe(44);
     await expect(show).toBeFocused();
     await show.press('Enter');
     await expect(collapse).toBeFocused();
@@ -39,7 +44,8 @@ for (const [width, colorScheme] of [[744, 'dark'], [1280, 'light']]) {
     await collapse.click();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(collapse).toBeHidden();
-    await expect(show.getByText('Sessions', { exact: true })).toBeHidden();
+    await expect(page.locator('#sidebar-open')).toBeHidden();
+    await expect(show).toHaveAttribute('id', 'back');
     await show.click();
     await expect(sidebar).toBeVisible();
     await page.getByRole('button', { name: /Project Beta/ }).click();
