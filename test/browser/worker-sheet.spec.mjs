@@ -141,7 +141,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(sheet).toBeFocused(); await expect(close).not.toBeFocused();
   await expect(close).toHaveCSS('outline-style', 'none');
   await expect(page.locator('#coordinator-task-list > div')).toHaveCount(2);
-  const borders = await page.locator('.coordinator-sheet, .coordinator-sheet > header, #coordinator-task-list > div, #coordinator-task-list button').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderWidth));
+  const borders = await page.locator('.coordinator-sheet, .coordinator-sheet > header, #coordinator-task-list > div').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderWidth));
   expect(borders.every(width => width === '0px')).toBe(true);
   await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
   const workingStatus = page.getByRole('button', { name: task.title + ', Working', exact: true }).locator('small');
@@ -165,6 +165,15 @@ test('worker sheet scopes history and images without disturbing the live parent'
         targets: [...list.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44) };
     });
     await checkFloatingSheet(true);
+    const cards = await page.locator('.coordinator-worker').evaluateAll(nodes => nodes.map(node => {
+      const style = getComputedStyle(node);
+      return { radius: style.borderRadius, border: style.borderWidth, fill: style.backgroundColor, shadow: style.boxShadow };
+    }));
+    for (const card of cards) {
+      expect(card).toMatchObject({ radius: '20px', border: '1px', shadow: 'none' });
+      expect(card.fill).not.toBe('rgba(0, 0, 0, 0)');
+    }
+    await expect(page.locator('#coordinator-task-list')).toHaveCSS('gap', '8px');
     expect(roster.height).toBeLessThan(320); expect(Math.abs(roster.emptySpace)).toBeLessThanOrEqual(1); expect(roster.targets).toBe(true);
     await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
   }
