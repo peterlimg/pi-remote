@@ -110,6 +110,11 @@ test('worker sheet scopes history and images without disturbing the live parent'
       await page.screenshot({ path: info.outputPath(`single-worker-${colorScheme}-${state}.png`) });
     }
   }
+  await page.locator('#coordinator-open').tap();
+  await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeLessThan(240);
+  await page.screenshot({ path: info.outputPath('single-worker-roster.png') });
+  await page.getByRole('button', { name: 'Close workers', exact: true }).tap();
   parent.coordination.tasks = allTasks;
   task.state = 'working';
   client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
@@ -126,7 +131,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
   const workingStatus = page.getByRole('button', { name: task.title + ', Working', exact: true }).locator('small');
   const finishedStatus = page.getByRole('button', { name: /, Integrated$/ }).locator('small');
-  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['desktop-light', 1440, 900, 'light'], ['desktop-dark', 1440, 900, 'dark']]) {
+  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'light'], ['desktop-light', 1440, 900, 'light'], ['desktop-dark', 1440, 900, 'dark']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
     const marker = await workingStatus.evaluate(node => {
       const dot = getComputedStyle(node, '::before');
@@ -138,6 +143,13 @@ test('worker sheet scopes history and images without disturbing the live parent'
     await expect(workingStatus).toHaveText('Working'); await expect(finishedStatus).toHaveText('Integrated');
     expect(await finishedStatus.evaluate(node => getComputedStyle(node, '::before').content)).toBe('none');
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    const roster = await page.locator('.coordinator-sheet').evaluate(node => {
+      const scroll = node.querySelector('#coordinator-scroll'), list = node.querySelector('#coordinator-task-list');
+      const style = getComputedStyle(scroll);
+      return { height: node.getBoundingClientRect().height, emptySpace: scroll.clientHeight - list.offsetHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+        targets: [...list.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44) };
+    });
+    expect(roster.height).toBeLessThan(320); expect(Math.abs(roster.emptySpace)).toBeLessThanOrEqual(1); expect(roster.targets).toBe(true);
     await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'dark' });
@@ -156,6 +168,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const layout = [];
   for (const [name, width, height, colorScheme] of [['phone', 390, 844, 'light'], ['dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'light'], ['desktop', 1440, 900, 'light']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
+    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(Math.min(height * .72, 640), 0);
     const space = await page.locator('.coordinator-sheet').evaluate(node => ({
       sheet: node.getBoundingClientRect().height, header: node.querySelector('header').getBoundingClientRect().height,
       body: node.querySelector('#coordinator-scroll').getBoundingClientRect().height, safeBottom: parseFloat(getComputedStyle(node).paddingBottom),
@@ -202,6 +215,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const back = page.getByRole('button', { name: 'Back to workers', exact: true });
   await back.tap(); await expect(sheet).toBeFocused();
   await expect(page.locator('#coordinator-title')).toHaveText('Workers');
+  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeLessThan(320);
   const workerButton = page.getByRole('button', { name: task.title + ', Working', exact: true });
   await workerButton.focus(); await page.keyboard.press('Enter');
   await expect(back).toBeFocused(); await expect(back).toHaveCSS('outline-style', 'solid');
@@ -249,6 +263,19 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('#coordinator-open')).toHaveAccessibleName(/11 total.*1 working/);
   expect((await page.locator('#coordinator-open').boundingBox()).width).toBeLessThan(200);
   await page.screenshot({ path: info.outputPath('worker-slots-history.png') });
+  await page.locator('#coordinator-open').tap();
+  await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+  for (const height of [740, 510]) {
+    await page.setViewportSize({ width: 320, height });
+    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(height * .72, 0);
+    const scroll = page.locator('#coordinator-scroll');
+    expect(await scroll.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+    await page.locator('#coordinator-task-list button').last().scrollIntoViewIfNeeded();
+    expect(await scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    await expect(close).toBeInViewport();
+    await page.screenshot({ path: info.outputPath(`worker-roster-many-${height}.png`) });
+  }
+  await close.tap();
   parent.coordination.tasks = [];
   client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
   await expect(page.locator('#coordinator-context')).toBeHidden();
