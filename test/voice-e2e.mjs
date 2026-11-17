@@ -32,7 +32,11 @@ try {
       assert.equal(body.session.model, 'gpt-live-1-codex'); assert.ok(body.sdp.startsWith('v=0'));
       offers.push({ body, signal: options.signal });
       if (mode === 'held') await new Promise(resolve => { releaseRequest = resolve; });
-      if (liveFile) return fetch(url, options);
+      if (liveFile) {
+        const started = performance.now(), response = await fetch(url, options);
+        console.log(JSON.stringify({ live: true, authorizationMs: Math.round(performance.now() - started), status: response.status }));
+        return response;
+      }
       assert.equal(options.headers.Authorization, 'Bearer private-test-token');
       if (mode === 'quota') return new Response('private-test-token: provider error details', { status: 429 });
       if (mode === 'malformed') return new Response('private-test-token: invalid SDP');
@@ -62,7 +66,23 @@ try {
   await context.addInitScript(({ audio64, sdp }) => {
     if (!navigator.mediaDevices) return;
     window.voiceTracks = []; window.voiceContexts = []; window.voicePeers = []; window.voiceSent = []; window.voiceClosed = 0; window.voiceEvents = [];
-    const NativeAudioContext = window.AudioContext, NativePeer = window.RTCPeerConnection;
+    window.voiceTiming = {};
+    const NativeAudioContext = window.AudioContext, NativePeer = window.RTCPeerConnection, NativeWorklet = window.AudioWorkletNode;
+    window.AudioWorkletNode = class extends NativeWorklet {
+      constructor(...args) {
+        super(...args);
+        window.voiceTiming.capture = performance.now();
+        const post = this.port.postMessage.bind(this.port);
+        this.port.postMessage = message => {
+          if (message === 'play') window.voiceTiming.play ??= performance.now();
+          if (message === 'stop') window.voiceTiming.stop = performance.now();
+          return post(message);
+        };
+        this.port.addEventListener('message', ({ data }) => {
+          if (data === 'drained') window.voiceTiming.drained = performance.now();
+        });
+      }
+    };
     window.AudioContext = class extends NativeAudioContext {
       constructor(...args) { super(...args); window.voiceContexts.push(this); }
     };
@@ -72,7 +92,7 @@ try {
         const source = audio.createBufferSource();
         source.buffer = await audio.decodeAudioData(Uint8Array.from(atob(audio64), c => c.charCodeAt(0)).buffer);
         source.connect(destination);
-        window.playVoiceSample = () => new Promise(resolve => { source.onended = () => { window.voiceAudioEndedAt = performance.now(); resolve(); }; source.start(); });
+        window.playVoiceSample = () => new Promise(resolve => { source.onended = () => { window.voiceAudioEndedAt = performance.now(); resolve(); }; window.voiceTiming.speech = performance.now(); source.start(); });
       } else {
         const oscillator = audio.createOscillator(), gain = window.voiceGain = audio.createGain();
         gain.gain.value = .15; oscillator.connect(gain); gain.connect(destination); oscillator.start();
@@ -81,11 +101,32 @@ try {
     };
     if (audio64) {
       window.RTCPeerConnection = class extends NativePeer {
-        constructor(...args) { super(...args); window.voicePeers.push(this); }
+        constructor(...args) {
+          super(...args); window.voicePeers.push(this);
+          this.addEventListener('connectionstatechange', () => {
+            if (this.connectionState === 'connected') window.voiceTiming.mediaConnected = performance.now();
+          });
+        }
+        async createOffer(...args) {
+          window.voiceTiming.offer = performance.now();
+          return super.createOffer(...args);
+        }
+        async setRemoteDescription(...args) {
+          window.voiceTiming.answer = performance.now();
+          return super.setRemoteDescription(...args);
+        }
         createDataChannel(...args) {
           const channel = super.createDataChannel(...args);
+          channel.addEventListener('open', () => { window.voiceTiming.connected = performance.now(); });
           channel.addEventListener('message', event => { try {
             const packet = JSON.parse(event.data);
+            if (packet.type === 'input_transcript.added' && packet.item?.text?.trim() && !window.voiceTiming.firstText) {
+              window.voiceTiming.firstText = performance.now();
+              setTimeout(() => {
+                window.voiceTiming.firstPreview = document.getElementById('prompt').value;
+                window.voiceTiming.preview = performance.now();
+              }, 0);
+            }
             if (packet.type === 'session.closed') window.voiceClosed++;
             if (['input_transcript.added', 'turn.done', 'error'].includes(packet.type)) window.voiceEvents.push({ at: performance.now(), type: packet.type, role: packet.turn?.role, id: packet.turn?.id, text: packet.type === 'input_transcript.added' ? packet.item?.text : packet.turn?.role === 'user' ? packet.turn.transcript : undefined });
           } catch {} });
@@ -107,7 +148,7 @@ try {
       async createOffer() { return { type: 'offer', sdp }; }
       async setLocalDescription() {}
       async setRemoteDescription() {
-        this.connectionState = 'connected';
+        this.connectionState = 'connected'; this.onconnectionstatechange?.();
         if (!window.voiceHoldConnection) { this.channel.readyState = 'open'; this.channel.onopen?.(); }
       }
       close() {
@@ -144,6 +185,20 @@ try {
   const packet = event => page.evaluate(event => window.voicePeers.at(-1).channel.onmessage?.({ data: JSON.stringify(event) }), event);
   const partial = text => packet({ type: 'input_transcript.added', item: { text } });
   const final = (text, id = 'turn-1') => packet({ type: 'turn.done', turn: { id, role: 'user', transcript: text } });
+  const timing = () => page.evaluate(() => {
+    const t = window.voiceTiming;
+    return {
+      captureToConnectionMs: Math.round(t.connected - t.capture),
+      offerToAnswerMs: Math.round(t.answer - t.offer),
+      answerToMediaMs: Math.round(t.mediaConnected - t.answer),
+      mediaToChannelMs: Math.round(t.connected - t.mediaConnected),
+      mediaToPlaybackMs: Math.round(t.play - t.mediaConnected),
+      transcriptToPreviewMs: Math.round(t.preview - t.firstText),
+      speechToFirstTextMs: Math.round(t.firstText - t.speech),
+      stopToBufferDrainedMs: Math.round(t.drained - t.stop),
+      firstPreview: t.firstPreview
+    };
+  });
   const assertPrivate = () => {
     for (const frame of hostFrames.filter(frame => frame.op?.startsWith('voice'))) {
       assert.ok(['voiceStart', 'voiceCancel'].includes(frame.op));
@@ -155,7 +210,9 @@ try {
   await expect(page.locator('#fast-mode')).toBeVisible(); await expect(page.locator('#commands')).toBeVisible();
   await page.locator('#prompt').fill('Keep this draft.');
   await page.locator('#prompt').evaluate(input => { window.voicePromptBlurs = 0; input.addEventListener('blur', () => window.voicePromptBlurs++); });
-  if (liveFile) mode = 'held'; await record();
+  if (liveFile) mode = 'held';
+  else await page.evaluate(() => { window.voiceHoldConnection = true; });
+  await record();
   if (liveFile) {
     await until(() => releaseRequest);
     const playback = page.evaluate(() => window.playVoiceSample());
@@ -184,7 +241,7 @@ try {
     await expect(page.locator('#notice')).toBeHidden();
     const text = (await page.locator('#prompt').inputValue()).trim();
     assert.match(text, /^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i);
-    console.log(JSON.stringify({ live: true, stopToEditableDraftMs, stopToCompletePreviewMs, editedWhileFinishing, text, promptsSent: commands.length }));
+    console.log(JSON.stringify({ live: true, ...await timing(), stopToEditableDraftMs, stopToCompletePreviewMs, editedWhileFinishing, text, promptsSent: commands.length }));
     assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('orange bicycle'));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
     await fresh(); await page.locator('#prompt').fill('Silent draft'); await record(); await delay(500);
@@ -200,10 +257,18 @@ try {
     assert.match(commands[0].text, /The orange bicycle is parked beside the library[.!]?$/i);
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#model')).toBeVisible();
     await expect(page.locator('#prompt')).toHaveValue('');
-    console.log(JSON.stringify({ live: true, catchupSendMs: Math.round(performance.now() - sendStarted), text: commands[0].text, promptsToSimulatedAgent: commands.length }));
+    console.log(JSON.stringify({ live: true, ...await timing(), catchupSendMs: Math.round(performance.now() - sendStarted), text: commands[0].text, promptsToSimulatedAgent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
   } else {
-    await until(() => offers.length === 1); await partial('Purple notebook');
+    await until(() => offers.length === 1);
+    await page.evaluate(() => window.monitorVoiceOutput());
+    await expect.poll(() => page.evaluate(() => window.voiceOutputLevel()), { timeout: 3000, message: 'Audio must start on the connected media link without waiting for the data channel' }).toBeGreaterThan(.03);
+    await page.evaluate(() => {
+      const channel = window.voicePeers.at(-1).channel;
+      channel.readyState = 'open'; channel.onopen();
+      return window.stopVoiceMonitor();
+    });
+    await partial('Purple notebook');
     await packet({ type: 'turn.done', turn: { id: 'assistant-1', role: 'assistant', transcript: 'Do not insert this' } });
     await packet({ type: 'delegation.created', item: { type: 'delegation', target: 'client' } });
     await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);

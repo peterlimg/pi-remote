@@ -236,6 +236,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       channel.onmessage = event => providerEvent(call, event.data);
       channel.onclose = channel.onerror = () => review(call, 'Voice connection lost. Check the draft before sending.');
       peer.onconnectionstatechange = () => {
+        if (peer.connectionState === 'connected') call.buffer.port.postMessage('play');
         if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) review(call, 'Voice connection lost. Check the draft before sending.');
       };
       const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
