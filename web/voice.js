@@ -166,7 +166,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
         call.partial = '';
       } else return; // Ignore assistant audio/text and tool requests; never forward them to the host.
       if (transcript(call).length > 16000) { review(call, 'Dictation is too long. Check the draft before sending.'); return; }
-      if (call.phase === 'finishing' && !preview(call)) return;
+      if (!preview(call)) return;
       settled(call);
     } catch { review(call, 'Dictation was interrupted. Check the draft before sending.'); }
   }
@@ -180,11 +180,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       stopMeter(call);
     }
     call.phase = sending ? 'sending' : 'finishing';
-    if (sending) {
-      if (call.preview !== undefined && input.value === call.preview) input.value = call.draft;
-      call.preview = undefined;
-      input.blur(); render();
-    } else if (!preview(call)) return;
+    if (!preview(call)) return;
     settled(call);
   }
   async function start() {
@@ -192,7 +188,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     const state = context();
     if (!state.enabled || !supported()) return;
     const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'preparing', turns: new Map(), partial: '' };
-    input.blur(); notice(''); render(); cancelButton.focus({ preventScroll: true });
+    notice(''); if (!preview(call)) return;
     try {
       call.audio = prepare();
       await Promise.all([prepared, call.audio.resume()]);

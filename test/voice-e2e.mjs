@@ -45,7 +45,7 @@ try {
     const file = join(dir, title + '.jsonl'); writeFileSync(file, '');
     const id = sessionKey(file), instanceId = randomUUID(), lock = acquireLock(join(dir, 'locks'), id, { file, instanceId }); locks.push(lock);
     const agent = await socket(origin.replace('http:', 'ws:') + '/bridge', config.bridgeToken); agents.push(agent);
-    const state = { id, file, instanceId, title, model, cwd: dir, status: 'idle', contextUsage: { tokens: 32000, contextWindow: 100000, percent: 32 }, messages: [{ id: 'hello', role: 'user', text: 'Voice test' }], tools: [], revision: 0, updatedAt: Date.now() };
+    const state = { id, file, instanceId, title, model, cwd: dir, status: 'idle', fastMode: true, contextUsage: { tokens: 32000, contextWindow: 100000, percent: 32 }, messages: [{ id: 'hello', role: 'user', text: 'Voice test' }], tools: [], revision: 0, updatedAt: Date.now() };
     states.push(state); agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state }));
     agent.ws.on('message', raw => {
       const packet = JSON.parse(raw.toString()); if (packet.type !== 'command') return;
@@ -152,17 +152,25 @@ try {
   };
 
   await fresh(); await expect(page.locator('#voice-accept')).toHaveCount(0);
-  await page.locator('#prompt').fill('Keep this draft.'); if (liveFile) mode = 'held'; await record();
+  await expect(page.locator('#fast-mode')).toBeVisible(); await expect(page.locator('#commands')).toBeVisible();
+  await page.locator('#prompt').fill('Keep this draft.');
+  await page.locator('#prompt').evaluate(input => { window.voicePromptBlurs = 0; input.addEventListener('blur', () => window.voicePromptBlurs++); });
+  if (liveFile) mode = 'held'; await record();
   if (liveFile) {
     await until(() => releaseRequest);
     const playback = page.evaluate(() => window.playVoiceSample());
     await delay(1500); releaseRequest(); releaseRequest = undefined;
     await playback;
+    await expect(page.locator('#prompt')).not.toHaveValue('Keep this draft.', { timeout: 6000 });
+    await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'recording');
+    await expect(page.locator('#prompt')).toBeFocused();
+    await page.screenshot({ path: join(evidence, 'live-recording-phone.png'), fullPage: true });
     const started = performance.now(); await stop(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible({ timeout: 1000 });
-    await expect(page.locator('#prompt')).not.toBeFocused();
+    await expect(page.locator('#prompt')).toBeFocused();
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     const stopToEditableDraftMs = Math.round(performance.now() - started);
+    assert.equal(await page.evaluate(() => window.voicePromptBlurs), 0);
     try { await expect(page.locator('#prompt')).toHaveValue(/^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i, { timeout: 6000 }); }
     catch (error) {
       console.log(JSON.stringify({ liveDiagnostics: await page.evaluate(() => window.voiceEvents.slice(-15).map(({ at, ...event }) => ({ ...event, afterAudioEndMs: Math.round(at - window.voiceAudioEndedAt) }))) }));
@@ -188,7 +196,7 @@ try {
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1); assert.equal(commands.length, 0);
     await fresh(); await record(); await page.evaluate(() => window.playVoiceSample());
     const sendStarted = performance.now(); await page.getByRole('button', { name: 'Send message' }).click();
-    await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused();
+    await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).not.toBeFocused();
     await expect(page.locator('#model')).toBeHidden();
     await until(() => commands.length === 1, 20000);
     assert.match(commands[0].text, /The orange bicycle is parked beside the library[.!]?$/i);
@@ -205,24 +213,39 @@ try {
       const x = []; for (let frame = 0; frame < 20; frame++) { await new Promise(requestAnimationFrame); x.push(bar.getBoundingClientRect().x); } return x;
     });
     assert.ok(positions.slice(1).filter((x, i) => x < positions[i] - .05).length >= 15, 'Continuous waveform motion');
-    await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused(); await expect(page.locator('#send')).toBeVisible();
+    await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toBeFocused(); await expect(page.locator('#send')).toBeVisible();
+    await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook');
+    await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'recording');
     await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#model')).toBeHidden();
     assert.equal(await page.locator('#voice-status').evaluate(node => node.parentElement.className), 'composer-toolbar');
     const levels = () => page.locator('#voice-waveform i').evaluateAll(bars => bars.map(bar => parseFloat(bar.style.height)));
     await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(20);
     await page.evaluate(() => { window.voiceGain.gain.value = 0; }); await expect.poll(async () => Math.max(...await levels())).toBe(3);
     await page.evaluate(() => { window.voiceGain.gain.value = .01; }); await expect.poll(async () => Math.max(...await levels())).toBeGreaterThan(8);
-    await page.screenshot({ path: join(evidence, 'recording-phone.png'), fullPage: true });
+    for (const [width, colorScheme] of [[320, 'light'], [390, 'dark'], [1280, 'light']]) {
+      await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme });
+      const field = await page.locator('#prompt').boundingBox(), toolbar = await page.locator('.composer-toolbar').boundingBox();
+      assert.ok(field.y + field.height <= toolbar.y + 1, 'Live text stays above the recording toolbar');
+      for (const id of ['prompt', 'voice-cancel', 'voice-waveform', 'voice-record', 'send']) {
+        const box = await page.locator('#' + id).boundingBox();
+        assert.ok(box && box.width > 0 && box.x >= 0 && box.x + box.width <= width, `${id} fits while recording at ${width}px`);
+        if (['voice-cancel', 'voice-record', 'send'].includes(id)) assert.ok(box.width >= 44 && box.height >= 44);
+      }
+      await page.screenshot({ path: join(evidence, `recording-${width}-${colorScheme}.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'light' });
     await stop(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook');
-    await expect(page.locator('#prompt')).not.toBeFocused(); await expect(page.locator('#model')).toBeVisible();
+    await expect(page.locator('#prompt')).toBeFocused(); await expect(page.locator('#model')).toBeVisible();
+    await expect(page.locator('#fast-mode')).toBeVisible(); await expect(page.locator('#commands')).toBeVisible();
+    assert.equal(await page.evaluate(() => window.voicePromptBlurs), 0);
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty();
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     assert.equal(commands.length, 0);
     await partial(' beside the lamp'); await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp');
     await delay(1900); const receivedAt = performance.now(); await final('Purple notebook beside the lamp.');
     await expect(page.locator('#prompt')).toHaveValue('Keep this draft. Purple notebook beside the lamp.', { timeout: 1000 });
-    await expect(page.locator('#prompt')).not.toBeFocused();
+    await expect(page.locator('#prompt')).toBeFocused();
     await expect(page.locator('#prompt')).toBeEditable();
     console.log(`Final provider event to draft after drain: ${Math.round(performance.now() - receivedAt)}ms`);
     await closed(); assert.equal(commands.length, 0); assert.ok(!JSON.stringify(hostFrames).includes('Purple notebook'));
@@ -231,7 +254,7 @@ try {
 
     await fresh(); await page.locator('#prompt').fill('Keep unchanged'); await record();
     await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
-    await expect(page.locator('#prompt')).toBeHidden();
+    await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toBeFocused();
     await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/, { timeout: 10000 }); await closed();
     await expect(page.locator('#prompt')).toHaveValue('Keep unchanged'); await expect(page.locator('#notice')).toBeHidden(); assert.equal(commands.length, 1);
 
@@ -306,7 +329,7 @@ try {
     await delay(400); await page.evaluate(() => { window.voiceGain.gain.value = 0; });
     await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
     await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
-    await expect(page.locator('#prompt')).toBeHidden(); await expect(page.locator('#prompt')).not.toBeFocused();
+    await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).not.toBeFocused();
     await expect(page.locator('#model')).toBeHidden(); await expect(page.locator('#send')).toBeDisabled();
     assert.equal(commands.length, 1);
     releaseRequest(); releaseRequest = undefined;
@@ -320,6 +343,23 @@ try {
     await expect(page.locator('#prompt')).toHaveValue('Next draft'); await stopped(); await closed();
     assert.equal(commands.length, 2);
 
+    await fresh(); await page.locator('#prompt').click(); await record();
+    await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
+    await page.keyboard.insertText('Typed before the first transcript');
+    await stopped(); await closed(); await expect(page.locator('#prompt')).toBeFocused();
+    await page.evaluate(() => window.lateVoiceEvent({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: 'Late words' } }) }));
+    await expect(page.locator('#prompt')).toHaveValue('Typed before the first transcript');
+
+    await fresh(); await page.locator('#prompt').fill('Prefix'); await record(); await partial('Queued words');
+    await page.getByRole('button', { name: 'Send message' }).click();
+    await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words'); await expect(page.locator('#prompt')).toBeFocused();
+    await partial(' trailing'); await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words trailing');
+    await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
+    await page.keyboard.insertText(' edited'); await stopped(); await closed();
+    await page.evaluate(() => window.lateVoiceEvent({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'edited-send', role: 'user', transcript: 'Must not send' } }) }));
+    await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words trailing edited'); assert.equal(commands.length, 2);
+    await expect(page.locator('#fast-mode')).toBeVisible(); await expect(page.locator('#commands')).toBeVisible();
+
     await fresh(); await record(); await partial('Keep queued draft');
     await page.getByRole('button', { name: 'Send message' }).click(); await stop();
     await expect(page.locator('#prompt')).toHaveValue('Keep queued draft'); await expect(page.locator('#prompt')).not.toBeFocused();
@@ -330,7 +370,7 @@ try {
     await page.evaluate(() => { window.voiceSkipClose = true; });
     await page.getByRole('button', { name: 'Cancel dictation' }).click(); await stopped(); await closed();
     await expect(page.locator('#prompt')).toHaveValue('Original');
-    await fresh(); await record(); await page.keyboard.press('Escape'); await stopped(); await closed(); await expect(page.locator('#voice-record')).toBeFocused();
+    await fresh(); await page.locator('#voice-record').focus(); await record(); await page.keyboard.press('Escape'); await stopped(); await closed(); await expect(page.locator('#voice-record')).toBeFocused();
 
     await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Discard preview'); await stop();
     await expect(page.locator('#prompt')).toHaveValue('Original draft Discard preview');

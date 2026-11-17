@@ -7,7 +7,7 @@
 #voice-record .voice-stop-icon { display: none; }
 #composer[data-capturing] #voice-record > svg { display: none; }
 #composer[data-capturing] #voice-record .voice-stop-icon { display: block; }
-#composer[data-capturing] :is(#prompt, #attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #composer-hint) { display: none; }
+#composer[data-capturing] :is(#attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #composer-hint) { display: none; }
 #composer[data-capturing] .composer-toolbar { flex-wrap: nowrap; }
 #voice-status { flex: 1; min-width: 0; color: var(--text); text-align: center; font-size: 12px; }
 #voice-waveform { position: relative; height: 32px; margin: 0 8px; overflow: hidden; }
