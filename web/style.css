@@ -108,11 +108,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { font-size: 12px; }
 #sidebar-collapse { display: none; flex-shrink: 0; width: 44px; height: 44px; padding: 0; }
+.sidebar-reopen-label { display: none; }
 @media (min-width: 701px) {
   #sidebar-collapse { display: grid; place-items: center; }
   .shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
   .shell.sidebar-collapsed > aside { display: none; }
-  .shell.sidebar-collapsed #back { display: grid; place-items: center; }
+  .shell.sidebar-collapsed .conversation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .shell.sidebar-collapsed #back { display: flex; align-items: center; gap: 4px; width: auto; padding: 0 12px 0 8px; }
+  .shell.sidebar-collapsed .sidebar-reopen-label { display: block; }
 }
 .theme-toggle { display: grid; place-items: center; min-width: 44px; padding: 0; }
 :is(.brand, .login-heading) .theme-toggle { margin-left: auto; flex-shrink: 0; }
