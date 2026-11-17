@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 const files = new Map([
   ['/voice.js', ['voice.js', 'text/javascript; charset=utf-8']],
+  ['/voice-buffer.js', ['voice-buffer.js', 'text/javascript; charset=utf-8']],
   ['/voice.css', ['voice.css', 'text/css; charset=utf-8']],
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/todo.html', ['todo.html', 'text/html; charset=utf-8']],

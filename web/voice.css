@@ -5,12 +5,9 @@
   background: var(--glass-fill); background-clip: padding-box; color: var(--text);
 }
 #voice-record .voice-stop-icon { display: none; }
-#composer[data-voice] #voice-record > svg { display: none; }
-#composer[data-voice] #voice-record .voice-stop-icon { display: block; }
-#composer[data-voice] :is(#attachments, #command-menu, #attach, .composer-settings, #fast-mode, #commands, #abort, #composer-hint) { display: none; }
-#composer:is([data-voice="connecting"], [data-voice="recording"]) :is(#prompt, #send) { display: none; }
-#composer:is([data-voice="finishing"], [data-voice="review"]) #voice-record { display: none; }
-#composer[data-voice] .composer-toolbar { flex-wrap: nowrap; }
-#voice-status { flex: 1; min-width: 0; color: var(--text); text-align: center; font-size: 12px; }
+#composer[data-capturing] #voice-record > svg { display: none; }
+#composer[data-capturing] #voice-record .voice-stop-icon { display: block; }
+#composer[data-capturing] :is(#prompt, #attachments, #command-menu, #attach, #fast-mode, #commands, #abort, #composer-hint) { display: none; }
+#voice-status { min-height: 44px; display: grid; align-items: center; color: var(--text); text-align: center; font-size: 12px; }
 #voice-waveform { position: relative; height: 32px; margin: 0 8px; overflow: hidden; }
 #voice-waveform i { position: absolute; top: 50%; right: 0; width: 3px; height: 3px; border-radius: 2px; background: currentColor; }

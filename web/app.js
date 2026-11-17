@@ -186,7 +186,7 @@ function loadVoice() {
   // Static assets update before a busy host can restart; older hosts cannot serve this module yet.
   voiceLoading = import('./voice.js').then(({ voiceComposer }) => {
     const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/voice.css'; document.head.append(style);
-    voice = voiceComposer({ request, notice, changed: () => { updateControls(); resizePrompt(); }, context: () => {
+    voice = voiceComposer({ request, notice, submit: sendMessage, changed: () => { updateControls(); resizePrompt(); }, context: () => {
       const state = cache.get(selected);
       const available = supportsVoice && state?.model?.startsWith('openai-codex/') && state?.coordination?.role !== 'worker';
       return { sessionId: selected, model: state?.model, available,
@@ -465,7 +465,7 @@ function connect() {
       supportsImages = packet.supportsImages === true;
       supportsUploads = packet.supportsUploads === true;
       supportsVideos = packet.supportsVideos === true;
-      supportsVoice = packet.supportsVoice === true && packet.voiceInput === 'webrtc-direct';
+      supportsVoice = packet.supportsVoice === true && packet.voiceInput === 'webrtc-buffered';
       if (supportsVoice) loadVoice();
       supportsCommandResults = packet.supportsCommandResults === true;
       supportsSessionSections = packet.supportsSessionSections === true;
@@ -2587,8 +2587,8 @@ function updateControls() {
   const noun = outgoing?.attachments.some(item => item.video) ? 'attachment' : 'image';
   $('composer-send-status').textContent = imageCount ? `Sending ${imageCount} ${noun}${imageCount === 1 ? '' : 's'}…` : 'Sending…';
   voice?.update();
-  $('send').disabled = !live || sending.has(selected) || !!voice?.busy;
-  $('send').hidden = !!working && !hasDraft;
+  $('send').disabled = !live || sending.has(selected) || !!voice?.blocksSend;
+  $('send').hidden = !!working && !hasDraft && !voice?.active;
   $('prompt').placeholder = working ? 'Message Pi while it works…' : 'Type / for commands';
   $('attach').disabled = !selected || !!state?.creation || sending.has(selected);
   $('image-files').disabled = $('attach').disabled;
@@ -4015,6 +4015,7 @@ $('composer').addEventListener('submit', event => {
   sendMessage();
 });
 async function sendMessage() {
+  if (voice?.send()) return;
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
   if ((!text.trim() && !attachments.length) || !id || cache.get(id)?.coordination?.role === 'worker' || $('send').disabled || sending.has(id)) return;
   voice?.freeze();

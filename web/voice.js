@@ -1,35 +1,43 @@
-export function voiceComposer({ request, context, changed, notice }) {
+export function voiceComposer({ request, context, changed, notice, submit }) {
   const button = document.getElementById('voice-record'), cancelButton = document.getElementById('voice-cancel');
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
   const input = document.getElementById('prompt');
   const composer = document.getElementById('composer'), waveform = document.getElementById('voice-waveform');
-  let active;
-  const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
+  let active, audio, prepared;
+  const supported = () => !!(window.isSecureContext && window.RTCPeerConnection && window.AudioWorkletNode && navigator.mediaDevices?.getUserMedia);
+  function prepare() {
+    if (!audio || audio.state === 'closed') {
+      audio = new AudioContext();
+      prepared = audio.audioWorklet.addModule('/voice-buffer.js');
+      void prepared.catch(() => {});
+    }
+    return audio;
+  }
   const transcript = call => [...call.turns.values(), call.partial].filter(Boolean).join(' ').trim();
   const current = call => active === call && context().sessionId === call.sessionId && context().model === call.model;
   function render() {
-    const reviewing = ['finishing', 'review'].includes(active?.phase);
-    cancelButton.title = reviewing ? 'Discard transcription preview' : 'Discard recording';
-    panel.hidden = !active || reviewing;
+    const capturing = ['preparing', 'recording', 'sending'].includes(active?.phase);
+    panel.hidden = !capturing;
+    composer.toggleAttribute('data-capturing', capturing);
     if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
     const showingWaveform = active?.phase === 'recording' && !!active.analyser;
     waveform.hidden = !showingWaveform;
     status.classList.toggle('sr-only', showingWaveform);
-    cancelButton.hidden = !active;
-    button.setAttribute('aria-label', active ? 'Stop dictation' : 'Dictate with ChatGPT');
-    button.title = active ? 'Stop recording and preview text' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';
-    button.setAttribute('aria-pressed', String(!!active));
+    cancelButton.hidden = !capturing;
+    button.setAttribute('aria-label', capturing ? 'Stop dictation' : 'Dictate with ChatGPT');
+    button.title = capturing ? 'Stop recording and keep a draft' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';
+    button.setAttribute('aria-pressed', String(capturing));
     button.dataset.recording = String(active?.phase === 'recording');
-    button.disabled = !!active && active.phase !== 'recording';
-    const label = active?.phase === 'recording' ? 'Listening · directly connected to OpenAI' :
-      active?.phase === 'connecting' ? 'Connecting to ChatGPT…' : '';
+    button.disabled = active?.phase === 'preparing';
+    const label = active?.phase === 'recording' ? 'Listening' :
+      active?.phase === 'sending' ? 'Sending voice…' : active?.phase === 'preparing' ? 'Starting microphone…' : '';
     if (status.textContent !== label) status.textContent = label;
     changed();
   }
   function stopMeter(call) {
     cancelAnimationFrame(call.frame);
     call.source?.disconnect();
-    if (call.audio) { void call.audio.close().catch(() => {}); call.audio = undefined; }
+    call.analyser?.disconnect();
     call.analyser = undefined;
   }
   function meter(call) {
@@ -66,6 +74,12 @@ export function voiceComposer({ request, context, changed, notice }) {
     stopMeter(call);
     clearTimeout(call.timer); clearTimeout(call.connectTimer); clearTimeout(call.drainTimer);
     call.stream?.getTracks().forEach(track => track.stop());
+    call.output?.stream.getTracks().forEach(track => track.stop());
+    if (call.buffer) {
+      call.buffer.port.postMessage('dispose'); call.buffer.port.onmessage = null; call.buffer.port.close();
+      call.buffer.onprocessorerror = null; call.buffer.disconnect();
+    }
+    if (call.audio) void call.audio.suspend().catch(() => {});
     call.rejectConnection?.(new Error('Dictation cancelled.'));
     if (call.started) void request('voiceCancel', { sessionId: call.sessionId, voiceId: call.id }).catch(() => {});
     const peer = call.peer, channel = call.channel;
@@ -126,9 +140,17 @@ export function voiceComposer({ request, context, changed, notice }) {
     }
     if (message) notice(message, call.sessionId);
   }
+  function complete(call) {
+    if (!current(call)) return;
+    const sending = call.phase === 'sending';
+    if (sending && !transcript(call).trim()) { cancel(); return; }
+    if (!preview(call)) return;
+    freeze();
+    if (sending) void submit();
+  }
   function settled(call) {
-    if (current(call) && call.phase === 'finishing' && call.drained && call.turns.size && !call.partial) {
-      freeze();
+    if (current(call) && ['finishing', 'sending'].includes(call.phase) && call.drained && call.turns.size && !call.partial) {
+      complete(call);
     }
   }
   function providerEvent(call, raw) {
@@ -144,35 +166,64 @@ export function voiceComposer({ request, context, changed, notice }) {
         call.partial = '';
       } else return; // Ignore assistant audio/text and tool requests; never forward them to the host.
       if (transcript(call).length > 16000) { review(call, 'Dictation is too long. Check the draft before sending.'); return; }
-      if (call.phase === 'finishing' && preview(call)) settled(call);
+      if (call.phase === 'finishing' && !preview(call)) return;
+      settled(call);
     } catch { review(call, 'Dictation was interrupted. Check the draft before sending.'); }
   }
-  function finish() {
+  function finish(sending = false) {
     const call = active;
-    if (!call || call.phase !== 'recording') return;
-    call.phase = 'finishing'; clearTimeout(call.timer); stopMeter(call);
-    call.stream.getTracks().forEach(track => track.stop());
-    if (!preview(call)) return;
-    input.focus({ preventScroll: true });
-    // shortcut: no verified flush; replace this Stop-based drain when a finalization contract is available.
-    call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
-    call.timer = setTimeout(() => review(call), 8000);
+    if (!call || !['recording', 'finishing', 'sending'].includes(call.phase)) return;
+    if (call.phase === 'recording') {
+      clearTimeout(call.timer);
+      call.buffer.port.postMessage('stop');
+      call.stream.getTracks().forEach(track => track.stop());
+      stopMeter(call);
+    }
+    call.phase = sending ? 'sending' : 'finishing';
+    if (sending) {
+      if (call.preview !== undefined && input.value === call.preview) input.value = call.draft;
+      call.preview = undefined;
+      input.blur(); render();
+    } else {
+      if (!preview(call)) return;
+      input.focus({ preventScroll: true });
+    }
+    settled(call);
   }
   async function start() {
     if (active) return;
     const state = context();
     if (!state.enabled || !supported()) return;
-    const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'connecting', turns: new Map(), partial: '' };
+    const call = active = { id: crypto.randomUUID(), ...state, draft: input.value, cursor: input.selectionStart, phase: 'preparing', turns: new Map(), partial: '' };
     input.blur(); notice(''); render(); cancelButton.focus({ preventScroll: true });
-    // Start Web Audio inside the tap gesture so Safari can render the microphone level.
-    try { call.audio = new AudioContext(); void call.audio.resume().catch(() => {}); } catch {}
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
-      if (!current(call)) { stream.getTracks().forEach(track => track.stop()); return; }
+      call.audio = prepare();
+      await Promise.all([prepared, call.audio.resume()]);
+      if (!current(call) || call.released) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+      if (!current(call) || call.released) { stream.getTracks().forEach(track => track.stop()); return; }
       call.stream = stream;
-      stream.getTracks().forEach(track => { track.enabled = false; });
+      call.output = call.audio.createMediaStreamDestination();
+      call.buffer = new AudioWorkletNode(call.audio, 'voice-buffer', { channelCount: 1, channelCountMode: 'explicit', outputChannelCount: [1] });
+      call.buffer.connect(call.output);
+      call.buffer.onprocessorerror = () => review(call, 'Audio capture failed. Check the draft before trying again.');
+      call.buffer.port.onmessage = ({ data }) => {
+        if (!current(call) || call.released) return;
+        if (data === 'overflow') { review(call, 'Voice connection took too long. Please record again.'); return; }
+        if (data !== 'drained' || call.audioDone) return;
+        call.audioDone = true;
+        call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
+        // shortcut: no verified provider flush; replace this bounded fallback when one is available.
+        call.timer = setTimeout(() => call.phase === 'sending' ? complete(call) : review(call), 8000);
+      };
+      call.source = call.audio.createMediaStreamSource(stream);
+      call.source.connect(call.buffer);
+      call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 1024;
+      call.source.connect(call.analyser);
+      call.phase = 'recording'; render(); meter(call);
+      call.timer = setTimeout(() => finish(), 120000);
       const peer = call.peer = new RTCPeerConnection();
-      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      call.output.stream.getTracks().forEach(track => peer.addTrack(track, call.output.stream));
       const channel = call.channel = peer.createDataChannel('oai-events');
       channel.onmessage = event => providerEvent(call, event.data);
       channel.onclose = channel.onerror = () => review(call, 'Voice connection lost. Check the draft before sending.');
@@ -180,53 +231,54 @@ export function voiceComposer({ request, context, changed, notice }) {
         if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) review(call, 'Voice connection lost. Check the draft before sending.');
       };
       const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
-      if (!current(call)) return;
+      if (!current(call) || call.released) return;
       call.started = true;
       const { sdp } = await request('voiceStart', { sessionId: call.sessionId, voiceId: call.id, format: 'webrtc-direct', sdp: offer.sdp });
-      if (!current(call)) return;
+      if (!current(call) || call.released) return;
       await peer.setRemoteDescription({ type: 'answer', sdp });
-      if (!current(call)) return;
+      if (!current(call) || call.released) return;
       await new Promise((resolve, reject) => {
         call.rejectConnection = reject;
         const ready = () => { clearTimeout(call.connectTimer); resolve(); };
         call.connectTimer = setTimeout(() => reject(new Error('Voice connection timed out. Try again.')), 10000);
         channel.onopen = ready; if (channel.readyState === 'open') ready();
       });
-      if (!current(call)) return;
+      if (!current(call) || call.released) return;
       call.rejectConnection = undefined;
-      call.phase = 'recording'; stream.getTracks().forEach(track => { track.enabled = true; });
-      if (call.audio) {
-        try {
-          call.analyser = call.audio.createAnalyser(); call.analyser.fftSize = 1024;
-          call.source = call.audio.createMediaStreamSource(stream); call.source.connect(call.analyser);
-          meter(call);
-        } catch { stopMeter(call); }
-      }
-      call.timer = setTimeout(finish, 120000); render();
+      call.buffer.port.postMessage('play');
     } catch (error) {
-      if (!current(call)) return;
-      cancel();
-      notice(error.name === 'NotAllowedError' ? 'Microphone access was denied. Allow it in browser settings to dictate.' :
-        error.name === 'NotFoundError' ? 'No microphone was found.' : error.message || 'Could not start dictation.', call.sessionId);
+      if (!current(call) || call.released) return;
+      review(call, error.name === 'NotAllowedError' ? 'Microphone access was denied. Allow it in browser settings to dictate.' :
+        error.name === 'NotFoundError' ? 'No microphone was found.' : error.message || 'Could not start dictation.');
     }
   }
-  button.addEventListener('click', () => active ? void finish() : void start());
+  button.addEventListener('click', () => {
+    if (['recording', 'sending'].includes(active?.phase)) finish();
+    else { freeze(); void start(); }
+  });
   cancelButton.addEventListener('click', cancel);
   input.addEventListener('beforeinput', freeze);
   input.addEventListener('compositionstart', freeze);
   input.addEventListener('input', () => active?.preview !== undefined ? freeze() : cancel());
   document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); cancel(); } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
-  window.addEventListener('pagehide', cancel);
+  window.addEventListener('pagehide', () => { cancel(); void audio?.close().catch(() => {}); });
+  if (supported()) { try { prepare(); } catch {} }
   return {
-    get busy() { return ['connecting', 'recording'].includes(active?.phase); },
+    get active() { return !!active; },
+    get busy() { return ['preparing', 'recording', 'sending'].includes(active?.phase); },
+    get blocksSend() { return ['preparing', 'sending'].includes(active?.phase); },
+    send() {
+      if (['recording', 'finishing'].includes(active?.phase)) { finish(true); return true; }
+      return ['preparing', 'sending'].includes(active?.phase);
+    },
     cancel,
     freeze,
     update() {
       const state = context();
       if (active && (!state.enabled || !current(active))) { cancel(); return; }
       button.hidden = !state.available;
-      button.disabled = !state.enabled || !supported() || !!active && active.phase !== 'recording';
+      button.disabled = !state.enabled || !supported() || active?.phase === 'preparing';
       if (!supported()) button.title = 'Dictation needs a secure browser with microphone access.';
     },
     receive(packet) {
