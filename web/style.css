@@ -1027,8 +1027,7 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; }
 .coordinator-intro p { max-width: 65ch; color: var(--muted); font-size: 16px; line-height: 1.7; }
 #coordinator-sheet { overflow: clip; padding: 0 max(8px, env(safe-area-inset-right)) max(8px, var(--safe-bottom)) max(8px, env(safe-area-inset-left)); }
-.coordinator-sheet { display: flex; flex-direction: column; width: min(640px, 100%); height: min(72dvh, 640px); max-height: min(72dvh, 640px, calc(100% - 24px)); min-height: 0; border: 0; border-radius: 28px; background: color-mix(in srgb, var(--bg) 96%, transparent); overflow: clip; }
-.coordinator-sheet:has(#coordinator-task-list:not([hidden])) { height: auto; }
+.coordinator-sheet { display: flex; flex-direction: column; width: min(640px, 100%); height: min(52dvh, 640px); max-height: calc(100% - 24px); min-height: 0; border: 0; border-radius: 28px; background: color-mix(in srgb, var(--bg) 96%, transparent); overflow: clip; }
 .coordinator-sheet > header { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; flex-shrink: 0; align-items: center; gap: 8px; padding: 20px 12px 8px; }
 .coordinator-sheet > header::before { content: ''; position: absolute; top: 9px; left: calc(50% - 18px); width: 36px; height: 4px; border-radius: 2px; background: var(--muted); }
 .coordinator-heading { grid-area: 1 / 2; min-width: 0; text-align: center; }
@@ -1039,7 +1038,7 @@ pre.message-text { white-space: pre-wrap; }
 #coordinator-done { grid-column: 3; }
 .coordinator-sheet:has(#coordinator-task-list:not([hidden])) #coordinator-done { grid-column: 1; }
 #coordinator-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 20px 16px; scrollbar-gutter: stable; }
-#coordinator-scroll:has(> #coordinator-task-list:not([hidden])) { flex: 0 1 auto; padding-top: 0; padding-bottom: 12px; }
+#coordinator-scroll:has(> #coordinator-task-list:not([hidden])) { padding-top: 0; padding-bottom: 12px; }
 #coordinator-scroll:focus-visible { outline-offset: -3px; }
 .coordinator-log-detail { margin: 0; padding: 0; border: 0; }
 .coordinator-log-detail > summary { min-height: 44px; padding: 10px 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }

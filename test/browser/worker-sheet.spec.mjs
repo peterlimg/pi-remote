@@ -127,7 +127,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   }
   await page.locator('#coordinator-open').tap();
   await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
-  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeLessThan(240);
+  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(844 * .52, 0);
   await page.screenshot({ path: info.outputPath('single-worker-roster.png') });
   await page.getByRole('button', { name: 'Close workers', exact: true }).tap();
   parent.coordination.tasks = allTasks;
@@ -159,9 +159,8 @@ test('worker sheet scopes history and images without disturbing the live parent'
     expect(await finishedStatus.evaluate(node => getComputedStyle(node, '::before').content)).toBe('none');
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     const roster = await page.locator('.coordinator-sheet').evaluate(node => {
-      const scroll = node.querySelector('#coordinator-scroll'), list = node.querySelector('#coordinator-task-list');
-      const style = getComputedStyle(scroll);
-      return { height: node.getBoundingClientRect().height, emptySpace: scroll.clientHeight - list.offsetHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+      const list = node.querySelector('#coordinator-task-list');
+      return {
         targets: [...list.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44) };
     });
     await checkFloatingSheet(true);
@@ -174,7 +173,8 @@ test('worker sheet scopes history and images without disturbing the live parent'
       expect(card.fill).not.toBe('rgba(0, 0, 0, 0)');
     }
     await expect(page.locator('#coordinator-task-list')).toHaveCSS('gap', '8px');
-    expect(roster.height).toBeLessThan(320); expect(Math.abs(roster.emptySpace)).toBeLessThanOrEqual(1); expect(roster.targets).toBe(true);
+    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(Math.min(height * .52, 640), 0);
+    expect(roster.targets).toBe(true);
     await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'dark' });
@@ -193,7 +193,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const layout = [];
   for (const [name, width, height, colorScheme] of [['phone', 390, 844, 'light'], ['dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'light'], ['desktop', 1440, 900, 'light']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
-    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(Math.min(height * .72, 640), 0);
+    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(Math.min(height * .52, 640), 0);
     const space = await page.locator('.coordinator-sheet').evaluate(node => ({
       sheet: node.getBoundingClientRect().height, header: node.querySelector('header').getBoundingClientRect().height,
       body: node.querySelector('#coordinator-scroll').getBoundingClientRect().height, safeBottom: parseFloat(getComputedStyle(node).paddingBottom),
@@ -241,7 +241,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const back = page.getByRole('button', { name: 'Back to workers', exact: true });
   await back.tap(); await expect(sheet).toBeFocused();
   await expect(page.locator('#coordinator-title')).toHaveText('Workers');
-  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeLessThan(320);
+  expect((await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(844 * .52, 0);
   const workerButton = page.getByRole('button', { name: task.title + ', Working', exact: true });
   await workerButton.focus(); await page.keyboard.press('Enter');
   await expect(back).toBeFocused(); await expect(back).toHaveCSS('outline-style', 'solid');
@@ -298,7 +298,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
   for (const height of [740, 510]) {
     await page.setViewportSize({ width: 320, height });
-    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(height * .72, 0);
+    await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(height * .52, 0);
     const scroll = page.locator('#coordinator-scroll');
     expect(await scroll.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
     await page.locator('#coordinator-task-list button').last().scrollIntoViewIfNeeded();
