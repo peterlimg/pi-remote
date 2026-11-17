@@ -399,25 +399,29 @@ test('keyboard footer spacing stays compact when iOS also resizes innerHeight', 
   await expect(footer).toBeVisible();
   await expect(footer).toHaveCSS('padding-bottom', '34px');
   const full = await page.evaluate(() => innerHeight);
-  for (const resizeInnerHeight of [false, true]) {
+  for (const [resizeInnerHeight, resizeLayoutHeight] of [[false, false], [true, false], [true, true]]) {
     await prompt.tap();
     // Focus alone must keep the home-indicator inset until the viewport shrinks.
     await expect(footer).toHaveCSS('padding-bottom', '34px');
-    await page.evaluate(({ full, resizeInnerHeight }) => {
+    await page.evaluate(({ full, resizeInnerHeight, resizeLayoutHeight }) => {
       const height = full - 300;
       Object.defineProperty(window, 'innerHeight', { value: resizeInnerHeight ? height : full, configurable: true });
+      Object.defineProperty(document.documentElement, 'clientHeight', { value: resizeLayoutHeight ? height : full, configurable: true });
       Object.defineProperty(visualViewport, 'height', { value: height, configurable: true });
       visualViewport.dispatchEvent(new Event('resize'));
-    }, { full, resizeInnerHeight });
-    await page.screenshot({ path: testInfo.outputPath(`keyboard-footer-${resizeInnerHeight ? 'inner' : 'visual'}-height.png`) });
-    await expect(footer).toHaveCSS('padding-bottom', '6px');
+    }, { full, resizeInnerHeight, resizeLayoutHeight });
+    await page.screenshot({ path: testInfo.outputPath(`keyboard-footer-${resizeLayoutHeight ? 'layout' : resizeInnerHeight ? 'inner' : 'visual'}-height.png`) });
+    const composer = await page.locator('#composer').boundingBox();
+    expect(composer.y + composer.height).toBeLessThanOrEqual(full - 300);
+    await expect(footer).toHaveCSS('padding-bottom', resizeLayoutHeight ? '34px' : '6px');
     const box = await footer.boundingBox();
-    expect(box.height).toBe(26);
+    expect(box.height).toBe(resizeLayoutHeight ? 54 : 26);
     expect(box.y + box.height).toBe(full - 300);
     await expect(page.locator('#app')).toHaveCSS('height', `${full - 300}px`);
     await prompt.blur();
     await expect(footer).toHaveCSS('padding-bottom', '34px');
     await page.evaluate(full => {
+      delete document.documentElement.clientHeight;
       Object.defineProperty(window, 'innerHeight', { value: full, configurable: true });
       Object.defineProperty(visualViewport, 'height', { value: full, configurable: true });
       visualViewport.dispatchEvent(new Event('resize'));

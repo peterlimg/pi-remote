@@ -42,7 +42,8 @@
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 /* Scripted focus may not open iOS's keyboard, and blur hides it before the viewport grows; viewport sizes differ between Safari and home-screen apps. */
-:root[data-keyboard]:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; --shell-height: var(--viewport-height, 100dvh); }
+:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --shell-height: min(calc(100dvh / var(--viewport-scale, 1)), var(--viewport-height, 100dvh)); }
+:root[data-keyboard]:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
 button, input, textarea, select { font: inherit; }
