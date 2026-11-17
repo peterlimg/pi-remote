@@ -19,6 +19,21 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const older = { messages: [{ id: 'older-worker', role: 'assistant', text: 'Earlier worker finding.' }], older: false, newer: true, tip: 'worker-tip' };
   let client, parentVersion = 0, workerVersion = 0;
   const requests = [], errors = [];
+  const checkFloatingSheet = async (roster) => {
+    await expect.poll(() => page.locator('#coordinator-sheet').evaluate(node => node.getBoundingClientRect().bottom - innerHeight)).toBeCloseTo(0, 0);
+    const geometry = await page.locator('.coordinator-sheet').evaluate(node => {
+      const box = node.getBoundingClientRect(), title = node.querySelector('.coordinator-heading').getBoundingClientRect();
+      const close = node.querySelector('#coordinator-done'), button = close.getBoundingClientRect();
+      return { left: box.left, right: innerWidth - box.right, bottom: innerHeight - box.bottom,
+        centered: title.x + title.width / 2 - (box.x + box.width / 2), closeOnLeft: button.x < title.x,
+        corners: [getComputedStyle(node).borderTopLeftRadius, getComputedStyle(node).borderBottomLeftRadius],
+        button: { width: button.width, height: button.height, radius: getComputedStyle(close).borderRadius } };
+    });
+    expect(geometry.left).toBeGreaterThanOrEqual(8); expect(geometry.right).toBeGreaterThanOrEqual(8);
+    expect(geometry.bottom).toBeGreaterThanOrEqual(8); expect(Math.abs(geometry.centered)).toBeLessThanOrEqual(1);
+    expect(geometry.closeOnLeft).toBe(roster); expect(geometry.corners).toEqual(['28px', '28px']);
+    expect(geometry.button).toEqual({ width: 44, height: 44, radius: '50%' });
+  };
   page.on('pageerror', error => errors.push(error.message));
   await page.routeWebSocket('**/ws', ws => {
     client = ws;
@@ -149,6 +164,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       return { height: node.getBoundingClientRect().height, emptySpace: scroll.clientHeight - list.offsetHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
         targets: [...list.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= 44) };
     });
+    await checkFloatingSheet(true);
     expect(roster.height).toBeLessThan(320); expect(Math.abs(roster.emptySpace)).toBeLessThanOrEqual(1); expect(roster.targets).toBe(true);
     await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
   }
@@ -175,6 +191,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
       overflow: document.documentElement.scrollWidth > innerWidth,
       targets: [...node.querySelectorAll('header button')].every(button => { const box = button.getBoundingClientRect(); return box.width >= 44 && box.height >= 44; })
     }));
+    await checkFloatingSheet(false);
     expect(space.header).toBeLessThanOrEqual(74); expect(space.targets).toBe(true); expect(space.overflow).toBe(false);
     expect(space.body).toBeGreaterThan(space.sheet - space.header - space.safeBottom - 3);
     const rows = await log.locator(':scope > .coordinator-log-detail').evaluateAll(nodes => nodes.map(node => {
@@ -233,6 +250,11 @@ test('worker sheet scopes history and images without disturbing the live parent'
   const touchClient = await page.context().newCDPSession(page), header = await page.locator('.coordinator-sheet > header').boundingBox();
   const x = header.x + header.width / 2, y = header.y + 32;
   await touchClient.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await touchClient.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + 30 }] });
+  await touchClient.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
+  await expect(sheet).toBeVisible();
+  await touchClient.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
   for (const dy of [30, 90, 150]) await touchClient.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + dy }] });
   await touchClient.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.locator('#coordinator-sheet')).toBeHidden(); await touchClient.detach();
@@ -273,6 +295,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
     await page.locator('#coordinator-task-list button').last().scrollIntoViewIfNeeded();
     expect(await scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
     await expect(close).toBeInViewport();
+    await checkFloatingSheet(true);
     await page.screenshot({ path: info.outputPath(`worker-roster-many-${height}.png`) });
   }
   await close.tap();

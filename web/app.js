@@ -2538,7 +2538,7 @@ function releaseCoordinatorDrag(dismiss) {
   const drag = coordinatorDrag; coordinatorDrag = undefined;
   if (!drag?.dragging) return;
   if (reducedMotion()) { resetCoordinatorDrag(); if (dismiss) $('coordinator-sheet').close(); return; }
-  const surface = document.querySelector('.coordinator-sheet'), end = dismiss ? Math.max(surface.offsetHeight, drag.distance) : 0;
+  const surface = document.querySelector('.coordinator-sheet'), end = dismiss ? Math.max(surface.offsetHeight + parseFloat(getComputedStyle($('coordinator-sheet')).paddingBottom), drag.distance) : 0;
   const animation = surface.animate({ transform: [`translateY(${drag.distance}px)`, `translateY(${end}px)`] },
     { duration: 180, easing: 'cubic-bezier(.16, 1, .3, 1)', fill: 'forwards' });
   coordinatorDragAnimation = animation;

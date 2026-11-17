@@ -1025,15 +1025,18 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-intro { max-width: var(--content-width); margin: 0 auto 24px; }
 .coordinator-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; }
 .coordinator-intro p { max-width: 65ch; color: var(--muted); font-size: 16px; line-height: 1.7; }
-#coordinator-sheet { overflow: clip; }
-.coordinator-sheet { display: flex; flex-direction: column; width: min(640px, 100%); height: min(72dvh, 640px); max-height: min(72dvh, 640px, calc(100% - 24px)); min-height: 0; padding-bottom: var(--safe-bottom); border: 0; border-radius: 24px 24px 0 0; overflow: clip; }
+#coordinator-sheet { overflow: clip; padding: 0 max(8px, env(safe-area-inset-right)) max(8px, var(--safe-bottom)) max(8px, env(safe-area-inset-left)); }
+.coordinator-sheet { display: flex; flex-direction: column; width: min(640px, 100%); height: min(72dvh, 640px); max-height: min(72dvh, 640px, calc(100% - 24px)); min-height: 0; border: 0; border-radius: 28px; background: color-mix(in srgb, var(--bg) 96%, transparent); overflow: clip; }
 .coordinator-sheet:has(#coordinator-task-list:not([hidden])) { height: auto; }
-.coordinator-sheet > header { position: relative; flex-shrink: 0; align-items: center; gap: 8px; padding: 20px 12px 8px; }
+.coordinator-sheet > header { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; flex-shrink: 0; align-items: center; gap: 8px; padding: 20px 12px 8px; }
 .coordinator-sheet > header::before { content: ''; position: absolute; top: 9px; left: calc(50% - 18px); width: 36px; height: 4px; border-radius: 2px; background: var(--muted); }
-.coordinator-heading { flex: 1; min-width: 0; }
+.coordinator-heading { grid-area: 1 / 2; min-width: 0; text-align: center; }
 .coordinator-heading h2 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #coordinator-subtitle { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#coordinator-done, #coordinator-log-back { display: grid; place-items: center; flex-shrink: 0; width: 44px; min-height: 44px; padding: 0; }
+#coordinator-done, #coordinator-log-back { display: grid; place-items: center; grid-row: 1; width: 44px; height: 44px; padding: 0; border: 1px solid var(--glass-edge); border-radius: 50%; background: var(--glass-sheen) var(--glass-fill); color: var(--text); }
+#coordinator-log-back { grid-column: 1; }
+#coordinator-done { grid-column: 3; }
+.coordinator-sheet:has(#coordinator-task-list:not([hidden])) #coordinator-done { grid-column: 1; }
 #coordinator-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 20px 16px; scrollbar-gutter: stable; }
 #coordinator-scroll:has(> #coordinator-task-list:not([hidden])) { flex: 0 1 auto; padding-top: 0; padding-bottom: 12px; }
 #coordinator-scroll:focus-visible { outline-offset: -3px; }
@@ -1048,5 +1051,7 @@ pre.message-text { white-space: pre-wrap; }
 .coordinator-task-warning, .coordinator-log-detail[data-status=error] > summary { color: var(--warning); }
 .coordinator-log-pages { display: flex; flex-wrap: wrap; justify-content: space-between; }
 #coordinator-log button { min-height: 44px; padding: 8px 0; font-size: 14px; }
-@media (prefers-reduced-motion: no-preference) { #coordinator-sheet[open] .coordinator-sheet { animation: sheet-up 220ms cubic-bezier(.16, 1, .3, 1); } }
+@media (prefers-reduced-transparency: reduce) { .coordinator-sheet { background: var(--bg); } }
+@keyframes coordinator-up { from { transform: translateY(calc(100% + max(8px, var(--safe-bottom)))); } }
+@media (prefers-reduced-motion: no-preference) { #coordinator-sheet[open] .coordinator-sheet { animation: coordinator-up 220ms cubic-bezier(.16, 1, .3, 1); } }
 .boot-status { display: flex; align-items: center; gap: 10px; }
