@@ -167,6 +167,7 @@ function presenceBot(kind, moving = true, offset = 0) {
   return node;
 }
 function drawPresence(rig, animate) {
+  if (rig.kind === 'miso-study') return drawMiso(rig, animate);
   const { kind, parts, eyes, eyeNodes } = rig, time = rig.time;
   const pose = animate ? presencePose(kind, time) : [0, 0, 0, 0, 1];
   const [x, y, roll, turn, scale] = pose, lag = animate ? presencePose(kind, time - .12) : pose;
@@ -375,7 +376,114 @@ function shimmerStudy() {
   chooseColor(new URL(location.href).searchParams.get('variant'));
   syncTheme(); syncMotion();
 }
+function misoDrawing(moving, size = 32) {
+  const node = el('span', undefined, 'bot m-bot presence-bot miso-redraw');
+  node.dataset.kind = 'miso'; node.dataset.state = moving ? 'working' : 'ready';
+  node.style.setProperty('--size', `${size}px`);
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `Redrawn Miso, ${moving ? 'working' : 'idle'}`);
+  node.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">'
+    + '<path data-part="tail" class="miso-tail"/><path class="bot-accent" d="M7 20Q16 15 25 20L25 27Q24 30 16 30Q8 30 7 27Z"/>'
+    + '<g data-part="head"><path data-part="outline" class="bot-body"/>'
+    + '<path data-part="earLeft" class="miso-inner-ear"/><path data-part="earRight" class="miso-inner-ear"/>'
+    + '<path data-part="eyeLeft" class="bot-eye"/><path data-part="eyeRight" class="bot-eye"/>'
+    + '<path data-part="nose" class="bot-eye"/><path data-part="mouth" class="miso-mouth"/></g>'
+    + '<ellipse data-part="pawLeft" class="miso-paw"/><ellipse data-part="pawRight" class="miso-paw"/>'
+    + '<path data-part="contactLeft" class="miso-contact" d="M7 31h7"/><path data-part="contactRight" class="miso-contact" d="M18 31h7"/></svg>';
+  const rig = { node, kind: 'miso-study', moving, time: 0,
+    parts: Object.fromEntries([...node.querySelectorAll('[data-part]')].map(part => [part.dataset.part, part])) };
+  presenceRigs.push(rig); drawMiso(rig, false);
+  return node;
+}
+function drawMiso({ parts, time }, animate) {
+  const smooth = (start, end, value) => { const t = Math.max(0, Math.min(1, (value - start) / (end - start))); return t * t * (3 - 2 * t); };
+  const cycle = time % 4.8, beat = time / .6 * Math.PI * 2;
+  const lookUp = animate ? smooth(3.65, 4, cycle) * (1 - smooth(4.35, 4.8, cycle)) : 1;
+  const focus = animate ? 1 - lookUp : 0;
+  const leftLift = Math.max(0, Math.sin(beat)) * 4.4 * focus;
+  const rightLift = Math.max(0, -Math.sin(beat)) * 4.4 * focus;
+  const lean = (leftLift - rightLift) * .22, press = focus * Math.abs(Math.cos(beat));
+  const cheek = .8 * press, foldLeft = 1.3 * focus + rightLift * .3, foldRight = 1.3 * focus + leftLift * .3;
+  const gaze = animate ? -1.2 * lookUp : 0;
+  parts.head.setAttribute('transform', `translate(${lean} ${1.3 * focus + .35 * press}) rotate(${-lean * 3} 16 22)`);
+  parts.outline.setAttribute('d', `M4 14 Q3 10 ${4 - foldLeft} ${4 + foldLeft}
+    Q4 1 7 3 L12 7.5 Q16 6 20 7.5 L25 3 Q28 1 28 4
+    L${28 + foldRight} ${11 + foldRight} Q29 13 28 16
+    L${30 + cheek} 19 Q30 20 27.5 20.5 L29 22
+    Q26 ${25 + cheek} 16 ${25 + cheek} Q6 ${25 + cheek} 3 22
+    L4.5 20.5 Q2 20 2 19Z`);
+  parts.earLeft.setAttribute('d', `M5.7 ${4.7 + foldLeft} 10 8.5 5.6 9.5Z`);
+  parts.earRight.setAttribute('d', `M26.3 ${4.7 + foldRight} 22 8.5 26.4 9.5Z`);
+  const blinkPhase = (time + .1) % 3.2;
+  const blink = animate && blinkPhase < .13 ? Math.sin(blinkPhase / .13 * Math.PI) : 0;
+  const openness = (.36 + .64 * lookUp) * (1 - .94 * blink);
+  for (const [eye, x, side] of [[parts.eyeLeft, 10.5, 1], [parts.eyeRight, 21.5, -1]]) {
+    const cx = x + gaze, top = 16.5 - 3.2 * openness, bottom = 16.5 + 2.2 * openness;
+    eye.setAttribute('d', `M${cx - 2.3} ${top - .45 * side * focus}
+      Q${cx} ${top - .7 * lookUp} ${cx + 2.3} ${top + .45 * side * focus}
+      L${cx + 2.3} 16.5 C${cx + 2.3} ${bottom + 1} ${cx - 2.3} ${bottom + 1} ${cx - 2.3} 16.5Z`);
+  }
+  parts.nose.setAttribute('d', `M${15.1 + gaze} 20.1Q${16 + gaze} 19.6 ${16.9 + gaze} 20.1L${16 + gaze} 21Z`);
+  parts.mouth.setAttribute('d', `M${13.8 + gaze} 21.6Q${15 + gaze} ${22.5 - focus * .4} ${16 + gaze} 21Q${17 + gaze} ${22.5 - focus * .4} ${18.2 + gaze} 21.6`);
+  const tailLift = animate ? 1.8 * Math.sin(beat - .8) * focus : 0;
+  parts.tail.setAttribute('d', `M24 27C32 30 33 ${19 - tailLift} 28 ${18 - tailLift}Q25 ${18 - tailLift} 26 21`);
+  for (const [paw, contact, x, lift] of [
+    [parts.pawLeft, parts.contactLeft, 10.5, leftLift], [parts.pawRight, parts.contactRight, 21.5, rightLift],
+  ]) {
+    const down = 1 - Math.min(1, lift / 1.5);
+    paw.setAttribute('cx', String(x - lean * .25));
+    paw.setAttribute('cy', String(28.1 - lift));
+    paw.setAttribute('rx', String(3.2 + .8 * down));
+    paw.setAttribute('ry', String(2.6 - .6 * down));
+    contact.setAttribute('opacity', String(animate ? down * focus * .65 : 0));
+  }
+}
+function misoStudy() {
+  const page = $('page'); page.classList.add('miso-study'); page.dataset.set = 'focused';
+  document.title = 'Miso drawing study · Pi Remote';
+  document.querySelector('h1').textContent = 'Miso, redrawn';
+  document.querySelector('.lede').textContent = 'Round cheeks, folding ears and working paws. A new drawing, not another wobble.';
+  $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
+  $('comparison').hidden = false; $('comparison-note').hidden = false; $('replay').hidden = false;
+  page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
+  function renderMiso() {
+    presenceRigs = [];
+    const drawing = el('section', undefined, 'miso-drawing');
+    drawing.setAttribute('aria-label', 'Enlarged drawing');
+    drawing.append(el('h2', 'Drawing study · 96px', 'section-title'));
+    const poses = el('div', undefined, 'miso-poses');
+    for (const [moving, label] of [[true, 'Working'], [false, 'Idle']]) {
+      const figure = el('figure'); figure.append(misoDrawing(moving, 96), el('figcaption', label)); poses.append(figure);
+    }
+    drawing.append(poses);
+    const list = el('section', undefined, 'presence-list'); list.id = 'miso-sessions';
+    list.setAttribute('aria-label', 'Session size comparison');
+    list.append(el('h2', 'In the session list · 32px', 'section-title'));
+    for (const variant of ['current', 'working', 'idle']) {
+      const row = el('div', undefined, 'session'); row.dataset.variant = variant;
+      const icon = variant === 'current' ? bot('miso', 32, 0) : misoDrawing(variant === 'working');
+      if (variant === 'current') {
+        icon.dataset.mood = 'working'; icon.dataset.state = 'working';
+        icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', 'Current Miso, working');
+      }
+      const body = el('div', undefined, 'session-body');
+      body.append(el('strong', 'Refine the mobile composer'),
+        el('small', variant === 'current' ? 'Current drawing · Working' : `New drawing · ${variant === 'idle' ? 'Idle' : 'Working'}`));
+      row.append(icon, body); list.append(row);
+    }
+    $('comparison').replaceChildren(drawing, list);
+    visibleBots.disconnect();
+    for (const node of page.querySelectorAll('.m-bot')) visibleBots.observe(node);
+  }
+  $('replay').onclick = () => { paused = false; renderMiso(); syncMotion(); };
+  $('theme').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); };
+  $('motion').onclick = () => { paused = !paused; syncMotion(); };
+  document.addEventListener('visibilitychange', syncMotion);
+  reducedMotion.addEventListener('change', syncMotion);
+  renderMiso(); syncTheme(); syncMotion();
+}
+
 if (new URL(location.href).searchParams.get('study') === 'shimmer') shimmerStudy();
+else if (new URL(location.href).searchParams.get('study') === 'miso') misoStudy();
 else {
 $('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });
 $('previous').addEventListener('click', () => cycle(-1));
