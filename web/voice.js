@@ -152,23 +152,35 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     if (sending) void submit();
   }
   function settled(call) {
-    if (current(call) && ['finishing', 'sending'].includes(call.phase) && call.drained && call.turns.size && !call.partial) {
-      complete(call);
-    }
+    clearTimeout(call.drainTimer);
+    if (!current(call) || call.released || !['finishing', 'sending'].includes(call.phase) || call.drainedAt === undefined) return;
+    const final = call.finalAt >= call.drainedAt && call.turns.size && !call.partial;
+    if (!final && (call.phase !== 'sending' || !call.progressAfterStop)) return;
+    // shortcut: quiet text is not a completion guarantee; replace when the provider supports an audio flush.
+    const readyAt = final ? call.drainedAt + 1800 : Math.max(call.drainedAt + 2500, call.transcriptAt + 1000);
+    const remaining = readyAt - performance.now();
+    if (remaining > 0) call.drainTimer = setTimeout(() => settled(call), remaining);
+    else complete(call);
   }
   function providerEvent(call, raw) {
     if (!current(call) || call.released) return;
     try {
       if (typeof raw !== 'string' || raw.length > 128 * 1024) throw new Error();
-      const event = JSON.parse(raw);
+      const event = JSON.parse(raw), before = transcript(call);
       if (event.type === 'error' || event.type === 'session.closed') throw new Error();
       if (event.type === 'input_transcript.added' && typeof event.item?.text === 'string') call.partial += event.item.text;
       else if (event.type === 'turn.done' && event.turn?.role === 'user' && typeof event.turn.transcript === 'string') {
         if (event.turn.id && call.turns.has(event.turn.id)) return;
         if (event.turn.transcript.trim()) call.turns.set(event.turn.id || String(call.turns.size), event.turn.transcript.trim());
         call.partial = '';
+        call.finalAt = performance.now();
       } else return; // Ignore assistant audio/text and tool requests; never forward them to the host.
-      if (transcript(call).length > 16000) { review(call, 'Dictation is too long. Check the draft before sending.'); return; }
+      const text = transcript(call);
+      if (text !== before) {
+        call.transcriptAt = performance.now();
+        call.progressAfterStop ||= ['finishing', 'sending'].includes(call.phase);
+      }
+      if (text.length > 16000) { review(call, 'Dictation is too long. Check the draft before sending.'); return; }
       if (!preview(call)) return;
       settled(call);
     } catch { review(call, 'Dictation was interrupted. Check the draft before sending.'); }
@@ -206,11 +218,11 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       call.buffer.port.onmessage = ({ data }) => {
         if (!current(call) || call.released) return;
         if (data === 'overflow') { review(call, 'Voice connection took too long. Please record again.'); return; }
-        if (data !== 'drained' || call.audioDone) return;
-        call.audioDone = true;
-        call.drainTimer = setTimeout(() => { call.drained = true; settled(call); }, 1800);
-        // shortcut: no verified provider flush; replace this bounded fallback when one is available.
-        call.timer = setTimeout(() => call.phase === 'sending' ? complete(call) : review(call), 8000);
+        if (data !== 'drained' || call.drainedAt !== undefined) return;
+        call.drainedAt = performance.now();
+        settled(call);
+        call.timer = setTimeout(() => review(call, call.phase === 'sending' && transcript(call) ?
+          'Dictation took too long. Check the draft before sending.' : undefined), 8000);
       };
       call.source = call.audio.createMediaStreamSource(stream);
       call.source.connect(call.buffer);
@@ -265,7 +277,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     get busy() { return ['preparing', 'recording', 'sending'].includes(active?.phase); },
     get blocksSend() { return ['preparing', 'sending'].includes(active?.phase); },
     send() {
-      if (active?.phase === 'recording' && !transcript(active)) { finish(true); return true; }
+      if (['recording', 'finishing'].includes(active?.phase)) { finish(true); return true; }
       return ['preparing', 'sending'].includes(active?.phase);
     },
     cancel,

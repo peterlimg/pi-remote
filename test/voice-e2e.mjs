@@ -195,14 +195,12 @@ try {
     console.log(JSON.stringify({ live: true, silenceCleanupMs: Math.round(performance.now() - emptyStarted), promptsSent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1); assert.equal(commands.length, 0);
     await fresh(); await record(); await page.evaluate(() => window.playVoiceSample());
-    await expect(page.locator('#prompt')).toHaveValue(/The orange bicycle is parked beside the library[.!]?$/i, { timeout: 6000 });
-    const visibleText = await page.locator('#prompt').inputValue();
     const sendStarted = performance.now(); await page.getByRole('button', { name: 'Send message' }).click();
-    await until(() => commands.length === 1, 2000);
-    assert.equal(commands[0].text, visibleText);
+    await until(() => commands.length === 1, 15000);
+    assert.match(commands[0].text, /The orange bicycle is parked beside the library[.!]?$/i);
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#model')).toBeVisible();
     await expect(page.locator('#prompt')).toHaveValue('');
-    console.log(JSON.stringify({ live: true, visibleDraftSendMs: Math.round(performance.now() - sendStarted), text: commands[0].text, promptsToSimulatedAgent: commands.length }));
+    console.log(JSON.stringify({ live: true, catchupSendMs: Math.round(performance.now() - sendStarted), text: commands[0].text, promptsToSimulatedAgent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
   } else {
     await until(() => offers.length === 1); await partial('Purple notebook');
@@ -462,13 +460,22 @@ try {
     }
     for (const [stopFirst, count] of [[true, 3], [false, 4]]) {
       await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Ready words');
-      if (stopFirst) await stop();
+      if (stopFirst) {
+        await stop(); await delay(2100); await partial(' and delayed ending'); await delay(1100);
+      }
       await expect(page.locator('#composer')).toHaveAttribute('data-voice', stopFirst ? 'finishing' : 'recording');
       await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
       const sendAt = performance.now();
-      await page.getByRole('button', { name: 'Send message' }).click(); await until(() => commands.length === count, 2000);
-      console.log(`${stopFirst ? 'Stopped' : 'Recording'} draft Send to simulated agent: ${Math.round(performance.now() - sendAt)}ms`);
-      assert.equal(commands[count - 1].text, 'Original draft Ready words');
+      await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
+      if (!stopFirst) {
+        await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'sending');
+        await delay(2100); assert.equal(commands.length, count - 1);
+        await partial(' and delayed ending');
+        await delay(700); assert.equal(commands.length, count - 1);
+      }
+      await until(() => commands.length === count, stopFirst ? 2000 : 5000);
+      console.log(`${stopFirst ? 'Stopped' : 'Recording'} draft catch-up Send to simulated agent: ${Math.round(performance.now() - sendAt)}ms`);
+      assert.equal(commands[count - 1].text, 'Original draft Ready words and delayed ending');
       await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/);
       await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('');
       await page.locator('#prompt').fill('Next draft');
@@ -477,6 +484,20 @@ try {
         window.lateVoiceEvent({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'late-send', role: 'user', transcript: 'Late final' } }) });
       });
       await stopped(); await closed(); await expect(page.locator('#prompt')).toHaveValue('Next draft'); assert.equal(commands.length, count);
+    }
+
+    for (const progressing of [false, true]) {
+      await fresh(); await page.locator('#prompt').fill('Kept draft'); await record(); await partial('Unfinished words');
+      await page.getByRole('button', { name: 'Send message' }).click();
+      if (progressing) await page.evaluate(() => {
+        const receive = window.voicePeers.at(-1).channel.onmessage;
+        window.voiceChatter = setInterval(() => receive({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: ' more' } }) }), 500);
+      });
+      await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 12000 });
+      await page.evaluate(() => clearInterval(window.voiceChatter));
+      await expect(page.locator('#notice')).toContainText('Check the draft before sending');
+      await expect(page.locator('#prompt')).toHaveValue(/^Kept draft Unfinished words/);
+      await stopped(); await closed(); assert.equal(commands.length, 4);
     }
 
     await page.routeWebSocket('**/ws', route => {
@@ -489,7 +510,7 @@ try {
     await until(() => commands.length === 5); assert.equal(commands[4].text, 'Old host can still send');
   }
   assertPrivate(); assert.deepEqual(errors, []);
-  console.log(`PASS: ${liveFile ? 'live buffered speech, silent timeout and immediate visible-text Send, no host transcript traffic before Send' : 'browser-direct protocol, waveform, draft, Send, cancellation, errors, validation and disconnect'}. Evidence: ${evidence}`);
+  console.log(`PASS: ${liveFile ? 'live buffered speech, silent timeout and catch-up Send, no host transcript traffic before Send' : 'browser-direct protocol, waveform, draft, Send, cancellation, errors, validation and disconnect'}. Evidence: ${evidence}`);
 } finally {
   releaseRequest?.(); releaseAuth?.(); probe?.ws.terminate();
   if (context) await context.tracing.stop({ path: join(evidence, 'trace.zip') }).catch(() => {});
