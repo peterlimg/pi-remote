@@ -167,6 +167,7 @@ function presenceBot(kind, moving = true, offset = 0) {
   return node;
 }
 function drawPresence(rig, animate) {
+  if (rig.study === 'celestial') return drawCelestial(rig, animate);
   if (rig.kind === 'miso-study') return drawMiso(rig, animate);
   const { kind, parts, eyes, eyeNodes } = rig, time = rig.time;
   const pose = animate ? presencePose(kind, time) : [0, 0, 0, 0, 1];
@@ -482,8 +483,120 @@ function misoStudy() {
   renderMiso(); syncTheme(); syncMotion();
 }
 
+function celestialBot(kind, moving = true, size = 32, offset = 0) {
+  const node = el('span', undefined, 'bot m-bot presence-bot celestial-bot');
+  node.dataset.kind = kind; node.dataset.state = moving ? 'working' : 'ready';
+  node.style.setProperty('--size', `${size}px`);
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', `${characters[kind][0]}, ${moving ? 'working study' : 'idle study'}`);
+  const id = `celestial-body-${++presenceId}`;
+  const body = kind === 'orbit' ? '<path fill-rule="evenodd" clip-rule="evenodd"/>' : characters[kind][1];
+  node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><clipPath id="${id}-clip"><use href="#${id}"/></clipPath></defs><g data-part="pose">`
+    + (kind === 'comet' ? characters.comet[3] : '')
+    + `<g class="bot-body">${body}</g><g clip-path="url(#${id}-clip)"><ellipse class="bot-eye"/><ellipse class="bot-eye"/></g></g></svg>`;
+  const rig = { node, kind, study: 'celestial', moving, time: offset,
+    pose: node.querySelector('[data-part=pose]'), body: node.querySelector('.bot-body > :first-child'),
+    eyes: [...node.querySelectorAll('.bot-eye')], tails: [...node.querySelectorAll('.character-comet-tail path')] };
+  rig.body.id = id;
+  presenceRigs.push(rig); drawCelestial(rig, false);
+  return node;
+}
+function drawCelestial({ kind, time, pose, body, eyes, tails }, animate) {
+  const smooth = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+  let positions, eyeWidth = 2.1, eyeHeight = 2.9, visible = true;
+  if (kind === 'luna') {
+    const phase = time % 2.8 / 2.8;
+    const curl = animate ? smooth(phase / .42) * (1 - smooth((phase - .54) / .46)) : 0;
+    const inner = 13 + curl * 8.5;
+    body.setAttribute('d', `M25 3C17 1 8 4 4 12C0 22 7 30 16 30C22 30 27 27 30 22C${20 + curl * 5} 26 ${inner} 20 ${inner} 12C${inner} 7 ${18 + curl * 6} 3 25 3Z`);
+    pose.setAttribute('transform', `rotate(${animate ? -12 + 30 * curl : 0} 16 17)`);
+    positions = [[7.5 + curl * 4, 20 - curl * 3], [12.5 + curl * 6, 21 - curl * 3]];
+    eyeWidth = 1.89; eyeHeight = 2.61 * (1 - curl * .35);
+  } else if (kind === 'comet') {
+    const phase = time % 1.9 / 1.9;
+    const fold = animate ? smooth(phase / .32) * (1 - smooth((phase - .32) / .18)) : 0;
+    const dash = animate ? smooth((phase - .32) / .18) * (1 - smooth((phase - .55) / .45)) : 0;
+    pose.setAttribute('transform', `translate(${dash * 2 - fold} ${fold - dash * 2}) rotate(${fold * -8 + dash * 6} 19 14)`);
+    tails[0].setAttribute('d', `M16 17Q${8 + fold * 9} ${18 + fold * 5} ${3 + fold * 12 - dash} ${29 - fold * 4}Q${14 + fold * 8} 28 22 21Z`);
+    tails[1].setAttribute('d', `M13 14Q${6 + fold * 6} ${16 + fold * 5} ${2 + fold * 10} ${23 + fold * 3}Q${10 + fold * 8} 23 18 19Z`);
+    tails[2].setAttribute('d', `M20 20Q${15 + fold * 8} 28 ${9 + fold * 12} ${31 - fold * 4}Q${10 + fold * 10} 24 16 18Z`);
+    positions = [[16 + dash, 13 - dash], [23 + dash, 13 - dash]];
+    eyeHeight = 2.9 - dash * 1.5;
+  } else {
+    const phase = time % 3.4 / 3.4;
+    const turn = animate ? Math.PI * 2 * smooth((phase - .18) / .7) + .18 * Math.sin(phase * Math.PI * 2) : 0;
+    const facing = Math.cos(turn), depth = Math.abs(facing);
+    const outer = 5 + 7 * depth, hole = .25 + 4.5 * depth, holeY = 16 - 3 * facing;
+    body.setAttribute('d', `M3 16a13 ${outer} 0 1 0 26 0a13 ${outer} 0 1 0 -26 0Z M9.7 ${holeY}a6.3 ${hole} 0 1 0 12.6 0a6.3 ${hole} 0 1 0 -12.6 0Z`);
+    pose.setAttribute('transform', `rotate(${-18 + (animate ? 12 * Math.sin(phase * Math.PI * 2) : 0)} 16 16)`);
+    positions = [[12, 16 + 7 * facing], [20, 16 + 7 * facing]];
+    eyeWidth = 1.8; eyeHeight = 2.2 * depth; visible = facing > .12;
+  }
+  const blinkPhase = time % 4.7;
+  const blink = animate && blinkPhase > 4.5 ? 1 - .9 * Math.sin((blinkPhase - 4.5) / .2 * Math.PI) : 1;
+  eyes.forEach((eye, index) => {
+    eye.setAttribute('cx', String(positions[index][0])); eye.setAttribute('cy', String(positions[index][1]));
+    eye.setAttribute('rx', String(eyeWidth)); eye.setAttribute('ry', String(eyeHeight * blink));
+    eye.setAttribute('opacity', visible ? '1' : '0');
+  });
+}
+function celestialStudy() {
+  const page = $('page'); page.dataset.set = 'focused';
+  document.title = 'Luna, Comet and Orbit · Pi Remote';
+  document.querySelector('h1').textContent = 'Luna, Comet & Orbit';
+  document.querySelector('.lede').textContent = 'Simple shapes and two eyes. Orbit is now a tilted loop. Sample activity only.';
+  $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
+  $('comparison').hidden = false; $('comparison-note').hidden = false; $('replay').hidden = false;
+  page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
+  function renderCelestial() {
+    presenceRigs = [];
+    const list = el('section', undefined, 'presence-list'); list.id = 'celestial-sessions';
+    list.setAttribute('aria-label', 'Sample session list');
+    list.append(el('h2', 'Working together · 32px', 'section-title'));
+    for (const [kind, title, moving] of [
+      ['luna', 'Check reconnect handling', true], ['comet', 'Trace a slow response', true],
+      ['orbit', 'Review the session history', true], ['luna', 'Saved design notes', false],
+    ]) {
+      const row = el('div', undefined, 'session'), content = el('div', undefined, 'session-body');
+      content.append(el('strong', title), el('small', `${characters[kind][0]} · ${moving ? 'Working' : 'Idle'} · pi-remote`));
+      row.append(celestialBot(kind, moving, 32, kind === 'comet' ? .3 : 0), content); list.append(row);
+    }
+    const details = el('details', undefined, 'presence-comparisons');
+    details.append(el('summary', 'Larger view · compare at 64px'));
+    for (const [kind, description] of [
+      ['luna', 'The crescent curls inward, then opens again.'],
+      ['comet', 'The tail folds in, then unfurls into the dash.'],
+      ['orbit', 'One thick loop rolls through an edge-on pose. No separate planet or satellite.'],
+    ]) {
+      const section = el('section', undefined, 'motion-comparison');
+      section.setAttribute('aria-label', characters[kind][0]);
+      section.append(el('h2', characters[kind][0]), el('p', description));
+      const columns = el('div', undefined, 'comparison-columns');
+      for (const [variant, label] of [['current', 'Current'], ['revised', 'Study'], ['rest', 'Idle']]) {
+        const figure = el('figure'); figure.dataset.variant = variant;
+        const icon = variant === 'current' ? bot(kind, 64, 0) : celestialBot(kind, variant === 'revised', 64);
+        if (variant === 'current') {
+          icon.dataset.mood = 'working'; icon.dataset.state = 'working';
+          icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', `${characters[kind][0]}, current working motion`);
+        }
+        figure.append(el('figcaption', label), icon); columns.append(figure);
+      }
+      section.append(columns); details.append(section);
+    }
+    $('comparison').replaceChildren(list, details);
+    visibleBots.disconnect();
+    for (const node of page.querySelectorAll('.m-bot')) visibleBots.observe(node);
+  }
+  $('replay').onclick = () => { paused = false; renderCelestial(); syncMotion(); };
+  $('theme').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); };
+  $('motion').onclick = () => { paused = !paused; syncMotion(); };
+  document.addEventListener('visibilitychange', syncMotion);
+  reducedMotion.addEventListener('change', syncMotion);
+  renderCelestial(); syncTheme(); syncMotion();
+}
+
 if (new URL(location.href).searchParams.get('study') === 'shimmer') shimmerStudy();
 else if (new URL(location.href).searchParams.get('study') === 'miso') misoStudy();
+else if (new URL(location.href).searchParams.get('study') === 'celestial') celestialStudy();
 else {
 $('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });
 $('previous').addEventListener('click', () => cycle(-1));
