@@ -107,6 +107,16 @@ function choose(next) {
 }
 // One authored timeline per character: phase, x, y, roll, face turn, vertical scale.
 const presenceTracks = {
+  slingshot: { period: 3.2, frames: [
+    // beat, moon turns, disc tilt, body lean, body drop, gaze, smile
+    [0, .05, -12, 0, 0, 1, .8],
+    [.26, .36, -10, -.5, 0, -.7, 0],
+    [.45, .49, -28, -1.8, 1.6, -1, 0],
+    [.54, .50, -31, -2, 1.8, .65, .2],
+    [.64, .72, 9, 1.3, -1.4, 1, .15],
+    [.79, .95, -7, .7, -.6, 1, .9],
+    [1, 1.05, -12, 0, 0, 1, .8],
+  ] },
   miso: { period: 5.6, center: [16, 19], radius: 10, frames: [
     [0, 0, 0, -4, -.35, 1], [.12, .4, -.8, 3, .4, 1.02],
     [.26, .7, .5, 6, .7, .97], [.4, -.4, -.5, -5, -.65, 1.01],
@@ -602,17 +612,20 @@ function celestialStudy() {
   renderCelestial(); syncTheme(); syncMotion();
 }
 
-function drawDiscMoon({ time, eyes, moons }, animate) {
-  const phase = (animate ? time : 0) * Math.PI * 2 / 2.5 + .35;
+function drawDiscMoon({ time, eyes, moons, body }, animate) {
+  const [turns, tilt, lean, drop, gaze, smile] = animate
+    ? presencePose('slingshot', time) : [.05, -12, 0, 0, 0, 0];
+  const phase = turns * Math.PI * 2;
+  body.setAttribute('transform', `translate(${lean} ${drop}) rotate(${lean * 5} 16 14)`);
   const x = Math.cos(phase), depth = Math.sin(phase);
   for (const [i, moon] of moons.entries()) {
+    moon.parentNode.setAttribute('transform', `rotate(${tilt} 16 18)`);
     moon.setAttribute('cx', 16 + 13.4 * x);
     moon.setAttribute('cy', 18 + 4 * depth);
     moon.setAttribute('opacity', Number((i === 1) === (depth >= 0)));
   }
-  const smile = animate ? Math.min(1, Math.max(0, (Math.cos(phase - .18) - .35) * 2.4)) : 0;
   for (const [i, eye] of eyes.entries()) {
-    eye.setAttribute('transform', `translate(${12.5 + 7 * i + x} ${12.7 + .55 * depth})`);
+    eye.setAttribute('transform', `translate(${12.5 + 7 * i + gaze} ${12.7 + .55 * depth})`);
     const halfWidth = 1.9 + .35 * smile, lowerCurve = 3.6 - 5.2 * smile;
     eye.setAttribute('d', `M${-halfWidth} 0C${-halfWidth} -3.6 ${halfWidth} -3.6 ${halfWidth} 0C${halfWidth} ${lowerCurve} ${-halfWidth} ${lowerCurve} ${-halfWidth} 0Z`);
   }
@@ -653,7 +666,7 @@ function orbitRingStudy(working = false) {
   if (working) {
     document.title = 'Orbit C in motion · Pi Remote';
     document.querySelector('h1').textContent = 'Orbit C in motion';
-    document.querySelector('.lede').textContent = 'Orbit’s eyes smile when the moon comes back around. At idle, its gaze rests.';
+    document.querySelector('.lede').textContent = 'Slingshot: Orbit dips its disc to catch the moon, looks ahead, then flicks the moon around the far side.';
     const pair = el('section', undefined, 'ring-options orbit-pair');
     pair.setAttribute('aria-label', 'Working and idle at 32px');
     for (const label of ['Working', 'Idle']) {
@@ -669,7 +682,10 @@ function orbitRingStudy(working = false) {
           const eye = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           eye.setAttribute('class', 'bot-eye'); oval.replaceWith(eye); return eye;
         });
-        const rig = { study: 'orbit-c', node, moving: true, time: 0, moons, eyes };
+        const planet = node.querySelector('.bot-body');
+        const body = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        planet.before(body); body.append(planet, ...eyes);
+        const rig = { study: 'orbit-c', node, moving: true, time: 0, moons, eyes, body };
         presenceRigs.push(rig); drawDiscMoon(rig, false); visibleBots.observe(node);
       }
       figure.append(node, el('figcaption', label)); pair.append(figure);
