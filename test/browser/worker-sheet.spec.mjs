@@ -20,7 +20,12 @@ test('worker sheet scopes history and images without disturbing the live parent'
   let client, parentVersion = 0, workerVersion = 0;
   const requests = [], errors = [];
   const checkFloatingSheet = async (roster) => {
+    await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
     await expect.poll(() => page.locator('#coordinator-sheet').evaluate(node => node.getBoundingClientRect().bottom - innerHeight)).toBeCloseTo(0, 0);
+    await expect.poll(() => page.locator('.coordinator-sheet').evaluate(node => {
+      const sheet = node.getBoundingClientRect(), conversation = document.querySelector('#app > main').getBoundingClientRect();
+      return sheet.x + sheet.width / 2 - (conversation.x + conversation.width / 2);
+    })).toBeCloseTo(0, 0);
     const geometry = await page.locator('.coordinator-sheet').evaluate(node => {
       const box = node.getBoundingClientRect(), title = node.querySelector('.coordinator-heading').getBoundingClientRect();
       const close = node.querySelector('#coordinator-done'), button = close.getBoundingClientRect();
@@ -70,6 +75,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
   for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'dark'], ['desktop', 1440, 900, 'dark']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
+    await expect.poll(() => page.locator('#app').evaluate(node => node.getBoundingClientRect().bottom - innerHeight)).toBeCloseTo(0, 0);
     for (const state of ['completed', 'working', 'waiting', 'unknown']) {
       task.state = state;
       client.send(JSON.stringify({ type: 'snapshot', sessionId: parent.id, version: ++parentVersion, state: parent }));
@@ -151,7 +157,7 @@ test('worker sheet scopes history and images without disturbing the live parent'
   await expect(page.locator('.coordinator-sheet')).toHaveCSS('transform', 'none');
   const workingStatus = page.getByRole('button', { name: task.title + ', Working', exact: true }).locator('small');
   const finishedStatus = page.getByRole('button', { name: /, Integrated$/ }).locator('small');
-  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'light'], ['desktop-light', 1440, 900, 'light'], ['desktop-dark', 1440, 900, 'dark']]) {
+  for (const [name, width, height, colorScheme] of [['phone-light', 390, 844, 'light'], ['phone-dark', 390, 844, 'dark'], ['narrow', 320, 740, 'light'], ['short', 390, 510, 'light'], ['tablet-landscape', 1133, 744, 'light'], ['tablet-portrait', 744, 1133, 'dark'], ['desktop-light', 1440, 900, 'light'], ['desktop-dark', 1440, 900, 'dark']]) {
     await page.setViewportSize({ width, height }); await page.emulateMedia({ colorScheme });
     const marker = await workingStatus.evaluate(node => {
       const dot = getComputedStyle(node, '::before');
@@ -181,6 +187,15 @@ test('worker sheet scopes history and images without disturbing the live parent'
     await expect.poll(async () => (await page.locator('.coordinator-sheet').boundingBox()).height).toBeCloseTo(Math.min(height * .52, 640), 0);
     expect(roster.targets).toBe(true);
     await page.screenshot({ path: info.outputPath('worker-roster-' + name + '.png') });
+  }
+  await page.setViewportSize({ width: 1133, height: 744 });
+  for (const collapsed of [true, false]) {
+    await close.tap();
+    await page.locator('#sidebar-toggle').tap();
+    await expect(page.locator('#sidebar-toggle')).toHaveAttribute('aria-expanded', String(!collapsed));
+    await page.locator('#coordinator-open').tap();
+    await checkFloatingSheet(true);
+    await page.screenshot({ path: info.outputPath(`worker-roster-tablet-sidebar-${collapsed ? 'collapsed' : 'expanded'}.png`) });
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: info.outputPath('worker-roster-touch.png') });
