@@ -1,5 +1,43 @@
 import { test, expect } from '@playwright/test';
 
+test('horizontal conversation swipes toggle Sessions without changing the draft', async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto('/#token=browser-test-token-only-123456789012345');
+  await page.getByRole('button', { name: /Project Alpha/ }).click();
+  await page.locator('#prompt').fill('Keep this draft');
+  const toggle = page.locator('#sidebar-toggle');
+  const cdp = browserName === 'chromium' && await page.context().newCDPSession(page);
+  const swipe = async (dx, dy, canceled = false) => {
+    const { x, y, width } = await page.locator('#transcript').boundingBox();
+    const start = { x: Math.round(x + width - 10), y: Math.round(y + 130) };
+    if (dx > 0) start.x = Math.round(x + 12);
+    const end = { x: start.x + dx, y: start.y + dy };
+    if (cdp) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] });
+      await cdp.send('Input.dispatchTouchEvent', { type: canceled ? 'touchCancel' : 'touchEnd', touchPoints: [] });
+    } else await page.evaluate(({ start, end, canceled }) => {
+      const target = document.elementFromPoint(start.x, start.y);
+      for (const [type, point] of [['touchstart', start], ['touchmove', end], [canceled ? 'touchcancel' : 'touchend', end]]) {
+        const touch = { clientX: point.x, clientY: point.y };
+        target.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+          touches: /end|cancel/.test(type) ? [] : [touch], changedTouches: [touch]
+        }));
+      }
+    }, { start, end, canceled });
+  };
+  for (const args of [[-30, 0], [-80, 70], [-100, 0, true]]) {
+    await swipe(...args);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  }
+  await swipe(-100, 0);
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await swipe(100, 0);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#title')).toHaveText('Project Alpha');
+  await expect(page.locator('#prompt')).toHaveValue('Keep this draft');
+});
+
 for (const [width, height] of [[744, 1133], [1133, 744], [844, 390], [568, 320]]) {
   test(`sessions and chat stay usable side by side at ${width}×${height}`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });

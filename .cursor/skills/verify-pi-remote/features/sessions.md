@@ -20,7 +20,7 @@ The session list lets users find a task, see whether it is working or waiting, a
 
 - Connect to Pi Remote to see the session list.
 - On mobile, choose `Show sessions` from a conversation to return to the list.
-- On tablet, desktop and landscape phones, select a session directly from the sidebar. Use `Collapse sessions` for full-width chat and `Show sessions` to restore split view.
+- On tablet, desktop and landscape phones, select a session directly from the sidebar. Swipe left across conversation text for full-width chat, or right to restore split view. The sidebar toggle works without swiping.
 - Use `Search sessions` or scroll to load more recent conversations.
 - Use `View all active sessions` or `View all pinned sessions` for the complete collection; `Close sessions` returns to the overview.
 - Open a conversation, choose `Session details`, then `Pin session` or `Unpin session`. Right swipes remain a shortcut.

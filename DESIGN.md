@@ -20,7 +20,7 @@ Mermaid diagrams use flat shapes, thin warm borders, muted blue group background
 
 ## Sessions sidebar
 
-On tablets, desktops and landscape phones at least 568px wide, show Sessions and the conversation side by side. Keep the sidebar up to 320px wide, with a divider and a circular collapse control at its top right. Selecting a session leaves the sidebar open. Collapse it to give the chat the full width; never dim or disable the conversation. Respect reduced motion and keep narrow portrait phones on list/back navigation.
+On tablets, desktops and landscape phones at least 568px wide, show Sessions and the conversation side by side. Keep the sidebar up to 320px wide, with a divider and a circular collapse control at its top right. Selecting a session leaves the sidebar open. Swipe right across the conversation to open Sessions, or left to collapse it. Keep session-row swipes for pinning and closing. Collapse it to give the chat the full width; never dim or disable the conversation. Respect reduced motion and keep narrow portrait phones on list/back navigation.
 
 ## Composer
 

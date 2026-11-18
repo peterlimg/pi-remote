@@ -3498,6 +3498,31 @@ $('sidebar-toggle').addEventListener('click', () => {
   setSidebarCollapsed(!$('app').classList.contains('sidebar-collapsed'));
 });
 renderSidebarToggle();
+let sidebarSwipe;
+$('app').addEventListener('touchstart', event => {
+  sidebarSwipe = undefined;
+  if (!sidebarLayout.matches || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1 ||
+      !event.target.closest('#transcript, #empty, #sidebar') ||
+      event.target.closest('button, a, input, textarea, select, label, summary, pre, table, dialog, [popover], [contenteditable], img, video') ||
+      window.getSelection()?.isCollapsed === false) return;
+  const touch = event.touches[0];
+  sidebarSwipe = { x: touch.clientX, y: touch.clientY, closed: $('app').classList.contains('sidebar-collapsed') };
+}, { passive: true });
+$('app').addEventListener('touchmove', event => {
+  if (!sidebarSwipe) return;
+  const touch = event.touches[0], dx = touch.clientX - sidebarSwipe.x, dy = touch.clientY - sidebarSwipe.y;
+  if (event.touches.length !== 1 || Math.abs(dy) > 8 && Math.abs(dx) < 1.5 * Math.abs(dy)) { sidebarSwipe = undefined; return; }
+  if ((sidebarSwipe.closed ? dx : -dx) > 8 && event.cancelable) event.preventDefault();
+}, { passive: false });
+$('app').addEventListener('touchcancel', () => { sidebarSwipe = undefined; });
+$('app').addEventListener('touchend', event => {
+  const swipe = sidebarSwipe;
+  sidebarSwipe = undefined;
+  if (!swipe || !sidebarLayout.matches || event.touches.length || !event.changedTouches?.length ||
+      (window.visualViewport?.scale ?? 1) > 1 || swipe.closed !== $('app').classList.contains('sidebar-collapsed')) return;
+  const touch = event.changedTouches[0], dx = touch.clientX - swipe.x, dy = touch.clientY - swipe.y;
+  if ((swipe.closed ? dx : -dx) >= Math.max(72, Math.abs(dy) * 1.5)) $('sidebar-toggle').click();
+});
 $('back').addEventListener('click', () => {
   voice?.cancel();
   haptic(); resetSwipe();
