@@ -15,8 +15,22 @@ if (process.argv.length > 2 && !liveFile) throw new Error('Usage: node test/voic
 const dir = mkdtempSync(join(tmpdir(), 'pi-voice-e2e-')), evidence = mkdtempSync(join(tmpdir(), 'pi-voice-evidence-'));
 const config = { port: 8787, clientToken: 'voice-test-client-only-1234567890123456', bridgeToken: 'voice-test-bridge-only-1234567890123456', relayToken: 'voice-test-relay-only-12345678901234567' };
 const sdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n';
-let host, browser, context, probe, mode = 'ok', releaseRequest, releaseAuth;
+let host, browser, context, page, probe, mode = 'ok', releaseRequest, releaseAuth;
 const agents = [], locks = [], offers = [], commands = [], errors = [], hostFrames = [];
+const diagnostics = async () => {
+  if (!liveFile || !page || page.isClosed()) return;
+  const data = await page.evaluate(() => window.voicePeers?.length ? {
+    timing: window.voiceTiming, events: window.voiceEvents, eventCounts: window.voiceEventCounts,
+    transport: window.voiceTransport, closed: window.voiceClosed, outcome: window.voiceOutcome,
+    phase: document.getElementById('composer')?.dataset.voice,
+    text: document.getElementById('prompt')?.value,
+    notice: document.getElementById('notice')?.hidden ? '' : document.getElementById('notice')?.textContent
+  } : null);
+  if (!data) return;
+  writeFileSync(join(evidence, `call-${offers.length}.json`), JSON.stringify(data, null, 2));
+  console.log(JSON.stringify({ call: offers.length, promptsSent: commands.length, timing: data.timing,
+    eventCounts: data.eventCounts, phase: data.phase, text: data.text, notice: data.notice, closed: data.closed, outcome: data.outcome }));
+};
 try {
   host = await startHost({ dir, config, port: 0, roots: [], relayUrl: '', publicUrl: 'http://127.0.0.1:8787' });
   host.service.voiceOptions = {
@@ -66,7 +80,7 @@ try {
   await context.addInitScript(({ audio64, sdp }) => {
     if (!navigator.mediaDevices) return;
     window.voiceTracks = []; window.voiceContexts = []; window.voicePeers = []; window.voiceSent = []; window.voiceClosed = 0; window.voiceEvents = [];
-    window.voiceTiming = {};
+    window.voiceTiming = {}; window.voiceEventCounts = {}; window.voiceTransport = [];
     const NativeAudioContext = window.AudioContext, NativePeer = window.RTCPeerConnection, NativeWorklet = window.AudioWorkletNode;
     window.AudioWorkletNode = class extends NativeWorklet {
       constructor(...args) {
@@ -76,6 +90,7 @@ try {
         this.port.postMessage = message => {
           if (message === 'play') window.voiceTiming.play ??= performance.now();
           if (message === 'stop') window.voiceTiming.stop = performance.now();
+          if (message === 'dispose') window.voiceTiming.dispose = performance.now();
           return post(message);
         };
         this.port.addEventListener('message', ({ data }) => {
@@ -103,9 +118,24 @@ try {
       window.RTCPeerConnection = class extends NativePeer {
         constructor(...args) {
           super(...args); window.voicePeers.push(this);
+          this.statsTimer = setInterval(async () => {
+            try {
+              const stats = await this.getStats();
+              window.voiceTransport.push({ at: performance.now(), stats: [...stats.values()]
+                .filter(s => ['outbound-rtp', 'remote-inbound-rtp', 'media-source'].includes(s.type))
+                .map(s => ({ type: s.type, kind: s.kind, bytesSent: s.bytesSent, packetsSent: s.packetsSent,
+                  packetsLost: s.packetsLost, roundTripTime: s.roundTripTime,
+                  totalAudioEnergy: s.totalAudioEnergy, totalSamplesDuration: s.totalSamplesDuration })) });
+            } catch {}
+          }, 500);
           this.addEventListener('connectionstatechange', () => {
             if (this.connectionState === 'connected') window.voiceTiming.mediaConnected = performance.now();
           });
+        }
+        close() {
+          window.voiceOutcome = { at: performance.now(), phase: document.getElementById('composer')?.dataset.voice,
+            notice: document.getElementById('notice')?.hidden ? '' : document.getElementById('notice')?.textContent };
+          clearInterval(this.statsTimer); super.close();
         }
         async createOffer(...args) {
           window.voiceTiming.offer = performance.now();
@@ -120,6 +150,12 @@ try {
           channel.addEventListener('open', () => { window.voiceTiming.connected = performance.now(); });
           channel.addEventListener('message', event => { try {
             const packet = JSON.parse(event.data);
+            window.voiceEventCounts[packet.type] = (window.voiceEventCounts[packet.type] || 0) + 1;
+            if (packet.type === 'session.started') window.voiceTiming.providerReady ??= performance.now();
+            if (['session.started', 'session.context_window.approaching', 'session.usage.updated'].includes(packet.type)) {
+              window.voiceEvents.push({ at: performance.now(), type: packet.type,
+                detail: JSON.parse(JSON.stringify(packet, (key, value) => typeof value === 'string' ? undefined : value)) });
+            }
             if (packet.type === 'input_transcript.added' && packet.item?.text?.trim() && !window.voiceTiming.firstText) {
               window.voiceTiming.firstText = performance.now();
               setTimeout(() => {
@@ -150,6 +186,7 @@ try {
       async setRemoteDescription() {
         this.connectionState = 'connected'; this.onconnectionstatechange?.();
         if (!window.voiceHoldConnection) { this.channel.readyState = 'open'; this.channel.onopen?.(); }
+        if (!window.voiceHoldReady) this.channel.onmessage?.({ data: '{"type":"session.started"}' });
       }
       close() {
         if (this.connectionState === 'closed') return;
@@ -167,9 +204,10 @@ try {
       window.stopVoiceMonitor = () => audio.close();
     };
   }, { audio64: liveFile ? readFileSync(liveFile).toString('base64') : null, sdp });
-  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+  page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
   page.on('websocket', socket => socket.on('framesent', event => { try { hostFrames.push(JSON.parse(String(event.payload))); } catch {} }));
   const fresh = async () => {
+    await diagnostics();
     mode = 'ok'; await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
     await page.getByRole('button', { name: /Voice Alpha/ }).click();
     await expect(page.locator('#voice-record')).toBeVisible(); await expect(page.locator('#app')).not.toHaveClass(/opening/);
@@ -183,16 +221,21 @@ try {
   const closed = async () => expect.poll(() => page.evaluate(() => window.voicePeers.every(peer => peer.connectionState === 'closed') && window.voiceContexts.every(audio => audio.state !== 'running')), { timeout: 15000 }).toBe(true);
   const stop = () => page.getByRole('button', { name: 'Stop dictation' }).click();
   const packet = event => page.evaluate(event => window.voicePeers.at(-1).channel.onmessage?.({ data: JSON.stringify(event) }), event);
-  const partial = text => packet({ type: 'input_transcript.added', item: { text } });
-  const final = (text, id = 'turn-1') => packet({ type: 'turn.done', turn: { id, role: 'user', transcript: text } });
+  const playbackStarted = () => page.waitForFunction(() => window.voiceTiming.play !== undefined, null, { timeout: 15000 });
+  const drained = () => page.waitForFunction(() => window.voiceTiming.drained !== undefined, null, { timeout: 15000 });
+  const partial = async text => { await playbackStarted(); return packet({ type: 'input_transcript.added', item: { text } }); };
+  const final = async (text, id = 'turn-1') => { await playbackStarted(); return packet({ type: 'turn.done', turn: { id, role: 'user', transcript: text } }); };
   const timing = () => page.evaluate(() => {
     const t = window.voiceTiming;
     return {
       captureToConnectionMs: Math.round(t.connected - t.capture),
+      captureToPlaybackMs: Math.round(t.play - t.capture),
       offerToAnswerMs: Math.round(t.answer - t.offer),
       answerToMediaMs: Math.round(t.mediaConnected - t.answer),
       mediaToChannelMs: Math.round(t.connected - t.mediaConnected),
       mediaToPlaybackMs: Math.round(t.play - t.mediaConnected),
+      channelToProviderReadyMs: Math.round(t.providerReady - t.connected),
+      providerReadyToPlaybackMs: Math.round(t.play - t.providerReady),
       transcriptToPreviewMs: Math.round(t.preview - t.firstText),
       speechToFirstTextMs: Math.round(t.firstText - t.speech),
       stopToBufferDrainedMs: Math.round(t.drained - t.stop),
@@ -211,13 +254,16 @@ try {
   await page.locator('#prompt').fill('Keep this draft.');
   await page.locator('#prompt').evaluate(input => { window.voicePromptBlurs = 0; input.addEventListener('blur', () => window.voicePromptBlurs++); });
   if (liveFile) mode = 'held';
-  else await page.evaluate(() => { window.voiceHoldConnection = true; });
+  else await page.evaluate(() => { window.voiceHoldConnection = true; window.voiceHoldReady = true; });
   await record();
   if (liveFile) {
     await until(() => releaseRequest);
     const playback = page.evaluate(() => window.playVoiceSample());
     await delay(1500); releaseRequest(); releaseRequest = undefined;
     await playback;
+    await playbackStarted();
+    assert.ok(await page.evaluate(() => window.voiceTiming.play >= window.voiceTiming.providerReady), 'Speech must wait for provider readiness');
+    assert.ok(await page.evaluate(() => window.voiceTransport.filter(t => t.at < window.voiceTiming.providerReady).every(t => t.stats.every(s => !s.totalAudioEnergy))), 'No speech energy before provider readiness');
     await expect(page.locator('#prompt')).not.toHaveValue('Keep this draft.', { timeout: 6000 });
     await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'recording');
     await expect(page.locator('#prompt')).toBeFocused();
@@ -228,7 +274,8 @@ try {
     await expect(page.locator('#prompt')).toBeEditable(); await expect(page.locator('#send')).toBeEnabled();
     const stopToEditableDraftMs = Math.round(performance.now() - started);
     assert.equal(await page.evaluate(() => window.voicePromptBlurs), 0);
-    try { await expect(page.locator('#prompt')).toHaveValue(/^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i, { timeout: 6000 }); }
+    const recognitionTimeout = await page.evaluate(() => Math.ceil(window.voiceTiming.play - window.voiceTiming.capture) + 6000);
+    try { await expect(page.locator('#prompt')).toHaveValue(/^Keep this draft\.[\s\S]*The orange bicycle is parked beside the library[.!]?$/i, { timeout: recognitionTimeout }); }
     catch (error) {
       console.log(JSON.stringify({ liveDiagnostics: await page.evaluate(() => window.voiceEvents.slice(-15).map(({ at, ...event }) => ({ ...event, afterAudioEndMs: Math.round(at - window.voiceAudioEndedAt) }))) }));
       throw error;
@@ -251,6 +298,7 @@ try {
     await expect(page.locator('#prompt')).toHaveValue('Silent draft'); await expect(page.locator('#notice')).toBeHidden();
     console.log(JSON.stringify({ live: true, silenceCleanupMs: Math.round(performance.now() - emptyStarted), promptsSent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1); assert.equal(commands.length, 0);
+    assert.ok(await page.evaluate(() => window.voiceTiming.providerReady !== undefined), 'Silence must reach provider readiness, not pass after a startup failure');
     await fresh(); await record(); await page.evaluate(() => window.playVoiceSample());
     const sendStarted = performance.now(); await page.getByRole('button', { name: 'Send message' }).click();
     await until(() => commands.length === 1, 15000);
@@ -259,20 +307,24 @@ try {
     await expect(page.locator('#prompt')).toHaveValue('');
     console.log(JSON.stringify({ live: true, ...await timing(), catchupSendMs: Math.round(performance.now() - sendStarted), text: commands[0].text, promptsToSimulatedAgent: commands.length }));
     await closed(); assert.equal(await page.evaluate(() => window.voiceClosed), 1);
+    assert.equal(commands.length, 1, 'Exactly one prompt after closing the voice connection');
   } else {
     await until(() => offers.length === 1);
-    await page.evaluate(() => window.monitorVoiceOutput());
-    await expect.poll(() => page.evaluate(() => window.voiceOutputLevel()), { timeout: 3000, message: 'Audio must start on the connected media link without waiting for the data channel' }).toBeGreaterThan(.03);
+    assert.ok(await page.locator('#voice-waveform i').count() < 12, 'No prefilled dot line');
+    await page.evaluate(() => window.monitorVoiceOutput()); await delay(150);
+    await expect.poll(() => page.evaluate(() => window.voiceOutputLevel()), { timeout: 1000, message: 'Connected transport must not release speech before provider readiness' }).toBeLessThan(.001);
+    await packet({ type: 'session.started' });
+    assert.ok(await page.evaluate(() => window.voiceOutputLevel()) < .001, 'Provider readiness alone must not bypass the channel wait');
     await page.evaluate(() => {
       const channel = window.voicePeers.at(-1).channel;
       channel.readyState = 'open'; channel.onopen();
-      return window.stopVoiceMonitor();
     });
+    await expect.poll(() => page.evaluate(() => window.voiceOutputLevel())).toBeGreaterThan(.03);
+    await page.evaluate(() => window.stopVoiceMonitor());
     await partial('Purple notebook');
     await packet({ type: 'turn.done', turn: { id: 'assistant-1', role: 'assistant', transcript: 'Do not insert this' } });
     await packet({ type: 'delegation.created', item: { type: 'delegation', target: 'client' } });
     await expect.poll(() => page.locator('#voice-waveform i').count()).toBeGreaterThan(0);
-    assert.ok(await page.locator('#voice-waveform i').count() < 12, 'No prefilled dot line');
     const positions = await page.locator('#voice-waveform i').first().evaluate(async bar => {
       const x = []; for (let frame = 0; frame < 20; frame++) { await new Promise(requestAnimationFrame); x.push(bar.getBoundingClientRect().x); } return x;
     });
@@ -333,6 +385,7 @@ try {
     await fresh(); await page.locator('#prompt').fill('Keep unchanged'); await record();
     await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
     await expect(page.locator('#prompt')).toBeVisible(); await expect(page.locator('#prompt')).toBeFocused();
+    await drained();
     await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/, { timeout: 10000 }); await closed();
     await expect(page.locator('#prompt')).toHaveValue('Keep unchanged'); await expect(page.locator('#notice')).toBeHidden(); assert.equal(commands.length, 1);
 
@@ -344,6 +397,7 @@ try {
 
     await fresh(); await record(); await partial('Unconfirmed words'); await stop();
     await expect(page.locator('#prompt')).toHaveValue('Unconfirmed words', { timeout: 1000 });
+    await drained();
     await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 10000 }); await closed();
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#voice-label')).toBeEmpty(); await expect(page.locator('#notice')).toBeHidden();
     await expect(page.locator('#send')).toBeEnabled(); await expect(page.locator('#prompt')).toBeEditable();
@@ -397,7 +451,9 @@ try {
     });
     await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Compose safely'); await closed();
 
-    await fresh(); mode = 'held'; states[0].status = 'working'; states[0].revision++;
+    await fresh(); mode = 'held';
+    await page.evaluate(() => { window.voiceHoldReady = true; });
+    states[0].status = 'working'; states[0].revision++;
     agents[0].ws.send(JSON.stringify({ type: 'snapshot', state: states[0] }));
     await expect(page.locator('#status')).toHaveText('working');
     await record(); await until(() => releaseRequest);
@@ -411,6 +467,10 @@ try {
     await expect(page.locator('#model')).toBeHidden(); await expect(page.locator('#send')).toBeDisabled();
     assert.equal(commands.length, 1);
     releaseRequest(); releaseRequest = undefined;
+    await expect.poll(() => page.evaluate(() => window.voicePeers.at(-1).channel.readyState)).toBe('open');
+    await delay(150);
+    assert.ok(await page.evaluate(() => window.voiceOutputLevel()) < .001, 'Queued Send must retain opening audio until the provider starts');
+    await packet({ type: 'session.started' });
     await expect.poll(() => page.evaluate(() => window.voiceOutputLevel())).toBeGreaterThan(.03);
     await page.evaluate(() => window.stopVoiceMonitor());
     await final('Send before final'); await until(() => commands.length === 2, 15000);
@@ -493,9 +553,20 @@ try {
     await stop(); await expect(page.locator('#model')).toBeVisible(); await expect(page.locator('#prompt')).toBeEditable();
     await page.locator('#prompt').fill('Changed before connecting'); releaseAuth(); releaseAuth = undefined; mode = 'ok'; await stopped(); await closed();
     await expect(page.locator('#prompt')).toHaveValue('Changed before connecting'); assert.equal(commands.length, 2);
-    await fresh(); await page.evaluate(() => { window.voiceHoldConnection = true; }); await page.getByRole('button', { name: 'Dictate with ChatGPT' }).click();
-    await expect.poll(() => page.evaluate(() => window.voicePeers.at(-1)?.connectionState)).toBe('connected');
-    await page.getByRole('button', { name: 'Cancel dictation' }).click(); await stopped(); await closed(); await expect(page.locator('#notice')).toBeHidden();
+    for (const hold of ['voiceHoldConnection', 'voiceHoldReady']) {
+      await fresh(); await page.evaluate(hold => { window[hold] = true; }, hold); await record();
+      await expect.poll(() => page.evaluate(() => window.voicePeers.at(-1)?.connectionState)).toBe('connected');
+      await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
+      await page.getByRole('button', { name: 'Cancel dictation' }).click(); await stopped(); await closed();
+      await page.evaluate(() => window.lateVoiceEvent({ data: '{"type":"session.started"}' }));
+      await expect(page.locator('#notice')).toBeHidden();
+    }
+    await fresh(); await page.locator('#prompt').fill('Keep startup draft');
+    await page.evaluate(() => { window.voiceHoldReady = true; }); await record();
+    await page.getByRole('button', { name: 'Send message' }).click();
+    await expect(page.locator('#notice')).toContainText('Voice connection timed out', { timeout: 15000 });
+    await expect(page.locator('#prompt')).toHaveValue('Keep startup draft');
+    await stopped(); await closed(); assert.equal(commands.length, 2);
 
     for (const invalid of [sdp.replace('m=application', 'm=video'), sdp.replace('m=audio', 'm=video'), 'v=0\r\n', sdp + 'x'.repeat(128 * 1024)]) {
       probe = await socket(origin.replace('http:', 'ws:') + '/ws', config.clientToken, origin); await probe.request('watch', { sessionId: states[0].id });
@@ -526,7 +597,7 @@ try {
     for (const [stopFirst, count] of [[true, 3], [false, 4]]) {
       await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Ready words');
       if (stopFirst) {
-        await stop(); await delay(2100); await partial(' and delayed ending'); await delay(1100);
+        await stop(); await drained(); await delay(2100); await partial(' and delayed ending'); await delay(1100);
       }
       await expect(page.locator('#composer')).toHaveAttribute('data-voice', stopFirst ? 'finishing' : 'recording');
       await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
@@ -534,7 +605,7 @@ try {
       await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
       if (!stopFirst) {
         await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'sending');
-        await delay(2100); assert.equal(commands.length, count - 1);
+        await drained(); await delay(2100); assert.equal(commands.length, count - 1);
         await partial(' and delayed ending');
         await delay(700); assert.equal(commands.length, count - 1);
       }
@@ -558,6 +629,7 @@ try {
         const receive = window.voicePeers.at(-1).channel.onmessage;
         window.voiceChatter = setInterval(() => receive({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: ' more' } }) }), 500);
       });
+      await drained();
       await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 12000 });
       await page.evaluate(() => clearInterval(window.voiceChatter));
       await expect(page.locator('#notice')).toContainText('Check the draft before sending');
@@ -577,6 +649,13 @@ try {
   assertPrivate(); assert.deepEqual(errors, []);
   console.log(`PASS: ${liveFile ? 'live buffered speech, silent timeout and catch-up Send, no host transcript traffic before Send' : 'browser-direct protocol, waveform, draft, Send, cancellation, errors, validation and disconnect'}. Evidence: ${evidence}`);
 } finally {
+  await diagnostics().catch(() => {});
+  if (liveFile && page && !page.isClosed()) {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForFunction(() => window.voicePeers?.every(peer => peer.connectionState === 'closed'), null, { timeout: 2000 }).catch(() => {});
+    const cleanup = await page.evaluate(() => ({ acknowledged: window.voiceClosed, peersClosed: window.voicePeers?.every(peer => peer.connectionState === 'closed') })).catch(() => ({}));
+    writeFileSync(join(evidence, 'cleanup.json'), JSON.stringify(cleanup));
+  }
   releaseRequest?.(); releaseAuth?.(); probe?.ws.terminate();
   if (context) await context.tracing.stop({ path: join(evidence, 'trace.zip') }).catch(() => {});
   await browser?.close(); agents.forEach(agent => agent.ws.terminate()); await host?.close(); locks.forEach(lock => lock.release()); rmSync(dir, { recursive: true, force: true });

@@ -36,9 +36,9 @@ Waited up to 250 ms for ICE gathering and sent `peer.localDescription.sdp` inste
 
 A direct-channel protocol probe also reconfirmed that `input_audio_buffer.commit` is rejected. Its accepted-message list contained pause/resume and session control, but no PCM append command. This is not a documented way to burst buffered audio ahead of the realtime media clock. See [the direct-channel investigation](phone-direct-dictation.md) for the endpoint and authentication contract.
 
-## Narrow change
+## Narrow change, superseded by the readiness fix
 
-Start buffered playback on WebRTC's `connected` event instead of waiting for the separate data channel. Keep the data-channel-ready fallback, cancellation, connection timeout, original-rate replay, and Send catch-up policy. This removes only the media-to-channel wait, about 0.1 seconds in the baseline. It does not make dictation instant.
+The initial change started buffered playback on WebRTC's `connected` event instead of waiting for the separate data channel. Keep the data-channel-ready fallback, cancellation, connection timeout, original-rate replay, and Send catch-up policy. This removes only the media-to-channel wait, about 0.1 seconds in the baseline. It does not make dictation instant.
 
 The focused browser regression holds the simulated data channel closed after media connects and checks actual outgoing audio. The old implementation produced zero audio and failed after three seconds. The existing tests previously made media and data-channel readiness simultaneous, so they could not catch this delay.
 
@@ -52,7 +52,7 @@ Removing most of the remaining startup backlog needs a separate design decision.
 
 ## Preconnection experiment
 
-Preconnection is **not enabled in the phone UI**. The isolated protocol probe removed the startup audio backlog, but did not establish reliable transcription after an idle connection. Some cold controls also failed to return text, so these results do not identify preconnection as the sole cause.
+Preconnection is **not enabled in the phone UI**. The initial isolated protocol probe removed the startup audio backlog, but did not establish reliable transcription after an idle connection. The readiness follow-up below corrected a missing startup gate and obtained a successful warm transcript. Some cold controls also failed to return text, so these results do not identify preconnection as the sole cause.
 
 The [opt-in probe](../../test/voice-preconnect-e2e.mjs) uses the production `VoiceSession` authorizer and audio worklet, a localhost browser fixture, and real subscription WebRTC. It does not load the Pi Remote composer, request a physical microphone, or send a chat prompt. The host authorizer exchanges only SDP; the speech fixture is injected into Chromium as synthetic input. Browser `getUserMedia` is blocked and counted. No credentials, SDP, or provider audio are written to evidence.
 
@@ -60,7 +60,7 @@ The [opt-in probe](../../test/voice-preconnect-e2e.mjs) uses the production `Voi
 node test/voice-preconnect-e2e.mjs --live-file /tmp/pi-voice-finish-probe/speech.wav "The orange bicycle"
 ```
 
-This opens up to three calls: cold speech, speech after five seconds connected, and five-second idle expiry. Append `cold`, `warm`, or `idle-expiry` to run only that case. The WAV must begin with the supplied words and end with "The orange bicycle is parked beside the library." The live comparison currently can fail; it is not part of the default test suite.
+This opens up to three calls: cold speech, speech after five seconds connected, and five-second idle expiry. Append `cold`, `warm`, or `idle-expiry` to run only that case. The WAV must begin with the supplied words and end with "The orange bicycle is parked beside the library." The live comparison can fail; it is not part of the default test suite. It now waits for `session.started` before releasing speech and before starting the five-second warm idle period.
 
 The final probe prepares an AudioContext and media destination under a button gesture, then supplies a constant zero-valued source before connecting. It creates the speech source and worklet only when recording begins. This keeps the idle RTP clock running without microphone input. A bare media destination sent no audio packets; a trackless connection also failed to establish reliable transcription. Both alternatives were discarded from the probe.
 
@@ -83,4 +83,41 @@ The earlier trackless trial in `pi-voice-preconnect-dr7XSZ` also drained in 5 ms
 
 The idle-expiry case did receive `session.closed` and closed its peer and audio context. Its first result incorrectly reported cleanup failure because the probe's finalizer attempted to close an already closed AudioContext. The probe now checks that state before closing again. This was a probe cleanup bug, not an application change. The focused `idle-expiry` rerun passed in `pi-voice-preconnect-nHNxrF`, with zero microphone requests, zero measured audio energy, a direct close acknowledgement, and closed browser resources. Syntax and diff checks passed; the failed speech comparison remains a failed result.
 
-No long-speech speed claim follows from a short sample that fails recognition. Physical Safari behavior, background-tab expiry, reconnect races, and quota accounting remain unverified. An idle model session can consume subscription allowance even when its audio is generated silence. Further work needs a repeatable recognition/readiness contract before integrating preconnection into the composer.
+No long-speech speed claim follows from a short sample that fails recognition. Physical Safari behavior, background-tab expiry, reconnect races, and quota accounting remain unverified. An idle model session can consume subscription allowance even when its audio is generated silence. The next investigation focused on provider readiness rather than Send completion.
+
+## Provider-readiness follow-up
+
+The actual composer was tested from an isolated checkout of `fc8243a`, excluding concurrent UI work. Test-only instrumentation recorded WebRTC counters, audio energy, provider events, and composer state. A failed short recording had this order:
+
+| Event | Browser clock |
+| --- | ---: |
+| Capture begins | 1,175 ms |
+| Buffered speech starts playing | 4,665 ms |
+| Data channel opens | 4,709 ms |
+| `session.context_window.approaching` | 4,731 ms |
+| OpenAI `session.started` | 9,779 ms |
+
+The short sentence had already played before the session-start event arrived. WebRTC reported nonzero source audio energy and zero remote-reported packet loss. No transcript events arrived. This failure happened before Stop or Send, ruling out Send's completion heuristic as its cause. Transport counters do not prove that the recognizer consumed speech.
+
+The browser now keeps capturing immediately but releases the buffer only after both channel-open and `session.started`. The existing ten-second connection deadline remains; no Send catch-up timer was shortened. Cancellation releases the buffer and ignores late readiness. This supersedes the earlier media-connected optimization.
+
+The focused regression drives real outgoing browser audio with simulated delayed readiness. Before the fix, speech RMS was 0.1065 where silence was required. It also covers readiness before channel-open, readiness after queued Send, cancellation, and readiness timeout without submitting the original draft. Earlier tests made provider and transport readiness effectively simultaneous, so they did not catch this ordering bug.
+
+In the first live candidate run, OpenAI started 4,431 ms after the channel opened. Playback then began immediately and the complete sentence arrived. A silent call and a Send call did not become ready within ten seconds; those were bounded startup failures, not successful recognition. Waiting for readiness does not guarantee that OpenAI will become available promptly.
+
+Two isolated protocol checks then passed with the same speech file:
+
+| Case | Media to provider ready | First text after speech starts | Stop to buffer drain |
+| --- | ---: | ---: | ---: |
+| Cold | 494 ms | 4,118 ms | 2,080 ms |
+| Warm, five seconds after provider ready | 429 ms before recording | 1,374 ms | 5 ms |
+
+Both preserved the supplied opening words and complete final sentence and received direct close acknowledgements. Evidence: `pi-voice-preconnect-cGxwPy` and `pi-voice-preconnect-CaFm1a`. The protocol probe allows twenty seconds to observe readiness; the production composer retains its existing ten-second deadline. These are individual observations, not a speed guarantee. The warm probe still accessed no microphone and sent only generated silence while idle. Preconnection remains an experiment; no automatic idle connection was added to the app.
+
+### Verification limits
+
+The delayed-readiness regression failed against the old implementation, and a live delayed-start recording returned the full sentence with the gate. Cold and warm protocol checks passed as recorded above. Final broader voice runs did not pass: one exceeded the 180-second runner limit, a live short-speech run exceeded 150 seconds, and subsequent simulated runs timed out in draft review and then microphone preparation. The host's load averages were roughly 40–70 during these attempts. A separate browser check took 3–10 seconds just to resume an AudioContext, before any provider signaling. This is a validation blocker, not evidence that the whole voice suite passed.
+
+Test timing now follows the actual contract: synthetic transcript events wait for playback to start, and drain-relative deadlines are checked after the worklet reports drain. Product timers were not extended. Per-call diagnostics preserve the state at peer close so a provider-startup error cannot be mistaken for silent recognition merely because its notice later disappears. The live silence test now requires observed provider readiness.
+
+With the host load back down, the focused suite passed (`pi-voice-evidence-pghg7g`). Live composer runs with the 2.62-second and 26.16-second WAVs both delivered the expected final sentence exactly once to the simulated agent, with no prompt before explicit Send. Tap-to-delivery was 4,027 ms and 3,958 ms respectively. Both silence controls reached provider readiness and sent nothing. Evidence: `pi-voice-evidence-qPbrOo` and `pi-voice-evidence-OR6UhF`. This verifies the readiness gate and delivery for these fixtures, not perfect transcription, a speed guarantee, or physical iPhone behavior.

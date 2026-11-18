@@ -40,12 +40,15 @@ try {
         state.text = () => [...state.turns.values(), state.partial].filter(Boolean).join(' ').trim();
         peer.onconnectionstatechange = () => {
           if (peer.connectionState === 'connected') {
-            state.connectedAt = performance.now(); state.buffer?.port.postMessage('play');
+            state.connectedAt = performance.now();
           }
         };
         const receive = ({ data }) => {
           const event = JSON.parse(data);
           state.eventCounts[event.type] = (state.eventCounts[event.type] || 0) + 1;
+          if (event.type === 'session.started') {
+            state.providerReadyAt ??= performance.now(); state.buffer?.port.postMessage('play');
+          }
           if (event.type === 'session.closed') { state.closeAcknowledged = true; return; }
           if (event.type === 'error') { state.errors.push(event.error?.code || event.code || 'provider-error'); return; }
           if (state.startedAt === undefined) {
@@ -89,7 +92,7 @@ try {
               if (data === 'overflow') state.errors.push('buffer-overflow');
             };
             buffer.onprocessorerror = () => state.errors.push('processor-error');
-            if (peer.connectionState === 'connected') buffer.port.postMessage('play');
+            if (state.providerReadyAt !== undefined) buffer.port.postMessage('play');
             source.onended = () => { state.stoppedAt = performance.now(); buffer.port.postMessage('stop'); };
             state.startedAt = performance.now(); source.start();
           } catch (error) { state.errors.push(error.message); }
@@ -140,6 +143,7 @@ try {
       authorizationMs = Math.round(performance.now() - started);
       await page.evaluate(sdp => window.probe.peer.setRemoteDescription({ type: 'answer', sdp }), sdp);
       await page.waitForFunction(() => window.probe.channel.readyState === 'open', null, { timeout: 10000 });
+      await page.waitForFunction(() => window.probe.providerReadyAt !== undefined, null, { timeout: 20000 });
       if (mode !== 'cold') {
         if (mode === 'idle-expiry') {
           await page.evaluate(() => {
@@ -182,6 +186,7 @@ try {
           eventCounts: s.eventCounts,
           audioStats: [...stats.values()].filter(v => ['outbound-rtp', 'media-source'].includes(v.type)).map(v => ({ type: v.type, kind: v.kind, bytesSent: v.bytesSent, packetsSent: v.packetsSent, totalAudioEnergy: v.totalAudioEnergy, totalSamplesDuration: v.totalSamplesDuration })),
           durationMs: s.durationMs,
+          mediaToProviderReadyMs: s.providerReadyAt === undefined ? null : Math.round(s.providerReadyAt - s.connectedAt),
           captureToMediaMs: s.startedAt === undefined ? null : Math.max(0, Math.round(s.connectedAt - s.startedAt)),
           speechToFirstTextMs: s.firstTextAt === undefined ? null : Math.round(s.firstTextAt - s.startedAt),
           stopToBufferDrainedMs: s.drainedAt === undefined ? null : Math.round(s.drainedAt - s.stoppedAt),

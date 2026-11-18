@@ -84,6 +84,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     }
     if (call.audio) void call.audio.suspend().catch(() => {});
     call.rejectConnection?.(new Error('Dictation cancelled.'));
+    call.ready = undefined;
     if (call.started) void request('voiceCancel', { sessionId: call.sessionId, voiceId: call.id }).catch(() => {});
     const peer = call.peer, channel = call.channel;
     if (!peer) return;
@@ -168,6 +169,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       if (typeof raw !== 'string' || raw.length > 128 * 1024) throw new Error();
       const event = JSON.parse(raw), before = transcript(call);
       if (event.type === 'error' || event.type === 'session.closed') throw new Error();
+      if (event.type === 'session.started') { call.providerReady = true; call.ready?.(); return; }
       if (event.type === 'input_transcript.added' && typeof event.item?.text === 'string') call.partial += event.item.text;
       else if (event.type === 'turn.done' && event.turn?.role === 'user' && typeof event.turn.transcript === 'string') {
         if (event.turn.id && call.turns.has(event.turn.id)) return;
@@ -236,7 +238,6 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       channel.onmessage = event => providerEvent(call, event.data);
       channel.onclose = channel.onerror = () => review(call, 'Voice connection lost. Check the draft before sending.');
       peer.onconnectionstatechange = () => {
-        if (peer.connectionState === 'connected') call.buffer.port.postMessage('play');
         if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) review(call, 'Voice connection lost. Check the draft before sending.');
       };
       const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
@@ -248,12 +249,15 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       if (!current(call) || call.released) return;
       await new Promise((resolve, reject) => {
         call.rejectConnection = reject;
-        const ready = () => { clearTimeout(call.connectTimer); resolve(); };
+        const ready = call.ready = () => {
+          if (channel.readyState !== 'open' || !call.providerReady) return;
+          clearTimeout(call.connectTimer); resolve();
+        };
         call.connectTimer = setTimeout(() => reject(new Error('Voice connection timed out. Try again.')), 10000);
         channel.onopen = ready; if (channel.readyState === 'open') ready();
       });
       if (!current(call) || call.released) return;
-      call.rejectConnection = undefined;
+      call.rejectConnection = call.ready = undefined;
       call.buffer.port.postMessage('play');
     } catch (error) {
       if (!current(call) || call.released) return;
