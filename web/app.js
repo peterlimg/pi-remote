@@ -186,7 +186,7 @@ function loadVoice() {
   // Static assets update before a busy host can restart; older hosts cannot serve this module yet.
   voiceLoading = import('./voice.js').then(({ voiceComposer }) => {
     const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/voice.css'; document.head.append(style);
-    voice = voiceComposer({ request, notice, submit: sendMessage, changed: () => { updateControls(); resizePrompt(); }, context: () => {
+    voice = voiceComposer({ request, notice, queue: queueVoiceMessage, changed: () => { updateControls(); resizePrompt(); }, context: () => {
       const state = cache.get(selected);
       const available = supportsVoice && state?.model?.startsWith('openai-codex/') && state?.coordination?.role !== 'worker';
       return { sessionId: selected, model: state?.model, available,
@@ -1860,12 +1860,12 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     if (outgoing.sessionId !== selected) continue;
     const images = outgoing.attachments.filter(item => !item.video);
     const text = outgoing.sentText ?? outgoing.text;
-    const index = messages.findIndex(message => message.role === 'user' && !outgoing.knownIds.has(message.id) &&
+    const index = outgoing.localStatus ? -1 : messages.findIndex(message => message.role === 'user' && !outgoing.knownIds.has(message.id) &&
       !localImages.has(message.id) && userMessageText(message).trim() === text.trim() &&
       (message.images?.length || 0) === images.length);
     const message = index < 0 ? { id: outgoing.key, role: 'user', text,
       images: images.map(({ file }) => ({ id: 'local', mimeType: file.type })),
-      delivery: outgoing.accepted ? undefined : 'Sending…' } : messages[index];
+      localStatus: outgoing.localStatus, delivery: outgoing.localStatus || (outgoing.accepted ? undefined : 'Sending…') } : messages[index];
     localImages.set(message.id, images);
     localVideos.set(message.id, outgoing.attachments.filter(item => item.video));
     if (index < 0) messages.push(message);
@@ -2050,7 +2050,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       const body = el('div', undefined, 'message-text');
       if (message.role === 'user') {
         const { text, paths } = splitVideoMessage(userMessageText(message));
-        body.textContent = skill ? skill.text : text || (message.images?.length || paths.length || localVideos.get(message.id)?.length ? '' : '(empty message)');
+        body.textContent = message.localStatus ? message.text : skill ? skill.text : text || (message.images?.length || paths.length || localVideos.get(message.id)?.length ? '' : '(empty message)');
       }
       else {
         // Only disclosure markup is allowed; images, arbitrary HTML and unsafe link schemes stay disabled.
@@ -2079,7 +2079,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         appendThreadImages(article, message, localImages.get(message.id));
         appendThreadVideos(article, message, localVideos.get(message.id), keepVideos);
       }
-      if (body.textContent) article.append(body);
+      if (body.textContent || message.localStatus) article.append(body);
       if (message.role !== 'user') appendThreadImages(article, message);
       if (message.role === 'assistant') appendThreadVideos(article, message, undefined, keepVideos);
       if (message.role === 'assistant' && message.text && !state.assistant) article.append(copyButton(message.text, 'Copy message', 'copy-message'));
@@ -2096,6 +2096,10 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       }
       if (message.delivery) {
         const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);
+        if (message.localStatus && message.localStatus !== 'Transcribing…') {
+          const edit = el('button', 'Edit draft', 'voice-edit-draft'); edit.type = 'button';
+          edit.onclick = () => restoreVoiceDraft(submissions.get(message.id)); article.append(edit);
+        }
       }
       // Miso's reply to a check-in becomes that check-in's lead line.
       if (article.childNodes.length && group && message.role === 'assistant') group.lead = article;
@@ -4062,29 +4066,79 @@ $('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage();
 });
-async function sendMessage() {
+function takeDraft(text) {
+  const id = selected, outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments: imageDrafts.get(id) || [],
+    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
+  drafts.set(id, ''); imageDrafts.delete(id);
+  $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
+  return outgoing;
+}
+function restoreVoiceDraft(outgoing) {
+  if (!outgoing || outgoing.sessionId !== selected || outgoing.localStatus === 'Transcribing…') return;
+  if ($('prompt').value || imageDrafts.get(selected)?.length || voice?.active || sending.has(selected)) {
+    notice('Finish your current draft before editing this one.'); return;
+  }
+  submissions.delete(outgoing.key);
+  drafts.set(selected, outgoing.text); $('prompt').value = outgoing.text;
+  imageDrafts.set(selected, outgoing.attachments); resizePrompt(); renderImages(); renderConversation(cache.get(selected));
+}
+function queueVoiceMessage(text) {
+  if (historyWindow) showLatest();
+  const outgoing = takeDraft(text), { sessionId: id, key } = outgoing;
+  outgoing.localStatus = 'Transcribing…'; submissions.set(key, outgoing);
+  renderConversation(cache.get(id)); $('transcript').scrollTop = $('transcript').scrollHeight;
+  return {
+    update(value) {
+      if (outgoing.text === value) return;
+      outgoing.text = value;
+      const body = $('transcript').querySelector(`[data-message-id="${key}"] .message-text`);
+      if (body) { const bottom = atThreadBottom(); body.textContent = value; if (bottom) $('transcript').scrollTop = $('transcript').scrollHeight; }
+    },
+    keep(value, restore = false) {
+      outgoing.text = value; outgoing.localStatus = 'Not sent';
+      if (!value && !outgoing.attachments.length) submissions.delete(key);
+      else if (restore && selected === id && !$('prompt').value && !imageDrafts.get(id)?.length) { restoreVoiceDraft(outgoing); return; }
+      if (selected === id) renderConversation(cache.get(id));
+    },
+    submit() {
+      const state = cache.get(id);
+      if (selected !== id || !connected || !['idle', 'working', 'waiting'].includes(state?.status) || sending.has(id)) {
+        this.keep(outgoing.text); return;
+      }
+      const issue = submissionIssue(outgoing.text, outgoing.attachments);
+      if (issue) { this.keep(outgoing.text); notice(issue); return; }
+      outgoing.localStatus = undefined;
+      outgoing.knownIds = new Set((cache.get(id)?.messages || []).map(message => message.id));
+      void deliver(outgoing, true);
+    }
+  };
+}
+function submissionIssue(text, attachments) {
+  if (attachments.some(item => !item.video) && !supportsImages) return 'Restart Pi Remote on your computer to enable image uploads.';
+  if (attachments.some(item => item.video) && !supportsVideos) return 'Restart Pi Remote on your computer to enable video uploads.';
+  if (attachments.length && text.trim().startsWith('/')) return 'Send attachments with a message, not a slash command.';
+}
+function sendMessage() {
   if (voice?.send()) return;
   const id = selected, text = $('prompt').value, attachments = imageDrafts.get(id) || [];
   if ((!text.trim() && !attachments.length) || !id || cache.get(id)?.coordination?.role === 'worker' || $('send').disabled || sending.has(id)) return;
   voice?.freeze();
-  if (attachments.some(item => !item.video) && !supportsImages) { notice('Restart Pi Remote on your computer to enable image uploads.'); return; }
-  if (attachments.some(item => item.video) && !supportsVideos) { notice('Restart Pi Remote on your computer to enable video uploads.'); return; }
+  const issue = submissionIssue(text, attachments);
+  if (issue) { notice(issue); return; }
   if (historyWindow) showLatest();
-  const isCommand = text.trim().startsWith('/');
-  if (attachments.length && isCommand) { notice('Send attachments with a message, not a slash command.'); return; }
-  const outgoing = { key: crypto.randomUUID(), sessionId: id, text, attachments,
-    knownIds: new Set((cache.get(id)?.messages || []).map(message => message.id)), accepted: false };
+  return deliver(takeDraft(text));
+}
+async function deliver(outgoing, dictated = false) {
+  const { sessionId: id, text, attachments } = outgoing, isCommand = text.trim().startsWith('/');
   sending.set(id, outgoing);
   if (!isCommand) submissions.set(outgoing.key, outgoing);
-  // The editor owns the next draft; retain this submission until delivery is confirmed.
-  drafts.set(id, ''); imageDrafts.delete(id);
-  $('prompt').value = ''; resizePrompt(); renderImages(); notice('');
+  else submissions.delete(outgoing.key);
   // On touch screens a sent message closes the keyboard to reveal the conversation; desktops keep typing.
-  if (matchMedia('(hover: none)').matches) $('prompt').blur();
-  if (!isCommand) {
+  if (!dictated && matchMedia('(hover: none)').matches) $('prompt').blur();
+  if (!isCommand || dictated) {
     renderConversation(cache.get(id));
-    $('transcript').scrollTop = $('transcript').scrollHeight;
-  }
+    if (!dictated) $('transcript').scrollTop = $('transcript').scrollHeight;
+  } else updateControls();
   let restored = false;
   try {
     await Promise.all(attachments.map(image => image.upload));
@@ -4109,6 +4163,9 @@ async function sendMessage() {
     if (created && selected === id) await selectSession(created.sessionId);
   } catch (e) {
     if (sending.get(id) !== outgoing) return;
+    if (dictated) {
+      outgoing.localStatus = 'Check delivery'; submissions.set(outgoing.key, outgoing); notice(e.message, id); return;
+    }
     submissions.delete(outgoing.key);
     const nextText = selected === id ? $('prompt').value : drafts.get(id) || '';
     drafts.set(id, [text, nextText].filter(Boolean).join('\n\n'));
@@ -4119,7 +4176,7 @@ async function sendMessage() {
     if (sending.get(id) === outgoing) {
       if (!restored && !submissions.has(outgoing.key)) releaseImages(attachments);
       sending.delete(id);
-      if (selected === id && !isCommand) renderConversation(cache.get(id));
+      if (selected === id && (!isCommand || dictated)) renderConversation(cache.get(id));
       else updateControls();
     }
   }

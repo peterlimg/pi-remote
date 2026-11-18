@@ -1,4 +1,4 @@
-export function voiceComposer({ request, context, changed, notice, submit }) {
+export function voiceComposer({ request, context, changed, notice, queue }) {
   const button = document.getElementById('voice-record'), cancelButton = document.getElementById('voice-cancel');
   const panel = document.getElementById('voice-status'), status = document.getElementById('voice-label');
   const input = document.getElementById('prompt');
@@ -98,29 +98,32 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     timer = setTimeout(close, 1000);
     try { channel.send(JSON.stringify({ type: 'session.close' })); } catch { close(); }
   }
-  function cancel() {
+  function cancel(keepPending = false) {
     const call = active;
     if (!call) return;
     const restoreFocus = [button, cancelButton].includes(document.activeElement);
-    if (context().sessionId === call.sessionId && call.preview !== undefined && input.value === call.preview) {
+    if (!call.pending && context().sessionId === call.sessionId && call.preview !== undefined && input.value === call.preview) {
       input.value = call.draft;
       input.setSelectionRange(call.cursor, call.cursor);
     }
     active = undefined; release(call);
+    call.pending?.keep(keepPending && transcript(call).trim() ? call.preview : call.draft, true);
     render();
     if (restoreFocus && !button.hidden) button.focus({ preventScroll: true });
   }
   function preview(call) {
     if (!current(call)) return false;
     // Only our preview may be replaced; an external draft edit always wins.
-    if (input.value !== (call.preview ?? call.draft)) { cancel(); return false; }
-    const follow = call.preview === undefined || input.scrollHeight - input.scrollTop - input.clientHeight < 24;
-    const selection = [input.selectionStart, input.selectionEnd, input.selectionDirection];
-    const atTail = call.preview === undefined || selection[0] === call.previewCursor && selection[1] === call.previewCursor;
+    if (!call.pending && input.value !== (call.preview ?? call.draft)) { cancel(); return false; }
     const words = transcript(call).slice(0, 16000).trim();
     const before = call.draft.slice(0, call.cursor), after = call.draft.slice(call.cursor);
     const addition = words ? (before && !/\s$/.test(before) ? ' ' : '') + words + (after && !/^\s/.test(after) ? ' ' : '') : '';
-    input.value = call.preview = before + addition + after;
+    const text = before + addition + after;
+    if (call.pending) { call.preview = text; call.pending.update(text); return true; }
+    const follow = call.preview === undefined || input.scrollHeight - input.scrollTop - input.clientHeight < 24;
+    const selection = [input.selectionStart, input.selectionEnd, input.selectionDirection];
+    const atTail = call.preview === undefined || selection[0] === call.previewCursor && selection[1] === call.previewCursor;
+    input.value = call.preview = text;
     call.previewCursor = before.length + addition.length;
     if (atTail) input.setSelectionRange(call.previewCursor, call.previewCursor);
     else input.setSelectionRange(...selection);
@@ -130,14 +133,16 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
   }
   function freeze() {
     const call = active;
-    if (!call || !current(call) || call.preview === undefined) return;
+    if (!call || call.pending || !current(call) || call.preview === undefined) return;
     active = undefined; release(call); render();
     if (input.value !== call.draft) input.dispatchEvent(new Event('input', { bubbles: true }));
   }
   function review(call, message) {
     if (!current(call) || call.released) return;
     if (!transcript(call).trim()) cancel();
-    else {
+    else if (call.pending) {
+      active = undefined; release(call); call.pending.keep(call.preview); render();
+    } else {
       call.phase = 'review';
       if (!preview(call)) return;
       release(call);
@@ -146,11 +151,11 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
   }
   function complete(call) {
     if (!current(call)) return;
-    const sending = call.phase === 'sending';
-    if (sending && !transcript(call).trim()) { cancel(); return; }
+    if (call.pending && !transcript(call).trim()) { cancel(); return; }
     if (!preview(call)) return;
-    freeze();
-    if (sending) void submit();
+    if (call.pending) {
+      active = undefined; release(call); call.pending.submit(); render();
+    } else freeze();
   }
   function settled(call) {
     clearTimeout(call.drainTimer);
@@ -190,6 +195,9 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
   function finish(sending = false) {
     const call = active;
     if (!call || !['recording', 'finishing', 'sending'].includes(call.phase)) return;
+    if (!sending && call.pending) {
+      active = undefined; release(call); call.pending.keep(call.preview, true); render(); return;
+    }
     if (call.phase === 'recording') {
       clearTimeout(call.timer);
       call.buffer.port.postMessage('stop');
@@ -198,6 +206,7 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     }
     call.phase = sending ? 'sending' : 'finishing';
     if (!preview(call)) return;
+    if (sending) call.pending = queue(call.preview);
     settled(call);
   }
   async function start() {
@@ -269,13 +278,13 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     if (['recording', 'sending'].includes(active?.phase)) finish();
     else { freeze(); void start(); }
   });
-  cancelButton.addEventListener('click', cancel);
+  cancelButton.addEventListener('click', () => cancel());
   input.addEventListener('beforeinput', freeze);
   input.addEventListener('compositionstart', freeze);
   input.addEventListener('input', () => active?.preview !== undefined ? freeze() : cancel());
   document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); cancel(); } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
-  window.addEventListener('pagehide', () => { cancel(); void audio?.close().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(true); });
+  window.addEventListener('pagehide', () => { cancel(true); void audio?.close().catch(() => {}); });
   if (supported()) { try { prepare(); } catch {} }
   return {
     get active() { return !!active; },
@@ -285,11 +294,11 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
       if (['recording', 'finishing'].includes(active?.phase)) { finish(true); return true; }
       return ['preparing', 'sending'].includes(active?.phase);
     },
-    cancel,
+    cancel: () => cancel(true),
     freeze,
     update() {
       const state = context();
-      if (active && (!state.enabled || !current(active))) { cancel(); return; }
+      if (active && (!state.enabled || !current(active))) { cancel(true); return; }
       button.hidden = !state.available;
       button.disabled = !state.enabled || !supported() || active?.phase === 'preparing';
       if (!supported()) button.title = 'Dictation needs a secure browser with microphone access.';
@@ -297,8 +306,8 @@ export function voiceComposer({ request, context, changed, notice, submit }) {
     receive(packet) {
       const call = active;
       if (!call || packet.id !== call.id || !current(call) || packet.sessionId !== call.sessionId) return;
-      if (packet.cancelled) { cancel(); notice('The selected model changed. Dictation stopped.', call.sessionId); return; }
-      if (packet.error) { cancel(); notice(packet.error, call.sessionId); }
+      if (packet.cancelled) { cancel(true); notice('The selected model changed. Dictation stopped.', call.sessionId); return; }
+      if (packet.error) review(call, packet.error);
     }
   };
 }

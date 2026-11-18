@@ -490,18 +490,22 @@ try {
 
     await fresh(); await page.locator('#prompt').fill('Prefix'); await record();
     await page.getByRole('button', { name: 'Send message' }).click(); await partial('Queued words');
-    await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words'); await expect(page.locator('#prompt')).toBeFocused();
-    await partial(' trailing'); await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words trailing');
+    const pendingBubble = page.locator('.message.user').filter({ hasText: 'Transcribing…' });
+    await expect(pendingBubble.locator('.message-text')).toHaveText('Prefix Queued words');
+    await expect(page.locator('#prompt')).toHaveValue(''); await expect(page.locator('#prompt')).toBeFocused();
+    await page.keyboard.insertText('Next draft');
+    await partial(' trailing'); await expect(pendingBubble.locator('.message-text')).toHaveText('Prefix Queued words trailing');
     await page.evaluate(() => { window.lateVoiceEvent = window.voicePeers.at(-1).channel.onmessage; });
-    await page.keyboard.insertText(' edited'); await stopped(); await closed();
+    await stop(); await stopped(); await closed();
     await page.evaluate(() => window.lateVoiceEvent({ data: JSON.stringify({ type: 'turn.done', turn: { id: 'edited-send', role: 'user', transcript: 'Must not send' } }) }));
-    await expect(page.locator('#prompt')).toHaveValue('Prefix Queued words trailing edited'); assert.equal(commands.length, 2);
+    await expect(page.locator('#prompt')).toHaveValue('Next draft');
+    await expect(page.locator('.message.user').filter({ hasText: 'Not sent' })).toContainText('Prefix Queued words trailing'); assert.equal(commands.length, 2);
     await expect(page.locator('#fast-mode')).toBeVisible(); await expect(page.locator('#commands')).toBeVisible();
 
     await fresh(); await record(); await page.getByRole('button', { name: 'Send message' }).click();
     await partial('Keep queued draft'); await stop();
     await expect(page.locator('#prompt')).toHaveValue('Keep queued draft'); await expect(page.locator('#prompt')).not.toBeFocused();
-    await expect(page.locator('#model')).toBeVisible(); await final('Keep queued draft'); await closed();
+    await expect(page.locator('#model')).toBeVisible(); await closed();
     assert.equal(commands.length, 2);
 
     await fresh(); await page.locator('#prompt').fill('Original'); await record(); await partial('Discard me');
@@ -594,6 +598,7 @@ try {
       await page.keyboard.press('Escape'); await expect(page.locator('#settings-picker')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Keep while checking usage');
       await page.screenshot({ path: join(evidence, 'ready-' + width + '.png'), fullPage: true });
     }
+    await page.setViewportSize({ width: 390, height: 844 });
     for (const [stopFirst, count] of [[true, 3], [false, 4]]) {
       await fresh(); await page.locator('#prompt').fill('Original draft'); await record(); await partial('Ready words');
       if (stopFirst) {
@@ -605,15 +610,23 @@ try {
       await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
       if (!stopFirst) {
         await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'sending');
+        const bubble = page.locator('.message.user').filter({ hasText: 'Transcribing…' });
+        await expect(bubble.locator('.message-text')).toHaveText('Original draft Ready words');
+        await expect(page.locator('#prompt')).toHaveValue('');
+        console.log(`Send to visible pending bubble: ${Math.round(performance.now() - sendAt)}ms`);
+        await page.locator('#prompt').fill('Next draft');
+        await page.screenshot({ path: join(evidence, 'pending-dictation-phone.png') });
         await drained(); await delay(2100); assert.equal(commands.length, count - 1);
         await partial(' and delayed ending');
+        await expect(bubble.locator('.message-text')).toHaveText('Original draft Ready words and delayed ending');
         await delay(700); assert.equal(commands.length, count - 1);
       }
       await until(() => commands.length === count, stopFirst ? 2000 : 5000);
       console.log(`${stopFirst ? 'Stopped' : 'Recording'} draft catch-up Send to simulated agent: ${Math.round(performance.now() - sendAt)}ms`);
       assert.equal(commands[count - 1].text, 'Original draft Ready words and delayed ending');
       await expect(page.locator('#composer')).not.toHaveAttribute('data-voice', /.+/);
-      await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('');
+      await expect(page.locator('#voice-status')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue(stopFirst ? '' : 'Next draft');
+      await expect(page.locator('.message.user').filter({ hasText: 'Original draft Ready words' })).toHaveCount(1);
       await page.locator('#prompt').fill('Next draft');
       await page.evaluate(() => {
         window.lateVoiceEvent({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: 'Late partial' } }) });
@@ -630,10 +643,15 @@ try {
         window.voiceChatter = setInterval(() => receive({ data: JSON.stringify({ type: 'input_transcript.added', item: { text: ' more' } }) }), 500);
       });
       await drained();
-      await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'review', { timeout: 12000 });
+      await page.locator('#prompt').fill('Separate draft');
+      const unsent = page.locator('.message.user').filter({ hasText: 'Not sent' });
+      await expect(unsent).toContainText('Kept draft Unfinished words', { timeout: 12000 });
       await page.evaluate(() => clearInterval(window.voiceChatter));
       await expect(page.locator('#notice')).toContainText('Check the draft before sending');
-      await expect(page.locator('#prompt')).toHaveValue(/^Kept draft Unfinished words/);
+      await unsent.getByRole('button', { name: 'Edit draft' }).click();
+      await expect(page.locator('#prompt')).toHaveValue('Separate draft');
+      await page.locator('#prompt').fill(''); await unsent.getByRole('button', { name: 'Edit draft' }).click();
+      await expect(page.locator('#prompt')).toHaveValue(/^Kept draft Unfinished words/); await expect(unsent).toHaveCount(0);
       await stopped(); await closed(); assert.equal(commands.length, 4);
     }
 
