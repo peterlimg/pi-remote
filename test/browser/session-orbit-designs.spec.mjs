@@ -31,6 +31,23 @@ test('Orbit C tracks a moon only while working', async ({ page }, info) => {
   expect(await working.innerHTML()).toBe(reduced);
 });
 
+test('Slingshot carries momentum through the catch and loop seam', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/session-motion-prototype.html?study=orbit-c');
+  const moon = page.locator('.orbit-pair .disc-moon').first();
+  await expect(page.locator('.orbit-pair .in-view')).toBeVisible();
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 500)));
+  const angle = () => moon.evaluate(node => Math.atan2((node.cy.baseVal.value - 18) / 4, (node.cx.baseVal.value - 16) / 13.4));
+  let previous = await angle();
+  for (let i = 0; i < 52; i++) {
+    await page.clock.runFor(64);
+    const next = await angle(), step = (next - previous + 2 * Math.PI) % (2 * Math.PI);
+    expect(step).toBeGreaterThan(.02);
+    expect(step).toBeLessThan(.30);
+    previous = next;
+  }
+});
+
 test('Orbit ring designs compare three still drawings at large and session sizes', async ({ page, browserName }, info) => {
   const errors = [], sockets = [];
   page.on('pageerror', error => errors.push(error.message));

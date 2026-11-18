@@ -107,16 +107,6 @@ function choose(next) {
 }
 // One authored timeline per character: phase, x, y, roll, face turn, vertical scale.
 const presenceTracks = {
-  slingshot: { period: 3.2, frames: [
-    // beat, moon turns, disc tilt, body lean, body drop, gaze, smile
-    [0, .05, -12, 0, 0, 1, .8],
-    [.26, .36, -10, -.5, 0, -.7, 0],
-    [.45, .49, -28, -1.8, 1.6, -1, 0],
-    [.54, .50, -31, -2, 1.8, .65, .2],
-    [.64, .72, 9, 1.3, -1.4, 1, .15],
-    [.79, .95, -7, .7, -.6, 1, .9],
-    [1, 1.05, -12, 0, 0, 1, .8],
-  ] },
   miso: { period: 5.6, center: [16, 19], radius: 10, frames: [
     [0, 0, 0, -4, -.35, 1], [.12, .4, -.8, 3, .4, 1.02],
     [.26, .7, .5, 6, .7, .97], [.4, -.4, -.5, -5, -.65, 1.01],
@@ -613,9 +603,13 @@ function celestialStudy() {
 }
 
 function drawDiscMoon({ time, eyes, moons, body }, animate) {
-  const [turns, tilt, lean, drop, gaze, smile] = animate
-    ? presencePose('slingshot', time) : [.05, -12, 0, 0, 0, 0];
-  const phase = turns * Math.PI * 2;
+  const beat = time * 2 * Math.PI / 3.2;
+  const phase = animate ? beat + .72 * Math.sin(beat + .45) : .05 * Math.PI * 2;
+  const tilt = animate ? -11 + 16 * Math.cos(beat) + 7 * Math.sin(2 * beat) : -12;
+  const lean = animate ? 1.6 * Math.cos(beat + .32) : 0;
+  const drop = animate ? -1.35 * Math.cos(beat + .12) : 0;
+  const gaze = animate ? Math.cos(phase + .72) : 0;
+  const smile = animate ? ((1 + Math.cos(phase - .24)) / 2) ** 3 : 0;
   body.setAttribute('transform', `translate(${lean} ${drop}) rotate(${lean * 5} 16 14)`);
   const x = Math.cos(phase), depth = Math.sin(phase);
   for (const [i, moon] of moons.entries()) {
