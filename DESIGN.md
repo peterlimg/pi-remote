@@ -18,9 +18,9 @@ Every floating control and surface uses the rim-lit glass material: a light tint
 
 Mermaid diagrams use flat shapes, thin warm borders, muted blue group backgrounds, and high-contrast connectors. Match the app's light/dark mode and system typography. Preserve author-defined state colors rather than inventing status meanings. No gradients, glow, or drop shadows. Show a bounded loading placeholder instead of raw source, retain finished diagram nodes across unrelated updates, and keep source available behind its disclosure. The existing image viewer owns zoom and pan.
 
-## Sessions drawer
+## Sessions sidebar
 
-Above 700px, reveal the sessions list behind the conversation rather than squeezing the conversation into a second column. Slide the full-width conversation and its composer right by 320px as one panel; text must not reflow. The small menu control travels with the panel. Round its exposed left corners and dim the conversation while the list is open. The dimmed panel does not accept conversation actions; tapping it, Escape, the toggle, or selecting a session closes the drawer. Preserve drafts and reading position. Use a reversible 280ms ease-out transition and remove spatial motion when reduced motion is enabled. Keep narrow-phone list/back navigation unchanged.
+On tablets, desktops and landscape phones at least 568px wide, show Sessions and the conversation side by side. Keep the sidebar up to 320px wide, with a divider and a circular collapse control at its top right. Selecting a session leaves the sidebar open. Collapse it to give the chat the full width; never dim or disable the conversation. Respect reduced motion and keep narrow portrait phones on list/back navigation.
 
 ## Composer
 

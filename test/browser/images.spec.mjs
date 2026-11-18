@@ -95,7 +95,6 @@ for (const withCall of [true, false]) test(`thread images from ${withCall ? 'cal
   await page.emulateMedia({ colorScheme: 'dark' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('tool-image-desktop.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#transcript img')).toHaveCount(0);
   expect(await page.evaluate(async url => { try { await fetch(url); return true; } catch { return false; } }, urls[0])).toBe(false);
@@ -264,7 +263,6 @@ test('image picker previews, removes and preserves session drafts until acknowle
   await page.keyboard.press('Enter');
   await expect(page.locator('#attachments img')).toHaveCount(1);
   await expect(page.getByRole('img', { name: 'second.png' })).toBeVisible();
-  await page.getByRole('button', { name: 'Show sessions', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.locator('#attachments img')).toHaveCount(0);
   expect(errors).toEqual([]);

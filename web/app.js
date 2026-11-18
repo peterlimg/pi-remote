@@ -1229,11 +1229,10 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
   else if (!fromMiso) { misoBackdrop?.remove(); misoBackdrop = undefined; }
   misoReturn = fromMiso;
   const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
-  const entering = !$('app').classList.contains('viewing') && matchMedia('(max-width: 700px)').matches;
+  const entering = !$('app').classList.contains('viewing') && !sidebarLayout.matches;
   if (!keepOrder) switchOrder = undefined;
   $('nearby-sessions').hidePopover();
   resetScrollback();
-  if (sidebarLayout.matches) setSidebarCollapsed(true);
   resetSwipe();
   closePicker();
   if (selected) drafts.set(selected, $('prompt').value);
@@ -1261,7 +1260,7 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
     { duration: reduced ? 120 : 360, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
     openingAnimation.onfinish = () => {
       openingAnimation = undefined;
-      $('app').classList.remove('opening'); $('sidebar').inert = false;
+      $('app').classList.remove('opening'); renderSidebarToggle();
     };
   }
   markSeen(); renderList(); notice(''); sessionFeedback(''); nudgeHeading();
@@ -3479,37 +3478,24 @@ function resetSwipe() {
   $('app').classList.remove('swiping', 'opening', 'to-miso'); renderSidebarToggle();
   const render = pendingSwipeRender; pendingSwipeRender = undefined; render?.();
 }
-const sidebarLayout = matchMedia('(min-width: 701px)');
+const sidebarLayout = matchMedia('(min-width: 701px), (min-width: 568px) and (orientation: landscape)');
 function renderSidebarToggle() {
   const collapsed = $('app').classList.contains('sidebar-collapsed');
   const label = collapsed ? 'Show sessions' : 'Collapse sessions';
   $('sidebar-toggle').setAttribute('aria-label', label);
   $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
   $('sidebar-toggle').title = label;
-  const main = document.querySelector('main');
-  const obscured = collapsed ? $('sidebar') : main;
-  if (sidebarLayout.matches && obscured.contains(document.activeElement)) $('sidebar-toggle').focus({ preventScroll: true });
+  if (sidebarLayout.matches && collapsed && $('sidebar').contains(document.activeElement)) $('sidebar-toggle').focus({ preventScroll: true });
   $('sidebar').inert = sidebarLayout.matches && collapsed;
-  main.inert = sidebarLayout.matches && !collapsed;
 }
 function setSidebarCollapsed(collapsed) {
   $('app').classList.toggle('sidebar-collapsed', collapsed);
   renderSidebarToggle();
 }
-sidebarLayout.addEventListener('change', () => {
-  if (sidebarLayout.matches) setSidebarCollapsed($('app').classList.contains('viewing'));
-  else renderSidebarToggle();
-});
+sidebarLayout.addEventListener('change', renderSidebarToggle);
 $('sidebar-toggle').addEventListener('click', () => {
   haptic(); closePicker();
   setSidebarCollapsed(!$('app').classList.contains('sidebar-collapsed'));
-});
-$('sidebar-dismiss').addEventListener('click', () => setSidebarCollapsed(true));
-document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || event.defaultPrevented || !sidebarLayout.matches || $('app').classList.contains('sidebar-collapsed') || document.querySelector('dialog[open], [popover]:popover-open')) return;
-  event.preventDefault();
-  setSidebarCollapsed(true);
-  $('sidebar-toggle').focus({ preventScroll: true });
 });
 renderSidebarToggle();
 $('back').addEventListener('click', () => {
@@ -3795,7 +3781,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     const touch = event.touches[0];
     // A right thumb can reach the thread's middle without reaching the left edge.
     trackingSwipe = event.touches.length === 1 && (window.visualViewport?.scale ?? 1) <= 1 && app.classList.contains('viewing') &&
-      (touch.clientX < 24 || event.target.closest('#transcript')) && matchMedia('(max-width: 700px)').matches &&
+      (touch.clientX < 24 || event.target.closest('#transcript')) && !sidebarLayout.matches &&
       !event.target.closest('button, a, input, textarea, summary, dialog, pre, table');
     if (trackingSwipe && touch.clientX < 24) event.preventDefault();
     startX = touch.clientX; startY = touch.clientY; dx = 0;
