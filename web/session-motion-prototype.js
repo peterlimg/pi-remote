@@ -605,7 +605,7 @@ function orbitRingStudy() {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Orbit ring designs · Pi Remote';
   document.querySelector('h1').textContent = 'Orbit ring designs';
-  document.querySelector('.lede').textContent = 'The ring on C now reaches farther to each side. Its thin edge, light purple and planet are unchanged. A and B remain for reference.';
+  document.querySelector('.lede').textContent = 'C has a broad lavender disc below the face. A and B are unchanged.';
   $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
   $('comparison').hidden = false; $('comparison-note').hidden = false;
   $('motion').hidden = true; $('replay').hidden = true;
@@ -620,10 +620,10 @@ function orbitRingStudy() {
       svg: '<g transform="rotate(-63 17 16)"><path class="ring-design-line" d="M3 16A14 5.4 0 0 1 31 16"/></g>'
         + face(14, 17.5, 9.4)
         + '<g transform="rotate(-63 17 16)"><path class="ring-design-line ring-design-front" d="M3 16A14 5.4 0 0 0 31 16"/></g>' },
-    { key: 'C', name: 'Wide ring', description: 'Wider ring, same thin edge.',
-      svg: '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" fill-rule="evenodd" d="M0 19a16 4.5 0 1 0 32 0a16 4.5 0 1 0-32 0M1.4 19a14.6 3.4 0 1 0 29.2 0a14.6 3.4 0 1 0-29.2 0"/></g>'
-        + face(16, 13, 9)
-        + '<g transform="rotate(-12 16 19)"><path class="ring-design-disc" d="M0 19A16 4.5 0 0 0 32 19L30.6 19A14.6 3.4 0 0 1 1.4 19Z"/></g>' },
+    { key: 'C', name: 'Wide disc', description: 'A wide, flat lavender ring.',
+      svg: '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" d="M0 18A16 5.3 0 0 1 32 18H27A11 2.3 0 0 0 5 18Z"/></g>'
+        + face(16, 14, 7)
+        + '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" d="M0 18A16 5.3 0 0 0 32 18H27A11 2.3 0 0 1 5 18Z"/></g>' }
   ];
   function icon(design, size) {
     const node = el('span', undefined, 'bot m-bot ring-design');
