@@ -167,6 +167,7 @@ function presenceBot(kind, moving = true, offset = 0) {
   return node;
 }
 function drawPresence(rig, animate) {
+  if (rig.study === 'orbit-c') return drawDiscMoon(rig, animate);
   if (rig.study === 'celestial') return drawCelestial(rig, animate);
   if (rig.kind === 'miso-study') return drawMiso(rig, animate);
   const { kind, parts, eyes, eyeNodes } = rig, time = rig.time;
@@ -601,7 +602,21 @@ function celestialStudy() {
   renderCelestial(); syncTheme(); syncMotion();
 }
 
-function orbitRingStudy() {
+function drawDiscMoon({ time, eyes, moons }, animate) {
+  const phase = (animate ? time : 0) * Math.PI * 2 / 2.5 + .35;
+  const x = Math.cos(phase), depth = Math.sin(phase);
+  for (const [i, moon] of moons.entries()) {
+    moon.setAttribute('cx', 16 + 13.4 * x);
+    moon.setAttribute('cy', 18 + 4 * depth);
+    moon.setAttribute('opacity', Number((i === 1) === (depth >= 0)));
+  }
+  for (const [i, eye] of eyes.entries()) {
+    eye.setAttribute('cx', 12.5 + 7 * i + 1.25 * x);
+    eye.setAttribute('cy', 12.7 + .55 * depth);
+  }
+}
+
+function orbitRingStudy(working = false) {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Orbit ring designs · Pi Remote';
   document.querySelector('h1').textContent = 'Orbit ring designs';
@@ -632,6 +647,34 @@ function orbitRingStudy() {
     node.setAttribute('role', 'img'); node.setAttribute('aria-label', `Orbit ${design.key}, ${design.name.toLowerCase()}`);
     node.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true">${design.svg}</svg>`;
     return node;
+  }
+  if (working) {
+    document.title = 'Orbit C in motion · Pi Remote';
+    document.querySelector('h1').textContent = 'Orbit C in motion';
+    document.querySelector('.lede').textContent = 'While working, Orbit follows a moon along its lavender disc. At idle, its gaze rests.';
+    const pair = el('section', undefined, 'ring-options orbit-pair');
+    pair.setAttribute('aria-label', 'Working and idle at 32px');
+    for (const label of ['Working', 'Idle']) {
+      const figure = el('figure'), node = icon(designs[2], 32);
+      node.setAttribute('aria-label', `Orbit C, ${label.toLowerCase()}`);
+      if (label === 'Working') {
+        const moons = [...node.querySelectorAll('svg > g')].map(layer => {
+          const moon = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          moon.setAttribute('class', 'disc-moon'); moon.setAttribute('r', '2.2');
+          layer.append(moon); return moon;
+        });
+        const rig = { study: 'orbit-c', node, moving: true, time: 0, moons, eyes: [...node.querySelectorAll('.bot-eye')] };
+        presenceRigs.push(rig); drawDiscMoon(rig, false); visibleBots.observe(node);
+      }
+      figure.append(node, el('figcaption', label)); pair.append(figure);
+    }
+    $('comparison').replaceChildren(el('h2', 'Session size · 32px', 'section-title'), pair);
+    const back = el('a', 'Compare the still designs'); back.href = '?study=orbit-rings';
+    $('comparison-note').replaceChildren(document.createTextNode('Preview only. '), back);
+    $('motion').hidden = false; $('motion').onclick = () => { paused = !paused; syncMotion(); };
+    $('theme').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; syncTheme(); };
+    reducedMotion.addEventListener('change', syncMotion); document.addEventListener('visibilitychange', syncMotion);
+    syncTheme(); syncMotion(); return;
   }
   const options = el('section', undefined, 'ring-options'); options.setAttribute('aria-label', 'Enlarged ring designs');
   for (const design of designs) {
@@ -664,6 +707,7 @@ function orbitRingStudy() {
 if (new URL(location.href).searchParams.get('study') === 'shimmer') shimmerStudy();
 else if (new URL(location.href).searchParams.get('study') === 'miso') misoStudy();
 else if (new URL(location.href).searchParams.get('study') === 'celestial') celestialStudy();
+else if (new URL(location.href).searchParams.get('study') === 'orbit-c') orbitRingStudy(true);
 else if (new URL(location.href).searchParams.get('study') === 'orbit-rings') orbitRingStudy();
 else {
 $('replay').addEventListener('click', () => { paused = false; render(); syncMotion(); });

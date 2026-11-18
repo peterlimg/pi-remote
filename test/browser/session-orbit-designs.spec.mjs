@@ -1,5 +1,31 @@
 import { test, expect } from '@playwright/test';
 
+test('Orbit C tracks a moon only while working', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/session-motion-prototype.html?study=orbit-c');
+  const working = page.getByRole('img', { name: 'Orbit C, working' });
+  const idle = page.getByRole('img', { name: 'Orbit C, idle' });
+  const original = await idle.innerHTML();
+  expect((await working.boundingBox()).width).toBe(32);
+  const gaze = working.locator('.bot-eye').first();
+  const x = await gaze.getAttribute('cx');
+  await expect.poll(() => gaze.getAttribute('cx')).not.toBe(x);
+  for (const moon of await working.locator('.disc-moon').all()) await expect(moon).toHaveAttribute('opacity', '1');
+  expect(await idle.innerHTML()).toBe(original);
+  await page.screenshot({ path: info.outputPath('working-idle.png') });
+  await page.getByRole('button', { name: 'Pause motion' }).press('Enter');
+  const paused = await working.innerHTML();
+  await page.waitForTimeout(180);
+  expect(await working.innerHTML()).toBe(paused);
+  await page.getByRole('button', { name: 'Resume motion' }).press('Enter');
+  await expect.poll(() => working.innerHTML()).not.toBe(paused);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.getByRole('button', { name: 'Reduced motion enabled' })).toBeDisabled();
+  const reduced = await working.innerHTML();
+  await page.waitForTimeout(180);
+  expect(await working.innerHTML()).toBe(reduced);
+});
+
 test('Orbit ring designs compare three still drawings at large and session sizes', async ({ page, browserName }, info) => {
   const errors = [], sockets = [];
   page.on('pageerror', error => errors.push(error.message));
