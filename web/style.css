@@ -119,10 +119,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
   .shell.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
   .shell.sidebar-collapsed > aside { transform: translateX(-100%); visibility: hidden; }
   .shell.sidebar-collapsed #sidebar-toggle { left: max(12px, env(safe-area-inset-left)); }
+  #sidebar-toggle[aria-expanded=false] path { transform: translateX(-3px); }
   @media (prefers-reduced-motion: no-preference) {
     .shell { transition: grid-template-columns 240ms ease-out; }
     .shell > aside { transition: transform 240ms ease-out, visibility 240ms; }
     #sidebar-toggle { transition: left 240ms ease-out; }
+    #sidebar-toggle path { transition: transform 180ms ease-out; }
+    #sidebar-toggle::after { content: ''; position: absolute; pointer-events: none; inset: 2px; border-radius: 50%; background: linear-gradient(110deg, transparent 40%, color-mix(in srgb, var(--text) 12%, transparent) 50%, transparent 60%) 100% 0 / 300% 100% no-repeat; transition: background-position 240ms ease-out; }
+    #sidebar-toggle[aria-expanded=false]::after { background-position: 0% 0; }
   }
   @media (max-width: 700px) {
     .brand { flex-wrap: wrap; gap: 0; }

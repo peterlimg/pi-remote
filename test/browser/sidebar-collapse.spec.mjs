@@ -27,9 +27,13 @@ for (const [width, height] of [[744, 1133], [1133, 744], [844, 390], [568, 320]]
     await toggle.press('Enter');
     await expect(sidebar).toBeHidden();
     await expect(sidebar).toHaveAttribute('inert', '');
+    await expect(toggle.locator('path')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -3, 0)');
+    expect(await toggle.evaluate(node => getComputedStyle(node, '::after').backgroundImage !== 'none')).toBe(width !== 568);
+    if (width === 568) await expect(toggle.locator('path')).toHaveCSS('transition-duration', '0s');
     await expect.poll(async () => (await main.boundingBox()).width).toBe(width);
     await toggle.press('Enter');
     await expect.poll(async () => (await main.boundingBox()).x).toBe(chat.x);
+    await expect(toggle.locator('path')).toHaveCSS('transform', 'none');
     await expect(prompt).toHaveValue('Keep this draft');
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(toggle).toBeHidden();
