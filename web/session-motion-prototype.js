@@ -610,9 +610,11 @@ function drawDiscMoon({ time, eyes, moons }, animate) {
     moon.setAttribute('cy', 18 + 4 * depth);
     moon.setAttribute('opacity', Number((i === 1) === (depth >= 0)));
   }
+  const smile = animate ? Math.min(1, Math.max(0, (Math.cos(phase - .18) - .35) * 2.4)) : 0;
   for (const [i, eye] of eyes.entries()) {
-    eye.setAttribute('cx', 12.5 + 7 * i + 1.25 * x);
-    eye.setAttribute('cy', 12.7 + .55 * depth);
+    eye.setAttribute('transform', `translate(${12.5 + 7 * i + x} ${12.7 + .55 * depth})`);
+    const halfWidth = 1.9 + .35 * smile, lowerCurve = 3.6 - 5.2 * smile;
+    eye.setAttribute('d', `M${-halfWidth} 0C${-halfWidth} -3.6 ${halfWidth} -3.6 ${halfWidth} 0C${halfWidth} ${lowerCurve} ${-halfWidth} ${lowerCurve} ${-halfWidth} 0Z`);
   }
 }
 
@@ -651,7 +653,7 @@ function orbitRingStudy(working = false) {
   if (working) {
     document.title = 'Orbit C in motion · Pi Remote';
     document.querySelector('h1').textContent = 'Orbit C in motion';
-    document.querySelector('.lede').textContent = 'While working, Orbit follows a moon along its lavender disc. At idle, its gaze rests.';
+    document.querySelector('.lede').textContent = 'Orbit’s eyes smile when the moon comes back around. At idle, its gaze rests.';
     const pair = el('section', undefined, 'ring-options orbit-pair');
     pair.setAttribute('aria-label', 'Working and idle at 32px');
     for (const label of ['Working', 'Idle']) {
@@ -663,7 +665,11 @@ function orbitRingStudy(working = false) {
           moon.setAttribute('class', 'disc-moon'); moon.setAttribute('r', '2.2');
           layer.append(moon); return moon;
         });
-        const rig = { study: 'orbit-c', node, moving: true, time: 0, moons, eyes: [...node.querySelectorAll('.bot-eye')] };
+        const eyes = [...node.querySelectorAll('.bot-eye')].map(oval => {
+          const eye = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          eye.setAttribute('class', 'bot-eye'); oval.replaceWith(eye); return eye;
+        });
+        const rig = { study: 'orbit-c', node, moving: true, time: 0, moons, eyes };
         presenceRigs.push(rig); drawDiscMoon(rig, false); visibleBots.observe(node);
       }
       figure.append(node, el('figcaption', label)); pair.append(figure);

@@ -8,8 +8,9 @@ test('Orbit C tracks a moon only while working', async ({ page }, info) => {
   const original = await idle.innerHTML();
   expect((await working.boundingBox()).width).toBe(32);
   const gaze = working.locator('.bot-eye').first();
-  const x = await gaze.getAttribute('cx');
-  await expect.poll(() => gaze.getAttribute('cx')).not.toBe(x);
+  const position = await gaze.getAttribute('transform'), expression = await gaze.getAttribute('d');
+  await expect.poll(() => gaze.getAttribute('transform')).not.toBe(position);
+  await expect.poll(() => gaze.getAttribute('d')).not.toBe(expression);
   for (const moon of await working.locator('.disc-moon').all()) await expect(moon).toHaveAttribute('opacity', '1');
   expect(await idle.innerHTML()).toBe(original);
   await page.screenshot({ path: info.outputPath('working-idle.png') });
