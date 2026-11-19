@@ -607,19 +607,18 @@ function drawDiscMoon({ time, eyes, moons, body }, animate) {
   const phase = animate ? beat + .72 * Math.sin(beat + .45) : .05 * Math.PI * 2;
   const tilt = animate ? -11 + 16 * Math.cos(beat) + 7 * Math.sin(2 * beat) : -12;
   const lean = animate ? 1.6 * Math.cos(beat + .32) : 0;
-  const drop = animate ? -1.35 * Math.cos(beat + .12) : 0;
   const gaze = animate ? Math.cos(phase + .72) : 0;
   const smile = animate ? ((1 + Math.cos(phase - .24)) / 2) ** 3 : 0;
-  body.setAttribute('transform', `translate(${lean} ${drop}) rotate(${lean * 5} 16 14)`);
+  body.setAttribute('transform', `rotate(${lean * 5} 16 16)`);
   const x = Math.cos(phase), depth = Math.sin(phase);
   for (const [i, moon] of moons.entries()) {
-    moon.parentNode.setAttribute('transform', `rotate(${tilt} 16 18)`);
+    moon.parentNode.setAttribute('transform', `rotate(${tilt} 16 16)`);
     moon.setAttribute('cx', 16 + 13.4 * x);
-    moon.setAttribute('cy', 18 + 4 * depth);
+    moon.setAttribute('cy', 16 + 3.2 * depth);
     moon.setAttribute('opacity', Number((i === 1) === (depth >= 0)));
   }
   for (const [i, eye] of eyes.entries()) {
-    eye.setAttribute('transform', `translate(${12.5 + 7 * i + gaze} ${12.7 + .55 * depth})`);
+    eye.setAttribute('transform', `translate(${13.4 + 5.2 * i + .7 * gaze} ${13.8 + .35 * depth}) scale(.82)`);
     const halfWidth = 1.9 + .35 * smile, lowerCurve = 3.6 - 5.2 * smile;
     eye.setAttribute('d', `M${-halfWidth} 0C${-halfWidth} -3.6 ${halfWidth} -3.6 ${halfWidth} 0C${halfWidth} ${lowerCurve} ${-halfWidth} ${lowerCurve} ${-halfWidth} 0Z`);
   }
@@ -629,12 +628,12 @@ function orbitRingStudy(working = false) {
   const page = $('page'); page.dataset.set = 'focused';
   document.title = 'Orbit ring designs · Pi Remote';
   document.querySelector('h1').textContent = 'Orbit ring designs';
-  document.querySelector('.lede').textContent = 'C has a broad lavender disc below the face. A and B are unchanged.';
+  document.querySelector('.lede').textContent = 'C has a wide lavender ring around its equator. A and B are unchanged.';
   $('lifecycle-study').hidden = true; document.querySelector('.switcher').hidden = true;
   $('comparison').hidden = false; $('comparison-note').hidden = false;
   $('motion').hidden = true; $('replay').hidden = true;
   page.insertBefore(document.querySelector('.preview-controls'), $('comparison'));
-  const face = (x, y, radius) => `<circle class="bot-body" cx="${x}" cy="${y}" r="${radius}"/><ellipse class="bot-eye" cx="${x - 3.5}" cy="${y - 1.3}" rx="1.9" ry="2.7"/><ellipse class="bot-eye" cx="${x + 3.5}" cy="${y - 1.3}" rx="1.9" ry="2.7"/>`;
+  const face = (x, y, radius, spacing = 3.5, rise = 1.3, rx = 1.9, ry = 2.7) => `<circle class="bot-body" cx="${x}" cy="${y}" r="${radius}"/><ellipse class="bot-eye" cx="${x - spacing}" cy="${y - rise}" rx="${rx}" ry="${ry}"/><ellipse class="bot-eye" cx="${x + spacing}" cy="${y - rise}" rx="${rx}" ry="${ry}"/>`;
   const designs = [
     { key: 'A', name: 'Open arc', description: 'A thin ring, open on one side.',
       svg: '<g transform="rotate(-24 16 17)"><path class="ring-design-line" d="M2 17A14 5.5 0 0 1 28.5 14.5"/></g>'
@@ -645,9 +644,9 @@ function orbitRingStudy(working = false) {
         + face(14, 17.5, 9.4)
         + '<g transform="rotate(-63 17 16)"><path class="ring-design-line ring-design-front" d="M3 16A14 5.4 0 0 0 31 16"/></g>' },
     { key: 'C', name: 'Wide disc', description: 'A wide, flat lavender ring.',
-      svg: '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" fill-rule="evenodd" d="M0 18A16 6.1 0 0 1 32 18A16 6.1 0 0 1 0 18ZM7 18A9 2.3 0 0 1 25 18A9 2.3 0 0 1 7 18Z"/></g>'
-        + face(16, 14, 7)
-        + '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" d="M0 18A16 6.1 0 0 0 32 18H25A9 2.3 0 0 1 7 18Z"/></g>' }
+      svg: '<g transform="rotate(-12 16 16)"><path class="ring-design-disc" fill-rule="evenodd" d="M0 16a16 3.8 0 1 0 32 0a16 3.8 0 1 0-32 0ZM4.4 16a11.6 2.65 0 1 0 23.2 0a11.6 2.65 0 1 0-23.2 0Z"/></g>'
+        + face(16, 16, 6.6, 2.6, 2.2, 1.56, 2.2)
+        + '<g transform="rotate(-12 16 16)"><path class="ring-design-disc" d="M0 16A16 3.8 0 0 0 32 16H27.6A11.6 2.65 0 0 1 4.4 16Z"/></g>' }
   ];
   function icon(design, size) {
     const node = el('span', undefined, 'bot m-bot ring-design');

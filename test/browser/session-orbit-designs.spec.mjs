@@ -13,8 +13,13 @@ test('Orbit C tracks a moon only while working', async ({ page }, info) => {
   await expect.poll(() => gaze.getAttribute('d')).not.toBe(expression);
   for (const moon of await working.locator('.disc-moon').all()) await expect(moon).toHaveAttribute('opacity', '1');
   const disc = working.locator('.ring-design-disc').first();
-  expect(await disc.evaluate(path => [2.5, 29.5].every(x =>
-    [17.5, 18.5].every(y => path.isPointInFill(new DOMPoint(x, y)))))).toBe(true);
+  expect(await disc.evaluate(path => {
+    const globe = path.closest('svg').querySelector('.bot-body'), y = globe.cy.baseVal.value;
+    const bounds = path.getBBox();
+    return Math.abs(bounds.y + bounds.height / 2 - y) < .01
+      && [2.5, 29.5].every(x => [-.5, .5].every(dy => path.isPointInFill(new DOMPoint(x, y + dy))))
+      && [7.5, 24.5].every(x => !path.isPointInFill(new DOMPoint(x, y)) && !globe.isPointInFill(new DOMPoint(x, y)));
+  })).toBe(true);
   const tilt = () => disc.evaluate(path => path.parentNode.transform.baseVal.getItem(0).angle);
   await expect.poll(tilt, { intervals: [50] }).toBeLessThan(-25);
   await expect.poll(tilt, { intervals: [50] }).toBeGreaterThan(4);
@@ -39,7 +44,7 @@ test('Slingshot carries momentum through the catch and loop seam', async ({ page
   const moon = page.locator('.orbit-pair .disc-moon').first();
   await expect(page.locator('.orbit-pair .in-view')).toBeVisible();
   await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 500)));
-  const angle = () => moon.evaluate(node => Math.atan2((node.cy.baseVal.value - 18) / 4, (node.cx.baseVal.value - 16) / 13.4));
+  const angle = () => moon.evaluate(node => Math.atan2((node.cy.baseVal.value - 16) / 3.2, (node.cx.baseVal.value - 16) / 13.4));
   let previous = await angle();
   for (let i = 0; i < 52; i++) {
     await page.clock.runFor(64);
