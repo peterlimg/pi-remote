@@ -645,7 +645,7 @@ function orbitRingStudy(working = false) {
         + face(14, 17.5, 9.4)
         + '<g transform="rotate(-63 17 16)"><path class="ring-design-line ring-design-front" d="M3 16A14 5.4 0 0 0 31 16"/></g>' },
     { key: 'C', name: 'Wide disc', description: 'A wide, flat lavender ring.',
-      svg: '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" d="M0 18A16 5.3 0 0 1 32 18H27A11 2.3 0 0 0 5 18Z"/></g>'
+      svg: '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" fill-rule="evenodd" d="M0 18A16 5.3 0 0 1 32 18A16 5.3 0 0 1 0 18ZM5 18A11 2.3 0 0 1 27 18A11 2.3 0 0 1 5 18Z"/></g>'
         + face(16, 14, 7)
         + '<g transform="rotate(-12 16 18)"><path class="ring-design-disc" d="M0 18A16 5.3 0 0 0 32 18H27A11 2.3 0 0 1 5 18Z"/></g>' }
   ];

@@ -13,6 +13,8 @@ test('Orbit C tracks a moon only while working', async ({ page }, info) => {
   await expect.poll(() => gaze.getAttribute('d')).not.toBe(expression);
   for (const moon of await working.locator('.disc-moon').all()) await expect(moon).toHaveAttribute('opacity', '1');
   const disc = working.locator('.ring-design-disc').first();
+  expect(await disc.evaluate(path => [2.5, 29.5].every(x =>
+    [17.5, 18.5].every(y => path.isPointInFill(new DOMPoint(x, y)))))).toBe(true);
   const tilt = () => disc.evaluate(path => path.parentNode.transform.baseVal.getItem(0).angle);
   await expect.poll(tilt, { intervals: [50] }).toBeLessThan(-25);
   await expect.poll(tilt, { intervals: [50] }).toBeGreaterThan(4);
