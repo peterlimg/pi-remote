@@ -644,15 +644,15 @@ try {
       });
       await drained();
       await page.locator('#prompt').fill('Separate draft');
-      const unsent = page.locator('.message.user').filter({ hasText: 'Not sent' });
-      await expect(unsent).toContainText('Kept draft Unfinished words', { timeout: 12000 });
+      const count = progressing ? 6 : 5;
+      await until(() => commands.length === count, 12000);
       await page.evaluate(() => clearInterval(window.voiceChatter));
-      await expect(page.locator('#notice')).toContainText('Check the draft before sending');
-      await unsent.getByRole('button', { name: 'Edit draft' }).click();
-      await expect(page.locator('#prompt')).toHaveValue('Separate draft');
-      await page.locator('#prompt').fill(''); await unsent.getByRole('button', { name: 'Edit draft' }).click();
-      await expect(page.locator('#prompt')).toHaveValue(/^Kept draft Unfinished words/); await expect(unsent).toHaveCount(0);
-      await stopped(); await closed(); assert.equal(commands.length, 4);
+      const bubble = page.locator('.message.user').filter({ hasText: 'Kept draft Unfinished words' });
+      await expect(bubble.locator('.message-text')).toHaveText(commands[count - 1].text);
+      assert.match(commands[count - 1].text, progressing ? /^Kept draft Unfinished words( more)+$/ : /^Kept draft Unfinished words$/);
+      await expect(bubble.getByRole('button', { name: 'Edit draft' })).toHaveCount(0);
+      await expect(page.locator('#notice')).toBeHidden(); await expect(page.locator('#prompt')).toHaveValue('Separate draft');
+      await stopped(); await closed(); assert.equal(commands.length, count);
     }
 
     await page.routeWebSocket('**/ws', route => {
@@ -662,7 +662,7 @@ try {
     await page.goto('about:blank'); await page.goto(origin + '/#token=' + config.clientToken);
     await page.getByRole('button', { name: /Voice Alpha/ }).click(); await expect(page.locator('#voice-record')).toBeHidden();
     await page.locator('#prompt').fill('Old host can still send'); await page.getByRole('button', { name: 'Send message' }).click();
-    await until(() => commands.length === 5); assert.equal(commands[4].text, 'Old host can still send');
+    await until(() => commands.length === 7); assert.equal(commands[6].text, 'Old host can still send');
   }
   assertPrivate(); assert.deepEqual(errors, []);
   console.log(`PASS: ${liveFile ? 'live buffered speech, silent timeout and catch-up Send, no host transcript traffic before Send' : 'browser-direct protocol, waveform, draft, Send, cancellation, errors, validation and disconnect'}. Evidence: ${evidence}`);

@@ -232,8 +232,7 @@ export function voiceComposer({ request, context, changed, notice, queue }) {
         if (data !== 'drained' || call.drainedAt !== undefined) return;
         call.drainedAt = performance.now();
         settled(call);
-        call.timer = setTimeout(() => review(call, call.phase === 'sending' && transcript(call) ?
-          'Dictation took too long. Check the draft before sending.' : undefined), 8000);
+        call.timer = setTimeout(() => call.phase === 'sending' ? complete(call) : review(call), 8000);
       };
       call.source = call.audio.createMediaStreamSource(stream);
       call.source.connect(call.buffer);
