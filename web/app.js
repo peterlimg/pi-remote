@@ -1015,7 +1015,7 @@ const sessionKinds = {
     '<path class="character-moon-mote" d="M25 7q0 4 4 4-4 0-4 4 0-4-4-4 4 0 4-4Z"/>'],
   sol: ['Sol', '<circle cx="16" cy="17" r="9"/>', [[12, 17], [20, 17]],
     '<g class="character-sun-rays"><path d="M16 2v3M16 29v3M1 17h3M28 17h3M5 6l2 2M25 26l2 2M5 28l2-2M25 8l2-2"/></g>'],
-  orbit: ['Orbit', '<circle cx="16" cy="16" r="6.6"/>', [[13.4, 13.8, .75], [18.6, 13.8, .75]]],
+  orbit: ['Orbit', '<circle cx="16" cy="16" r="8.4"/>', [[13.4, 13.8, .75], [18.6, 13.8, .75]]],
   comet: ['Comet', '<circle cx="19" cy="14" r="9.5"/>', [[16, 13], [23, 13]],
     '<g class="character-comet-tail"><path class="bot-accent" d="M16 17Q8 18 3 29Q14 28 22 21Z"/><path class="bot-body" d="M13 14Q6 16 2 23Q10 23 18 19Z"/><path class="bot-body" d="M20 20Q15 28 9 31Q10 24 16 18Z"/></g>', '',
     '<path class="character-speed" d="M8 4 4 8M5 11l-3 3M28 22l-4 4"/>'],
