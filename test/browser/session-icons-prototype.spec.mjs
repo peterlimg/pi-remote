@@ -9,7 +9,7 @@ const start = source.indexOf('const botStar ='), end = source.indexOf('const per
 if (start < 0 || end <= start) throw new Error('Production drawing block moved; update the prototype reference.');
 const productionSvg = runInNewContext(source.slice(start, end) + '\nbotSvg');
 async function expectOriginalArtwork(page) {
-  const bots = page.locator('.layout-bot');
+  const bots = page.locator('.layout-bot:not([data-kind=orbit])'); // The catalogue keeps the original Orbit.
   const attributes = await bots.evaluateAll(nodes => nodes.map(node => ({ kind: node.dataset.kind, mood: node.dataset.mood, size: Number(node.dataset.size), unread: node.dataset.unread === 'true' })));
   const references = attributes.map(({ kind, mood, size, unread }) => productionSvg(kind, mood, size, unread));
   const matches = await bots.evaluateAll((nodes, references) => nodes.map((node, index) => {

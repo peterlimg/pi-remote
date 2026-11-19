@@ -7,7 +7,7 @@ test('Signature motion matches the approved prototype in real session rows', asy
     jelly: ['.bot-figure', '.character-tentacle', '.character-tentacle-middle', '.character-tentacle-right'],
     sol: ['.bot-figure', '.character-sun-rays'],
     moss: ['.bot-figure', '.character-frog-foot', '.character-frog-foot-right'],
-    orbit: ['.bot-figure', '.character-moon-x', '.character-moon-y'],
+    orbit: [],
     comet: ['.bot-figure', '.character-comet-tail', '.character-speed'],
     nim: ['.bot-figure', '.character-wing', '.character-wing-right'],
   };
@@ -50,6 +50,10 @@ test('Signature motion matches the approved prototype in real session rows', asy
       expect(await actual.evaluate(motion), `${kind} ${selector}`).toEqual(await reference.evaluate(motion));
     }
   }
+  await preview.goto('/session-motion-prototype.html?study=orbit-c');
+  const orbit = page.locator('#sessions [data-id=orbit] .bot');
+  expect(await orbit.locator('.orbit-disc').evaluateAll(paths => paths.map(p => p.getAttribute('d')))).toEqual(
+    await preview.getByRole('img', { name: 'Orbit C, working' }).locator('.ring-design-disc').evaluateAll(paths => paths.map(p => p.getAttribute('d'))));
   await preview.close();
   await page.bringToFront();
   const luna = page.locator('#sessions [data-id=luna] .bot-figure');
@@ -71,12 +75,28 @@ test('Signature motion matches the approved prototype in real session rows', asy
   }
   await page.locator('#sessions [data-id=orbit]').focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#title-kind .character-moon-x')).toHaveCSS('animation-name', 'character-moon-x');
+  const moon = page.locator('#title-kind .orbit-moon').first();
+  const cx = await moon.getAttribute('cx');
+  await expect.poll(() => moon.getAttribute('cx')).not.toBe(cx);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(async () => Number(await moon.getAttribute('cx'))).toBeCloseTo(16 + 13.4 * Math.cos(.05 * Math.PI * 2), 4);
+  const still = await moon.getAttribute('cx');
+  await page.waitForTimeout(160);
+  expect(await moon.getAttribute('cx')).toBe(still);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.getByLabel('Session details', { exact: true }).press('Enter');
+  await page.getByRole('button', { name: /^Session icon / }).press('Enter');
+  const choice = page.getByRole('dialog').getByRole('button', { name: 'Orbit', exact: true });
+  await choice.scrollIntoViewIfNeeded();
+  await expect(choice).toHaveAttribute('aria-pressed', 'true');
+  const pickerMoon = choice.locator('.orbit-moon').first(), pickerX = await pickerMoon.getAttribute('cx');
+  await expect.poll(() => pickerMoon.getAttribute('cx')).not.toBe(pickerX);
+  await page.getByRole('button', { name: 'Done', exact: true }).press('Enter');
   await page.getByRole('button', { name: 'Show sessions', exact: true }).focus();
   await page.keyboard.press('Enter');
   states.find(state => state.id === 'orbit').status = 'waiting'; publish();
   await expect(page.locator('#sessions [data-id=orbit] .bot')).toHaveAttribute('data-mood', 'waiting');
-  await expect(page.locator('#sessions [data-id=orbit] .character-moon')).toHaveCount(0);
+  await expect(orbit.locator('.orbit-moon')).toHaveCount(0);
   await expect(page.locator('#sessions [data-id=orbit] .bot-badge')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 400 });
   const nim = page.locator('#sessions [data-id=nim] .bot-figure');

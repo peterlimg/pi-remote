@@ -276,6 +276,11 @@ test('32px bots stay aligned across session states and preserve icon and emoji c
     const button = picker.getByRole('button', { name, exact: true });
     await button.click();
     await expect(button.locator('.bot')).toHaveClass(/personality-bot/);
+    if (motion === 'orbit') {
+      const moon = button.locator('.orbit-moon').first(), x = await moon.getAttribute('cx');
+      await expect.poll(() => moon.getAttribute('cx')).not.toBe(x);
+      continue;
+    }
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-name', 'character-' + motion);
     await expect(button.locator('.bot-figure')).toHaveCSS('animation-play-state', 'running');
     if (motion === 'luna') {

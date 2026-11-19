@@ -1015,10 +1015,7 @@ const sessionKinds = {
     '<path class="character-moon-mote" d="M25 7q0 4 4 4-4 0-4 4 0-4-4-4 4 0 4-4Z"/>'],
   sol: ['Sol', '<circle cx="16" cy="17" r="9"/>', [[12, 17], [20, 17]],
     '<g class="character-sun-rays"><path d="M16 2v3M16 29v3M1 17h3M28 17h3M5 6l2 2M25 26l2 2M5 28l2-2M25 8l2-2"/></g>'],
-  orbit: ['Orbit', '<circle cx="16" cy="16" r="10"/>', [[12, 13.5], [20, 13.5]],
-    '<g class="character-planet-ring"><ellipse class="character-ring-back" cx="16" cy="17" rx="15" ry="5" transform="rotate(-22 16 17)"/></g>',
-    '<g class="character-planet-ring"><path class="character-ring-front" d="M2 22C8 29 28 20 30 12"/></g>',
-    '<g transform="rotate(-22 16 17)"><g class="character-moon-x"><g class="character-moon-y"><circle class="character-moon" cx="16" cy="17" r="1.9"/></g></g></g>'],
+  orbit: ['Orbit', '<circle cx="16" cy="16" r="6.6"/>', [[13.4, 13.8, .75], [18.6, 13.8, .75]]],
   comet: ['Comet', '<circle cx="19" cy="14" r="9.5"/>', [[16, 13], [23, 13]],
     '<g class="character-comet-tail"><path class="bot-accent" d="M16 17Q8 18 3 29Q14 28 22 21Z"/><path class="bot-body" d="M13 14Q6 16 2 23Q10 23 18 19Z"/><path class="bot-body" d="M20 20Q15 28 9 31Q10 24 16 18Z"/></g>', '',
     '<path class="character-speed" d="M8 4 4 8M5 11l-3 3M28 22l-4 4"/>'],
@@ -1035,6 +1032,14 @@ function botSvg(kind, mood, size, unread = mood === 'unread') {
   const badge = mood === 'waiting' ? '<g class="bot-badge"><circle cx="27" cy="5" r="4.5"/><path d="M27 2.8v2.6M27 7.3v.1"/></g>'
     : unread ? '<g class="bot-badge"><circle cx="27" cy="5" r="4"/></g>' : '';
   const zz = mood === 'saved' ? '<g class="bot-zz"><text x="24" y="9">z</text><text x="24" y="9">z</text></g>' : '';
+  if (kind === 'orbit') {
+    const moving = mood === 'working';
+    const rear = '<path class="orbit-disc" fill-rule="evenodd" d="M0 16a16 3.8 0 1 0 32 0a16 3.8 0 1 0-32 0ZM4.4 16a11.6 2.65 0 1 0 23.2 0a11.6 2.65 0 1 0-23.2 0Z"/>';
+    const near = '<path class="orbit-disc" d="M0 16A16 3.8 0 0 0 32 16H27.6A11.6 2.65 0 0 1 4.4 16Z"/>';
+    const layer = (disc, opacity) => `<g transform="rotate(-12 16 16)">${disc}${moving ? `<circle class="orbit-moon" cx="28.7" cy="17" r="2.2" opacity="${opacity}"/>` : ''}</g>`;
+    const expression = moving ? eyes.map(([x, y]) => `<path class="bot-eye" d="M-1.9 0a1.9 2.7 0 1 0 3.8 0a1.9 2.7 0 1 0-3.8 0" transform="translate(${x} ${y}) scale(.82)"/>`).join('') : face;
+    return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure orbit-c">${layer(rear, 0)}<g class="orbit-planet"><g class="bot-body">${body}</g>${expression}</g>${layer(near, 1)}</g>${badge}${zz}</svg>`;
+  }
   return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><g class="bot-figure">${back}<g class="bot-body">${body}</g><g class="bot-eyes"><g class="bot-look">${face}</g></g>${front}${mood === 'working' ? work : ''}</g>${badge}${zz}</svg>`;
 }
 const personalityKinds = ['pip', 'sprout', 'bun', 'mochi', 'pebble', 'wisp', 'miso', 'puff', 'moss', 'jelly', 'nim', 'zig', 'stella', 'luna', 'sol', 'orbit', 'comet', 'vega'];
@@ -1044,8 +1049,50 @@ function sessionSeed(id = '') {
   for (let index = 0; index < id.length; index++) seed = Math.imul(seed ^ id.charCodeAt(index), 16777619);
   return seed >>> 0;
 }
+function drawWorkingOrbit({ eyes, moons, body }, time, animate) {
+  const beat = time * 2 * Math.PI / 3.2;
+  const phase = animate ? beat + .72 * Math.sin(beat + .45) : .05 * Math.PI * 2;
+  const tilt = animate ? -11 + 16 * Math.cos(beat) + 7 * Math.sin(2 * beat) : -12;
+  const lean = animate ? 1.6 * Math.cos(beat + .32) : 0;
+  const gaze = animate ? Math.cos(phase + .72) : 0;
+  const smile = animate ? ((1 + Math.cos(phase - .24)) / 2) ** 3 : 0;
+  body.setAttribute('transform', `rotate(${lean * 5} 16 16)`);
+  const x = Math.cos(phase), depth = Math.sin(phase);
+  for (const [i, moon] of moons.entries()) {
+    moon.parentNode.setAttribute('transform', `rotate(${tilt} 16 16)`);
+    moon.setAttribute('cx', 16 + 13.4 * x);
+    moon.setAttribute('cy', 16 + 3.2 * depth);
+    moon.setAttribute('opacity', Number((i === 1) === (depth >= 0)));
+  }
+  for (const [i, eye] of eyes.entries()) {
+    eye.setAttribute('transform', `translate(${13.4 + 5.2 * i + .7 * gaze} ${13.8 + .35 * depth}) scale(.82)`);
+    const halfWidth = 1.9 + .35 * smile, lowerCurve = 3.6 - 5.2 * smile;
+    eye.setAttribute('d', `M${-halfWidth} 0C${-halfWidth} -3.6 ${halfWidth} -3.6 ${halfWidth} 0C${halfWidth} ${lowerCurve} ${-halfWidth} ${lowerCurve} ${-halfWidth} 0Z`);
+  }
+}
+
+const visibleOrbits = new Map(), orbitMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let orbitFrame = 0;
+function tickOrbits(now) {
+  orbitFrame = 0;
+  if (document.hidden || !visibleOrbits.size) return;
+  for (const rig of visibleOrbits.values()) drawWorkingOrbit(rig, (now + rig.offset) / 1000, !orbitMotion.matches);
+  if (!orbitMotion.matches) orbitFrame = requestAnimationFrame(tickOrbits);
+}
+function syncOrbits() {
+  cancelAnimationFrame(orbitFrame);
+  tickOrbits(performance.now());
+}
+orbitMotion.addEventListener('change', syncOrbits);
 const botObserver = new IntersectionObserver(entries => {
-  for (const { target, isIntersecting } of entries) target.classList.toggle('in-view', isIntersecting);
+  for (const { target, isIntersecting } of entries) {
+    target.classList.toggle('in-view', isIntersecting);
+    if (isIntersecting && target.dataset.kind === 'orbit' && target.dataset.mood === 'working' && target.isConnected) {
+      visibleOrbits.set(target, { body: target.querySelector('.orbit-planet'), eyes: target.querySelectorAll('.bot-eye'),
+        moons: target.querySelectorAll('.orbit-moon'), offset: Number(target.dataset.orbitOffset || 0) });
+    } else visibleOrbits.delete(target);
+  }
+  syncOrbits();
 });
 let botVisibilityQueued = false;
 function syncBotVisibility() {
@@ -1055,6 +1102,7 @@ function syncBotVisibility() {
   queueMicrotask(() => {
     botVisibilityQueued = false;
     botObserver.disconnect();
+    visibleOrbits.clear(); syncOrbits();
     document.querySelectorAll('.bot, .session-state[data-status=working]').forEach(node => botObserver.observe(node));
   });
 }
@@ -1087,6 +1135,7 @@ function dressKind(node, kind, size, status, unread = false) {
     const seed = sessionSeed(kind.id);
     node.style.setProperty('--bot-t', `-${performance.now() + seed % 6000}ms`);
     node.style.setProperty('--bot-blink', `-${(Date.now() + seed) % 6000}ms`);
+    if (kind.type === 'orbit') node.dataset.orbitOffset = seed % 3200;
     node.innerHTML = botSvg(kind.type, mood, size, unread);
     syncBotVisibility();
   }
