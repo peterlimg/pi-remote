@@ -117,19 +117,34 @@ new ResizeObserver(([entry]) => {
 }).observe($('prompt'));
 // Keyboards and pinch zoom change the visible area without resizing the layout viewport.
 // Reflow inside it, keeping the browser's magnification and all controls reachable.
-function fitViewport() {
+let fitEdgeControl;
+function fitViewport(clearFullOverride = false) {
   const viewport = window.visualViewport;
-  document.documentElement.style.setProperty('--viewport-scale', `${viewport?.scale ?? 1}`);
-  document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? innerHeight}px`);
-  document.documentElement.style.setProperty('--viewport-left', `${viewport?.offsetLeft ?? 0}px`);
-  document.documentElement.style.setProperty('--viewport-top', `${viewport?.offsetTop ?? 0}px`);
+  const root = document.documentElement;
+  const scale = Math.max(1, Number.isFinite(viewport?.scale) ? viewport.scale : 1);
+  const height = Math.max(1, Number.isFinite(viewport?.height) ? viewport.height : innerHeight);
+  const offsetLeft = Math.max(0, Number.isFinite(viewport?.offsetLeft) ? viewport.offsetLeft : 0);
+  const offsetTop = Math.max(0, Number.isFinite(viewport?.offsetTop) ? viewport.offsetTop : 0);
+  const layoutHeight = Math.max(innerHeight, root.clientHeight);
   // iOS can shrink innerHeight with the keyboard, so also compare the layout viewport.
-  document.documentElement.toggleAttribute('data-keyboard', !!viewport && Math.max(innerHeight, document.documentElement.clientHeight) - viewport.height * viewport.scale > 150);
+  const keyboard = !!viewport && layoutHeight - height * scale > 150;
+  root.style.setProperty('--viewport-scale', `${scale}`);
+  root.style.setProperty('--viewport-height', `${height}px`);
+  root.style.setProperty('--viewport-left', `${offsetLeft}px`);
+  root.style.setProperty('--viewport-top', `${offsetTop}px`);
+  if (clearFullOverride) {
+    root.style.removeProperty('--viewport-full-width');
+    root.style.removeProperty('--viewport-full-height');
+  }
+  root.toggleAttribute('data-keyboard', keyboard);
+  fitEdgeControl?.();
 }
-window.visualViewport?.addEventListener('resize', fitViewport);
-window.visualViewport?.addEventListener('scroll', fitViewport);
-window.addEventListener('resize', fitViewport);
-window.addEventListener('pageshow', fitViewport);
+const onViewportResize = () => fitViewport(true);
+const onViewportScroll = () => fitViewport(false);
+window.visualViewport?.addEventListener('resize', onViewportResize);
+window.visualViewport?.addEventListener('scroll', onViewportScroll);
+window.addEventListener('resize', onViewportResize);
+window.addEventListener('pageshow', onViewportResize);
 // iOS Safari ignores user-scalable=no; its pinch arrives as gesture events.
 for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, event => event.preventDefault(), { passive: false });
 fitViewport();
@@ -3545,7 +3560,13 @@ function setSidebarCollapsed(collapsed) {
   $('app').classList.toggle('sidebar-collapsed', collapsed);
   renderSidebarToggle();
 }
-sidebarLayout.addEventListener('change', renderSidebarToggle);
+sidebarLayout.addEventListener('change', () => {
+  resetSwipe();
+  sidebarSwipe = undefined;
+  if (sidebarLayout.matches && !$('app').classList.contains('viewing')) $('app').classList.remove('sidebar-collapsed');
+  renderSidebarToggle();
+  fitViewport();
+});
 $('sidebar-toggle').addEventListener('click', () => {
   haptic(); closePicker();
   setSidebarCollapsed(!$('app').classList.contains('sidebar-collapsed'));
@@ -3831,6 +3852,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     const edgeObserver = new ResizeObserver(fitEdge);
     edgeObserver.observe($('transcript')); edgeObserver.observe($('dock'));
     window.visualViewport?.addEventListener('scroll', fitEdge);
+    fitEdgeControl = fitEdge;
     let origin, x, y;
     for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) nativeInput.addEventListener(type, event => {
       if (type === 'touchstart' && event.touches.length === 1) {
@@ -3899,6 +3921,50 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   main.addEventListener('touchend', release);
   main.addEventListener('touchcancel', resetSwipe);
   document.addEventListener('visibilitychange', () => { if (document.hidden) resetSwipe(); });
+}
+{
+  let timers = [], frame = 0;
+  // iOS Safari updates visualViewport, scroll offsets, and safe areas across frames during rotation.
+  const handleOrientationChange = () => {
+    const root = document.documentElement;
+    root.toggleAttribute('data-rotating', true);
+    resetSwipe();
+    if (headingGesture) { clearTimeout(headingGesture.timer); headingGesture = undefined; $('session-swipe').classList.remove('pressing', 'dragging'); }
+    offsetHeading(0);
+    endRowSwipe(false);
+    sidebarSwipe = undefined;
+    if ($('nearby-sessions').matches(':popover-open')) $('nearby-sessions').hidePopover();
+    document.querySelectorAll('.video-actions:popover-open').forEach(menu => menu.hidePopover());
+    const settle = done => {
+      const viewport = window.visualViewport;
+      const scale = Math.max(1, Number.isFinite(viewport?.scale) ? viewport.scale : 1);
+      if (!$('app').hidden && scale <= 1 && (window.scrollX || window.scrollY)) window.scrollTo(0, 0);
+      fitViewport(true);
+      // WebKit can leave fixed 100% / 100dvh stuck at the previous orientation's bounds after rotating.
+      const focusedField = document.activeElement?.matches?.('textarea, input[type=search], input[type=text], input[type=password], input:not([type])');
+      if (!$('app').hidden && scale <= 1 && !focusedField && !root.hasAttribute('data-keyboard')) {
+        const rect = $('app').getBoundingClientRect();
+        const expectedWidth = innerWidth;
+        const expectedHeight = viewport && Number.isFinite(viewport.height) ? Math.min(innerHeight, Math.round(viewport.height * scale)) : innerHeight;
+        if (Math.abs(rect.width - expectedWidth) > 2) root.style.setProperty('--viewport-full-width', `${expectedWidth}px`);
+        if (Math.abs(rect.height - expectedHeight) > 2) root.style.setProperty('--viewport-full-height', `${expectedHeight}px`);
+      }
+      renderSidebarToggle();
+      resizePrompt();
+      fitPickerMenu();
+      if ($('recent-filter-menu').matches(':popover-open')) positionRecentFilter();
+      reportViewing();
+      if (pinnedToBottom && !$('transcript').hidden) { $('transcript').scrollTop = $('transcript').scrollHeight; updateScrollButton(); }
+      if (done) root.removeAttribute('data-rotating');
+    };
+    for (const timer of timers) clearTimeout(timer);
+    cancelAnimationFrame(frame);
+    settle(false);
+    frame = requestAnimationFrame(() => settle(false));
+    timers = [setTimeout(() => settle(false), 150), setTimeout(() => settle(true), 350)];
+  };
+  window.addEventListener('orientationchange', handleOrientationChange);
+  screen.orientation?.addEventListener?.('change', handleOrientationChange);
 }
 $('prompt').addEventListener('input', () => {
   closePicker(); resizePrompt();

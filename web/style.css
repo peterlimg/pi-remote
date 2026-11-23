@@ -4,7 +4,8 @@
   --safe-bottom: env(safe-area-inset-bottom);
   /* iOS reports the keyboard's height change only once its slide ends; with no text field focused it is
      closing, so fill the screen now instead of hovering the bottom controls mid-screen. */
-  --shell-height: calc(100dvh / var(--viewport-scale, 1));
+  --shell-width: calc(var(--viewport-full-width, 100%) / max(1, var(--viewport-scale, 1)));
+  --shell-height: calc(var(--viewport-full-height, 100dvh) / max(1, var(--viewport-scale, 1)));
   --bg: light-dark(#fafaf8, #100d10);
   --panel: light-dark(#f2f3f0, #1b181b);
   --sidebar-bg: light-dark(var(--panel), var(--bg));
@@ -42,8 +43,9 @@
 html { touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 /* Scripted focus may not open iOS's keyboard, and blur hides it before the viewport grows; viewport sizes differ between Safari and home-screen apps. */
-:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --shell-height: min(calc(100dvh / var(--viewport-scale, 1)), var(--viewport-height, 100dvh)); }
+:root:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --shell-height: min(calc(var(--viewport-full-height, 100dvh) / max(1, var(--viewport-scale, 1))), var(--viewport-height, 100dvh)); }
 :root[data-keyboard]:has(:is(textarea, input[type=search], input[type=text], input[type=password], input:not([type])):focus) { --safe-bottom: 0px; }
+:root[data-rotating] :is(.shell, .shell > aside, #sidebar-toggle, #sidebar-toggle path, #sidebar-toggle::after) { transition: none !important; }
 html:has(#app:not([hidden])) { overflow: hidden; overscroll-behavior: none; }
 body:has(#app:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
 button, input, textarea, select { font: inherit; }
@@ -102,8 +104,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #pair-code { min-height: 64px; padding: 14px 16px; font: 500 28px/1.2 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: .24em; text-align: center; }
 #pair-code:focus { border-color: var(--accent); }
 #login-cancel, #login-logout { width: 100%; }
-/* iOS can retain a keyboard offset after returning; never shift the shell past the screen edge. */
-.shell { position: fixed; top: clamp(0px, var(--viewport-top, 0px), calc(100dvh - var(--shell-height))); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
+/* iOS can retain a keyboard or rotation offset; never shift the shell past the screen edges. */
+.shell { position: fixed; top: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--shell-height)))); left: clamp(0px, var(--viewport-left, 0px), max(0px, calc(var(--viewport-full-width, 100%) - var(--shell-width)))); width: var(--shell-width); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
 .shell aside { background: var(--sidebar-bg); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
@@ -118,7 +120,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
   .brand { padding-right: 48px; }
   #sidebar-toggle { display: grid; left: calc(env(safe-area-inset-left) + var(--rail) - 56px); }
   .shell.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
-  .shell.sidebar-collapsed > aside { transform: translateX(-100%); visibility: hidden; }
+  .shell.sidebar-collapsed > aside { transform: translateX(calc(-100% - env(safe-area-inset-left))); visibility: hidden; }
   .shell.sidebar-collapsed #sidebar-toggle { left: max(12px, env(safe-area-inset-left)); }
   #sidebar-toggle[aria-expanded=false] path { transform: translateX(-3px); }
   @media (prefers-reduced-motion: no-preference) {
@@ -159,7 +161,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 #assistant-open { width: 50px; min-height: 50px; }
 #new-session { display: flex; align-items: center; gap: 8px; min-height: 50px; margin-left: auto; padding: 0 22px 0 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 500; box-shadow: 0 1px 6px rgb(0 0 0 / .12); }
 /* The dialog spans the visible viewport, so the sheet rides above the keyboard; taps on its transparent area close it. */
-.project-picker { inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); }
+.project-picker { inset: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--viewport-height, 100dvh)))) 0 auto; width: 100%; max-width: none; height: min(var(--viewport-full-height, 100dvh), var(--viewport-height, 100dvh)); max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text); }
 .project-picker[open] { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 /* A fixed height keeps the sheet from jumping between loading and loaded. */
 .project-sheet { display: flex; flex-direction: column; width: 100%; max-width: var(--content-width); height: min(80%, 40rem); padding-bottom: max(8px, var(--safe-bottom)); border: 0; border-radius: 16px 16px 0 0; animation: sheet-up .2s ease-out; }
@@ -501,7 +503,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .session.dragging.closing::before { content: 'Close'; right: auto; left: calc(100% + 4px); }
 .session.swipe-ready::before { background: var(--accent); color: var(--bg); }
 .session.closing.swipe-ready::before, #session-close-confirm-button { background: var(--warning); }
-.session-close-dialog { position: fixed; inset: var(--viewport-top, 0px) 0 auto; width: 100%; max-width: none; height: var(--viewport-height, 100dvh); max-height: none; margin: 0; padding: 20px; border: 0; overflow: hidden; background: transparent; color: var(--text); }
+.session-close-dialog { position: fixed; inset: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--viewport-height, 100dvh)))) 0 auto; width: 100%; max-width: none; height: min(var(--viewport-full-height, 100dvh), var(--viewport-height, 100dvh)); max-height: none; margin: 0; padding: 20px; border: 0; overflow: hidden; background: transparent; color: var(--text); }
 .session-close-dialog[open] { display: grid; place-items: center; }
 .session-close-dialog:focus-visible { outline: none; }
 .session-close-dialog::backdrop { background: rgb(0 0 0 / .4); }
@@ -607,7 +609,7 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .session-info { position: relative; font-size: 12px; }
 .session-info summary { display: grid; place-items: center; list-style: none; }
 .session-info summary::-webkit-details-marker { display: none; }
-.session-details { position: absolute; z-index: 1; right: 0; top: calc(100% + 8px); width: max-content; min-width: 200px; max-width: min(300px, calc(85vw / var(--viewport-scale, 1))); max-height: calc(var(--viewport-height, 100dvh) - 80px); overflow: auto; padding: 4px; border-radius: 16px; overflow-wrap: anywhere; }
+.session-details { position: absolute; z-index: 1; right: 0; top: calc(100% + 8px); width: max-content; min-width: 200px; max-width: min(300px, calc(85vw / max(1, var(--viewport-scale, 1)))); max-height: calc(var(--viewport-height, 100dvh) - 80px); overflow: auto; padding: 4px; border-radius: 16px; overflow-wrap: anywhere; }
 .session-details #project { margin: 0; padding: 8px; color: var(--muted); font-family: var(--mono); }
 :is(#session-pin, #session-close, #assistant-push) { width: 100%; text-align: left; padding: 8px; background: transparent; color: var(--text); font-size: 14px; font-weight: 400; }
 #session-close { color: var(--warning); }
@@ -923,7 +925,7 @@ pre.message-text { white-space: pre-wrap; }
 .assistant-question :is(input, textarea) { width: 100%; margin-bottom: 12px; font-size: 16px; }
 .assistant-question textarea { min-height: 88px; resize: none; overflow: hidden; }
 .assistant-question .hint { margin: 12px 0 0; }
-.image-viewer { position: fixed; top: var(--viewport-top, 0px); left: var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); height: var(--viewport-height, 100dvh); max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--safe-bottom) env(safe-area-inset-left); border: 0; border-radius: 0; overflow: hidden; background: var(--bg); color: var(--text); }
+.image-viewer { position: fixed; top: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--viewport-height, 100dvh)))); left: clamp(0px, var(--viewport-left, 0px), max(0px, calc(var(--viewport-full-width, 100%) - var(--shell-width)))); width: var(--shell-width); height: min(var(--viewport-full-height, 100dvh), var(--viewport-height, 100dvh)); max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--safe-bottom) env(safe-area-inset-left); border: 0; border-radius: 0; overflow: hidden; background: var(--bg); color: var(--text); }
 .image-viewer[open] { display: flex; flex-direction: column; }
 .image-viewer:focus-visible { outline: none; }
 .image-viewer::backdrop { background: var(--bg); }
@@ -945,7 +947,7 @@ pre.message-text { white-space: pre-wrap; }
 .settings-dialog:focus-visible { outline: none; }
 .settings-dialog[data-usage] { inset: var(--usage-top) 0 auto auto; }
 .settings-picker { position: static; display: flex; flex-direction: column; width: 100%; max-height: min(24rem, var(--picker-menu-height, 50dvh)); }
-.settings-dialog[data-sheet] { position: fixed; inset: var(--viewport-top, 0px) auto auto var(--viewport-left, 0px); width: calc(100% / var(--viewport-scale, 1)); height: var(--viewport-height, 100dvh); }
+.settings-dialog[data-sheet] { position: fixed; inset: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--viewport-height, 100dvh)))) auto auto clamp(0px, var(--viewport-left, 0px), max(0px, calc(var(--viewport-full-width, 100%) - var(--shell-width)))); width: var(--shell-width); height: min(var(--viewport-full-height, 100dvh), var(--viewport-height, 100dvh)); }
 .settings-dialog[data-sheet][open] { display: flex; align-items: flex-end; }
 .settings-dialog[data-sheet]::backdrop { background: rgb(0 0 0 / .4); }
 .settings-dialog[data-sheet] .settings-picker { max-height: var(--picker-menu-height, 80dvh); padding: 12px 8px max(12px, var(--safe-bottom)); border: 0; border-radius: 20px 20px 0 0; }
@@ -993,8 +995,8 @@ pre.message-text { white-space: pre-wrap; }
   .session:hover, .tool summary:hover, .tool-activity > summary:hover { background: var(--user); }
   summary:hover, .quiet:hover { color: var(--text); }
 }
-@media (max-width: 700px) and (orientation: portrait), (max-width: 567px) {
-  .shell { grid-template-columns: 1fr; }
+@media (max-width: 700.98px) and (orientation: portrait), (max-width: 567.98px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
   .brand h2 { font-size: 24px; letter-spacing: -.02em; }
   .brand { margin-bottom: 12px; }
   .shell aside { border: 0; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; }
