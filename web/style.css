@@ -821,7 +821,14 @@ pre.message-text { white-space: pre-wrap; }
 #fast-mode[aria-pressed=true] { color: var(--accent); }
 #fast-mode[aria-pressed=true] svg { fill: currentColor; }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
-@container (max-width: 320px) {
+@container (max-width: 375px) {
+  .composer-toolbar:has(#fast-mode:not([hidden])):has(#voice-record:not([hidden])) {
+    margin-inline: -6px;
+    gap: 1px;
+    & .composer-actions { gap: 1px; }
+  }
+}
+@container (max-width: 336px) {
   .composer-toolbar { flex-wrap: wrap; }
   .composer-settings { order: -1; width: 100%; }
 }

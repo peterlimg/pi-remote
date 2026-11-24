@@ -21,7 +21,7 @@ test('focusing the message field has no tap overlay or border change', async ({ 
 
 test('compact composer keeps controls reachable across draft, working and offline states', async ({ page }, testInfo) => {
   const state = { id: 'composer', title: 'Review changes', cwd: '/project', status: 'idle',
-    model: 'openai/gpt-6.1-sol', modelName: 'GPT-6.1 Sol', thinkingLevel: 'xhigh', messages: [
+    model: 'openai-codex/gpt-6.2-sol', modelName: 'GPT-6.2 Sol', thinkingLevel: 'xhigh', messages: [
       { id: 'reply', role: 'assistant', text: 'The changes are ready to review.' }
     ] };
   let client, version = 0;
@@ -31,7 +31,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
     ws.onMessage(raw => {
       const p = JSON.parse(raw);
       if (p.type === 'auth') {
-        ws.send(JSON.stringify({ type: 'ready', supportsImages: true }));
+        ws.send(JSON.stringify({ type: 'ready', supportsImages: true, supportsVoice: true, voiceInput: 'webrtc-buffered' }));
         ws.send(JSON.stringify({ type: 'sessions', sessions: [state] }));
       } else {
         if (p.op === 'watch') snapshot();
@@ -42,7 +42,8 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Review changes/ }).click();
   await expect(page.locator('#app')).not.toHaveClass(/opening/);
-  await expect(page.locator('#model-name')).toHaveText('GPT-6.1 Sol');
+  await expect(page.locator('#model-name')).toHaveText('GPT-6.2 Sol');
+  await expect(page.locator('#voice-record')).toBeVisible();
   await expect(page.locator('#reasoning-value')).toHaveText('XHigh');
   await expect(page.locator('#reasoning-control')).toHaveAttribute('title', 'Change reasoning effort: Extra high');
   await expect(page.locator('#reasoning-control')).toBeVisible();
@@ -52,7 +53,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   const rowFits = async () => {
     await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
     await expect(page.locator('#reasoning-value')).toBeVisible();
-    const controls = await page.locator('#attach, #model, #reasoning-control, #fast-mode:not([hidden]), #commands, #abort:not([hidden]), #send:not([hidden])')
+    const controls = await page.locator('#attach, #model, #reasoning-control, #fast-mode:not([hidden]), #commands, #voice-record:not([hidden]), #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
       }).sort((a, b) => a.y - b.y || a.x - b.x));
