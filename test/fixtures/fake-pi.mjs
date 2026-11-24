@@ -11,7 +11,7 @@ const startupFile = process.argv.includes('--startup-file') ? process.argv[proce
 if (fresh) mkdirSync(dir, { recursive: true });
 if (fresh && process.argv.includes('--persist-at-startup')) writeFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: sessionId, cwd: process.cwd() }) + '\n');
 if (process.argv.includes('--startup-pid')) writeFileSync(process.argv[process.argv.indexOf('--startup-pid') + 1], String(process.pid));
-const models = [{ provider: 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
+const models = [{ provider: process.argv.includes('--codex') ? 'openai-codex' : 'test', id: 'first', name: 'First', headers: { private: 'secret' } }, { provider: 'test', id: 'org/second', name: 'Second' }];
 let model = models[0], thinkingLevel = 'medium', usageId = 0, usageCommand, fastMode = false, waitingTimestamp, retryTimer;
 let contextUsage = { tokens: 64000, contextWindow: 200000, percent: 32 };
 let usageRefreshes = 0, inspected = false;

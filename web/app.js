@@ -193,7 +193,7 @@ const activityDebug = { page: crypto.randomUUID(), queue: [], sending: false, re
   last: undefined, framePending: false, frameDelay: null, frameAt: 0 };
 const listRoot = () => $(listSection === 'overview' ? 'sessions' : 'collection-sessions');
 const submissions = new Map();
-const sending = new Map(), changingReasoning = new Set(), commandCatalog = new Map();
+const sending = new Map(), changingReasoning = new Set(), changingFastMode = new Set(), commandCatalog = new Map();
 let commandOptions = [], commandIndex = 0, commandDismissed = false, commandRender;
 let supportsVoice = false, voice, voiceLoading;
 function loadVoice() {
@@ -2691,7 +2691,11 @@ function updateControls() {
   if (settingsPicker && !live && settingsPicker.kind !== 'usage') closePicker();
   renderUsageMeter();
   if (settingsPicker?.kind === 'usage') renderUsagePanel();
-  $('fast-mode').toggleAttribute('hidden', !live || state?.fastMode !== true);
+  const fast = $('fast-mode'), enabled = state?.fastMode === true;
+  fast.hidden = !live || !(enabled || state.model?.startsWith('openai-codex/') && commandCatalog.get(selected)?.commands?.some(c => c.name === 'fast'));
+  fast.setAttribute('aria-pressed', String(enabled));
+  fast.title = enabled ? 'Disable fast mode' : 'Enable fast mode';
+  fast.disabled = changingFastMode.has(selected);
   $('resume').hidden = state?.creation ? state.creation.pending : !state || !['saved', 'disconnected'].includes(state.status);
   $('resume').textContent = state?.creation ? 'Try starting again' : 'Resume session';
   const resumable = allowResume || (sessions.find(x => x.id === selected) || selectedSummary)?.resumable;
@@ -2710,7 +2714,7 @@ async function loadCommands(id) {
   renderCommands();
   try { entry.commands = await request('commands', { sessionId: id }); }
   catch (e) { entry.error = e.message; }
-  if (selected === id && commandCatalog.get(id) === entry) renderCommands();
+  if (selected === id && commandCatalog.get(id) === entry) updateControls();
 }
 function commandToken() {
   const input = $('prompt'), cursor = input.selectionStart;
@@ -4296,6 +4300,13 @@ async function deliver(outgoing, dictated = false) {
     }
   }
 }
+$('fast-mode').addEventListener('click', async () => {
+  const id = selected;
+  changingFastMode.add(id); updateControls();
+  try { await request('command', { sessionId: id, command: { type: 'prompt', text: '/fast' } }); }
+  catch (e) { notice(e.message, id); }
+  finally { changingFastMode.delete(id); updateControls(); }
+});
 $('abort').addEventListener('click', async () => {
   try { await request('command', { sessionId: selected, command: { type: 'abort' } }); }
   catch (e) { notice(e.message); }

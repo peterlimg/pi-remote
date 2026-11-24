@@ -817,7 +817,9 @@ pre.message-text { white-space: pre-wrap; }
 .composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
 .composer textarea:focus { outline: 0; }
 .composer-toolbar { display: flex; align-items: center; gap: 6px; min-width: 0; }
-#fast-mode { flex-shrink: 0; color: var(--accent); }
+#fast-mode { flex: 0 0 44px; height: 44px; padding: 0; background: transparent; color: var(--muted); }
+#fast-mode[aria-pressed=true] { color: var(--accent); }
+#fast-mode[aria-pressed=true] svg { fill: currentColor; }
 .composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 @container (max-width: 320px) {
   .composer-toolbar { flex-wrap: wrap; }

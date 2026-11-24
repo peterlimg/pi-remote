@@ -52,7 +52,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   const rowFits = async () => {
     await expect(page.locator('#abort:not([hidden]), #send:not([hidden])')).toHaveCount(1);
     await expect(page.locator('#reasoning-value')).toBeVisible();
-    const controls = await page.locator('#attach, #model, #reasoning-control, #usage-meter, #commands, #abort:not([hidden]), #send:not([hidden])')
+    const controls = await page.locator('#attach, #model, #reasoning-control, #fast-mode:not([hidden]), #commands, #abort:not([hidden]), #send:not([hidden])')
       .evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height };
       }).sort((a, b) => a.y - b.y || a.x - b.x));
@@ -73,9 +73,9 @@ test('compact composer keeps controls reachable across draft, working and offlin
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   };
-  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Fast mode', exact: true })).toBeHidden();
   state.fastMode = true; snapshot();
-  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fast mode', exact: true })).toBeVisible();
   for (const width of [320, 375, 390, 430, 484, 485, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await rowFits();
@@ -130,7 +130,7 @@ test('compact composer keeps controls reachable across draft, working and offlin
   await page.screenshot({ path: testInfo.outputPath('composer-desktop-dark.png') });
   state.status = 'saved'; snapshot();
   await expect(page.locator('#resume')).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Fast mode enabled' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Fast mode', exact: true })).toBeHidden();
   await expect(page.locator('#send')).toBeDisabled();
   await expect(page.locator('#commands')).toBeDisabled();
   await expect(page.locator('#model')).toBeDisabled();
