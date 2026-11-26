@@ -1697,15 +1697,18 @@ function formatToolDuration(durationMs) {
   return durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
-function terminalCode(code) {
-  const pre = el('pre');
-  const tokens = /(\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|await|async|if|else|return|throw|new|for|of|function|try|catch)\b)/g;
+function terminalCode(code, tag = 'pre', className) {
+  const node = el(tag, undefined, className);
+  const tokens = /(?<comment>\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$))|(?<string>"(?:\\.|[^"\\\n])*(?:"|$)|'(?:\\.|[^'\\\n])*(?:'|$)|`(?:\\.|[^`\\])*(?:`|$))|(?<keyword>\b(?:import|from|export|default|as|const|let|var|await|async|if|else|return|throw|new|for|of|function|try|catch|class|extends|switch|case|break|while)\b)|(?<literal>\b(?:true|false|null|undefined|0x[\da-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b)|(?<property>\b[A-Za-z_$][\w$]*(?=\s*:))|(?<method>\b[A-Za-z_$][\w$]*(?=\s*\())/g;
+  const preview = code.slice(0, 4000);
   let end = 0;
-  for (const match of code.slice(0, 4000).matchAll(tokens)) {
-    pre.append(code.slice(end, match.index), el('span', match[0], match[0][0] === '/' ? 'comment' : /^["'`]/.test(match[0]) ? 'string' : 'keyword'));
+  for (const match of preview.matchAll(tokens)) {
+    let kind = Object.keys(match.groups).find(key => match.groups[key] !== undefined);
+    if (kind === 'string' && /^\s*:/.test(preview.slice(match.index + match[0].length))) kind = 'property';
+    node.append(code.slice(end, match.index), el('span', match[0], kind));
     end = match.index + match[0].length;
   }
-  pre.append(code.slice(end)); return pre;
+  node.append(code.slice(end)); return node;
 }
 function terminalRun(id, status, source, output, trace, duration, startedAt, truncated, expanded) {
   const block = el('section', undefined, 'pi-terminal');
@@ -1728,7 +1731,7 @@ function terminalRun(id, status, source, output, trace, duration, startedAt, tru
     for (const call of calls) {
       const row = el('li'), mark = el('span', ({ running: '…', ok: '✓', error: '✗', cancelled: '⊘' })[call.status]);
       mark.setAttribute('aria-hidden', 'true'); row.dataset.status = call.status;
-      row.append(mark, el('span', ({ running: 'Running', ok: 'Complete', error: 'Failed', cancelled: 'Cancelled' })[call.status] + ': ', 'sr-only'), ' ', el('b', call.name), ' ' + displayPaths(call.args));
+      row.append(mark, el('span', ({ running: 'Running', ok: 'Complete', error: 'Failed', cancelled: 'Cancelled' })[call.status] + ': ', 'sr-only'), ' ', el('b', call.name), ' ', terminalCode(displayPaths(call.args), 'span'));
       if (Number.isFinite(call.durationMs)) row.append(el('small', ' ' + formatToolDuration(call.durationMs)));
       if (call.cost > 0) row.append(el('small', ' $' + (call.cost >= .01 ? call.cost.toFixed(2) : call.cost.toPrecision(2))));
       if (call.error) row.append(el('div', displayPaths(call.error), 'call-error'));
@@ -1739,7 +1742,11 @@ function terminalRun(id, status, source, output, trace, duration, startedAt, tru
   if (trace.omitted) block.append(el('small', `${trace.omitted} earlier calls omitted on mobile`));
   if (trace.calls.length > 8) block.append(more('calls', `… ${trace.calls.length - 8} earlier ${trace.calls.length === 9 ? 'call' : 'calls'}`, callRows(trace.calls.slice(0, -8))));
   if (trace.calls.length) block.append(callRows(trace.calls.slice(-8)));
-  if (status !== 'working') lines('output', output.replace(/^Script (?:completed|failed)\r?\nWall time [\d.]+ seconds\r?\nOutput:\r?\n\s*\n?/, ''), 5, text => el('pre', text, 'terminal-output'));
+  if (status !== 'working') {
+    const body = output.replace(/^Script (?:completed|failed)\r?\nWall time [\d.]+ seconds\r?\nOutput:\r?\n\s*\n?/, '');
+    const codeOutput = /^[ \t]*(?:(?:import|export|const|let|var|function|class|async|await)\b|(?:\{\s*"|\[\s*\{)|"[^"\n]+"\s*:)/m.test(body);
+    lines('output', body, 5, text => codeOutput ? terminalCode(text, 'pre', 'terminal-output') : el('pre', text, 'terminal-output'));
+  }
   if (truncated) block.append(el('small', 'Output shortened for mobile.'));
   const timing = el('small', status === 'working' ? 'Running…' : (status === 'error' ? 'Failed' : 'Complete') + (Number.isFinite(duration) ? ' · Took ' + formatToolDuration(duration) : ''));
   if (status === 'working' && Number.isFinite(startedAt)) timing.dataset.terminalStarted = startedAt;

@@ -83,6 +83,33 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   await expect(page.locator('.pi-terminal li')).toHaveCount(2);
 });
 
+test('terminal uses the app panel and visible syntax colors in arguments and returned code', async ({ page }) => {
+  const output = "==> text 1/4 <==\nimport { createServer } from 'node:http';";
+  const state = { id: 'syntax', title: 'Inspect the server', cwd: '/project', status: 'idle', tools: [], messages: [
+    { id: 'calls', role: 'assistant', toolCalls: [call('run', 'text(await tools.read({path: "src/host.mjs", limit: 85}));')] },
+    { ...result('run', output, 32, 12000), trace: { calls: [{ name: 'read', args: '{"path":"src/host.mjs","limit":85}', status: 'ok' }] } }
+  ] };
+  await open(page, state);
+  const block = page.locator('.pi-terminal');
+  await expect(block.locator('.terminal-output')).toHaveText(output);
+  for (const scheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const colors = await block.evaluate(node => {
+      const panel = document.createElement('span'); panel.style.backgroundColor = 'var(--panel)'; node.append(panel);
+      const bg = getComputedStyle(panel).backgroundColor; panel.remove();
+      const ink = selector => { const token = node.querySelector(selector); return token && getComputedStyle(token).color; };
+      return { bg, surface: getComputedStyle(node).backgroundColor, base: getComputedStyle(node).color,
+        args: ['.property', '.string', '.literal'].map(c => ink('li ' + c)), keyword: ink('.terminal-output .keyword'), string: ink('.terminal-output .string') };
+    });
+    expect(colors.surface).toBe(colors.bg);
+    expect(colors.args).not.toContain(null);
+    expect(new Set([...colors.args, colors.base]).size).toBe(4);
+    expect(colors.keyword).toBeTruthy(); expect(colors.string).toBeTruthy();
+    expect(new Set([colors.keyword, colors.string, colors.base]).size).toBe(3);
+    await capture(page, 'terminal-syntax-' + scheme);
+  }
+});
+
 test('codemode output stays opt-in and preserves manual expansion through streaming and completion', async ({ page }) => {
   const state = sample(), publish = await open(page, state);
   const group = page.locator('.codemode-activity'), summary = group.locator(':scope > summary');
