@@ -47,7 +47,13 @@ const terminalVariants = [
   { key: 'fold', name: 'C · Margin note' }
 ];
 const terminalStudy = terminalVariants.some(v => v.key === new URLSearchParams(location.search).get('variant'));
-const choices = terminalStudy ? terminalVariants : variants;
+const captureVariants = [
+  { key: 'terminal', name: 'Reference · Pi terminal' },
+  { key: 'compact', name: 'A · Terminal compact' },
+  { key: 'calls', name: 'B · Calls first' }
+];
+const captureStudy = captureVariants.some(v => v.key === new URLSearchParams(location.search).get('variant'));
+const choices = captureStudy ? captureVariants : terminalStudy ? terminalVariants : variants;
 const root = document.querySelector('#study-thread');
 const selector = document.querySelector('#sample-state');
 let index = 0;
@@ -116,12 +122,39 @@ text(matches);`;
   return `<details class="term-block term-fold"><summary><span><strong>Find the activity renderer</strong><small>codemode · ${status}</small></span></summary><b>Output</b>${preview}<details class="term-details"><summary>Script</summary><pre>${script}</pre></details></details><p class="term-note">${state === 'done' ? 'web/app.js:2033' : state === 'error' ? output : 'Waiting for output…'}</p>`;
 }
 
+function capturedRun(state, variant) {
+  const capture = document.getElementById(`capture-${state}`).innerHTML;
+  const reference = `<figure class="capture-reference">${capture}<figcaption>Pi 1.6.1 · cropped terminal capture. Scroll sideways for long lines.</figcaption></figure>`;
+  if (variant === 'terminal') return reference;
+  const working = state === 'working', failed = state === 'error';
+  const status = working ? 'Elapsed 3.0s' : 'Took 3.3s';
+  const script = `const version = await tools.read({ path: "VERSION" });
+const check = await tools.bash({ command: "node check.mjs" });
+if (check.exit_code) throw Error(check.output.trim());
+text("Version " + version.trim() + ": " + check.output.trim());`;
+  const rows = `<ul class="capture-calls">${[
+    ['✓', 'Complete', 'read', 'VERSION', '3ms'],
+    [working ? '…' : failed ? '✗' : '✓', working ? 'Running' : failed ? 'Failed' : 'Complete', 'bash', 'node check.mjs', working ? 'Running' : '3.3s']
+  ].map(([mark, label, tool, args, time]) => `<li><span class="call-mark" aria-hidden="true">${mark}</span><span><span class="sr-only">${label}: </span><strong>${tool}</strong> ${args}</span><small>${time}</small></li>`).join('')}</ul>`;
+  const output = working ? '' : `<pre class="capture-output">${failed ? 'Error: Version mismatch' : 'Version 1.2.0: release check passed'}</pre>`;
+  const source = `<details class="term-details"><summary>Full script</summary><pre>${escapeHtml(script)}</pre></details>`;
+  return `<section class="term-block ${variant === 'compact' ? 'term-console' : 'term-result'}">
+    <header><strong>codemode</strong><small>${status}</small></header>
+    ${variant === 'compact' ? `<pre class="term-input">${escapeHtml(script.split('\n').slice(0, 2).join('\n'))}</pre>${source}` : ''}
+    ${rows}${output}${variant === 'calls' ? source : ''}
+  </section><details class="capture-compare"><summary>Compare with Pi terminal</summary>${reference}</details>`;
+}
+
 function render() {
   const params = new URLSearchParams(location.search);
   index = Math.max(0, choices.findIndex(item => item.key === params.get('variant')));
   selector.value = ['done', 'working', 'error', 'empty'].includes(params.get('state')) ? params.get('state') : 'done';
+  if (captureStudy && !selector.value) selector.value = 'done';
   const variant = choices[index], state = selector.value;
-  root.innerHTML = terminalStudy ? `<section class="term-thread cm-detail" data-state="${state}">
+  root.innerHTML = captureStudy ? `<section class="term-thread cm-detail" data-state="${state}">
+    <article class="cm-message cm-user"><p>Check the release version.</p></article>
+    ${capturedRun(state, variant.key)}
+  </section>` : terminalStudy ? `<section class="term-thread cm-detail" data-state="${state}">
     <article class="cm-message cm-user"><p>Where is the codemode row rendered?</p></article>
     <article class="cm-message"><p>I'll look for the class on the tool row.</p></article>
     ${terminalBlock(state, variant.key)}
@@ -159,7 +192,16 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('popstate', render);
 
-if (terminalStudy) {
+if (captureStudy) {
+  document.title = 'Codemode capture · Pi Remote prototypes';
+  document.querySelector('.study-title h1').textContent = 'Release version check';
+  document.querySelector('.study-tools > span').textContent = 'Prototype · Recorded run';
+  selector.querySelector('[value=empty]').remove();
+  selector.querySelector('[value=error]').textContent = 'Failed';
+  const notes = document.querySelectorAll('#study-info p');
+  notes[1].textContent = 'A local fixture requested one fixed script. Pi really read VERSION and ran node check.mjs. The failed recording uses a mismatched version.';
+  notes[2].textContent = 'These are saved frames, not a live session. The reference keeps the captured lines and terminal colors. Both phone layouts show the same recorded calls.';
+} else if (terminalStudy) {
   document.title = 'Codemode on the phone · Pi Remote prototypes';
   document.querySelector('.study-title h1').textContent = 'Codemode on the phone';
   document.querySelectorAll('#study-info p')[1].textContent = 'Compare the same sample search three ways. The mini terminal abbreviates the script; Full run shows the JavaScript.';

@@ -48,7 +48,33 @@
 .cm-script { margin-top: 12px; border-top: 1px solid var(--line); }
 .cm-script summary { display: flex; align-items: center; gap: 8px; padding-block: 10px; font-size: 13px; }
 .cm-script summary > span { margin-left: auto; color: var(--muted); font-size: 11px; }
-.term-thread { max-width: 640px; }
+.pane-capture { overflow: auto; padding: 12px 8px; border-radius: 8px; white-space: pre; color: #eee; background: #005f5f; font: 13px/1.5 var(--mono); }
+[data-state=working] .pane-capture { background: rgb(58 58 58); }
+[data-state=error] .pane-capture { background: #5f0000; }
+.ink-254 { color: rgb(228 228 228); }
+.ink-74 { color: #5fafd7; }
+.ink-73 { color: #5fafaf; }
+.ink-173 { color: #d7875f; }
+.ink-140 { color: #af87d7; }
+.ink-72 { color: #5faf87; }
+.ink-145 { color: #afafaf; }
+.ink-102 { color: #878787; }
+.ink-172 { color: #d78700; }
+.ink-174 { color: #d78787; }
+.capture-reference { margin: 0; min-width: 0; }
+.capture-reference figcaption { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.capture-compare { margin-top: 12px; }
+.capture-compare > summary { display: flex; align-items: center; font-size: 13px; color: var(--muted); }
+.capture-compare > summary::before { content: '+'; width: 18px; }
+.capture-compare[open] > summary::before { content: '−'; }
+.capture-calls { list-style: none; margin: 10px 0; padding: 0; }
+.capture-calls li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 5px 0; font: 13px/1.5 var(--mono); }
+.capture-calls li small { font: 12px var(--mono); }
+.capture-calls strong { font-weight: 600; }
+.call-mark { color: var(--muted); }
+[data-state=error] .capture-calls li:last-child .call-mark { color: var(--error); }
+.term-block .capture-output { padding: 10px 0; margin: 0; border-top: 1px solid var(--line); }
+.term-thread { width: min(100%, 640px); }
 .term-block { padding: 12px 16px 0; }
 .term-block header, .term-fold > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .term-block header strong, .term-block pre, .term-note { font: 13px/1.55 var(--mono); }

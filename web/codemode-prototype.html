@@ -90,6 +90,45 @@
     <p>The production composer is unchanged and disabled here.</p>
     <button type="button" popovertarget="study-info" popovertargetaction="hide">Got it</button>
   </div>
+<template id="capture-working"><pre class="pane-capture" tabindex="0" aria-label="Pi terminal capture"> <span class="ink-254"><b>codemode</b></span>
+ <span class="ink-74">const</span><span class="ink-254"> version = </span><span class="ink-74">await</span><span class="ink-254"> tools.read({ </span><span class="ink-73">path</span><span class="ink-254">: </span><span class="ink-173">"VERSION"</span><span class="ink-254"> });</span>
+ <span class="ink-74">const</span><span class="ink-254"> check = </span><span class="ink-74">await</span><span class="ink-254"> tools.bash({ </span><span class="ink-73">command</span><span class="ink-254">: </span><span class="ink-173">"node check.mjs"</span><span class="ink-254"> });</span>
+ <span class="ink-74">if</span><span class="ink-254"> (check.exit_code) </span><span class="ink-74">throw</span><span class="ink-254"> </span><span class="ink-140">Error</span><span class="ink-254">(check.output.trim());</span>
+ <span class="ink-254">text(</span><span class="ink-173">"Version "</span><span class="ink-254"> + version.trim() + </span><span class="ink-173">": "</span><span class="ink-254"> + check.output.trim());</span>
+
+ <span class="ink-72">✓</span> <span class="ink-254">read</span> <span class="ink-145">{"path":"VERSION"}</span> <span class="ink-102">3ms</span>
+ <span class="ink-172">…</span> <span class="ink-254">bash</span> <span class="ink-145">{"command":"node check.mjs"}</span>
+
+ <span class="ink-145">Elapsed 3.0s</span></pre></template>
+<template id="capture-done"><pre class="pane-capture" tabindex="0" aria-label="Pi terminal capture"> <span class="ink-254"><b>codemode</b></span>
+ <span class="ink-74">const</span><span class="ink-254"> version = </span><span class="ink-74">await</span><span class="ink-254"> tools.read({ </span><span class="ink-73">path</span><span class="ink-254">: </span><span class="ink-173">"VERSION"</span><span class="ink-254"> });</span>
+ <span class="ink-74">const</span><span class="ink-254"> check = </span><span class="ink-74">await</span><span class="ink-254"> tools.bash({ </span><span class="ink-73">command</span><span class="ink-254">: </span><span class="ink-173">"node check.mjs"</span><span class="ink-254"> });</span>
+ <span class="ink-74">if</span><span class="ink-254"> (check.exit_code) </span><span class="ink-74">throw</span><span class="ink-254"> </span><span class="ink-140">Error</span><span class="ink-254">(check.output.trim());</span>
+ <span class="ink-254">text(</span><span class="ink-173">"Version "</span><span class="ink-254"> + version.trim() + </span><span class="ink-173">": "</span><span class="ink-254"> + check.output.trim());</span>
+
+ <span class="ink-72">✓</span> <span class="ink-254">read</span> <span class="ink-145">{"path":"VERSION"}</span> <span class="ink-102">3ms</span>
+ <span class="ink-72">✓</span> <span class="ink-254">bash</span> <span class="ink-145">{"command":"node check.mjs"}</span> <span class="ink-102">3.3s</span>
+
+ <span class="ink-145">Version 1.2.0: release check passed</span>
+
+ <span class="ink-145">Took 3.3s</span></pre></template>
+<template id="capture-error"><pre class="pane-capture" tabindex="0" aria-label="Pi terminal capture"> <span class="ink-254"><b>codemode</b></span>
+ <span class="ink-74">const</span><span class="ink-254"> version = </span><span class="ink-74">await</span><span class="ink-254"> tools.read({ </span><span class="ink-73">path</span><span class="ink-254">: </span><span class="ink-173">"VERSION"</span><span class="ink-254"> });</span>
+ <span class="ink-74">const</span><span class="ink-254"> check = </span><span class="ink-74">await</span><span class="ink-254"> tools.bash({ </span><span class="ink-73">command</span><span class="ink-254">: </span><span class="ink-173">"node check.mjs"</span><span class="ink-254"> });</span>
+ <span class="ink-74">if</span><span class="ink-254"> (check.exit_code) </span><span class="ink-74">throw</span><span class="ink-254"> </span><span class="ink-140">Error</span><span class="ink-254">(check.output.trim());</span>
+ <span class="ink-254">text(</span><span class="ink-173">"Version "</span><span class="ink-254"> + version.trim() + </span><span class="ink-173">": "</span><span class="ink-254"> + check.output.trim());</span>
+
+ <span class="ink-72">✓</span> <span class="ink-254">read</span> <span class="ink-145">{"path":"VERSION"}</span> <span class="ink-102">3ms</span>
+ <span class="ink-174">✗</span> <span class="ink-254">bash</span> <span class="ink-145">{"command":"node check.mjs"}</span> <span class="ink-102">3.3s</span>
+
+ <span class="ink-174">Script error:</span>
+ <span class="ink-174">Error: Version mismatch</span>
+ <span class="ink-174">    at &lt;anonymous&gt; (codemode.js:3:47)</span>
+
+ <span class="ink-174">Tool calls made before the failure (they are not undone): read (ok), bash</span>
+ <span class="ink-145">... (1 more lines,</span> <span class="ink-102">ctrl+o</span><span class="ink-145"> to expand)</span>
+
+ <span class="ink-145">Took 3.3s</span></pre></template>
   <noscript>Enable JavaScript to compare these sample layouts.</noscript>
 </body>
 </html>

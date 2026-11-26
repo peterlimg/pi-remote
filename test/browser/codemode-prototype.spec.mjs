@@ -168,6 +168,29 @@ test('terminal studies compare the same sample and keep raw JavaScript behind a 
   expect(sockets).toEqual([]);
 });
 
+test('recorded calls agree with the Pi terminal across layouts and states', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 690 });
+  await page.goto(`${route}?variant=calls&state=working`);
+  for (const state of ['working', 'error', 'done']) {
+    await page.getByLabel('Sample run state').selectOption(state);
+    for (const variant of ['calls', 'terminal', 'compact']) {
+      await expect(page).toHaveURL(new RegExp('variant=' + variant));
+      if (variant !== 'terminal') {
+        await expect(page.locator('.capture-calls li')).toHaveCount(2);
+        await expect(page.locator('.capture-calls li').last()).toContainText(state === 'working' ? 'Running' : state === 'error' ? 'Failed' : 'Complete');
+        await expect(page.locator('.capture-output')).toHaveCount(state === 'working' ? 0 : 1);
+        await page.getByText('Full script', { exact: true }).click();
+        await expect(page.locator('.term-details pre')).toContainText('tools.read');
+        await page.getByText('Compare with Pi terminal').click();
+      }
+      await expect(page.locator('.pane-capture')).toBeVisible();
+      await expect(page.locator('.pane-capture')).toContainText(state === 'working' ? '… bash' : state === 'error' ? '✗ bash' : '✓ bash');
+      expect(await page.locator('#study-thread').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
+      await page.getByRole('button', { name: 'Next prototype' }).click();
+    }
+  }
+});
+
 test('only explicit study assets are served and the production composer is unchanged', async ({ request }) => {
   for (const path of assets) {
     const response = await request.get(path);
