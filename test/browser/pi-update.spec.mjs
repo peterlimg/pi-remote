@@ -22,6 +22,7 @@ test('a confirmed Pi update replaces the idle host and the phone reconnects', as
   Object.assign(process.env, env);
   try {
     const before = await ensureHost(config, dir);
+    await page.setViewportSize({ width: 744, height: 1133 });
     await page.goto(config.publicUrl + '/#token=' + config.clientToken);
     const action = page.getByRole('button', { name: 'Update and restart' });
     await expect(page.getByRole('status').filter({ hasText: 'Pi 2.0.0 is available.' })).toBeVisible();
@@ -30,10 +31,15 @@ test('a confirmed Pi update replaces the idle host and the phone reconnects', as
     expect(readFileSync(join(dir, 'version'), 'utf8')).toBe('1.9.0');
     page.once('dialog', dialog => dialog.accept());
     await action.click();
+    const restarting = page.getByRole('status').filter({ hasText: 'Restarting after update…' });
+    await expect(restarting).toBeVisible();
+    const header = await page.locator('.brand').boundingBox();
+    expect((await restarting.boundingBox()).y).toBeGreaterThanOrEqual(header.y + header.height);
     await expect.poll(async () => { const now = await hostStatus(config); return !!now && now.pid !== before.pid; }, { timeout: 15000 }).toBe(true);
     expect(readFileSync(join(dir, 'version'), 'utf8').trim()).toBe('2.0.0');
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await expect(page.locator('#pi-update')).toBeHidden();
+    await expect(page.locator('#connection')).toBeHidden();
   } finally {
     await stopHost(config, { idleOnly: true });
     for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;

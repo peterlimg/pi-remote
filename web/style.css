@@ -145,7 +145,7 @@ a { color: var(--accent); text-underline-offset: 3px; }
 :is(.brand, .login-heading) .theme-toggle { margin-left: auto; flex-shrink: 0; }
 .theme-toggle[aria-pressed=false] .theme-sun, .theme-toggle[aria-pressed=true] .theme-moon { display: none; }
 /* Keep the full outage reason readable instead of clipping it on phones. */
-#connection { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; margin: 0; font-size: 12px; color: var(--muted); white-space: normal; }
+#connection { display: flex; align-items: center; gap: 6px; margin: 0 8px 8px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 #connection[hidden] { display: none; }
 #connection::before { content: ''; width: 10px; height: 10px; flex-shrink: 0; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 .badge { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }

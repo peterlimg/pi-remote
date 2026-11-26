@@ -391,6 +391,7 @@ function showLogin(text = '') {
   $('login-cancel').hidden = !token; $('login-logout').hidden = !token;
 }
 function loginFailed(text) {
+  updateRestartUntil = 0;
   $('access-message').textContent = text; $('access-warning').hidden = false;
   reconnect(text);
 }
@@ -406,18 +407,22 @@ async function homeScreenPairing() {
 // The first connection keeps the boot screen until sessions arrive, so the app never flashes empty.
 function showApp() { $('boot').hidden = true; $('app').hidden = false; }
 // Routine reconnects (foreground return, network change) finish in a moment; only a lasting outage shows the banner.
-let bannerTimer;
+let bannerTimer, updateRestartUntil = 0;
 function connection(text, compact = text) {
+  const restarting = !connected && Date.now() < updateRestartUntil;
+  if (restarting) text = compact = 'Restarting after update…';
   $('connection').textContent = text;
   $('composer-connection-text').textContent = compact;
   $('composer-connection').title = text;
   $('composer-connection').setAttribute('aria-label', text);
   if (connected) { clearTimeout(bannerTimer); bannerTimer = undefined; $('connection').hidden = true; }
+  else if (restarting) $('connection').hidden = false;
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
 }
 let piUpdateTimer, piOffer;
 function renderPiUpdate(info) {
+  updateRestartUntil = info.job ? Date.now() + 60000 : 0;
   piOffer = info;
   $('pi-update').hidden = !(info.latest || info.job || info.failure || info.needsRestart);
   $('pi-update-status').textContent = info.job || info.failure || (info.latest ? 'Pi ' + info.latest + ' is available.' : '');
@@ -444,7 +449,8 @@ $('pi-update-action').addEventListener('click', async () => {
   } catch (error) { if (socket === ws) { renderPiUpdate({ ...offer, failure: error.message }); piUpdateTimer = setTimeout(() => checkPiUpdate(ws), 5000); } }
 });
 function disconnect() {
-  clearTimeout(piUpdateTimer); renderPiUpdate({});
+  clearTimeout(piUpdateTimer); piOffer = undefined; $('pi-update').hidden = true;
+  if (manualClose) updateRestartUntil = 0;
   voice?.cancel(); supportsVoice = false;
   closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
@@ -530,6 +536,7 @@ function connect() {
           item.reject(new Error('Delivery outcome is unknown. Inspect the conversation before sending again.'));
         }
       }
+      updateRestartUntil = 0;
       connected = true; reportViewing(); retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
       if (packet.supportsPiUpdate) void checkPiUpdate(ws);
       void syncPush();
