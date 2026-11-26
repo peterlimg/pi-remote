@@ -11,6 +11,7 @@ import { serveStatic } from './http.mjs';
 import { connectRelay } from './relay.mjs';
 import { acceptSealed, e2eKey } from './e2e.mjs';
 import { createPairing } from './pairing.mjs';
+import { piUpdater } from './pi-update.mjs';
 import { Push } from './push.mjs';
 
 export async function startHost(options = {}) {
@@ -21,6 +22,7 @@ export async function startHost(options = {}) {
   let lock;
   const pairing = createPairing(config);
   const service = new SessionService({ dir, roots: options.roots || rootsFromEnv(), allowResume: options.allowResume, workerOptions: options.workerOptions, assistantDelay: options.assistantDelay });
+  if (options.enablePiUpdate && !process.env.PI_OFFLINE && !process.env.PI_SKIP_VERSION_CHECK) service.piUpdate = piUpdater(service);
   service.coordination.bridgeToken = config.bridgeToken;
   // A damaged push.json disables notifications, never the host.
   try { service.assistant.push = new Push(dir, options.allowPushEndpoint ? { allowEndpoint: options.allowPushEndpoint } : {}); }
@@ -33,7 +35,7 @@ export async function startHost(options = {}) {
   };
   const status = () => ({ protocol: 1, pid: process.pid, execPath: process.execPath, publicUrl, relayUrl,
     relayConnected: disconnectRelay?.connected() ?? false, relayOutdated: disconnectRelay?.outdated() ?? false, closing: !!closing,
-    busyWorkers: service.busyWorkers, managedSessions: service.managedSessions });
+    busyWorkers: service.busyWorkers + Number(!!service.piUpdate?.installing), managedSessions: service.managedSessions });
   const http = createServer((req, res) => {
     if (req.url === '/_pi/coordinator') { void service.coordination.handle(req, res); return; }
     if (req.url === '/_pi/assistant') { void service.assistant.handle(req, res); return; }
@@ -60,7 +62,7 @@ export async function startHost(options = {}) {
       return;
     }
     if (req.method !== 'GET' && req.method !== 'DELETE') { res.writeHead(405); res.end(); return; }
-    if (req.method === 'DELETE' && req.headers['x-pi-remote-idle-only'] === '1' && service.busyWorkers) {
+    if (req.method === 'DELETE' && req.headers['x-pi-remote-idle-only'] === '1' && (service.busyWorkers || service.piUpdate?.installing)) {
       res.writeHead(409, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(status())); return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });

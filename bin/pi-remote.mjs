@@ -13,7 +13,7 @@ const [command = 'serve', ...args] = process.argv.slice(2);
 try {
   if (command === 'serve') {
     const config = loadConfig();
-    const host = await startHost({ config, allowResume: !args.includes('--no-allow-resume') });
+    const host = await startHost({ config, enablePiUpdate: !args.includes('--no-allow-resume'), allowResume: !args.includes('--no-allow-resume') });
     console.log('Pi Remote: http://127.0.0.1:' + config.port);
     console.log('Use /pi-remote in Pi for your phone login QR.');
     let closing = false;

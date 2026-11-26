@@ -109,7 +109,7 @@ export function attachClient(socket, service, { pairing } = {}) {
   };
   service.on('list', onList); service.on('state', onState);
   protectSocket(socket);
-  send(socket, { type: 'ready', supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsVoice: true, voiceInput: 'webrtc-buffered', supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
+  send(socket, { type: 'ready', supportsPiUpdate: !!service.piUpdate, supportsPairing: !!pairing, supportsUsage: true, supportsHistory: true, supportsImages: true, supportsCommandResults: true, supportsUploads: true, supportsVideos: true, supportsSessionSections: true, supportsRecentAvailability: true, supportsSessionClosing: true, supportsNewPreparation: true, supportsActivityDebug: true, supportsCoordinator: true, supportsWorkerInspection: true, supportsVoice: true, voiceInput: 'webrtc-buffered', supportsAssistant: true, assistantId: service.assistant.id, pushKey: service.assistant.push?.publicKey, blankDir: service.blankDir }); send(socket, { type: 'sessions', ...list(listOptions) });
   socket.on('message', async raw => {
     let message;
     try {
@@ -135,6 +135,8 @@ export function attachClient(socket, service, { pairing } = {}) {
           value = writeActivityDebug(service.dir, message.records);
           debugBudget = budget - message.records.length; debugBudgetAt = now;
         } else if (message.op === 'pairingCode' && pairing) value = pairing.issue();
+        else if (message.op === 'piUpdateStatus' && service.piUpdate) value = await service.piUpdate.status();
+        else if (message.op === 'piUpdateInstall' && service.piUpdate) value = await service.piUpdate.update(message.version);
         else if (message.op === 'projects') value = service.projects();
         else if (message.op === 'prepareNew') value = await service.prepareNew(message.sessionId);
         else if (message.op === 'pin') value = service.pin(message.sessionId, message.pinned);

@@ -108,6 +108,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .shell { position: fixed; top: clamp(0px, var(--viewport-top, 0px), max(0px, calc(var(--viewport-full-height, 100dvh) - var(--shell-height)))); left: clamp(0px, var(--viewport-left, 0px), max(0px, calc(var(--viewport-full-width, 100%) - var(--shell-width)))); width: var(--shell-width); display: grid; grid-template-columns: 320px minmax(0,1fr); grid-template-rows: minmax(0,1fr); height: var(--shell-height); overflow: hidden; }
 .shell aside { background: var(--sidebar-bg); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; padding-left: 8px; }
+#pi-update { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; font-size: 14px; }
+#pi-update-action { flex-shrink: 0; min-height: 44px; }
 .brand h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .brand button { font-size: 12px; }
 #sidebar-toggle { display: none; place-items: center; position: absolute; z-index: 3; isolation: isolate; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--muted); }

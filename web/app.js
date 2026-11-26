@@ -416,7 +416,35 @@ function connection(text, compact = text) {
   else bannerTimer ??= setTimeout(() => { $('connection').hidden = connected; }, 2000);
   updateControls(); renderPagination();
 }
+let piUpdateTimer, piOffer;
+function renderPiUpdate(info) {
+  piOffer = info;
+  $('pi-update').hidden = !(info.latest || info.job || info.failure || info.needsRestart);
+  $('pi-update-status').textContent = info.job || info.failure || (info.latest ? 'Pi ' + info.latest + ' is available.' : '');
+  $('pi-update-action').hidden = !!info.job || !(info.latest || info.needsRestart);
+  $('pi-update-action').textContent = info.needsRestart ? 'Retry restart' : 'Update and restart';
+}
+async function checkPiUpdate(ws) {
+  try {
+    const info = await request('piUpdateStatus');
+    if (socket !== ws) return;
+    renderPiUpdate(info);
+  } catch { if (socket !== ws) return; }
+  clearTimeout(piUpdateTimer);
+  piUpdateTimer = setTimeout(() => checkPiUpdate(ws), piOffer?.job ? 2000 : 5 * 60000);
+}
+$('pi-update-action').addEventListener('click', async () => {
+  const ws = socket, offer = piOffer;
+  if (!offer || !confirm(offer.needsRestart ? 'Restart Pi Remote now?' : 'Update Pi on your computer and restart Pi Remote? Your phone will reconnect.')) return;
+  clearTimeout(piUpdateTimer);
+  renderPiUpdate({ job: 'Requesting update…' });
+  try {
+    const result = await request('piUpdateInstall', { version: offer.latest });
+    if (socket === ws) { renderPiUpdate(result); void checkPiUpdate(ws); }
+  } catch (error) { if (socket === ws) { renderPiUpdate({ ...offer, failure: error.message }); piUpdateTimer = setTimeout(() => checkPiUpdate(ws), 5000); } }
+});
 function disconnect() {
+  clearTimeout(piUpdateTimer); renderPiUpdate({});
   voice?.cancel(); supportsVoice = false;
   closePicker(); supportsUsage = false;
   listRequest++; legacyList = undefined; projectRequest = undefined; preparation = undefined; supportsNewPreparation = false;
@@ -503,6 +531,7 @@ function connect() {
         }
       }
       connected = true; reportViewing(); retry = 0; connection('Computer connected'); $('login-error').hidden = true; $('access-warning').hidden = true;
+      if (packet.supportsPiUpdate) void checkPiUpdate(ws);
       void syncPush();
       const opening = new URLSearchParams(location.search).get('open');
       if (/^[a-f0-9]{64}$/.test(opening || '')) { history.replaceState(null, '', location.pathname); void selectSession(opening); }
