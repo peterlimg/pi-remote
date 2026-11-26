@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
-import { cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
+import { codemodeTrace, cleanMessage, shown, textContent, takeText, noteTaskTiming, lastPromptTime, EXTENSION_INPUT } from './catalog.mjs';
 import { sessionTitle } from './session-title.mjs';
 import { taskText } from '../web/protocol.js';
 
@@ -96,9 +96,15 @@ export function applyEvent(state, event) {
     state.title = sessionTitle(state.title, state.messages);
   }
   if (event.type.startsWith('tool_execution_')) {
+    if (event.parentToolCallId && state.tools.some(tool => tool.id === event.parentToolCallId && tool.name === 'codemode')) return refreshStatus(state);
+    const index = state.tools.findIndex(x => x.id === event.toolCallId);
+    const result = event.result || event.partialResult, previous = state.tools[index];
     const tool = { id: event.toolCallId, name: event.toolName, status: event.type === 'tool_execution_end' ? (event.isError ? 'error' : 'done') : 'working',
-      text: textContent((event.result || event.partialResult)?.content).slice(0, 12000), durationMs: event.durationMs };
-    const index = state.tools.findIndex(x => x.id === tool.id);
+      text: textContent(result?.content).slice(0, 12000), durationMs: event.durationMs };
+    if (event.toolName === 'codemode') {
+      tool.trace = codemodeTrace(event.toolName, result?.details) ?? previous?.trace;
+      tool.startedAt = event.type === 'tool_execution_start' ? Date.now() : previous?.startedAt;
+    }
     if (index < 0) state.tools.push(tool); else state.tools[index] = tool;
     state.tools = state.tools.slice(-20);
   }

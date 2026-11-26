@@ -1697,6 +1697,54 @@ function formatToolDuration(durationMs) {
   return durationMs < 1000 ? `${Math.round(durationMs)}ms` : durationMs < 60000 ? `${(durationMs / 1000).toFixed(1)}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
+function terminalCode(code) {
+  const pre = el('pre');
+  const tokens = /(\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|await|async|if|else|return|throw|new|for|of|function|try|catch)\b)/g;
+  let end = 0;
+  for (const match of code.slice(0, 4000).matchAll(tokens)) {
+    pre.append(code.slice(end, match.index), el('span', match[0], match[0][0] === '/' ? 'comment' : /^["'`]/.test(match[0]) ? 'string' : 'keyword'));
+    end = match.index + match[0].length;
+  }
+  pre.append(code.slice(end)); return pre;
+}
+function terminalRun(id, status, source, output, trace, duration, startedAt, truncated, expanded) {
+  const block = el('section', undefined, 'pi-terminal');
+  block.dataset.toolId = id; block.dataset.status = status; block.dataset.scrollKey = 'terminal:' + id;
+  block.append(el('strong', 'codemode'));
+  const more = (key, label, node) => {
+    const details = el('details'); details.dataset.disclosureId = `terminal:${id}:${key}`;
+    details.open = expanded.get(details.dataset.disclosureId) ?? false;
+    details.append(el('summary', label), node); return details;
+  };
+  const lines = (key, value, max, render) => {
+    if (!value) return;
+    const rows = value.trimEnd().split('\n');
+    block.append(render(rows.slice(0, max).join('\n')));
+    if (rows.length > max) block.append(more(key, `… ${rows.length - max} more ${rows.length === max + 1 ? 'line' : 'lines'}`, render(rows.slice(max).join('\n'))));
+  };
+  lines('script', displayPaths(source), 10, terminalCode);
+  const callRows = calls => {
+    const list = el('ul');
+    for (const call of calls) {
+      const row = el('li'), mark = el('span', ({ running: '…', ok: '✓', error: '✗', cancelled: '⊘' })[call.status]);
+      mark.setAttribute('aria-hidden', 'true'); row.dataset.status = call.status;
+      row.append(mark, el('span', ({ running: 'Running', ok: 'Complete', error: 'Failed', cancelled: 'Cancelled' })[call.status] + ': ', 'sr-only'), ' ', el('b', call.name), ' ' + displayPaths(call.args));
+      if (Number.isFinite(call.durationMs)) row.append(el('small', ' ' + formatToolDuration(call.durationMs)));
+      if (call.cost > 0) row.append(el('small', ' $' + (call.cost >= .01 ? call.cost.toFixed(2) : call.cost.toPrecision(2))));
+      if (call.error) row.append(el('div', displayPaths(call.error), 'call-error'));
+      list.append(row);
+    }
+    return list;
+  };
+  if (trace.omitted) block.append(el('small', `${trace.omitted} earlier calls omitted on mobile`));
+  if (trace.calls.length > 8) block.append(more('calls', `… ${trace.calls.length - 8} earlier ${trace.calls.length === 9 ? 'call' : 'calls'}`, callRows(trace.calls.slice(0, -8))));
+  if (trace.calls.length) block.append(callRows(trace.calls.slice(-8)));
+  if (status !== 'working') lines('output', output.replace(/^Script (?:completed|failed)\r?\nWall time [\d.]+ seconds\r?\nOutput:\r?\n\s*\n?/, ''), 5, text => el('pre', text, 'terminal-output'));
+  if (truncated) block.append(el('small', 'Output shortened for mobile.'));
+  const timing = el('small', status === 'working' ? 'Running…' : (status === 'error' ? 'Failed' : 'Complete') + (Number.isFinite(duration) ? ' · Took ' + formatToolDuration(duration) : ''));
+  if (status === 'working' && Number.isFinite(startedAt)) timing.dataset.terminalStarted = startedAt;
+  block.append(timing); return block;
+}
 const assistantCards = new Map();
 // Question notifications: the host pushes encrypted payloads; this subscribes the device.
 function pushSupported() { return pushKey && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
@@ -1992,6 +2040,17 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
     detail.dataset.disclosureId = 'tool:' + id;
     detail.open = expanded.get(detail.dataset.disclosureId) ?? false;
     const toolName = name || live?.name || 'Tool', codemode = toolName === 'codemode';
+    let args;
+    try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
+    // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
+    const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
+    const trace = result?.trace ?? live?.trace;
+    if (codemode && Array.isArray(trace?.calls)) {
+      const source = typeof args?.code === 'string' ? args.code : typeof args === 'string' ? args : input;
+      activity = undefined;
+      fragment.append(terminalRun(id, status, source, output, trace, durationMs, live?.startedAt, result?.truncated, expanded));
+      return;
+    }
     if (activity && activity.codemode !== codemode) activity = undefined;
     if (!activity) {
       const node = el('details', undefined, 'tool-activity'), summary = el('summary');
@@ -2002,11 +2061,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
       activity = { node, summary, tools: [], codemode }; activityGroups.push(activity);
     }
     const entry = { name: toolName, status, durationMs: timed ? durationMs : undefined, timestamp: result?.timestamp }; activity.tools.push(entry);
-    let args;
-    try { args = JSON.parse(input); } catch { /* Streaming or shortened input may not be valid JSON yet. */ }
     entry.sessionAction = args?.action;
-    // Terminal colour and cursor codes (Playwright's line rewrites, for one) render as boxes in the browser.
-    const output = displayPaths((result?.text || live?.text || '').replace(/\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g, ''));
     entry.preview = output.split(/\r\n|[\r\n]/).filter(line => line.trim()).slice(-2).map(line => line.slice(0, 240)).join('\n');
     if (state.assistant && toolName === 'sessions' && status === 'done') {
       try {
@@ -2324,6 +2379,9 @@ function updateActivity() {
   const state = cache.get(selected), activity = activityIndicator, now = Date.now();
   const label = activity.querySelector('#activity-label'), time = activity.querySelector('#activity-time');
   const active = connected && !historyWindow && state?.status === 'working', compacting = state?.compacting === true;
+  if (active) for (const timer of $('transcript').querySelectorAll('[data-terminal-started]')) {
+    timer.textContent = 'Elapsed ' + formatToolDuration(Math.max(0, now - Number(timer.dataset.terminalStarted)));
+  }
   const retrying = state ? replyAttempts(state).retrying : false;
   if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',

@@ -115,6 +115,18 @@ function subagentLabel({ role, customType, details }) {
   }
   return subagentLabels.get(customType) || 'Subagent update';
 }
+export function codemodeTrace(name, details) {
+  if (name !== 'codemode' || !Array.isArray(details?.calls)) return;
+  const clip = (s, limit) => typeof s !== 'string' ? '' : s.length <= limit ? s : s.slice(0, limit - 1) + '…';
+  const calls = details.calls.slice(-24).filter(call => typeof call?.name === 'string' && ['running', 'ok', 'error', 'cancelled'].includes(call.status))
+    .map(({ name, args, status, durationMs, cost, error }) => ({
+      name: clip(name, 80), args: clip(args, 240), status,
+      ...(Number.isFinite(durationMs) && durationMs >= 0 ? { durationMs } : {}),
+      ...(Number.isFinite(cost) && cost > 0 ? { cost } : {}),
+      ...(error ? { error: clip(error, 240) } : {})
+    }));
+  return { calls, omitted: Math.max(0, details.calls.length - 24) };
+}
 export function cleanMessage(message, key) {
   const content = Array.isArray(message.content) ? message.content : undefined;
   const images = new Map();
@@ -143,6 +155,7 @@ export function cleanMessage(message, key) {
     ...(message.role === 'custom' && typeof message.customType === 'string' ? { customType: message.customType.slice(0, 120) } : {}),
     ...(activityLabel ? { activityLabel } : {}),
     ...(images.size ? { images: [...images.values()] } : {}),
+    trace: message.role === 'toolResult' ? codemodeTrace(message.toolName, message.details) : undefined,
     truncated, toolName: message.toolName, toolCallId: message.toolCallId,
     isError: !!message.isError, timestamp: message.timestamp, stopReason: message.stopReason,
     durationMs: Number.isFinite(message.durationMs) && message.durationMs >= 0 ? message.durationMs : undefined };

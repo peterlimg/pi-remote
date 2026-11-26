@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { applyEvent, initialState } from '../../src/state.mjs';
 import { cleanMessage } from '../../src/catalog.mjs';
 
 const call = (id, code) => ({ id, name: 'codemode', text: JSON.stringify({ code }) });
@@ -44,6 +45,43 @@ async function capture(page, name) {
   mkdirSync(process.env.PI_CODEMODE_LIVE_EVIDENCE, { recursive: true });
   await page.screenshot({ path: join(process.env.PI_CODEMODE_LIVE_EVIDENCE, name + '.png'), animations: 'disabled' });
 }
+
+test('terminal blocks follow call snapshots and survive reopening from a saved result', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  const code = Array.from({ length: 11 }, (_, i) => 'const v' + i + ' = "VERSION";').join('\n');
+  const state = initialState({ id: 'terminal', title: 'Check release', cwd: '/project' }, [
+    cleanMessage({ role: 'assistant', content: [{ type: 'toolCall', name: 'codemode', id: 'run', arguments: { code } }] }, 'call')
+  ]);
+  const base = { toolCallId: 'run', toolName: 'codemode' };
+  const calls = [{ name: 'read', args: '{"path":"VERSION"}', status: 'ok', durationMs: 3 },
+    { name: 'bash', args: '{"command":"node check.mjs"}', status: 'running' }];
+  applyEvent(state, { type: 'agent_start' });
+  applyEvent(state, { type: 'tool_execution_start', ...base });
+  applyEvent(state, { type: 'tool_execution_update', ...base, partialResult: { details: { calls } } });
+  applyEvent(state, { type: 'tool_execution_update', toolName: 'bash', toolCallId: 'run/2', parentToolCallId: 'run' });
+  const publish = await open(page, state), block = page.locator('.pi-terminal');
+  await expect(block.locator('.keyword').first()).toHaveText('const');
+  await expect(block.locator('li')).toHaveCount(2);
+  await expect(block.locator('li').last()).toContainText(/Running:.*bash/);
+  await expect(block.locator('[data-terminal-started]')).toContainText('Elapsed');
+  await expect(page.locator('[data-tool-id="run/2"]')).toHaveCount(0);
+  await block.getByText('… 1 more line', { exact: true }).click();
+  calls[1] = { ...calls[1], status: 'error', error: 'Version mismatch', durationMs: 3250 };
+  const completed = { content: [{ type: 'text', text: 'Script failed\nWall time 3.3 seconds\nOutput:\n' },
+    { type: 'text', text: 'Error: <img src=x> version mismatch' }], details: { calls } };
+  applyEvent(state, { type: 'tool_execution_end', ...base, result: completed, isError: true, durationMs: 3313 });
+  applyEvent(state, { type: 'message_end', message: { role: 'toolResult', ...base, ...completed, isError: true, durationMs: 3313 } });
+  state.tools = []; publish();
+  await expect(block.locator('details')).toHaveJSProperty('open', true);
+  await expect(block.locator('li').last()).toContainText('Version mismatch');
+  await expect(block.locator('.terminal-output')).toHaveText('Error: <img src=x> version mismatch');
+  await expect(block).toContainText('Failed · Took 3.3s');
+  await expect(block.locator('img')).toHaveCount(0);
+  expect(await page.locator('#transcript').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: /Check release/ }).click();
+  await expect(page.locator('.pi-terminal li')).toHaveCount(2);
+});
 
 test('codemode output stays opt-in and preserves manual expansion through streaming and completion', async ({ page }) => {
   const state = sample(), publish = await open(page, state);
