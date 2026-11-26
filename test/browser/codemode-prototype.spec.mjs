@@ -147,6 +147,27 @@ for (const variant of variants) {
   });
 }
 
+test('terminal studies compare the same sample and keep raw JavaScript behind a tap', async ({ page }) => {
+  const sockets = [];
+  page.on('websocket', socket => sockets.push(socket.url()));
+  await page.goto(`${route}?variant=transcript`);
+  for (const variant of ['transcript', 'excerpt', 'fold']) {
+    await expect(page).toHaveURL(new RegExp(`variant=${variant}`));
+    await expect(page.getByText(/web\/app\.js:2033/).filter({ visible: true }).first()).toBeVisible();
+    if (variant === 'fold') await page.locator('.term-fold > summary').click();
+    const script = page.locator('.term-details pre').last();
+    await expect(script).not.toBeVisible();
+    await page.locator('.term-details summary').click();
+    await expect(script).toContainText('tools.ffgrep');
+    await expect(script).toBeVisible();
+    expect(await page.locator('#study-thread').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Next prototype' }).click();
+  }
+  await page.getByLabel('Sample run state').selectOption('error');
+  await expect(page.locator('.term-block small')).toContainText('Failed');
+  expect(sockets).toEqual([]);
+});
+
 test('only explicit study assets are served and the production composer is unchanged', async ({ request }) => {
   for (const path of assets) {
     const response = await request.get(path);

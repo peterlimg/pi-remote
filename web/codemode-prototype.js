@@ -41,6 +41,13 @@ const variants = [
   { key: 'recap', name: 'B · Count only' },
   { key: 'source', name: 'C · Latest step' }
 ];
+const terminalVariants = [
+  { key: 'transcript', name: 'A · Mini terminal' },
+  { key: 'excerpt', name: 'B · Result first' },
+  { key: 'fold', name: 'C · Margin note' }
+];
+const terminalStudy = terminalVariants.some(v => v.key === new URLSearchParams(location.search).get('variant'));
+const choices = terminalStudy ? terminalVariants : variants;
 const root = document.querySelector('#study-thread');
 const selector = document.querySelector('#sample-state');
 let index = 0;
@@ -91,12 +98,34 @@ function activity(state, variant) {
   </details>`;
 }
 
+function terminalBlock(state, variant) {
+  if (state === 'empty') return '<p class="cm-empty">No codemode runs yet.</p>';
+  const script = `// Find the activity renderer
+const matches = await tools.ffgrep({
+  pattern: 'codemode-tool',
+  path: 'web/app.js'
+});
+text(matches);`;
+  const output = state === 'error' ? 'Search failed: file index unavailable.' : state === 'working' ? '' : `web/app.js:2033\n  detail.classList.add('codemode-tool');`;
+  const status = state === 'done' ? 'Complete · 87ms' : state === 'error' ? 'Failed · 87ms' : 'Running';
+  const details = `<details class="term-details"><summary>Full run</summary><b>Output</b><pre>${output || 'No output yet.'}</pre><b>Script</b><pre>${script}</pre></details>`;
+  const head = `<header><strong>codemode</strong><small>${status}</small></header>`;
+  const preview = `<pre>${output || 'Waiting for output…'}</pre>`;
+  if (variant === 'transcript') return `<section class="term-block term-console">${head}<pre class="term-input"><b>›</b> ffgrep <strong>codemode-tool</strong>\n  web/app.js</pre>${preview}${details}</section>`;
+  if (variant === 'excerpt') return `<section class="term-block term-result">${head}<h2>Find the activity renderer</h2>${preview}${details}</section>`;
+  return `<details class="term-block term-fold"><summary><span><strong>Find the activity renderer</strong><small>codemode · ${status}</small></span></summary><b>Output</b>${preview}<details class="term-details"><summary>Script</summary><pre>${script}</pre></details></details><p class="term-note">${state === 'done' ? 'web/app.js:2033' : state === 'error' ? output : 'Waiting for output…'}</p>`;
+}
+
 function render() {
   const params = new URLSearchParams(location.search);
-  index = Math.max(0, variants.findIndex(item => item.key === params.get('variant')));
+  index = Math.max(0, choices.findIndex(item => item.key === params.get('variant')));
   selector.value = ['done', 'working', 'error', 'empty'].includes(params.get('state')) ? params.get('state') : 'done';
-  const variant = variants[index], state = selector.value;
-  root.innerHTML = `<section class="cm-detail cm-${variant.key}" data-state="${state}">
+  const variant = choices[index], state = selector.value;
+  root.innerHTML = terminalStudy ? `<section class="term-thread cm-detail" data-state="${state}">
+    <article class="cm-message cm-user"><p>Where is the codemode row rendered?</p></article>
+    <article class="cm-message"><p>I'll look for the class on the tool row.</p></article>
+    ${terminalBlock(state, variant.key)}
+  </section>` : `<section class="cm-detail cm-${variant.key}" data-state="${state}">
     <article class="cm-message cm-user" aria-label="Sample user message"><p>Can the working status show more detail without getting in the way?</p></article>
     <article class="cm-message" aria-label="Sample Pi reply"><p>I'll inspect the session row and check how the working indicator is displayed.</p></article>
     ${activity(state, variant.key)}
@@ -113,7 +142,7 @@ function update(key, value) {
 }
 
 function cycle(direction) {
-  update('variant', variants[(index + direction + variants.length) % variants.length].key);
+  update('variant', choices[(index + direction + choices.length) % choices.length].key);
 }
 
 document.querySelector('#previous-variant').addEventListener('click', () => cycle(-1));
@@ -130,11 +159,17 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('popstate', render);
 
+if (terminalStudy) {
+  document.title = 'Codemode on the phone · Pi Remote prototypes';
+  document.querySelector('.study-title h1').textContent = 'Codemode on the phone';
+  document.querySelectorAll('#study-info p')[1].textContent = 'Compare the same sample search three ways. The mini terminal abbreviates the script; Full run shows the JavaScript.';
+}
+
 // Keep the production composer unchanged and disconnected.
 document.querySelector('#composer').hidden = false;
 document.querySelector('#prompt').placeholder = 'Message Pi while it works…';
 document.querySelector('#model-name').textContent = 'GPT-6.1 Sol';
 document.querySelector('#reasoning-value').textContent = 'Max';
-for (const id of ['model', 'reasoning-control', 'fast-mode', 'usage-meter']) document.getElementById(id).hidden = false;
+for (const id of ['model', 'reasoning-control', 'fast-mode']) document.getElementById(id).hidden = false;
 document.querySelector('#send').hidden = true;
 render();
