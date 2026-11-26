@@ -156,7 +156,7 @@ test('restart-and-resume upgrades an old host and starts a replacement after a s
   writeFileSync(bin, `#!${process.execPath}\nimport ${JSON.stringify(new URL('./fixtures/fake-pi.mjs', import.meta.url).href)};\n`, { mode: 0o700 });
   process.env.PI_REMOTE_PI_BIN = bin;
   const file = join(dir, 'saved.jsonl');
-  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n');
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'saved', cwd: dir }) + '\n' + JSON.stringify({ type: 'session_info', id: 'name', parentId: null, name: 'Restored session' }) + '\n');
   const id = sessionKey(file);
   const host = await startHost({ dir, config, roots: [dir], allowResume: true,
     workerOptions: { bin: process.execPath, prefix: [fakePi] } });

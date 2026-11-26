@@ -28,7 +28,7 @@ export class SessionService extends EventEmitter {
   constructor({ dir, roots, workerOptions = {}, allowResume = true, assistantDelay }) {
     super(); this.dir = dir; this.roots = roots; this.workerOptions = workerOptions; this.allowResume = allowResume;
     this.live = new Map(); this.catalog = new Map(); this.warnings = []; this.bridges = new WeakMap(); this.starting = new Set();
-    this.restoreWarnings = []; this.restoring = new Set();
+    this.restoreWarnings = []; this.restoring = new Set(); this.idleBeforeRestart = new Map();
     this.journal = new CommandJournal(join(dir, 'commands'));
     this.historyReader = new HistoryReader();
     // Sessions started without a project each get a folder here; the phone hides these folders' names.
@@ -77,15 +77,19 @@ export class SessionService extends EventEmitter {
   }
   async restore() {
     try {
-      const ids = JSON.parse(readFileSync(join(this.dir, 'resume-sessions.json'), 'utf8'));
-      if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid session restore list');
-      this.restoreLoaded = true; this.restoring = new Set(ids);
+      const entries = JSON.parse(readFileSync(join(this.dir, 'resume-sessions.json'), 'utf8'));
+      if (!Array.isArray(entries) || !entries.every(entry => {
+        const id = typeof entry === 'string' ? entry : entry?.id;
+        return typeof id === 'string' && /^[a-f0-9]{64}$/.test(id) && (entry === id || entry.status === 'idle' && Number.isFinite(entry.lastPromptAt));
+      })) throw new Error('Invalid session restore list');
+      this.restoreLoaded = true; this.restoring = new Set(entries.map(entry => entry.id ?? entry));
+      for (const entry of entries) if (entry.status === 'idle') this.idleBeforeRestart.set(entry.id, entry.lastPromptAt);
       // Cold Pi startups are expensive; do not launch the whole restore list at once.
       for (const id of this.restoring) {
         if (this.stopping) break;
         try { await this.startWorker(id); }
         catch (error) { this.restoreWarnings.push(`Could not restore ${id}: ${error.message}`); }
-        finally { this.restoring.delete(id); }
+        finally { this.restoring.delete(id); this.idleBeforeRestart.delete(id); this.emit('list'); }
       }
     } catch (error) {
       if (error.code === 'ENOENT') this.restoreLoaded = true;
@@ -134,6 +138,11 @@ export class SessionService extends EventEmitter {
     const visible = [...all.values()].filter(item => includeHelpers || query || !this.closedSessions.has(item.id) &&
       this.independent(item.id));
     for (const item of visible) {
+      if (this.restoring.has(item.id) && ['saved', 'starting'].includes(item.status) && !item.error) {
+        const lastPromptAt = this.idleBeforeRestart.get(item.id);
+        item.status = lastPromptAt === undefined ? 'restoring' : 'idle';
+        if (lastPromptAt !== undefined) item.lastPromptAt = lastPromptAt;
+      }
       if (this.closedSessions.has(item.id)) item.closed = true;
       // Lists update independently of the watched conversation, without exposing full task records.
       const coordination = this.coordination.describe(item.id);
@@ -500,7 +509,13 @@ export class SessionService extends EventEmitter {
     const ids = [...new Set([...this.restoring, ...this.managedSessions.map(item => item.id)])];
     if (this.restoreLoaded || this.live.size) {
       const file = join(this.dir, 'resume-sessions.json');
-      writeFileSync(file + '.tmp', JSON.stringify(ids), { mode: 0o600 });
+      const entries = ids.map(id => {
+        const item = this.live.get(id);
+        const lastPromptAt = item?.state.status === 'idle' && item.managed?.restartSafe ? item.state.lastPromptAt :
+          !item || item.state.status === 'starting' ? this.idleBeforeRestart.get(id) : undefined;
+        return Number.isFinite(lastPromptAt) ? { id, status: 'idle', lastPromptAt } : id;
+      });
+      writeFileSync(file + '.tmp', JSON.stringify(entries), { mode: 0o600 });
       renameSync(file + '.tmp', file);
     }
     this.stopping = true; this.coordination.close(); this.assistant.close();

@@ -135,7 +135,7 @@ test('host restart restores every managed session with phone prompts, images and
   const options = { dir, config, port: 0, roots: [dir],
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('./fixtures/fake-pi.mjs', import.meta.url))] } };
   for (const name of ['first', 'second', 'archive']) writeFileSync(join(dir, name + '.jsonl'),
-    JSON.stringify({ type: 'session', id: name, cwd: dir }) + '\n');
+    JSON.stringify({ type: 'session', id: name, cwd: dir }) + '\n' + JSON.stringify({ type: 'session_info', id: 'name', parentId: null, name }) + '\n');
   const ids = ['first', 'second'].map(name => sessionKey(join(dir, name + '.jsonl')));
   const archive = sessionKey(join(dir, 'archive.jsonl'));
   let host = await startHost(options);
@@ -147,14 +147,19 @@ test('host restart restores every managed session with phone prompts, images and
   ids.push(created.value.sessionId);
   await host.service.command(ids.at(-1), randomUUID(), { type: 'prompt', text: 'save new session' });
   await until(() => host.service.read(ids.at(-1)).status === 'idle');
+  host.service.pin(ids[0], true);
   const pids = ids.map(id => host.service.live.get(id).worker.process.pid);
   await host.close();
   assert.equal(statSync(join(dir, 'resume-sessions.json')).mode & 0o777, 0o600);
   host = await startHost({ ...options, workerOptions: { ...options.workerOptions, prefix: [...options.workerOptions.prefix, '--startup-gate'] } });
   await until(() => host.service.managedSessions.length);
   assert.equal(host.service.managedSessions.length, 1, 'Cold restorations must not start every worker at once');
+  const overview = host.service.list({ section: 'overview', availability: 'online' });
+  assert.equal(overview.groups.now, 0);
+  assert.equal(overview.sessions.find(row => row.id === ids[0] && row.pinned)?.status, 'idle');
+  assert.equal(host.service.read(ids[0]).status, 'starting', 'The list must not change worker readiness');
   await host.close();
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')).sort(), [...ids].sort(), 'Shutdown must retain queued restorations');
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')).map(entry => entry.id ?? entry).sort(), [...ids].sort(), 'Shutdown must retain queued restorations');
   host = await startHost(options); // The normal background start has no --allow-resume flag.
   await until(() => ids.every(id => host.service.read(id).status === 'idle'));
   const port = host.http.address().port;
@@ -205,7 +210,7 @@ test('restoration respects owners and roots, reports failures and continues rest
   assert.match(host.service.list().warnings.join('\n'), /owned or has a stale lock/);
   assert.match(host.service.list().warnings.join('\n'), /not found in configured roots/);
   await host.close();
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')), [valid], 'Failed restore attempts must not become a permanent restart backlog');
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')).map(entry => entry.id ?? entry), [valid], 'Failed restore attempts must not become a permanent restart backlog');
 });
 
 test('remote /new creates an independent session in the same working directory', async t => {

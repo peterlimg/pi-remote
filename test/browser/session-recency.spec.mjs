@@ -118,7 +118,8 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     const port = host.http.address().port, url = `http://127.0.0.1:${port}`;
     const restored = async (expectedLive = 2) => {
       await expect.poll(() => host.service.live.size).toBe(expectedLive);
-      await expect.poll(() => host.service.busyWorkers).toBe(0);
+      await expect.poll(() => host.service.restoring.size).toBe(0);
+      expect(host.service.managedSessions.every(item => item.restartSafe)).toBe(true);
       for (const [i, file] of files.entries()) {
         expect(host.service.read(sessionKey(file)).updatedAt).toBeCloseTo(now - i * 3600000, 0);
       }
@@ -134,9 +135,18 @@ for (const fails of [false, true]) test(`startup events from ${fails ? 'failed' 
     await expect(page.locator('#sessions .session').last()).toHaveAccessibleName(new RegExp(`\\b${fails ? 'Saved' : 'Ready'} Older restored task 2 `));
 
     await host.close();
-    expect(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8'))).toEqual(fails ? [] : files.slice(-2).map(sessionKey));
+    expect(JSON.parse(readFileSync(join(dir, 'resume-sessions.json'), 'utf8')).map(entry => entry.id ?? entry)).toEqual(fails ? [] : files.slice(-2).map(sessionKey));
     await expect(page.locator('#connection')).not.toHaveText('Computer connected');
-    host = await startHost({ ...options, port });
+    host = await startHost({ ...options, port, workerOptions: { ...options.workerOptions, prefix: [...options.workerOptions.prefix, '--startup-gate'] } });
+    if (!fails) {
+      await page.reload();
+      await expect(rows).toHaveText(titles.slice(-2));
+      for (const id of files.slice(-2).map(sessionKey)) await expect(page.locator(`#sessions button[data-id="${id}"]`)).toHaveAccessibleName(/Ready Older restored task/);
+      expect(host.service.restoring.size).toBe(2);
+      writeFileSync(join(dir, 'startup-ready'), '');
+      await filterRecentSessions(page, 'all');
+      await page.locator('#sessions .session').last().scrollIntoViewIfNeeded();
+    }
     await restored(fails ? 0 : 2);
     await expect(page.locator('#connection')).toHaveText('Computer connected');
     await expect(rows).toHaveText(titles);

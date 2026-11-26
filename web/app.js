@@ -654,7 +654,7 @@ function logout() {
   $('login-cancel').hidden = true; $('login-logout').hidden = true;
   $('app').hidden = true; $('boot').hidden = true; $('login').hidden = false;
 }
-const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', saved: 'Saved', disconnected: 'Offline' };
+const statusLabels = { working: 'Working', waiting: 'Needs input', idle: 'Ready', starting: 'Starting', restoring: 'Restoring', saved: 'Saved', disconnected: 'Offline' };
 const shortDate = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 // Compact age for the list; the exact time stays in the tooltip.
 function age(date) {
