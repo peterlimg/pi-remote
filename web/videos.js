@@ -1,6 +1,6 @@
-export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 export const VIDEO_CHUNK_BYTES = 256 * 1024;
-export const VIDEO_LIMIT = 'Attach up to 4 images or videos. Images: 2 MB total. Videos: 200 MB each.';
+export const VIDEO_LIMIT = 'Attach up to 4 images or videos. Images: 2 MB total. Videos: 500 MB each.';
 
 export function isVideo(file) {
   return /^video\/[a-z0-9.+-]+$/i.test(file.type) ||
@@ -64,7 +64,7 @@ export class VideoCache {
     });
   }
   put(id, info, file) {
-    if (typeof info.revision !== 'string' || !info.revision || file.size !== info.size || file.size > MAX_VIDEO_BYTES) return Promise.resolve();
+    if (typeof info.revision !== 'string' || !info.revision || file.size !== info.size || file.size > VIDEO_CACHE_BYTES) return Promise.resolve();
     return this.run(async cache => {
       const url = this.url(id);
       await cache.delete(url);

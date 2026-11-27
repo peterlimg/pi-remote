@@ -122,7 +122,7 @@ for (const [orientation, buffer, width] of [
   await page.getByRole('button', { name: /Project Alpha/ }).click();
   const input = page.getByLabel('Attach images and videos', { exact: true });
   await expect(input).toHaveAttribute('accept', /video\/\*/);
-  await expect(page.locator('#attach')).toHaveAttribute('title', /200 MB each/);
+  await expect(page.locator('#attach')).toHaveAttribute('title', /500 MB each/);
   const picker = page.waitForEvent('filechooser');
   await page.locator('#attach').click(); await (await picker).setFiles(upload);
   const video = page.locator('#attachments video');

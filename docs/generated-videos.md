@@ -8,7 +8,7 @@ For agents:
 
 1. Finish editing and inspect the export for sensitive information. Do not attach raw inspection frames or the original when the user requested a redacted copy.
 2. Copy the finished video into `$PI_REMOTE_HOME/videos/<new UUID>/<filename>`. The default home is `~/.pi/remote`. Create the directory with mode `0700` and the file with mode `0600`. Keep the original unchanged. Do not use symlinks.
-3. Use a filename of at most 180 ASCII letters, digits, dots, underscores, or hyphens, with a video extension. Each video must be nonempty and at most 200 MB. Prefer H.264 MP4 for mobile playback.
+3. Use a filename of at most 180 ASCII letters, digits, dots, underscores, or hyphens, with a video extension. Each video must be nonempty and at most 500 MB. Prefer H.264 MP4 for mobile playback.
 4. End an assistant message with this exact block, separated from preceding prose by a blank line. Use the actual absolute path, JSON-quoted, one per line. Up to four paths are allowed. Do not use a Markdown code fence or put text after the paths.
 
 ```text

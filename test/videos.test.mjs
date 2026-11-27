@@ -37,7 +37,7 @@ test('video upload validation bounds disk use and rejects forged references, off
     { ...file, name: '../escape.mov' }, { ...file, name: 'bad\n.mov' }, { ...file, type: 'text/plain' },
     { ...file, size: 0 }, { ...file, size: MAX_VIDEO_BYTES + 1 }, { ...file, size: 1.5 }
   ]) assert.throws(() => uploads.start(metadata));
-  assert.equal(MAX_VIDEO_BYTES, 200 * 1024 * 1024);
+  assert.equal(MAX_VIDEO_BYTES, 500 * 1024 * 1024);
   const atLimit = uploads.start({ ...file, size: MAX_VIDEO_BYTES });
   uploads.discard(atLimit.uploadId);
   const { uploadId } = uploads.start({ ...file, type: '' }); // iOS may omit the MIME type.
