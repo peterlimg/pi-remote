@@ -1,5 +1,7 @@
 :root {
   color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   /* Home-screen apps keep the home-indicator inset while the keyboard covers it. */
   --safe-bottom: env(safe-area-inset-bottom);
   /* iOS reports the keyboard's height change only once its slide ends; with no text field focused it is

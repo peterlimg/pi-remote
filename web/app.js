@@ -40,7 +40,7 @@ function atThreadBottom(resizeAllowance = 0) {
 }
 function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
 // Keep the latest message visible when the composer or inline activity changes height.
-let pinnedToBottom = true, transcriptHeight = 0, historyTouch;
+let pinnedToBottom = true, transcriptHeight = 0, transcriptWidth = 0, widthAnchor, historyTouch;
 function scrollHistory(delta) {
   const box = $('transcript');
   if (delta < 0 && box.scrollTop < 400) loadHistory('before');
@@ -48,8 +48,10 @@ function scrollHistory(delta) {
 }
 $('transcript').addEventListener('scroll', () => {
   const box = $('transcript');
+  if (box.clientWidth !== transcriptWidth) return;
   // The browser may shift scrollTop by up to the pending resize before the resize callback runs.
   pinnedToBottom = atThreadBottom(pinnedToBottom ? Math.abs(box.clientHeight - transcriptHeight) : 0);
+  widthAnchor = pinnedToBottom ? undefined : readingAnchor();
   updateScrollButton();
   const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
   // Resizing can move the bottom upward without the reader scrolling into history.
@@ -75,8 +77,12 @@ $('transcript').addEventListener('touchmove', event => {
 }, { passive: true });
 $('transcript').addEventListener('toggle', updateScrollButton, true);
 const transcriptObserver = new ResizeObserver(() => {
-  transcriptHeight = $('transcript').clientHeight;
-  if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
+  const box = $('transcript');
+  transcriptHeight = box.clientHeight;
+  if (pinnedToBottom) box.scrollTop = box.scrollHeight;
+  else if (box.clientWidth !== transcriptWidth && widthAnchor) restoreReadingAnchor(box, widthAnchor);
+  if (box.clientWidth !== transcriptWidth) historyScrollTop = box.scrollTop;
+  transcriptWidth = box.clientWidth;
   updateScrollButton();
 });
 transcriptObserver.observe($('transcript'));
@@ -299,6 +305,10 @@ function readingAnchor() {
   const top = $('transcript').getBoundingClientRect().top;
   const node = [...$('transcript').querySelectorAll('[data-scroll-key]')].find(item => item.getBoundingClientRect().bottom > top);
   return node && { key: node.dataset.scrollKey, id: node.dataset.messageId, top: node.getBoundingClientRect().top };
+}
+function restoreReadingAnchor(box, anchor) {
+  const node = [...box.querySelectorAll('[data-scroll-key]')].find(item => item.dataset.scrollKey === anchor.key || anchor.id && item.dataset.messageId === anchor.id);
+  if (node) box.scrollTop += node.getBoundingClientRect().top - anchor.top;
 }
 function mergeHistory(before, after) {
   const messages = [...before];
@@ -2313,10 +2323,8 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   }
   if (focusedTool) [...box.querySelectorAll('details')].find(node => node.dataset.disclosureId === focusedTool)?.querySelector('summary').focus({ preventScroll: true });
   box.scrollTop = bottom ? box.scrollHeight : oldScroll;
-  if (anchor) {
-    const node = [...box.querySelectorAll('[data-scroll-key]')].find(item => item.dataset.scrollKey === anchor.key || anchor.id && item.dataset.messageId === anchor.id);
-    if (node) box.scrollTop += node.getBoundingClientRect().top - anchor.top;
-  }
+  if (anchor) restoreReadingAnchor(box, anchor);
+  widthAnchor = atThreadBottom() ? undefined : readingAnchor();
   historyScrollTop = box.scrollTop;
   renderDialog(state);
   updateControls();

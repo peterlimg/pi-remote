@@ -24,7 +24,7 @@ async function open(page, state) {
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
-  await page.locator('.session').click();
+  await page.locator('.session').press('Enter');
   return publish;
 }
 async function capture(page, name) {
@@ -101,6 +101,28 @@ test('borderless terminal retains visible syntax colors in arguments and returne
     expect(new Set([colors.keyword, colors.string, colors.base]).size).toBe(3);
     await capture(page, 'terminal-syntax-' + scheme);
   }
+});
+
+test('rotating a long tool transcript back to portrait keeps the same text size and reading position', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const messages = Array.from({ length: 40 }, (_, i) => [
+    { id: 'call' + i, role: 'assistant', toolCalls: [call('run' + i, 'text(await tools.read({path:"web/app.js"}));')] },
+    { ...result('run' + i, 'Saved output', 32, i + 1), trace: { calls: [{ name: 'edit', args: JSON.stringify({ path: 'web/app.js', newText: 'const result = await read(); '.repeat(8) }), status: 'ok' }] } }
+  ]).flat();
+  await open(page, { id: 'rotate', title: 'Saved runs', cwd: '/project', status: 'idle', tools: [], messages });
+  await expect(page.locator('#app')).not.toHaveClass(/opening/);
+  const marker = page.locator('.pi-terminal').nth(32);
+  await marker.evaluate(node => node.scrollIntoView({ block: 'center' }));
+  await expect(page.getByRole('button', { name: 'Go to thread bottom' })).toBeVisible();
+  const before = await marker.boundingBox();
+  for (const [width, height] of [[844, 390], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+    await expect(page.locator('html')).not.toHaveAttribute('data-rotating', '');
+  }
+  const after = await marker.boundingBox();
+  expect(after.height).toBeCloseTo(before.height, 0);
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
 });
 
 test('runs without traces show their recorded output without inferring calls or merging neighboring tools', async ({ page }) => {
