@@ -40,7 +40,7 @@ function atThreadBottom(resizeAllowance = 0) {
 }
 function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
 // Keep the latest message visible when the composer or inline activity changes height.
-let pinnedToBottom = true, transcriptHeight = 0, transcriptWidth = 0, widthAnchor, historyTouch;
+let pinnedToBottom = true, transcriptHeight = 0, transcriptWidth = 0, widthAnchor, restoredScrollTop, historyTouch;
 function scrollHistory(delta) {
   const box = $('transcript');
   if (delta < 0 && box.scrollTop < 400) loadHistory('before');
@@ -51,7 +51,8 @@ $('transcript').addEventListener('scroll', () => {
   if (box.clientWidth !== transcriptWidth) return;
   // The browser may shift scrollTop by up to the pending resize before the resize callback runs.
   pinnedToBottom = atThreadBottom(pinnedToBottom ? Math.abs(box.clientHeight - transcriptHeight) : 0);
-  widthAnchor = pinnedToBottom ? undefined : readingAnchor();
+  if (box.scrollTop !== restoredScrollTop) widthAnchor = pinnedToBottom ? undefined : readingAnchor();
+  restoredScrollTop = undefined;
   updateScrollButton();
   const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
   // Resizing can move the bottom upward without the reader scrolling into history.
@@ -80,7 +81,10 @@ const transcriptObserver = new ResizeObserver(() => {
   const box = $('transcript');
   transcriptHeight = box.clientHeight;
   if (pinnedToBottom) box.scrollTop = box.scrollHeight;
-  else if (box.clientWidth !== transcriptWidth && widthAnchor) restoreReadingAnchor(box, widthAnchor);
+  else if (box.clientWidth !== transcriptWidth && widthAnchor) {
+    restoreReadingAnchor(box, widthAnchor);
+    restoredScrollTop = box.scrollTop;
+  }
   if (box.clientWidth !== transcriptWidth) historyScrollTop = box.scrollTop;
   transcriptWidth = box.clientWidth;
   updateScrollButton(); positionQuoteButton();

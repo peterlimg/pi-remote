@@ -734,15 +734,15 @@ pre.message-text { white-space: pre-wrap; }
 .tool-input { border-bottom: 1px solid var(--line); }
 .tool-output { max-height: 40dvh; overflow: auto; color: var(--text); }
 .tool .hint { padding: 0 12px; }
-.pi-terminal { max-width: var(--content-width); min-width: 0; margin: 0 auto 18px; padding: 8px 10px; border-radius: 8px; background: var(--panel); color: var(--text); font: 13px/1.52 var(--mono); }
+.pi-terminal { max-width: var(--content-width); min-width: 0; margin: 0 auto 12px; padding: 5px 10px; border-radius: 8px; background: var(--panel); color: var(--text); font: 13px/1.4 var(--mono); }
 .pi-terminal pre { margin: 0; overflow-x: auto; white-space: pre; font: inherit; }
 .pi-terminal[data-status=done] { background: color-mix(in srgb, var(--working) 9%, var(--panel)); }
 .pi-terminal[data-status=error] { background: color-mix(in srgb, var(--error) 9%, var(--panel)); }
-.pi-terminal > strong + pre { margin-top: 4px; }
-.pi-terminal ul { list-style: none; padding: 0; margin: 12px 0; }
+.pi-terminal > strong + pre { margin-top: 2px; }
+.pi-terminal ul { list-style: none; padding: 0; margin: 4px 0; }
 .pi-terminal li { overflow-wrap: anywhere; }
 .pi-terminal small, .pi-terminal .comment { color: var(--muted); font: inherit; }
-.pi-terminal > small { display: block; margin-top: 10px; }
+.pi-terminal > small { display: block; margin-top: 4px; }
 .pi-terminal .keyword { color: light-dark(#694788, #cfafe5); }
 .pi-terminal .string { color: light-dark(#386247, #abd1b5); }
 .pi-terminal :is(.property, .method) { color: light-dark(#285b78, #a4c9e1); }
@@ -751,7 +751,7 @@ pre.message-text { white-space: pre-wrap; }
 .pi-terminal li[data-status=ok] > span:first-child { color: var(--working); }
 .pi-terminal .call-error, .pi-terminal li[data-status=error] > span:first-child { color: var(--error); }
 .pi-terminal .call-error { padding-left: 2ch; white-space: pre-wrap; }
-.pi-terminal .terminal-output { margin-top: 10px; }
+.pi-terminal .terminal-output { margin-top: 4px; }
 .pi-terminal summary { min-height: 44px; align-content: center; color: inherit; }
 /* The composer and the rows above it float over the end of the thread, which reserves their height as --dock-height. */
 .dock { position: absolute; z-index: 2; inset: auto 0 0; display: flex; flex-direction: column; pointer-events: none; }
