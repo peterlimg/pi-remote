@@ -31,11 +31,22 @@ test('the bottom button returns to the latest message and resumes following repl
   await expect(button).toBeHidden();
   // The thread runs on under the glass composer instead of fading out above it.
   expect(await page.locator('#composer').evaluate(node => getComputedStyle(node, '::before').backdropFilter)).toMatch(/blur/);
-  state.messages[0].text = 'Thread history\n\n'.repeat(60);
+  state.messages.unshift({ id: 'older', role: 'assistant', text: 'Older lines\n\n'.repeat(24) });
+  state.messages[1].text = 'Thread history\n\n'.repeat(60);
   snapshot();
   await expect(transcript).toContainText('Thread history');
   await expect.poll(gap).toBeLessThan(1);
   await expect(button).toBeHidden();
+  await transcript.evaluate(node => node.scrollBy(0, -64));
+  const readingTop = () => transcript.locator('[data-message-id="reply"]').evaluate(node => node.getBoundingClientRect().top);
+  const before = await readingTop();
+  state.messages.push({ id: 'incoming', role: 'assistant', text: 'Incoming lines\n\n'.repeat(30) }); snapshot();
+  await expect(transcript).toContainText('Incoming lines');
+  expect(await readingTop()).toBeCloseTo(before, 0);
+  state.messages.shift(); snapshot();
+  await expect(transcript).not.toContainText('Older lines');
+  expect(await readingTop()).toBeCloseTo(before, 0);
+  await button.click();
   state.status = 'working'; snapshot();
   const activity = page.locator('#agent-activity');
   await expect(activity).toBeVisible();

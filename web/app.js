@@ -34,9 +34,9 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshDia
 const $ = id => document.getElementById(id);
 const activityIndicator = $('agent-activity');
 let historyWindow, historyRequest, historyForward = [], historyError = '', historyGeneration = 0, historyScrollTop = 0;
-function atThreadBottom() {
+function atThreadBottom(resizeAllowance = 0) {
   const box = $('transcript');
-  return box.scrollHeight - box.scrollTop - box.clientHeight < 100;
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 2 + resizeAllowance;
 }
 function updateScrollButton() { $('scroll-bottom').hidden = !historyWindow && atThreadBottom(); }
 // Keep the latest message visible when the composer or inline activity changes height.
@@ -49,7 +49,7 @@ function scrollHistory(delta) {
 $('transcript').addEventListener('scroll', () => {
   const box = $('transcript');
   // The browser may shift scrollTop by up to the pending resize before the resize callback runs.
-  pinnedToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 2 + Math.abs(box.clientHeight - transcriptHeight);
+  pinnedToBottom = atThreadBottom(pinnedToBottom ? Math.abs(box.clientHeight - transcriptHeight) : 0);
   updateScrollButton();
   const direction = box.scrollTop - historyScrollTop; historyScrollTop = box.scrollTop;
   // Resizing can move the bottom upward without the reader scrolling into history.
@@ -1996,6 +1996,7 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
   }
   if (historyWindow) state = { ...state, messages: historyWindow.messages, tools: [] };
   const box = $('transcript'), bottom = !anchor && atThreadBottom(), oldScroll = box.scrollTop;
+  if (!bottom && !anchor) anchor = readingAnchor();
   const fragment = document.createDocumentFragment();
   const questionFocus = document.activeElement?.closest('.assistant-checkin') ? document.activeElement : undefined;
   // A diagram arriving mid-reply can change the default, but not the reader's explicit choice.
