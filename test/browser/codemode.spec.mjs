@@ -97,6 +97,10 @@ test('borderless terminal retains visible syntax colors in arguments and returne
         args: ['.property', '.string', '.literal'].map(c => ink('li ' + c)), keyword: ink('.terminal-output .keyword'), string: ink('.terminal-output .string') };
     });
     expect(colors.surface).toBe('rgba(0, 0, 0, 0)');
+    const script = block.locator('pre').first();
+    await expect(script).not.toHaveCSS('background-color', colors.surface);
+    await expect(script).not.toHaveCSS('background-color', await page.locator('html').evaluate(node => getComputedStyle(node).backgroundColor));
+    await expect(block.locator('.terminal-output')).toHaveCSS('background-color', colors.surface);
     expect(colors.border).toBe('0px');
     expect(colors.args).not.toContain(null);
     expect(new Set([...colors.args, colors.base]).size).toBe(4);
