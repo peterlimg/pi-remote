@@ -3942,7 +3942,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   }, { passive: false });
   main.addEventListener('touchmove', event => {
     if (!trackingSwipe) return;
-    if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1) { resetSwipe(); return; }
+    if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) > 1 || window.getSelection()?.isCollapsed === false) { resetSwipe(); return; }
     const touch = event.touches[0], dy = Math.abs(touch.clientY - startY);
     dx = Math.max(0, touch.clientX - startX);
     if (!app.classList.contains('swiping')) {
@@ -4040,8 +4040,27 @@ $('commands').addEventListener('click', () => {
   input.focus();
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
+function selectedMessageText() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed || $('prompt').disabled || $('composer').hidden) return '';
+  const node = selection.getRangeAt(0).commonAncestorContainer;
+  const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  return element?.closest('#transcript .message > .message-text') ? selection.toString() : '';
+}
+$('quote-selection').addEventListener('pointerdown', event => event.preventDefault());
+$('quote-selection').addEventListener('click', () => {
+  const text = selectedMessageText();
+  if (!text.trim()) return;
+  const input = $('prompt');
+  window.getSelection().removeAllRanges();
+  input.value = text.replace(/^/gm, '> ') + '\n\n' + input.value;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+});
 $('prompt').addEventListener('click', renderCommands);
 document.addEventListener('selectionchange', () => {
+  $('quote-selection').hidden = !selectedMessageText().trim();
   if (document.activeElement === $('prompt')) renderCommands();
 });
 $('composer').addEventListener('focusout', event => {
