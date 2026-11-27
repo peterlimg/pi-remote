@@ -4057,7 +4057,9 @@ function positionQuoteButton() {
   button.hidden = rect.bottom <= top || rect.top >= bottom || rect.right <= main.left || rect.left >= main.right;
   if (button.hidden) return;
   const gap = 8, width = button.offsetWidth, height = button.offsetHeight;
-  const y = rect.bottom + gap + height <= bottom ? rect.bottom + gap : rect.top - height - gap;
+  const clearance = matchMedia('(pointer: coarse)').matches ? 88 : gap;
+  const below = bottom - rect.bottom, above = rect.top - top;
+  const y = below >= height + clearance || below > above ? rect.bottom + clearance : rect.top - height - clearance;
   button.style.top = Math.max(top, Math.min(bottom - height, y)) - main.top + 'px';
   button.style.left = Math.max(gap, Math.min(main.width - width - gap, rect.left - main.left + (rect.width - width) / 2)) + 'px';
 }

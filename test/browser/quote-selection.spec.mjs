@@ -20,7 +20,7 @@ test('quote a selected passage into a draft and send it with the reply', async (
   });
   const gapBelowSelection = () => quote.evaluate(button => button.getBoundingClientRect().top - window.getSelection().getRangeAt(0).getBoundingClientRect().bottom);
   await expect(quote).toBeVisible();
-  await expect.poll(gapBelowSelection).toBeCloseTo(8, 0);
+  await expect.poll(gapBelowSelection).toBeGreaterThanOrEqual(80);
   const before = await quote.boundingBox();
   await page.locator('#transcript').evaluate(box => { box.scrollTop += 32; });
   await expect.poll(async () => (await quote.boundingBox()).y).toBeCloseTo(before.y - 32, 0);
