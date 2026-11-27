@@ -1735,7 +1735,7 @@ function terminalRun(id, status, source, output, trace, duration, startedAt, tru
     block.append(render(rows.slice(0, max).join('\n')));
     if (rows.length > max) block.append(more(key, `… ${rows.length - max} more ${rows.length === max + 1 ? 'line' : 'lines'}`, render(rows.slice(max).join('\n'))));
   };
-  if (source) block.append(more('script', 'View code', terminalCode(displayPaths(source))));
+  if (source) lines('script', displayPaths(source), 2, terminalCode);
   const callRows = calls => {
     const list = el('ul');
     for (const call of calls) {
@@ -1750,12 +1750,13 @@ function terminalRun(id, status, source, output, trace, duration, startedAt, tru
     return list;
   };
   if (trace.omitted) block.append(el('small', `${trace.omitted} earlier calls omitted on mobile`));
-  if (trace.calls.length > 8) block.append(more('calls', `… ${trace.calls.length - 8} earlier ${trace.calls.length === 9 ? 'call' : 'calls'}`, callRows(trace.calls.slice(0, -8))));
-  if (trace.calls.length) block.append(callRows(trace.calls.slice(-8)));
+  const earlier = trace.calls.length - 3;
+  if (earlier > 0) block.append(more('calls', `… ${earlier} earlier ${earlier === 1 ? 'call' : 'calls'}`, callRows(trace.calls.slice(0, earlier))));
+  if (trace.calls.length) block.append(callRows(trace.calls.slice(-3)));
   if (status !== 'working') {
     const body = output.replace(/^Script (?:completed|failed)\r?\nWall time [\d.]+ seconds\r?\nOutput:\r?\n\s*\n?/, '');
     const codeOutput = /^[ \t]*(?:(?:import|export|const|let|var|function|class|async|await)\b|(?:\{\s*"|\[\s*\{)|"[^"\n]+"\s*:)/m.test(body);
-    lines('output', body, 5, text => codeOutput ? terminalCode(text, 'pre', 'terminal-output') : el('pre', text, 'terminal-output'));
+    lines('output', body, 2, text => codeOutput ? terminalCode(text, 'pre', 'terminal-output') : el('pre', text, 'terminal-output'));
   }
   if (truncated) block.append(el('small', 'Output shortened for mobile.'));
   const timing = el('small', status === 'pending' ? 'Waiting to run…' : status === 'working' ? 'Running…' : (status === 'error' ? 'Failed' : 'Complete') + (Number.isFinite(duration) ? ' · Took ' + formatToolDuration(duration) : ''));

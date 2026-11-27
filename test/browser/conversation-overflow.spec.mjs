@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('long received text and expanded codemode scripts cannot scroll the whole conversation sideways', async ({ page }, testInfo) => {
+test('long received text and inline codemode scripts cannot scroll the whole conversation sideways', async ({ page }, testInfo) => {
   const title = 'Update the Codemode header icon and run its focused browser verification before publishing the change';
   const state = { id: 'layout-proof', title: 'Layout verification session', cwd: '/project', status: 'working', tools: [], messages: [
     { id: 'request', role: 'user', text: 'Please update only the work-log icon. Keep the existing labels, layout and behavior unchanged. '.repeat(3) },
@@ -22,9 +22,8 @@ test('long received text and expanded codemode scripts cannot scroll the whole c
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Layout verification session/ }).click();
-  const script = page.locator('.pi-terminal details pre');
-  await expect(script).toBeHidden();
-  await page.getByText('View code', { exact: true }).click();
+  const script = page.locator('.pi-terminal > pre').first();
+  await expect(script).toBeVisible();
   await expect(script).toContainText(title);
   for (const width of [390, 320, 1200]) {
     await page.setViewportSize({ width, height: 844 });

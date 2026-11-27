@@ -40,32 +40,35 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
     cleanMessage({ role: 'assistant', content: [{ type: 'toolCall', name: 'codemode', id: 'run', arguments: { code } }] }, 'call')
   ]);
   const base = { toolCallId: 'run', toolName: 'codemode' };
-  const calls = [{ name: 'read', args: '{"path":"VERSION"}', status: 'ok', durationMs: 3 },
+  const calls = [{ name: 'fffind', args: '{}', status: 'ok' }, { name: 'read', args: '{}', status: 'ok' },
+    { name: 'read', args: '{"path":"VERSION"}', status: 'ok', durationMs: 3 },
     { name: 'bash', args: '{"command":"node check.mjs"}', status: 'running' }];
   applyEvent(state, { type: 'agent_start' });
   const publish = await open(page, state), block = page.locator('.pi-terminal');
   await expect(block).toContainText('Waiting to run…');
-  await expect(block.locator('pre')).toBeHidden();
+  await expect(block.locator('pre').first()).toHaveText(code.split('\n').slice(0, 2).join('\n'));
   applyEvent(state, { type: 'tool_execution_start', ...base }); publish();
   await expect(block).toHaveAttribute('data-status', 'working');
   await expect(block.locator('li')).toHaveCount(0);
   applyEvent(state, { type: 'tool_execution_update', ...base, partialResult: { details: { calls } } });
   applyEvent(state, { type: 'tool_execution_update', toolName: 'bash', toolCallId: 'run/2', parentToolCallId: 'run' });
   publish();
-  await expect(block.locator('pre')).toBeHidden();
-  await expect(block.locator('li')).toHaveCount(2);
+  await expect(block.locator('li:visible')).toHaveCount(3);
+  await expect(block.getByText('fffind')).toBeHidden();
+  await block.getByText('… 1 earlier call').click();
+  await expect(block.getByText('fffind')).toBeVisible();
   await expect(block.locator('li').last()).toContainText(/Running:.*bash/);
   await expect(block.locator('[data-terminal-started]')).toContainText('Elapsed');
   await expect(page.locator('[data-tool-id="run/2"]')).toHaveCount(0);
-  await block.getByText('View code', { exact: true }).click();
-  await expect(block.locator('pre')).toHaveText(code);
-  calls[1] = { ...calls[1], status: 'error', error: 'Version mismatch', durationMs: 3250 };
+  await block.getByText('… 9 more lines').click();
+  await expect(block.locator('details pre')).toHaveText(code.split('\n').slice(2).join('\n'));
+  calls[3] = { ...calls[3], status: 'error', error: 'Version mismatch', durationMs: 3250 };
   const completed = { content: [{ type: 'text', text: 'Script failed\nWall time 3.3 seconds\nOutput:\n' },
     { type: 'text', text: 'Error: <img src=x> version mismatch' }], details: { calls } };
   applyEvent(state, { type: 'tool_execution_end', ...base, result: completed, isError: true, durationMs: 3313 });
   applyEvent(state, { type: 'message_end', message: { role: 'toolResult', ...base, ...completed, isError: true, durationMs: 3313 } });
   state.tools = []; publish();
-  await expect(block.locator('details')).toHaveJSProperty('open', true);
+  await expect(block.locator('details[open]')).toHaveCount(2);
   await expect(block.locator('li').last()).toContainText('Version mismatch');
   await expect(block.locator('.terminal-output')).toHaveText('Error: <img src=x> version mismatch');
   await expect(block).toContainText('Failed · Took 3.3s');
@@ -73,7 +76,7 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   expect(await page.locator('#transcript').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
   await page.reload();
   await page.getByRole('button', { name: /Check release/ }).click();
-  await expect(page.locator('.pi-terminal li')).toHaveCount(2);
+  await expect(page.locator('.pi-terminal li:visible')).toHaveCount(3);
 });
 
 test('borderless terminal retains visible syntax colors in arguments and returned code', async ({ page }) => {
@@ -137,10 +140,11 @@ test('runs without traces show their recorded output without inferring calls or 
   await open(page, state);
   const block = page.locator('.pi-terminal[data-tool-id="saved"]');
   await expect(block.locator('li')).toHaveCount(0);
-  await expect(block.getByText(/never-called/)).toBeHidden();
-  await expect(block.locator('.terminal-output').first()).toBeVisible();
-  await block.getByText('… 1 more line').click();
-  await expect(block.locator('.terminal-output').last()).toHaveText('6');
-  await expect(page.locator('[data-tool-id="orphan"]')).not.toContainText('View code');
+  await expect(block.locator('pre').first()).toBeVisible();
+  await expect(block.locator('pre').first()).toContainText('never-called');
+  await expect(block.locator('.terminal-output').first()).toHaveText('Earlier output\n2');
+  await block.getByText('… 4 more lines').click();
+  await expect(block.locator('.terminal-output').last()).toHaveText('3\n4\n5\n6');
+  await expect(page.locator('[data-tool-id="orphan"] pre')).toHaveCount(1);
   await expect(page.locator('.tool-activity')).toHaveCount(2);
 });
