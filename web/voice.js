@@ -22,7 +22,7 @@ export function voiceComposer({ request, context, changed, notice, queue }) {
     if (active) composer.dataset.voice = active.phase; else delete composer.dataset.voice;
     const showingWaveform = active?.phase === 'recording' && !!active.analyser;
     waveform.hidden = !showingWaveform;
-    status.classList.toggle('sr-only', showingWaveform);
+    status.classList.toggle('sr-only', showingWaveform || active?.phase === 'sending');
     cancelButton.hidden = !capturing;
     button.setAttribute('aria-label', capturing ? 'Stop dictation' : 'Dictate with ChatGPT');
     button.title = capturing ? 'Stop recording and keep a draft' : 'Dictate with this computer’s Codex ChatGPT sign-in. Audio is sent to OpenAI.';

@@ -2257,9 +2257,9 @@ function renderConversation(state, { anchor, historyChanged = false } = {}) {
         for (const char of `${message.timestamp ?? message.id}`) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
         article.append(el('p', phrases[hash % phrases.length] + ' ' + formatToolDuration(message.taskDurationMs), 'task-duration'));
       }
-      if (message.delivery) {
+      if (message.delivery && message.delivery !== 'Transcribing…') {
         const status = el('small', message.delivery, 'delivery-status'); status.setAttribute('role', 'status'); article.append(status);
-        if (message.localStatus && message.localStatus !== 'Transcribing…') {
+        if (message.localStatus) {
           const edit = el('button', 'Edit draft', 'voice-edit-draft'); edit.type = 'button';
           edit.onclick = () => restoreVoiceDraft(submissions.get(message.id)); article.append(edit);
         }

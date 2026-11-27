@@ -490,7 +490,7 @@ try {
 
     await fresh(); await page.locator('#prompt').fill('Prefix'); await record();
     await page.getByRole('button', { name: 'Send message' }).click(); await partial('Queued words');
-    const pendingBubble = page.locator('.message.user').filter({ hasText: 'Transcribing…' });
+    const pendingBubble = page.locator('.message.user').filter({ hasText: 'Prefix Queued words' });
     await expect(pendingBubble.locator('.message-text')).toHaveText('Prefix Queued words');
     await expect(page.locator('#prompt')).toHaveValue(''); await expect(page.locator('#prompt')).toBeFocused();
     await page.keyboard.insertText('Next draft');
@@ -610,7 +610,9 @@ try {
       await page.getByRole('button', { name: 'Send message' }).click(); await stopped();
       if (!stopFirst) {
         await expect(page.locator('#composer')).toHaveAttribute('data-voice', 'sending');
-        const bubble = page.locator('.message.user').filter({ hasText: 'Transcribing…' });
+        const bubble = page.locator('.message.user').filter({ hasText: 'Original draft Ready words' });
+        await expect(bubble.locator('.delivery-status')).toHaveCount(0);
+        await expect(page.locator('#voice-label')).toHaveClass(/sr-only/);
         await expect(bubble.locator('.message-text')).toHaveText('Original draft Ready words');
         await expect(page.locator('#prompt')).toHaveValue('');
         console.log(`Send to visible pending bubble: ${Math.round(performance.now() - sendAt)}ms`);
