@@ -9,13 +9,22 @@ test('quote a selected passage into a draft and send it with the reply', async (
   await expect(quote).toBeHidden();
   const passage = page.locator('#transcript .message-text').filter({ hasText: 'The relay is ready.' }).first();
   await passage.locator('strong').click();
+  const composer = page.locator('#composer'), composerHeight = (await composer.boundingBox()).height;
   await passage.evaluate(body => {
+    body.querySelector('strong').scrollIntoView({ block: 'center' });
     const range = new Range();
     range.setStart(body.querySelector('strong').firstChild, 4);
     range.setEnd(body.querySelector('p:nth-child(2)').firstChild, 14);
     window.getSelection().removeAllRanges();
     window.getSelection().addRange(range);
   });
+  const gapBelowSelection = () => quote.evaluate(button => button.getBoundingClientRect().top - window.getSelection().getRangeAt(0).getBoundingClientRect().bottom);
+  await expect(quote).toBeVisible();
+  await expect.poll(gapBelowSelection).toBeCloseTo(8, 0);
+  const before = await quote.boundingBox();
+  await page.locator('#transcript').evaluate(box => { box.scrollTop += 32; });
+  await expect.poll(async () => (await quote.boundingBox()).y).toBeCloseTo(before.y - 32, 0);
+  expect((await composer.boundingBox()).height).toBe(composerHeight);
   await quote.tap();
   const draft = '> relay is ready.\n> \n> Run the checks\n\n' + reply;
   await expect(prompt).toHaveValue(draft);

@@ -83,7 +83,7 @@ const transcriptObserver = new ResizeObserver(() => {
   else if (box.clientWidth !== transcriptWidth && widthAnchor) restoreReadingAnchor(box, widthAnchor);
   if (box.clientWidth !== transcriptWidth) historyScrollTop = box.scrollTop;
   transcriptWidth = box.clientWidth;
-  updateScrollButton();
+  updateScrollButton(); positionQuoteButton();
 });
 transcriptObserver.observe($('transcript'));
 transcriptObserver.observe(activityIndicator);
@@ -91,7 +91,7 @@ transcriptObserver.observe(activityIndicator);
 new ResizeObserver(([{ target }]) => {
   document.documentElement.style.setProperty('--dock-height', `${target.offsetHeight}px`);
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
-  updateScrollButton();
+  updateScrollButton(); positionQuoteButton();
 }).observe($('dock'));
 new ResizeObserver(([{ target }]) => {
   const height = target.getBoundingClientRect().height;
@@ -4040,17 +4040,31 @@ $('commands').addEventListener('click', () => {
   input.focus();
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
-function selectedMessageText() {
+function selectedMessageRange() {
   const selection = window.getSelection();
-  if (!selection?.rangeCount || selection.isCollapsed || $('prompt').disabled || $('composer').hidden) return '';
-  const node = selection.getRangeAt(0).commonAncestorContainer;
+  if (!selection?.rangeCount || selection.isCollapsed || $('prompt').disabled || $('composer').hidden) return;
+  const range = selection.getRangeAt(0), node = range.commonAncestorContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-  return element?.closest('#transcript .message > .message-text') ? selection.toString() : '';
+  if (element?.closest('#transcript .message > .message-text') && selection.toString().trim()) return range;
 }
+function positionQuoteButton() {
+  const button = $('quote-selection'), range = selectedMessageRange();
+  if (!range) { button.hidden = true; return; }
+  const rect = range.getBoundingClientRect(), main = button.parentElement.getBoundingClientRect();
+  const top = Math.max(document.querySelector('.conversation-header').getBoundingClientRect().bottom, $('transcript').getBoundingClientRect().top);
+  const bottom = $('dock').getBoundingClientRect().top;
+  button.hidden = rect.bottom <= top || rect.top >= bottom || rect.right <= main.left || rect.left >= main.right;
+  if (button.hidden) return;
+  const gap = 8, width = button.offsetWidth, height = button.offsetHeight;
+  const y = rect.bottom + gap + height <= bottom ? rect.bottom + gap : rect.top - height - gap;
+  button.style.top = Math.max(top, Math.min(bottom - height, y)) - main.top + 'px';
+  button.style.left = Math.max(gap, Math.min(main.width - width - gap, rect.left - main.left + (rect.width - width) / 2)) + 'px';
+}
+$('transcript').addEventListener('scroll', positionQuoteButton, { capture: true, passive: true });
 $('quote-selection').addEventListener('pointerdown', event => event.preventDefault());
 $('quote-selection').addEventListener('click', () => {
-  const text = selectedMessageText();
-  if (!text.trim()) return;
+  if (!selectedMessageRange()) return;
+  const text = window.getSelection().toString();
   const input = $('prompt');
   window.getSelection().removeAllRanges();
   input.value = text.replace(/^/gm, '> ') + '\n\n' + input.value;
@@ -4060,7 +4074,7 @@ $('quote-selection').addEventListener('click', () => {
 });
 $('prompt').addEventListener('click', renderCommands);
 document.addEventListener('selectionchange', () => {
-  $('quote-selection').hidden = !selectedMessageText().trim();
+  positionQuoteButton();
   if (document.activeElement === $('prompt')) renderCommands();
 });
 $('composer').addEventListener('focusout', event => {
