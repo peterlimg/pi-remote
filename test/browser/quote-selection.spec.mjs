@@ -25,6 +25,9 @@ test('quote a selected passage into a draft and send it with the reply', async (
   await page.locator('#transcript').evaluate(box => { box.scrollTop += 32; });
   await expect.poll(async () => (await quote.boundingBox()).y).toBeCloseTo(before.y - 32, 0);
   expect((await composer.boundingBox()).height).toBe(composerHeight);
+  await quote.evaluate(button => button.addEventListener('touchstart', () => {
+    window.getSelection().removeAllRanges();
+  }, { once: true }));
   await quote.tap();
   const draft = '> relay is ready.\n> \n> Run the checks\n\n' + reply;
   await expect(prompt).toHaveValue(draft);

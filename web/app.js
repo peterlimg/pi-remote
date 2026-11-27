@@ -4048,8 +4048,12 @@ function selectedMessageRange() {
   const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
   if (element?.closest('#transcript .message > .message-text') && selection.toString().trim()) return range;
 }
+const quoteButton = $('quote-selection');
+let displayedQuote, quoteTouch;
 function positionQuoteButton() {
-  const button = $('quote-selection'), range = selectedMessageRange();
+  if (quoteTouch && displayedQuote?.session === selected) return;
+  const button = quoteButton, range = selectedMessageRange();
+  displayedQuote = range && { session: selected, text: window.getSelection().toString() };
   if (!range) { button.hidden = true; return; }
   const rect = range.getBoundingClientRect(), main = button.parentElement.getBoundingClientRect();
   const top = Math.max(document.querySelector('.conversation-header').getBoundingClientRect().bottom, $('transcript').getBoundingClientRect().top);
@@ -4064,17 +4068,31 @@ function positionQuoteButton() {
   button.style.left = Math.max(gap, Math.min(main.width - width - gap, rect.left - main.left + (rect.width - width) / 2)) + 'px';
 }
 $('transcript').addEventListener('scroll', positionQuoteButton, { capture: true, passive: true });
-$('quote-selection').addEventListener('pointerdown', event => event.preventDefault());
-$('quote-selection').addEventListener('click', () => {
-  if (!selectedMessageRange()) return;
-  const text = window.getSelection().toString();
-  const input = $('prompt');
+function insertQuote() {
+  const input = $('prompt'), quote = displayedQuote;
+  if (!quote || quote.session !== selected || input.disabled || $('composer').hidden || quoteButton.hidden) return;
+  displayedQuote = undefined; quoteButton.hidden = true;
   window.getSelection().removeAllRanges();
-  input.value = text.replace(/^/gm, '> ') + '\n\n' + input.value;
+  input.value = quote.text.replace(/^/gm, '> ') + '\n\n' + input.value;
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-});
+}
+quoteButton.addEventListener('touchstart', event => {
+  quoteTouch = event.touches.length === 1 && { session: selected, touch: event.touches[0] };
+  if (quoteTouch) event.preventDefault();
+}, { passive: false });
+quoteButton.addEventListener('touchend', event => {
+  const start = quoteTouch, end = event.changedTouches[0];
+  quoteTouch = undefined;
+  if (start && start.session === selected && end?.identifier === start.touch.identifier && Math.hypot(end.clientX - start.touch.clientX, end.clientY - start.touch.clientY) < 10) {
+    event.preventDefault(); insertQuote();
+  }
+  positionQuoteButton();
+}, { passive: false });
+quoteButton.addEventListener('touchcancel', () => { quoteTouch = undefined; positionQuoteButton(); });
+quoteButton.addEventListener('mousedown', event => event.preventDefault());
+quoteButton.addEventListener('click', insertQuote);
 $('prompt').addEventListener('click', renderCommands);
 document.addEventListener('selectionchange', () => {
   positionQuoteButton();
