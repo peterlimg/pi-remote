@@ -87,7 +87,7 @@ const transcriptObserver = new ResizeObserver(() => {
   }
   if (box.clientWidth !== transcriptWidth) historyScrollTop = box.scrollTop;
   transcriptWidth = box.clientWidth;
-  updateScrollButton(); positionQuoteButton();
+  updateScrollButton();
 });
 transcriptObserver.observe($('transcript'));
 transcriptObserver.observe(activityIndicator);
@@ -95,7 +95,7 @@ transcriptObserver.observe(activityIndicator);
 new ResizeObserver(([{ target }]) => {
   document.documentElement.style.setProperty('--dock-height', `${target.offsetHeight}px`);
   if (pinnedToBottom) $('transcript').scrollTop = $('transcript').scrollHeight;
-  updateScrollButton(); positionQuoteButton();
+  updateScrollButton();
 }).observe($('dock'));
 new ResizeObserver(([{ target }]) => {
   const height = target.getBoundingClientRect().height;
@@ -4045,33 +4045,20 @@ $('commands').addEventListener('click', () => {
   input.focus();
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
-function selectedMessageRange() {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || selection.isCollapsed || $('prompt').disabled || $('composer').hidden) return;
-  const range = selection.getRangeAt(0), node = range.commonAncestorContainer;
-  const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-  if (element?.closest('#transcript .message > .message-text') && selection.toString().trim()) return range;
-}
 const quoteButton = $('quote-selection');
 let displayedQuote, quoteTouch;
-function positionQuoteButton() {
+function updateQuoteButton() {
   if (quoteTouch && displayedQuote?.session === selected) return;
-  const button = quoteButton, range = selectedMessageRange();
-  displayedQuote = range && { session: selected, text: window.getSelection().toString() };
-  if (!range) { button.hidden = true; return; }
-  const rect = range.getBoundingClientRect(), main = button.parentElement.getBoundingClientRect();
-  const top = Math.max(document.querySelector('.conversation-header').getBoundingClientRect().bottom, $('transcript').getBoundingClientRect().top);
-  const bottom = $('dock').getBoundingClientRect().top;
-  button.hidden = rect.bottom <= top || rect.top >= bottom || rect.right <= main.left || rect.left >= main.right;
-  if (button.hidden) return;
-  const gap = 8, width = button.offsetWidth, height = button.offsetHeight;
-  const clearance = matchMedia('(pointer: coarse)').matches ? 88 : gap;
-  const below = bottom - rect.bottom, above = rect.top - top;
-  const y = below >= height + clearance || below > above ? rect.bottom + clearance : rect.top - height - clearance;
-  button.style.top = Math.max(top, Math.min(bottom - height, y)) - main.top + 'px';
-  button.style.left = Math.max(gap, Math.min(main.width - width - gap, rect.left - main.left + (rect.width - width) / 2)) + 'px';
+  const selection = window.getSelection();
+  let text;
+  if (selection?.rangeCount && !selection.isCollapsed && !$('prompt').disabled && !$('composer').hidden) {
+    const node = selection.getRangeAt(0).commonAncestorContainer;
+    const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    if (element?.closest('#transcript .message > .message-text')) text = selection.toString();
+  }
+  displayedQuote = text?.trim() ? { session: selected, text } : undefined;
+  quoteButton.hidden = !displayedQuote;
 }
-$('transcript').addEventListener('scroll', positionQuoteButton, { capture: true, passive: true });
 function insertQuote() {
   const input = $('prompt'), quote = displayedQuote;
   if (!quote || quote.session !== selected || input.disabled || $('composer').hidden || quoteButton.hidden) return;
@@ -4092,14 +4079,13 @@ quoteButton.addEventListener('touchend', event => {
   if (start && start.session === selected && end?.identifier === start.touch.identifier && Math.hypot(end.clientX - start.touch.clientX, end.clientY - start.touch.clientY) < 10) {
     event.preventDefault(); insertQuote();
   }
-  positionQuoteButton();
+  updateQuoteButton();
 }, { passive: false });
-quoteButton.addEventListener('touchcancel', () => { quoteTouch = undefined; positionQuoteButton(); });
-quoteButton.addEventListener('mousedown', event => event.preventDefault());
+quoteButton.addEventListener('touchcancel', () => { quoteTouch = undefined; updateQuoteButton(); });
 quoteButton.addEventListener('click', insertQuote);
 $('prompt').addEventListener('click', renderCommands);
 document.addEventListener('selectionchange', () => {
-  positionQuoteButton();
+  updateQuoteButton();
   if (document.activeElement === $('prompt')) renderCommands();
 });
 $('composer').addEventListener('focusout', event => {

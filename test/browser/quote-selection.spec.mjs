@@ -3,13 +3,12 @@ import { test, expect } from '@playwright/test';
 test('quote a selected passage into a draft and send it with the reply', async ({ page }) => {
   await page.goto('/#token=browser-test-token-only-123456789012345');
   await page.getByRole('button', { name: /Project Alpha/ }).click();
-  const quote = page.getByRole('button', { name: 'Quote selection' }), prompt = page.locator('#prompt');
+  const quote = page.locator('#composer').getByRole('button', { name: 'Quote selection' }), prompt = page.locator('#prompt');
   const reply = 'Which checks should I run?';
   await prompt.fill(reply);
   await expect(quote).toBeHidden();
   const passage = page.locator('#transcript .message-text').filter({ hasText: 'The relay is ready.' }).first();
   await passage.locator('strong').click();
-  const composer = page.locator('#composer'), composerHeight = (await composer.boundingBox()).height;
   await passage.evaluate(body => {
     body.querySelector('strong').scrollIntoView({ block: 'center' });
     const range = new Range();
@@ -18,13 +17,10 @@ test('quote a selected passage into a draft and send it with the reply', async (
     window.getSelection().removeAllRanges();
     window.getSelection().addRange(range);
   });
-  const gapBelowSelection = () => quote.evaluate(button => button.getBoundingClientRect().top - window.getSelection().getRangeAt(0).getBoundingClientRect().bottom);
   await expect(quote).toBeVisible();
-  await expect.poll(gapBelowSelection).toBeGreaterThanOrEqual(80);
   const before = await quote.boundingBox();
   await page.locator('#transcript').evaluate(box => { box.scrollTop += 32; });
-  await expect.poll(async () => (await quote.boundingBox()).y).toBeCloseTo(before.y - 32, 0);
-  expect((await composer.boundingBox()).height).toBe(composerHeight);
+  expect((await quote.boundingBox()).y).toBeCloseTo(before.y, 0);
   await quote.evaluate(button => button.addEventListener('touchstart', () => {
     window.getSelection().removeAllRanges();
   }, { once: true }));

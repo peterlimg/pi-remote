@@ -64,9 +64,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .hint { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 /* Floating controls and surfaces all share the same glass over the content beneath them. */
-.shell :is(.conversation-heading, #back, .conversation-actions), :is(#scroll-bottom, #quote-selection), .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
+.shell :is(.conversation-heading, #back, .conversation-actions), #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { border: 1px solid var(--glass-edge); background: var(--glass-sheen) var(--glass); box-shadow: 0 8px 24px rgb(0 0 0 / .14); }
 /* Blur these containers on a separate layer so their floating children can still sample the thread. */
-.shell :is(.conversation-heading, #back), .conversation-actions::before, :is(#scroll-bottom, #quote-selection), .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.shell :is(.conversation-heading, #back), .conversation-actions::before, #scroll-bottom, .search-bar :is(.search-round, .search-field), .image-viewer .search-round, .composer::before, .command-menu, .session-details, .nearby-sessions, #recent-filter-menu, .video-actions, .project-sheet, .coordinator-sheet, .session-close-card, .access-banner, .dialog, .session-feedback, #coordinator-open::before, .coordinator-inspection { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .boot { min-height: 100svh; display: grid; place-items: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(80px, var(--safe-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
 .boot-content { max-width: 100%; }
 .boot-logo { display: block; margin: 0 auto 28px; }
@@ -801,7 +801,7 @@ pre.message-text { white-space: pre-wrap; }
 /* A 44px tap target surrounds the smaller close circle, as in the toolbar. */
 .attachment > button:not(.video-open) { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 10px solid transparent; border-radius: 50%; background: #171717; background-clip: padding-box; color: #fff; }
 .video-attachment > button:not(.video-open) { top: -6px; right: -6px; }
-#quote-selection { position: absolute; z-index: 3; border-radius: 22px; color: var(--text); font-size: 14px; }
+#quote-selection { align-self: flex-start; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 14px; }
 .composer textarea { display: block; width: 100%; border: 0; border-radius: 0; background: transparent; resize: none; font-size: 17px; line-height: 1.5; max-height: min(216px, calc(var(--viewport-height, 100dvh) * .3)); min-height: 44px; padding: 8px 10px; overflow-y: auto; overscroll-behavior: contain; }
 .composer:has(.settings-picker:not([hidden])) textarea { max-height: 44px; }
 .composer textarea:focus { outline: 0; }
