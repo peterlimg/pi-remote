@@ -28,9 +28,7 @@ The production composer is an invariant in the coordinator study. Copy its exact
 
 ## Codemode work log
 
-When Pi records nested calls, show the terminal block directly: highlighted JavaScript, real call rows with status and arguments, script output, then elapsed or final timing. Preview ten script lines, the last eight calls and five output lines; expand in place. Use the same neutral panel and border as message code blocks in both themes. Highlight script tokens, call arguments, and code-like output; keep ordinary logs neutral. Preserve long code lines with horizontal scrolling and use text as well as color for call status.
-
-Runs without structured call data retain Sol's connected work-log layout. Keep Codemode in the group heading only. Each run uses one visible line for its action, status icon, and recorded duration, with the status name retained for screen readers. Reveal output before the script and preserve disclosure state during streaming. A leading script comment supplies the run title; otherwise use short action labels for literal tool references, such as Read files or Run commands. Ignore strings, comments, and regex literals, and use a neutral numbered Run when no supported reference is available. These labels describe script intent, not executed inner calls or successful checks.
+Each Codemode run is a borderless section aligned with the conversation, including pending runs and saved runs without call details. Keep JavaScript behind **View code**. Show only recorded call rows, output, and timing; preview the last eight calls and five output lines and expand in place. Preserve syntax colors, long-line scrolling, and accessible status text.
 
 ## Coordinator interaction
 

@@ -8,19 +8,6 @@ const call = (id, code) => ({ id, name: 'codemode', text: JSON.stringify({ code 
 const result = (id, text, durationMs, timestamp, isError = false) => ({
   id: id + '-result', role: 'toolResult', toolCallId: id, toolName: 'codemode', text, durationMs, timestamp, isError
 });
-const sample = () => ({
-  id: 'codemode', title: 'Check session defaults', cwd: '/project', status: 'working', messages: [
-    { id: 'user', role: 'user', text: 'Keep the same character after a rename.' },
-    { id: 'intro', role: 'assistant', text: "I'll tie default characters to session IDs and check the rename behavior." },
-    cleanMessage({ role: 'assistant', content: [
-      { type: 'toolCall', id: 'read', name: 'codemode', arguments: { code: '// Read the icon components\ntext(await tools.read({ path: "/Users/private/project/web/app.js" }));' } },
-      { type: 'toolCall', id: 'edit', name: 'codemode', arguments: { code: '// Update session defaults\nconsole.log("<img src=x onerror=window.injected=1>");' } },
-      { type: 'toolCall', id: 'checks', name: 'codemode', arguments: { code: '// Run focused browser checks\ntext(await tools.bash({ command: "npm run test:browser" }));' } }
-    ] }, 'calls'),
-    result('read', 'Read two files.', 3000, 8000),
-    result('edit', 'Applied the session ID change.', 4000, 9000)
-  ], tools: [{ id: 'checks', name: 'codemode', status: 'working', text: 'Starting browser checks\n1 passed' }]
-});
 async function open(page, state) {
   page.on('pageerror', error => { throw error; });
   let client, version = 0;
@@ -56,16 +43,22 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   const calls = [{ name: 'read', args: '{"path":"VERSION"}', status: 'ok', durationMs: 3 },
     { name: 'bash', args: '{"command":"node check.mjs"}', status: 'running' }];
   applyEvent(state, { type: 'agent_start' });
-  applyEvent(state, { type: 'tool_execution_start', ...base });
+  const publish = await open(page, state), block = page.locator('.pi-terminal');
+  await expect(block).toContainText('Waiting to run…');
+  await expect(block.locator('pre')).toBeHidden();
+  applyEvent(state, { type: 'tool_execution_start', ...base }); publish();
+  await expect(block).toHaveAttribute('data-status', 'working');
+  await expect(block.locator('li')).toHaveCount(0);
   applyEvent(state, { type: 'tool_execution_update', ...base, partialResult: { details: { calls } } });
   applyEvent(state, { type: 'tool_execution_update', toolName: 'bash', toolCallId: 'run/2', parentToolCallId: 'run' });
-  const publish = await open(page, state), block = page.locator('.pi-terminal');
-  await expect(block.locator('.keyword').first()).toHaveText('const');
+  publish();
+  await expect(block.locator('pre')).toBeHidden();
   await expect(block.locator('li')).toHaveCount(2);
   await expect(block.locator('li').last()).toContainText(/Running:.*bash/);
   await expect(block.locator('[data-terminal-started]')).toContainText('Elapsed');
   await expect(page.locator('[data-tool-id="run/2"]')).toHaveCount(0);
-  await block.getByText('… 1 more line', { exact: true }).click();
+  await block.getByText('View code', { exact: true }).click();
+  await expect(block.locator('pre')).toHaveText(code);
   calls[1] = { ...calls[1], status: 'error', error: 'Version mismatch', durationMs: 3250 };
   const completed = { content: [{ type: 'text', text: 'Script failed\nWall time 3.3 seconds\nOutput:\n' },
     { type: 'text', text: 'Error: <img src=x> version mismatch' }], details: { calls } };
@@ -83,7 +76,7 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   await expect(page.locator('.pi-terminal li')).toHaveCount(2);
 });
 
-test('terminal uses the app panel and visible syntax colors in arguments and returned code', async ({ page }) => {
+test('borderless terminal retains visible syntax colors in arguments and returned code', async ({ page }) => {
   const output = "==> text 1/4 <==\nimport { createServer } from 'node:http';";
   const state = { id: 'syntax', title: 'Inspect the server', cwd: '/project', status: 'idle', tools: [], messages: [
     { id: 'calls', role: 'assistant', toolCalls: [call('run', 'text(await tools.read({path: "src/host.mjs", limit: 85}));')] },
@@ -95,13 +88,13 @@ test('terminal uses the app panel and visible syntax colors in arguments and ret
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme });
     const colors = await block.evaluate(node => {
-      const panel = document.createElement('span'); panel.style.backgroundColor = 'var(--panel)'; node.append(panel);
-      const bg = getComputedStyle(panel).backgroundColor; panel.remove();
+      const { backgroundColor: surface, borderTopWidth: border } = getComputedStyle(node);
       const ink = selector => { const token = node.querySelector(selector); return token && getComputedStyle(token).color; };
-      return { bg, surface: getComputedStyle(node).backgroundColor, base: getComputedStyle(node).color,
+      return { surface, border, base: getComputedStyle(node).color,
         args: ['.property', '.string', '.literal'].map(c => ink('li ' + c)), keyword: ink('.terminal-output .keyword'), string: ink('.terminal-output .string') };
     });
-    expect(colors.surface).toBe(colors.bg);
+    expect(colors.surface).toBe('rgba(0, 0, 0, 0)');
+    expect(colors.border).toBe('0px');
     expect(colors.args).not.toContain(null);
     expect(new Set([...colors.args, colors.base]).size).toBe(4);
     expect(colors.keyword).toBeTruthy(); expect(colors.string).toBeTruthy();
@@ -110,210 +103,22 @@ test('terminal uses the app panel and visible syntax colors in arguments and ret
   }
 });
 
-test('codemode output stays opt-in and preserves manual expansion through streaming and completion', async ({ page }) => {
-  const state = sample(), publish = await open(page, state);
-  const group = page.locator('.codemode-activity'), summary = group.locator(':scope > summary');
-  const read = page.locator('[data-tool-id="read"]'), checks = page.locator('[data-tool-id="checks"]');
-  await expect(group).toHaveAttribute('open', '');
-  await expect(group.locator('.tool-activity-label')).toHaveText('2 complete · 1 running');
-  await expect(group.locator('.tool')).toHaveCount(3);
-  await expect(group.locator('.codemode-meta')).toHaveCount(0);
-  await expect(group.locator('.codemode-tool > summary code')).toHaveCount(0);
-  await expect(read.locator(':scope > summary')).toHaveAccessibleName(/Read the icon components.*Complete/);
-  await expect(read.locator('.codemode-title')).toHaveText('Read the icon components');
-  await expect(read.locator('.tool-output')).toBeHidden();
-  await expect(checks).not.toHaveAttribute('open', '');
-  await expect(checks.locator('.tool-output')).toBeHidden();
-  await expect(checks.locator('.codemode-state')).toHaveText(' · Running');
-  await expect(checks.locator('.codemode-state')).toHaveClass(/sr-only/);
-  await expect(checks.locator('.codemode-marker svg path')).toHaveAttribute('d', 'M12 7v5l3 2');
-  await expect(checks.locator(':scope > summary')).toHaveAccessibleName(/Run focused browser checks.*Running/);
-  await expect(checks.locator('.tool-status')).toHaveCount(0);
-  state.tools[0].text = 'Streaming output before any tap'; publish();
-  await expect(checks.locator('.tool-output')).toHaveText('Streaming output before any tap');
-  await expect(checks.locator('.tool-output')).toBeHidden();
-  await expect(group.locator('.tool-activity-progress')).toHaveCount(0);
-  await capture(page, 'phone-working');
-  await checks.locator(':scope > summary').focus(); await page.keyboard.press('Enter');
-  await expect(checks.locator('.tool-output')).toBeVisible();
-  await read.locator(':scope > summary').focus();
-  await page.keyboard.press('Enter');
-  await expect(read.locator('.tool-output')).toHaveText('Read two files.');
-  await expect(read.locator('.tool-input')).toBeHidden();
-  const script = read.locator('.codemode-script');
-  await script.locator('summary').focus();
-  await page.keyboard.press('Enter');
-  await expect(script.locator('pre')).toContainText('path: "~/project/web/app.js"');
-  await expect(script.locator('pre')).not.toContainText('"code":');
-  state.tools[0].text = 'Checking rename\n\x1b[32m2 passed\x1b[39m';
-  publish();
-  await expect(script).toHaveAttribute('open', '');
-  await expect(script.locator('summary')).toBeFocused();
-  await expect(checks.locator('.tool-output')).toHaveText('Checking rename\n2 passed');
-  await expect(checks.locator('.tool-output')).toBeVisible();
-  await checks.locator(':scope > summary').click();
-  state.tools[0].text = 'More output after closing the run'; publish();
-  await expect(checks.locator('.tool-output')).toHaveText('More output after closing the run');
-  await expect(checks.locator('.tool-output')).toBeHidden();
-  await checks.locator(':scope > summary').click();
-  await summary.click();
-  state.tools[0].text = '<img src=x onerror=window.injected=1>\n3 passed'; publish();
-  await expect(group).not.toHaveAttribute('open', '');
-  await expect(summary.locator('.tool-activity-line')).toHaveText('Run focused browser checks');
-  await expect(summary.locator('.tool-activity-progress')).toHaveCount(0);
-  await expect(checks.locator('.tool-output')).toBeHidden();
-  await expect(page.locator('#transcript img')).toHaveCount(0);
-  expect(await page.evaluate(() => window.injected)).toBeUndefined();
-  state.messages.push(result('checks', 'All browser checks passed.', 3000, 10000));
-  state.tools = []; state.status = 'idle'; publish();
-  await expect(group.locator('.tool-activity-label')).toHaveText('3 complete');
-  await expect(group.locator('.tool-activity-time')).toHaveText('5.0s elapsed');
-  await expect(group.locator('.tool-activity-progress')).toHaveCount(0);
-  await expect(group).not.toHaveAttribute('open', '');
-  await summary.focus(); await page.keyboard.press('Enter');
-  await expect(script).toHaveAttribute('open', '');
-  await expect(checks.locator('.tool-status')).toHaveText('3.0s');
-  await expect(checks.locator('.tool-output')).toBeVisible();
-  await expect(group.locator('.tool')).toHaveCount(3);
-  state.messages.push({ id: 'retry', role: 'assistant', toolCalls: [call('failed', '// Check rename assertion\nthrow new Error("rename");')] },
-    result('failed', 'Expected the same character after rename. 1 failed, 4 passed.', 0, 11000, true));
-  publish();
-  const failed = page.locator('[data-tool-id="failed"]');
-  await expect(group.locator('.tool-activity-label')).toHaveText('3 complete · 1 failed');
-  await expect(failed.locator('.tool-output')).toBeHidden();
-  await failed.locator(':scope > summary').click();
-  await expect(failed.locator('.tool-output')).toBeVisible();
-  await expect(failed.locator('.codemode-state')).toHaveText(' · Failed');
-  await expect(failed.locator(':scope > summary')).toHaveAccessibleName(/Check rename assertion.*Failed/);
-  await expect(failed.locator('.tool-status')).toHaveText('0ms');
-  await failed.scrollIntoViewIfNeeded(); await capture(page, 'phone-error');
-  await failed.locator(':scope > summary').click();
-  publish();
-  await expect(failed).not.toHaveAttribute('open', '');
-  state.messages.push({ id: 'queued', role: 'assistant', toolCalls: [call('pending', '// Review the final diff\nconsole.log("diff");')] });
-  publish();
-  const pending = page.locator('[data-tool-id="pending"]');
-  await expect(group.locator('.tool-activity-label')).toHaveText('3 complete · 1 pending · 1 failed');
-  await expect(pending.locator('.tool-status')).toHaveCount(0);
-  await expect(pending.locator(':scope > summary')).toHaveAccessibleName(/Review the final diff.*Pending/);
-  await expect(pending.locator('.codemode-marker svg circle')).toHaveCount(1);
-  await expect(pending.locator('.codemode-marker svg path')).toHaveCount(0);
-  await pending.locator(':scope > summary').click();
-  await expect(pending.locator('.tool-output')).toHaveText('Waiting to run…');
-});
-
-test('missing, string and partial inputs remain inspectable without inventing inner-tool results', async ({ page }) => {
-  const state = { id: 'codemode', title: 'Older codemode history', cwd: '/project', status: 'idle', tools: [], messages: [
-    result('orphan', 'Older output, input unavailable.'),
-    { id: 'user', role: 'user', text: 'Continue.' },
+test('runs without traces show their recorded output without inferring calls or merging neighboring tools', async ({ page }) => {
+  const state = { id: 'history', title: 'Saved work', cwd: '/project', status: 'idle', tools: [], messages: [
+    result('orphan', 'Output without script'),
     { id: 'calls', role: 'assistant', toolCalls: [
-      call('unnamed', 'console.log("tools.read is only a string, not an executed read");'),
-      { id: 'normal', name: 'read', text: '{"path":"web/app.js"}' },
-      { id: 'partial', name: 'codemode', text: '{"code":"const text = "' },
-      { id: 'string', name: 'codemode', text: JSON.stringify('// Read a string input\nconsole.log("saved");') },
-      call('options', '// @options: {"timeout_ms": 1000}\n\n// Review the results\nconsole.log("done");'),
-      call('empty', '')
-    ] },
-    result('unnamed', ''), { id: 'normal-result', role: 'toolResult', toolCallId: 'normal', toolName: 'read', text: 'Normal source.' },
-    { ...result('partial', 'Shortened output.'), truncated: true }, result('string', 'Saved output.'),
-    result('options', 'Reviewed.'), result('empty', '')
+      { id: 'read', name: 'read', text: '{"path":"web/app.js"}' },
+      call('saved', 'await tools.read({path:"never-called"});'),
+      { id: 'bash', name: 'bash', text: '{"command":"pwd"}' }
+    ] }, result('saved', 'Earlier output\n2\n3\n4\n5\n6', 0, 12000)
   ] };
   await open(page, state);
-  await expect(page.locator('.tool-activity')).toHaveCount(4);
-  await expect(page.locator('.codemode-activity')).toHaveCount(3);
-  const orphan = page.locator('[data-tool-id="orphan"]');
-  await expect(orphan.locator('.codemode-title')).toHaveText('Run 1');
-  await orphan.locator(':scope > summary').click();
-  await expect(orphan.locator('.tool-output')).toHaveText('Older output, input unavailable.');
-  await expect(orphan.locator('.codemode-script')).toHaveCount(0);
-  const unnamed = page.locator('[data-tool-id="unnamed"]');
-  await expect(unnamed.locator('.codemode-title')).toHaveText('Run 1');
-  await unnamed.locator(':scope > summary').click();
-  await expect(unnamed.locator('.tool-output')).toHaveText('No output.');
-  await expect(page.locator('[data-tool-id="normal"]')).not.toHaveClass(/codemode-tool/);
-  const partial = page.locator('[data-tool-id="partial"]');
-  await partial.locator(':scope > summary').click();
-  await expect(partial.locator('.hint')).toHaveText('Output shortened for mobile.');
-  await partial.locator('.codemode-script summary').click();
-  await expect(partial.locator('.tool-input')).toHaveText('{"code":"const text = "');
-  await expect(partial.locator('.codemode-script summary')).toHaveText('Input');
-  const string = page.locator('[data-tool-id="string"]');
-  await expect(string.locator('.codemode-title')).toHaveText('Read a string input');
-  await string.locator(':scope > summary').click();
-  await string.locator('.codemode-script summary').click();
-  await expect(string.locator('.tool-input')).toHaveText('// Read a string input\nconsole.log("saved");');
-  await expect(page.locator('[data-tool-id="options"] .codemode-title')).toHaveText('Review the results');
-  await expect(page.locator('[data-tool-id="empty"] .codemode-title')).toHaveText('Run 4');
-  await expect(page.locator('#transcript')).not.toContainText('Read 1 file,');
-});
-
-test('untitled runs use action labels without treating source references as executed inner calls', async ({ page }) => {
-  const scripts = [
-    ['read-files', `const note = "tools.bash({})";
-const template = \`tools.edit({})\`;
-const pattern = /tools.write()/;
-// tools.fffind({})
-/* tools.radius_web_search({}) */
-text(await tools.read({ path: "web/app.js" }));`, 'Read files'],
-    ['search-code', 'await Promise.all([tools.read({ path: "web/app.js" }), tools.read({ path: "web/style.css" }), tools.ffgrep({ pattern: "working" })]);', 'Read files · Search code'],
-    ['run-command', 'text(await tools.bash({ command: "npm run test:browser" }));', 'Run commands'],
-    ['dynamic', 'tools.constructor({}); const name = "read"; await tools[name]({ path: "web/app.js" });', 'Run 4'],
-    ['quoted', `console.log('tools.read({})');`, 'Run 5']
-  ];
-  const state = { id: 'codemode', title: 'Inspect the activity display', cwd: '/project', status: 'idle', tools: [], messages: [
-    cleanMessage({ role: 'assistant', content: scripts.map(([id, code]) => ({ type: 'toolCall', id, name: 'codemode', arguments: { code } })) }, 'calls'),
-    ...scripts.map(([id]) => result(id, 'Script completed. Inner tool outcomes are not recorded.', 1000, 10000))
-  ] };
-  const publish = await open(page, state);
-  const group = page.locator('.codemode-activity');
-  await expect(group.locator(':scope > summary .codemode-title')).toHaveText('Codemode');
-  await expect(group.locator('.tool-activity-label')).toHaveText('5 complete');
-  for (const [id, , title] of scripts) {
-    const run = page.locator(`[data-tool-id="${id}"]`);
-    await expect(run.locator('.codemode-title')).toHaveText(title);
-    await expect(run.locator('.tool-output')).toBeHidden();
-  }
-  await expect(page.locator('#transcript')).not.toContainText('JavaScript run');
-  await expect(page.locator('#transcript')).not.toContainText('Read 2 files');
-  await capture(page, 'phone-action-titles');
-  const read = page.locator('[data-tool-id="read-files"]');
-  await read.locator(':scope > summary').click();
-  await read.locator('.codemode-script summary').click();
-  await expect(read.locator('.tool-input')).toContainText('const template');
-  publish();
-  await expect(read.locator('.codemode-title')).toHaveText('Read files');
-  await expect(read.locator('.codemode-script')).toHaveAttribute('open', '');
-});
-
-test('compact work log fits phone, narrow and desktop views without shrinking touch targets', async ({ page }) => {
-  const state = sample();
-  state.messages.push(result('checks', '5 passed.', 3000, 10000)); state.tools = []; state.status = 'idle';
-  await open(page, state);
-  for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [1440, 'light']]) {
-    await page.setViewportSize({ width, height: 844 }); await page.emulateMedia({ colorScheme: scheme });
-    const group = page.locator('.codemode-activity');
-    await expect(async () => {
-      await group.locator(':scope > summary').scrollIntoViewIfNeeded();
-    }).toPass({ timeout: 5000 });
-    for (const selector of ['.codemode-activity > summary', '.codemode-tool > summary']) {
-      for (const box of await page.locator(selector).all()) {
-        const { height } = await box.boundingBox();
-        expect(height).toBeGreaterThanOrEqual(44);
-        expect(height).toBeLessThanOrEqual(52);
-      }
-    }
-    for (const heading of await group.locator('.codemode-tool .tool-heading').all()) {
-      expect((await heading.boundingBox()).height).toBeLessThanOrEqual(20);
-    }
-    expect((await group.boundingBox()).height).toBeLessThanOrEqual(190);
-    await expect(group.locator('.codemode-mark path')).toHaveAttribute('d', 'm8 6-6 6 6 6m8-12 6 6-6 6M13.5 3l-3 18');
-    await expect(page.locator('#commands path')).toHaveAttribute('d', 'm15 5-6 14');
-    const iconBounds = await group.locator('.codemode-mark path').evaluate(path => {
-      const { y, height } = path.getBBox(); return { y, height };
-    });
-    expect(iconBounds).toEqual({ y: 3, height: 18 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    expect(await page.locator('#transcript').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-    await capture(page, `work-log-${width}-${scheme}`);
-  }
+  const block = page.locator('.pi-terminal[data-tool-id="saved"]');
+  await expect(block.locator('li')).toHaveCount(0);
+  await expect(block.getByText(/never-called/)).toBeHidden();
+  await expect(block.locator('.terminal-output').first()).toBeVisible();
+  await block.getByText('… 1 more line').click();
+  await expect(block.locator('.terminal-output').last()).toHaveText('6');
+  await expect(page.locator('[data-tool-id="orphan"]')).not.toContainText('View code');
+  await expect(page.locator('.tool-activity')).toHaveCount(2);
 });
