@@ -49,6 +49,7 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   await expect(block.locator('pre').first()).toHaveText(code.split('\n').slice(0, 2).join('\n'));
   applyEvent(state, { type: 'tool_execution_start', ...base }); publish();
   await expect(block).toHaveAttribute('data-status', 'working');
+  const runningBackground = await block.evaluate(node => getComputedStyle(node).backgroundColor);
   await expect(block.locator('li')).toHaveCount(0);
   applyEvent(state, { type: 'tool_execution_update', ...base, partialResult: { details: { calls } } });
   applyEvent(state, { type: 'tool_execution_update', toolName: 'bash', toolCallId: 'run/2', parentToolCallId: 'run' });
@@ -72,6 +73,7 @@ test('terminal blocks follow call snapshots and survive reopening from a saved r
   await expect(block.locator('li').last()).toContainText('Version mismatch');
   await expect(block.locator('.terminal-output')).toHaveText('Error: <img src=x> version mismatch');
   await expect(block).toContainText('Failed · Took 3.3s');
+  await expect(block).not.toHaveCSS('background-color', runningBackground);
   await expect(block.locator('img')).toHaveCount(0);
   expect(await page.locator('#transcript').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
   await page.reload();
@@ -96,11 +98,10 @@ test('borderless terminal retains visible syntax colors in arguments and returne
       return { surface, border, base: getComputedStyle(node).color,
         args: ['.property', '.string', '.literal'].map(c => ink('li ' + c)), keyword: ink('.terminal-output .keyword'), string: ink('.terminal-output .string') };
     });
-    expect(colors.surface).toBe('rgba(0, 0, 0, 0)');
-    const script = block.locator('pre').first();
-    await expect(script).not.toHaveCSS('background-color', colors.surface);
-    await expect(script).not.toHaveCSS('background-color', await page.locator('html').evaluate(node => getComputedStyle(node).backgroundColor));
-    await expect(block.locator('.terminal-output')).toHaveCSS('background-color', colors.surface);
+    expect(colors.surface).not.toBe('rgba(0, 0, 0, 0)');
+    expect(colors.surface).not.toBe(await page.locator('html').evaluate(node => getComputedStyle(node).backgroundColor));
+    await expect(block.locator('pre').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(block.locator('.terminal-output')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     expect(colors.border).toBe('0px');
     expect(colors.args).not.toContain(null);
     expect(new Set([...colors.args, colors.base]).size).toBe(4);

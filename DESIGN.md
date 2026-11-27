@@ -28,7 +28,7 @@ The production composer is an invariant in the coordinator study. Copy its exact
 
 ## Codemode work log
 
-Each Codemode run is a borderless section aligned with the conversation, including pending runs and saved runs without call details. Show the first two script lines inline, the last three recorded calls, and the first two output lines. Expand each section in place when there is more to read. Preserve syntax colors, long-line scrolling, and accessible status text.
+Each Codemode run is a borderless section aligned with the conversation, including pending runs and saved runs without call details. Tint the entire run: neutral while pending or running, soft green on success, soft red on failure. Show the first two script lines inline, the last three recorded calls, and the first two output lines. Expand each section in place when there is more to read. Preserve syntax colors, long-line scrolling, and accessible status text.
 
 ## Coordinator interaction
 
