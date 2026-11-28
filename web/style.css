@@ -785,11 +785,11 @@ pre.message-text { white-space: pre-wrap; }
 /* The dots strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button rises above it. */
 .session-swipe { position: absolute; bottom: calc(100% + var(--coordinator-height, 0px)); left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .session-dots:empty { border-radius: 50%; background: var(--text); }
-#pull-new-session { --ring: light-dark(#a7432f, #da7760); position: absolute; bottom: calc(100% + var(--coordinator-height, 0px) + 8px); left: 50%; translate: -50% 0; display: grid; justify-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; pointer-events: none; opacity: min(1, var(--pull-progress) * 4); }
-#pull-new-session circle { stroke: var(--ring); stroke-width: 2; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--pull-progress)); transform: rotate(-90deg); transform-origin: center; }
+#pull-new-session { position: absolute; bottom: calc(100% + var(--coordinator-height, 0px) + 8px); left: 50%; translate: -50% 0; display: grid; justify-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; pointer-events: none; opacity: min(1, var(--pull-progress) * 4); }
+#pull-new-session circle { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--pull-progress)); transform: rotate(-90deg); transform-origin: center; }
 #pull-new-session[data-ready] { color: var(--text); }
-#pull-new-session[data-ready] circle { fill: var(--ring); }
-#pull-new-session[data-ready] path { stroke: white; }
+#pull-new-session[data-ready] circle { fill: var(--accent); }
+#pull-new-session[data-ready] path { stroke: var(--bg); }
 main:has(#pull-new-session:not([hidden])) :is(#scroll-bottom, #session-dots) { opacity: 0; }
 @media (prefers-reduced-motion: no-preference) {
   #pull-new-session { translate: -50% calc(var(--pull-lift) * -.42); }

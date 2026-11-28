@@ -3861,13 +3861,14 @@ $('nearby-sessions').addEventListener('toggle', event => { if (event.newState ==
 }
 const pullAction = $('pull-new-session'), pullSurface = $('transcript').closest('main');
 function updateSessionPull(distance) {
-  const progress = Math.max(0, Math.min(1, distance / 144));
+  const threshold = Math.min(256, Math.max(144, (window.visualViewport?.height ?? innerHeight) * .4));
+  const progress = Math.max(0, Math.min(1, distance / threshold));
   const wasReady = pullAction.hasAttribute('data-ready'), ready = progress >= (wasReady ? .9 : 1);
   if (ready && !wasReady) haptic();
   pullAction.toggleAttribute('data-ready', ready);
   pullAction.lastElementChild.textContent = ready ? 'Release for new session' : 'Pull up for new session';
   pullAction.style.setProperty('--pull-progress', progress);
-  pullSurface.style.setProperty('--pull-lift', `${Math.max(0, Math.min(144, distance * .75))}px`);
+  pullSurface.style.setProperty('--pull-lift', `${Math.max(0, Math.min(144, distance / threshold * 108))}px`);
   pullAction.hidden = false;
 }
 function dismissSessionPull() {

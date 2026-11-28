@@ -338,17 +338,23 @@ test('new session button lists recent projects, hides projectless folders and st
     await page.mouse.move(center, start); await page.mouse.down();
     await page.mouse.move(center, start - distance, { steps: 5 });
   };
-  await pull(48);
+  await pull(220);
   await expect(action).toHaveText('Pull up for new session');
   await page.mouse.up(); await expect(action).toBeHidden(); await expect(picker).toBeHidden();
-  await pull(155); await expect(action).toHaveText('Release for new session');
+  await pull(260); await expect(action).toHaveText('Release for new session');
+  for (const colorScheme of ['dark', 'light']) {
+    await page.emulateMedia({ colorScheme });
+    const colors = await page.locator('#send').evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]);
+    await expect(action.locator('circle')).toHaveCSS('fill', colors[0]);
+    await expect(action.locator('path')).toHaveCSS('stroke', colors[1]);
+  }
   await page.mouse.move(center, start - 48); await page.mouse.up();
   await expect(action).toBeHidden(); await expect(picker).toBeHidden();
   const thread = page.locator('#transcript'), dock = page.locator('#composer');
   const dockY = (await dock.boundingBox()).y, threadY = (await thread.boundingBox()).y;
   if (browserName === 'chromium') {
     const touch = await page.context().newCDPSession(page);
-    for (const dy of [0, 32, 155]) await touch.send('Input.dispatchTouchEvent', {
+    for (const dy of [0, 32, 260]) await touch.send('Input.dispatchTouchEvent', {
       type: dy ? 'touchMove' : 'touchStart', touchPoints: [{ x: center, y: start - 80 - dy }],
     });
     await expect(action).toHaveText('Release for new session');
@@ -357,7 +363,7 @@ test('new session button lists recent projects, hides projectless folders and st
     await page.screenshot({ path: testInfo.outputPath('pull-new-session.png') });
     await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await touch.detach();
-  } else { await pull(155); await page.mouse.up(); }
+  } else { await pull(260); await page.mouse.up(); }
   await expect(picker).toBeVisible(); expect(operations).toHaveLength(1);
   await picker.getByRole('button', { name: 'Start without a project' }).tap();
   await expect(picker).toBeHidden();
