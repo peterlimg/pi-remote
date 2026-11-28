@@ -762,8 +762,15 @@ pre.message-text { white-space: pre-wrap; }
 .activity-text { min-width: 0; }
 #activity-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
-.activity-glyph { flex: 0 0 28px; }
+.activity-scene { display: inline-flex; align-items: center; flex: none; }
+.activity-glyph { width: 36px; }
 .activity-glyph > .session-icon { margin: 0; }
+.activity-glyph > .bot { height: 36px; }
+.activity-prop { margin-left: -2px; z-index: 1; }
+.activity-prop > g { display: none; }
+.activity-glyph[data-gesture=look] + svg .thought,
+.activity-glyph[data-gesture=scan] + svg .book,
+.activity-glyph[data-gesture=tap] + svg .laptop { display: inline; }
 @media (prefers-reduced-motion: no-preference) {
   .activity-glyph > .bot { transform-origin: 50% 85%; }
   .activity-glyph[data-gesture=look] > .bot { animation: activity-look 3.2s ease-in-out infinite; }
@@ -772,17 +779,17 @@ pre.message-text { white-space: pre-wrap; }
   .document-hidden .activity-glyph > .bot, .activity-glyph[data-gesture] > .bot:not(.in-view) { animation-play-state: paused; }
 }
 @keyframes activity-look {
-  0%, 18%, 100% { transform: translateX(-1px) rotate(-6deg); }
-  48%, 68% { transform: translateX(1px) rotate(6deg); }
+  0%, 18%, 100% { transform: translate(-2px, 1px) rotate(-9deg); }
+  48%, 68% { transform: translate(2px, -3px) rotate(12deg); }
 }
 @keyframes activity-scan {
-  0%, 85%, 100% { transform: translate(-2px, -1px) rotate(-5deg); }
-  38% { transform: translate(2px, 0) rotate(4deg); }
-  62% { transform: translate(-2px, 2px) rotate(-3deg); }
+  0%, 85%, 100% { transform: rotate(4deg); }
+  38%, 52% { transform: translate(4px, 2px) rotate(19deg); }
+  68% { transform: translate(2px, 1px) rotate(11deg); }
 }
 @keyframes activity-tap {
   0%, 26%, 52%, 100% { transform: none; }
-  14%, 39% { transform: translateY(2px) scale(.98, .9); }
+  14%, 39% { transform: translate(3px, 3px) rotate(9deg) scale(1.06, .84); }
 }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
 #composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 13px; }

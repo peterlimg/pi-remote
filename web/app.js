@@ -2358,18 +2358,22 @@ function updateActivity() {
   }
   const retrying = state ? replyAttempts(state).retrying : false;
   const runningTool = active && state.tools?.findLast(tool => tool.status === 'working');
+  const toolName = runningTool?.name === 'codemode' ? runningTool.trace?.calls?.findLast(call => call.status === 'running')?.name || 'codemode' : runningTool?.name;
+  const scanning = ['read', 'grep', 'find', 'ffgrep', 'fffind', 'ls'].includes(toolName);
+  const statusText = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : !toolName ? ''
+    : toolName === 'read' ? 'Reading a file…' : scanning ? 'Searching…' : toolName === 'bash' ? 'Running a command…'
+    : toolName === 'edit' ? 'Editing a file…' : toolName === 'write' ? 'Writing a file…' : 'Using a tool…';
   if (active) {
-    const toolName = runningTool?.name === 'codemode' ? runningTool.trace?.calls?.findLast(call => call.status === 'running')?.name || 'codemode' : runningTool?.name;
-    const gesture = !toolName ? 'look' : ['read', 'grep', 'find', 'ffgrep', 'fffind', 'ls'].includes(toolName) ? 'scan' : 'tap';
+    const gesture = !toolName || compacting || retrying ? 'look' : scanning ? 'scan' : 'tap';
     if (activityGlyph.dataset.gesture !== gesture) activityGlyph.dataset.gesture = gesture;
     const kind = sessionKind(state);
     const icon = activityGlyph.firstElementChild;
     if (!icon || activity.dataset.sessionId !== selected || icon.dataset.kind !== (kind?.emoji ? undefined : kind?.type)) {
       const working = statusIcon('working');
-      activityGlyph.replaceChildren(kind && !kind.emoji ? dressKind(working, kind, 28, 'working') : working);
+      activityGlyph.replaceChildren(kind && !kind.emoji ? dressKind(working, kind, 36, 'working') : working);
     }
   }
-  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
+  if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.statusText !== statusText || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
       'Looking closer…', 'Considering it…', 'Finding an angle…', 'Making sense of it…', 'Reflecting…',
@@ -2377,12 +2381,12 @@ function updateActivity() {
       'Exploring the idea…', 'Considering angles…', 'Making connections…', 'Working through it…', 'Thinking it over…',
       'Taking it in…', 'Letting it simmer…', 'Noodling on it…', 'Piecing it together…']
       .filter(text => text !== label.textContent);
-    label.textContent = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : labels[Math.floor(Math.random() * labels.length)];
+    label.textContent = statusText || labels[Math.floor(Math.random() * labels.length)];
     activityLabelAt = now + 8000;
-    activity.dataset.sessionId = selected; activity.dataset.compacting = String(compacting); activity.dataset.retrying = String(retrying);
+    activity.dataset.sessionId = selected; activity.dataset.statusText = statusText;
   }
   // Screen readers keep a stable announcement while the visible phrase rotates.
-  const announcement = compacting ? 'Compacting conversation…' : retrying ? 'Retrying reply…' : 'Working…';
+  const announcement = statusText || 'Working…';
   const status = activity.querySelector('.sr-only');
   if (status.textContent !== announcement) status.textContent = announcement;
   activity.hidden = !active;
