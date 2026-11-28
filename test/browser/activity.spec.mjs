@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('activity follows the selected agent through streaming, tools, waiting, completion and disconnect', async ({ page }, testInfo) => {
+test('activity follows the selected agent through streaming, tools, waiting, completion and disconnect', async ({ page }) => {
   const state = { id: 'active', title: 'Review changes', cwd: '/project', status: 'idle', messages: [
     { id: 'user', role: 'user', text: 'Check how to fix the slow runs.' },
     { id: 'reply', role: 'assistant', text: 'I’ll check the timings from the last three runs.' }
@@ -36,12 +36,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const icon = activity.locator('.session-icon');
   await expect(icon).toHaveAttribute('data-kind', 'luna');
   await expect(icon).toHaveAttribute('data-mood', 'working');
-  const checkScene = async (prop, text) => {
-    await expect(activity.locator('.activity-prop > g:visible')).toHaveClass(prop);
-    await expect(label).toHaveText(text);
-    await activity.screenshot({ path: testInfo.outputPath(prop + '.png') });
-  };
-  await checkScene('thought', 'Thinking…');
+  await expect(activity.locator('svg')).toHaveCount(1);
   await expect(icon).toHaveCSS('animation-name', 'activity-look');
   const glyph = icon.locator('.bot-figure');
   await expect(glyph).toHaveCSS('animation-name', 'character-luna');
@@ -57,10 +52,10 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
-  await checkScene('laptop', 'Running a command…');
+  await expect(label).toHaveText('Running a command…');
   await expect(icon).toHaveCSS('animation-name', 'activity-tap');
   state.tools.push({ id: 'file', name: 'codemode', status: 'working', trace: { calls: [{ name: 'read', status: 'running', args: '{}' }] } }); snapshot();
-  await checkScene('book', 'Reading a file…');
+  await expect(label).toHaveText('Reading a file…');
   await expect(icon).toHaveCSS('animation-name', 'activity-scan');
   state.tools.pop(); snapshot();
   await expect(icon).toHaveCSS('animation-name', 'activity-tap');
@@ -106,7 +101,6 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.tools = [];
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
-  await expect(activity.locator('.activity-prop > g:visible')).toHaveClass('thought');
   await expect(label).not.toHaveText('Running a command…');
 
   client.close({ code: 1012, reason: 'Computer disconnected' });

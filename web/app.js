@@ -2370,7 +2370,7 @@ function updateActivity() {
     const icon = activityGlyph.firstElementChild;
     if (!icon || activity.dataset.sessionId !== selected || icon.dataset.kind !== (kind?.emoji ? undefined : kind?.type)) {
       const working = statusIcon('working');
-      activityGlyph.replaceChildren(kind && !kind.emoji ? dressKind(working, kind, 36, 'working') : working);
+      activityGlyph.replaceChildren(kind && !kind.emoji ? dressKind(working, kind, 28, 'working') : working);
     }
   }
   if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.statusText !== statusText || now >= activityLabelAt)) {
