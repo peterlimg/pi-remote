@@ -1,0 +1,13 @@
+# Haptics during the New session pull on iPhone
+
+The interaction to test is one uninterrupted upward drag. A tick on release, a checkbox `change` event, and several tactile ticks **before** release are different outcomes.
+
+| Delivery | What to try | Limit |
+| --- | --- | --- |
+| Safari or Home Screen web app | Test one system tick at “Release for new session” from a pull starting on the bottom handle. The finger must operate a real native switch; Pi Remote's edge-back control is a starting point. | [WebKit's switch implementation](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/CheckboxSwitch.cpp) checks trusted input, has a 200 ms touch-hold delay, and requests drag feedback when the switch changes sides. It does not offer arbitrary pulses at successive distances along the transcript. A quick flick may miss the tick. |
+| Thin iOS client, same web conversation | Forward pull milestones to native code. [Capacitor Haptics](https://capacitorjs.com/docs/apis/haptics) has `selectionStart`, `selectionChanged`, and `selectionEnd` for this sequence. Alternatively a [WKScriptMessageHandler](https://developer.apple.com/documentation/webkit/wkscriptmessagehandler) can call [UISelectionFeedbackGenerator](https://developer.apple.com/documentation/uikit/uiselectionfeedbackgenerator). | Runs inside the installed client, not the existing Safari tab. Scope any bridge to the trusted Pi Remote origin and a bounded set of feedback events. |
+| Native continuous feedback | If the desired feel is a buzz rather than distinct ticks, use [Core Haptics](https://developer.apple.com/documentation/corehaptics/updating-continuous-and-transient-haptic-parameters-in-real-time). Map upward progress to intensity and stop on pause, reversal, cancellation or release. | Also needs native code and supported hardware. |
+
+[Browser compatibility data](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/vibrate#browser_compatibility) lists no iOS Safari Vibration API. Changing the JS vibration pattern, installing the same page on the Home Screen, or counting scripted switch changes doesn't establish that the motor fired.
+
+**Smallest useful experiment:** If staying in Safari matters more than repeated ticks, try the single threshold tick on the dots without intercepting ordinary thread scrolling. If repeated ticks are the requirement, first prototype just the pull and native feedback on one iPhone before packaging the full app. Compare slow pull, fast flick, hold still, reverse and cancel. Record what the tester actually feels rather than the number of callbacks. No device trial was performed for this note.
