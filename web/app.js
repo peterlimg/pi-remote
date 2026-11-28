@@ -2364,7 +2364,8 @@ function updateActivity() {
     : toolName === 'read' ? 'Reading a file…' : scanning ? 'Searching…' : toolName === 'bash' ? 'Running a command…'
     : toolName === 'edit' ? 'Editing a file…' : toolName === 'write' ? 'Writing a file…' : 'Using a tool…';
   if (active) {
-    const gesture = !toolName || compacting || retrying ? 'look' : scanning ? 'scan' : 'tap';
+    const gesture = !toolName || compacting || retrying ? 'think' : toolName === 'read' ? 'read' : scanning ? 'search'
+      : toolName === 'write' || toolName === 'edit' ? 'type' : 'run';
     if (activityGlyph.dataset.gesture !== gesture) activityGlyph.dataset.gesture = gesture;
     const kind = sessionKind(state);
     const icon = activityGlyph.firstElementChild;

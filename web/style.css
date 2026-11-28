@@ -765,24 +765,50 @@ pre.message-text { white-space: pre-wrap; }
 .activity-glyph { flex: 0 0 28px; }
 .activity-glyph > .session-icon { margin: 0; }
 @media (prefers-reduced-motion: no-preference) {
-  .activity-glyph > .bot { transform-origin: 50% 85%; }
-  .activity-glyph[data-gesture=look] > .bot { animation: activity-look 3.2s ease-in-out infinite; }
-  .activity-glyph[data-gesture=scan] > .bot { animation: activity-scan 1.8s ease-in-out infinite; }
-  .activity-glyph[data-gesture=tap] > .bot { animation: activity-tap 1.25s ease-in-out infinite; }
-  .document-hidden .activity-glyph > .bot, .activity-glyph[data-gesture] > .bot:not(.in-view) { animation-play-state: paused; }
+  .activity-glyph[data-gesture=think] { --pose: avatar-ponder 2.8s; --gaze: translate(1.2px, -1.8px); }
+  .activity-glyph[data-gesture=read] { --pose: avatar-read 2s; --eyes: avatar-track-line 2s; }
+  .activity-glyph[data-gesture=search] { --pose: avatar-peek 2.3s; --eyes: avatar-scout 2.3s; }
+  .activity-glyph[data-gesture=type] { --pose: avatar-keystrokes 1.15s; --gaze: translateY(1.5px) scaleY(.8); }
+  .activity-glyph[data-gesture=run] { --pose: avatar-hop 1.55s; }
+  #agent-activity .bot > svg { animation: none; }
+  #agent-activity .bot-figure { transform-box: view-box; transform-origin: 16px 27px; animation: var(--pose) ease-in-out infinite; }
+  #agent-activity .bot-look { transform: var(--gaze, none); animation: var(--eyes, none) ease-in-out infinite; }
 }
-@keyframes activity-look {
-  0%, 18%, 100% { transform: translateX(-1px) rotate(-6deg); }
-  48%, 68% { transform: translateX(1px) rotate(6deg); }
+@keyframes avatar-ponder {
+  0%, 14%, 100% { transform: none; }
+  30%, 65% { transform: translate(1px, -1px) rotate(-23deg); }
+  78% { transform: rotate(4deg); }
 }
-@keyframes activity-scan {
-  0%, 85%, 100% { transform: translate(-2px, -1px) rotate(-5deg); }
-  38% { transform: translate(2px, 0) rotate(4deg); }
-  62% { transform: translate(-2px, 2px) rotate(-3deg); }
+@keyframes avatar-read {
+  0%, 100% { transform: rotate(5deg); }
+  45% { transform: translateY(1px) rotate(12deg); }
+  54%, 85% { transform: translateY(2px) rotate(16deg); }
 }
-@keyframes activity-tap {
-  0%, 26%, 52%, 100% { transform: none; }
-  14%, 39% { transform: translateY(2px) scale(.98, .9); }
+@keyframes avatar-track-line {
+  0%, 100% { transform: translate(-2px, 0); }
+  43% { transform: translate(2px, 0); }
+  50% { transform: translate(-2px, 1.8px); }
+  88% { transform: translate(2px, 1.8px); }
+}
+@keyframes avatar-peek {
+  0%, 12%, 100% { transform: none; }
+  25%, 42% { transform: translateX(-3px) rotate(-20deg); }
+  62%, 82% { transform: translateX(3px) rotate(20deg); }
+}
+@keyframes avatar-scout {
+  10%, 40% { transform: translateX(-2px); }
+  54%, 80% { transform: translateX(2px); }
+}
+@keyframes avatar-keystrokes {
+  0%, 24%, 48%, 72%, 100% { transform: none; }
+  13%, 60% { transform: rotate(-10deg) scale(1.08, .79); }
+  36% { transform: rotate(10deg) scale(1.08, .79); }
+}
+@keyframes avatar-hop {
+  0%, 12%, 75%, 100% { transform: none; }
+  26% { transform: scale(1.16, .75); }
+  44% { transform: translateY(-7px) scale(.9, 1.12); }
+  59% { transform: scale(1.12, .83); }
 }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
 #composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 13px; }

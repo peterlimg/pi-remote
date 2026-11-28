@@ -37,9 +37,8 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(icon).toHaveAttribute('data-kind', 'luna');
   await expect(icon).toHaveAttribute('data-mood', 'working');
   await expect(activity.locator('svg')).toHaveCount(1);
-  await expect(icon).toHaveCSS('animation-name', 'activity-look');
   const glyph = icon.locator('.bot-figure');
-  await expect(glyph).toHaveCSS('animation-name', 'character-luna');
+  await expect(glyph).toHaveCSS('animation-name', 'avatar-ponder');
   const spinStart = () => glyph.evaluate(async el => {
     const animation = el.getAnimations()[0];
     await animation.ready;
@@ -53,13 +52,17 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
   await expect(label).toHaveText('Running a command…');
-  await expect(icon).toHaveCSS('animation-name', 'activity-tap');
+  await expect(glyph).toHaveCSS('animation-name', 'avatar-hop');
   state.tools.push({ id: 'file', name: 'codemode', status: 'working', trace: { calls: [{ name: 'read', status: 'running', args: '{}' }] } }); snapshot();
   await expect(label).toHaveText('Reading a file…');
-  await expect(icon).toHaveCSS('animation-name', 'activity-scan');
+  await expect(glyph).toHaveCSS('animation-name', 'avatar-read');
+  await expect(icon.locator('.bot-look')).toHaveCSS('animation-name', 'avatar-track-line');
+  for (const [name, gesture] of [['ffgrep', 'avatar-peek'], ['edit', 'avatar-keystrokes']]) {
+    state.tools[1].trace.calls[0].name = name; snapshot();
+    await expect(glyph).toHaveCSS('animation-name', gesture);
+  }
   state.tools.pop(); snapshot();
-  await expect(icon).toHaveCSS('animation-name', 'activity-tap');
-  expect(await spinStart(), 'Changing gestures must not restart the character animation').toBe(started);
+  await expect(glyph).toHaveCSS('animation-name', 'avatar-hop');
   await icon.evaluate(el => el.getAnimations({ subtree: true }).forEach(animation => animation.cancel()));
   await expect.poll(() => glyph.evaluate(el => el.getAnimations()[0]?.playState), { message: 'A stalled pulse must restart' }).toBe('running');
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
