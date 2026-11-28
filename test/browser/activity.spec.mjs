@@ -74,6 +74,10 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
+  const shapes = activity.locator('svg path');
+  await expect(shapes.first()).toHaveCSS('opacity', '1');
+  await expect(shapes.nth(1)).toHaveCSS('opacity', '0');
+  await expect(shapes.nth(2)).toHaveCSS('opacity', '0');
   await expect(activity).toHaveCSS('color', 'rgb(239, 237, 239)');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await checkPosition();
@@ -85,6 +89,8 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
   await expect(label).not.toHaveText(previousLabel);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  for (const shape of await shapes.all()) await expect(shape).toHaveCSS('opacity', '1');
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();
