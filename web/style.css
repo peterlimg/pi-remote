@@ -762,14 +762,18 @@ pre.message-text { white-space: pre-wrap; }
 .activity-text { min-width: 0; }
 #activity-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
+.activity-glyph { flex: 0 0 20px; text-align: center; font: 18px/20px var(--mono); }
+.activity-glyph::before { content: var(--frame, '✻'); }
 @media (prefers-reduced-motion: no-preference) {
-  .activity-dots > path { animation: activity-shape 4.2s ease-in-out infinite; }
-  .activity-dots > path:nth-child(2) { animation-delay: -2.8s; }
-  .activity-dots > path:nth-child(3) { animation-delay: -1.4s; }
+  .activity-glyph { animation: activity-pulse 1.44s step-end infinite; }
 }
-@keyframes activity-shape {
-  0%, 27%, 100% { opacity: 1; }
-  33.333%, 94% { opacity: 0; }
+@keyframes activity-pulse {
+  0%, 91.667%, 100% { --frame: '·'; }
+  8.333%, 83.333% { --frame: '✢'; }
+  16.667%, 75% { --frame: '✳︎'; }
+  25%, 66.667% { --frame: '✶'; }
+  33.333%, 58.333% { --frame: '✻'; }
+  41.667% { --frame: '✽'; }
 }
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
 #composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 13px; }

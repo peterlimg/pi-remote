@@ -32,9 +32,10 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
   await page.evaluate(() => { Math.random = () => 0.999; });
   await expect(activity).toHaveAttribute('role', 'status');
-  await expect(activity.locator('svg')).toHaveCSS('animation-name', 'connection-spin');
-  const spinStart = () => activity.locator('svg').evaluate(async svg => {
-    const animation = svg.getAnimations()[0];
+  const glyph = activity.locator('.activity-glyph');
+  await expect(glyph).toHaveCSS('animation-name', 'activity-pulse');
+  const spinStart = () => glyph.evaluate(async el => {
+    const animation = el.getAnimations()[0];
     await animation.ready;
     return animation.startTime;
   });
@@ -46,9 +47,8 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
   expect(await spinStart(), 'Tool updates must not restart the working animation').toBe(started);
-  // iOS Safari can show the dots with the spin named in CSS but no running animation; cancelling reproduces that state.
-  await activity.locator('svg').evaluate(svg => svg.getAnimations()[0].cancel());
-  await expect.poll(() => activity.locator('svg').evaluate(svg => svg.getAnimations()[0]?.playState), { message: 'A stalled spin must restart' }).toBe('running');
+  await glyph.evaluate(el => el.getAnimations()[0].cancel());
+  await expect.poll(() => glyph.evaluate(el => el.getAnimations()[0]?.playState), { message: 'A stalled pulse must restart' }).toBe('running');
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await expect(toolLabel).toHaveCSS('animation-name', 'none');
@@ -73,11 +73,8 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-  await expect(activity.locator('svg')).toHaveCSS('animation-name', 'none');
-  const shapes = activity.locator('svg path');
-  await expect(shapes.first()).toHaveCSS('opacity', '1');
-  await expect(shapes.nth(1)).toHaveCSS('opacity', '0');
-  await expect(shapes.nth(2)).toHaveCSS('opacity', '0');
+  await expect(glyph).toHaveCSS('animation-name', 'none');
+  expect(await glyph.evaluate(el => getComputedStyle(el, '::before').content)).toBe('"✻"');
   await expect(activity).toHaveCSS('color', 'rgb(239, 237, 239)');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await checkPosition();
@@ -90,7 +87,15 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toBeVisible();
   await expect(label).not.toHaveText(previousLabel);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  for (const shape of await shapes.all()) await expect(shape).toHaveCSS('opacity', '1');
+  const frames = await glyph.evaluate(el => {
+    const animation = el.getAnimations()[0];
+    animation.pause();
+    return Array.from({ length: 13 }, (_, i) => {
+      animation.currentTime = i * 120 + 60;
+      return JSON.parse(getComputedStyle(el, '::before').content);
+    });
+  });
+  expect(frames.join('')).toBe('·✢✳︎✶✻✽✽✻✶✳︎✢··');
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();

@@ -32,7 +32,7 @@ function refreshDiagramTheme() {
 new MutationObserver(refreshDiagramTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshDiagramTheme);
 const $ = id => document.getElementById(id);
-const activityIndicator = $('agent-activity');
+const activityIndicator = $('agent-activity'), activityGlyph = activityIndicator.querySelector('.activity-glyph');
 let historyWindow, historyRequest, historyForward = [], historyError = '', historyGeneration = 0, historyScrollTop = 0;
 function atThreadBottom(resizeAllowance = 0) {
   const box = $('transcript');
@@ -2386,14 +2386,14 @@ function debugActivity(reason = 'sample') {
   const key = [selected, state?.status, connected, viewing, document.visibilityState, reducedMotion].join(':');
   if (reason === 'sample' && key === activityDebug.last?.key && now - activityDebug.last.at < 5000) return;
   try {
-    const svg = activityIndicator.querySelector('svg'), style = getComputedStyle(svg), rect = svg.getBoundingClientRect();
-    const animations = svg.getAnimations?.() || [], animation = animations[0];
+    const style = getComputedStyle(activityGlyph), rect = activityGlyph.getBoundingClientRect();
+    const animations = activityGlyph.getAnimations?.() || [], animation = animations[0];
     const ms = value => Number.isFinite(value) ? Math.round(value) : null;
     activityDebug.queue.push({ page: activityDebug.page, session: /^[a-f0-9]{64}$/.test(selected || '') ? selected : null, reason, at: Date.now(), elapsedMs: ms(now),
       sampleGapMs: activityDebug.last ? ms(now - activityDebug.last.at) : null,
       status: state?.status || 'none', connected, visible: !document.hidden, viewing, reducedMotion, standalone,
       revision: versions.get(selected) ?? null, renders: activityDebug.renders, updateAgeMs: activityDebug.renderAt ? ms(now - activityDebug.renderAt) : null,
-      rendered: svg.isConnected && rect.width > 0 && rect.height > 0,
+      rendered: activityGlyph.isConnected && rect.width > 0 && rect.height > 0,
       inViewport: rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth,
       width: rect.width, height: rect.height, viewportWidth: innerWidth, viewportHeight: innerHeight,
       animationCount: animations.length, animationName: ['connection-spin', 'none'].includes(style.animationName) ? style.animationName : 'other',
@@ -2414,14 +2414,12 @@ function debugActivity(reason = 'sample') {
   } catch { /* Diagnostics must never interrupt the conversation. */ }
 }
 window.addEventListener('pagehide', () => debugActivity('pagehide'));
-// iOS 18 Safari sometimes re-shows the dots without creating their CSS spin, mostly when switching from an idle session.
-// Re-applying the animation makes WebKit create it again. Runs after diagnostics so samples still record the stall.
-function restartStalledDots() {
-  const dots = activityIndicator.querySelector('.activity-dots');
-  if (dots.getAnimations().length || !dots.getClientRects().length || reducedMotion()) return;
-  dots.style.animation = 'none'; getComputedStyle(dots).animationName; dots.style.animation = '';
+// WebKit can re-show the indicator without recreating its animation after a session switch.
+function restartStalledPulse() {
+  if (activityGlyph.getAnimations().length || !activityGlyph.getClientRects().length || reducedMotion()) return;
+  activityGlyph.style.animation = 'none'; getComputedStyle(activityGlyph).animationName; activityGlyph.style.animation = '';
 }
-setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledDots(); } }, 1000);
+setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledPulse(); } }, 1000);
 const coordinatorLabels = { queued: 'Queued', recovering: 'Recovering', starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
   stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
 const coordinatorLabel = task => task.workspace?.integration === 'applied' ? 'Integrated' : coordinatorLabels[task.state] || task.state;
