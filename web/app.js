@@ -2357,6 +2357,14 @@ function updateActivity() {
     timer.textContent = 'Elapsed ' + formatToolDuration(Math.max(0, now - Number(timer.dataset.terminalStarted)));
   }
   const retrying = state ? replyAttempts(state).retrying : false;
+  if (active) {
+    const kind = sessionKind(state);
+    const icon = activityGlyph.firstElementChild;
+    if (!icon || activity.dataset.sessionId !== selected || icon.dataset.kind !== (kind?.emoji ? undefined : kind?.type)) {
+      const working = statusIcon('working');
+      activityGlyph.replaceChildren(kind && !kind.emoji ? dressKind(working, kind, 28, 'working') : working);
+    }
+  }
   if (active && (activity.hidden || activity.dataset.sessionId !== selected || activity.dataset.compacting !== String(compacting) || activity.dataset.retrying !== String(retrying) || now >= activityLabelAt)) {
     const labels = ['Thinking…', 'Pondering…', 'Working…', 'Mulling it over…', 'Reasoning it out…',
       'Connecting the dots…', 'Turning it over…', 'Thinking it through…', 'Weighing options…', 'Sorting through it…',
@@ -2399,8 +2407,8 @@ function debugActivity(reason = 'sample') {
   const key = [selected, state?.status, connected, viewing, document.visibilityState, reducedMotion].join(':');
   if (reason === 'sample' && key === activityDebug.last?.key && now - activityDebug.last.at < 5000) return;
   try {
-    const style = getComputedStyle(activityGlyph), rect = activityGlyph.getBoundingClientRect();
-    const animations = activityGlyph.getAnimations?.() || [], animation = animations[0];
+    const animations = activityGlyph.getAnimations({ subtree: true }), animation = animations[0];
+    const style = getComputedStyle(animation?.effect.target || activityGlyph), rect = activityGlyph.getBoundingClientRect();
     const ms = value => Number.isFinite(value) ? Math.round(value) : null;
     activityDebug.queue.push({ page: activityDebug.page, session: /^[a-f0-9]{64}$/.test(selected || '') ? selected : null, reason, at: Date.now(), elapsedMs: ms(now),
       sampleGapMs: activityDebug.last ? ms(now - activityDebug.last.at) : null,
@@ -2428,11 +2436,14 @@ function debugActivity(reason = 'sample') {
 }
 window.addEventListener('pagehide', () => debugActivity('pagehide'));
 // WebKit can re-show the indicator without recreating its animation after a session switch.
-function restartStalledPulse() {
-  if (activityGlyph.getAnimations().length || !activityGlyph.getClientRects().length || reducedMotion()) return;
-  activityGlyph.style.animation = 'none'; getComputedStyle(activityGlyph).animationName; activityGlyph.style.animation = '';
+function restartStalledIcon() {
+  if (activityIndicator.hidden || reducedMotion() || activityGlyph.getAnimations({ subtree: true }).length || !activityGlyph.getClientRects().length) return;
+  if ([...activityGlyph.querySelectorAll('svg, svg *')].some(part => getComputedStyle(part).animationName !== 'none')) {
+    activityGlyph.replaceChildren();
+    updateActivity();
+  }
 }
-setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledPulse(); } }, 1000);
+setInterval(() => { if (!document.hidden) { updateActivity(); debugActivity(); restartStalledIcon(); } }, 1000);
 const coordinatorLabels = { queued: 'Queued', recovering: 'Recovering', starting: 'Starting', working: 'Working', waiting: 'Needs answer', reported: 'Result ready', completed: 'Accepted',
   stopping: 'Stopping', stopped: 'Stopped', unknown: 'Needs inspection' };
 const coordinatorLabel = task => task.workspace?.integration === 'applied' ? 'Integrated' : coordinatorLabels[task.state] || task.state;

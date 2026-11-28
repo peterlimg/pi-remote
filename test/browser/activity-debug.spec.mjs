@@ -34,14 +34,15 @@ test('working animation diagnostics reach the computer through encryption and su
     });
     agent.ws.send(JSON.stringify({ type: 'register', owner: lock.owner, state }));
     await until(() => host.service.live.has(id));
+    await page.addInitScript(id => localStorage.setItem('pi-remote-session-icons', JSON.stringify([[id, { type: 'custom', icon: '🔎' }]])), id);
     await page.goto(origin + '/#token=' + config.clientToken + '&key=' + key);
     await page.getByRole('button', { name: /Animation diagnostics/ }).click();
-    const dots = page.locator('#agent-activity .activity-glyph');
+    const dots = page.locator('#agent-activity rect').first();
     await expect(dots).toBeVisible();
     await expect.poll(() => readLog(log).some(row => row.playState === 'running')).toBe(true);
     const first = readLog(log).find(row => row.playState === 'running');
     expect(first).toMatchObject({ tag: 'activity-debug-v1', session: id, connected: true, visible: true, reducedMotion: false,
-      animationName: 'other', animationCount: 1, durationMs: 1440 });
+      animationName: 'other', animationCount: 6, durationMs: 900 });
     expect(first.userAgent).toContain('AppleWebKit');
     const startTime = await dots.evaluate(async svg => {
       const animation = svg.getAnimations()[0]; await animation.ready; return Math.round(animation.startTime);

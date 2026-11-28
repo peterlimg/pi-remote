@@ -5,6 +5,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
     { id: 'user', role: 'user', text: 'Check how to fix the slow runs.' },
     { id: 'reply', role: 'assistant', text: 'I’ll check the timings from the last three runs.' }
   ] };
+  await page.addInitScript(() => localStorage.setItem('pi-remote-session-icons', JSON.stringify([['active', { type: 'luna' }], ['other', { type: 'jelly' }]])));
   const other = { id: 'other', title: 'Another session', cwd: '/project', status: 'idle', messages: [] };
   let client, version = 0;
   const snapshot = (value = state) => client.send(JSON.stringify({ type: 'snapshot', sessionId: value.id, version: ++version, state: value }));
@@ -32,8 +33,11 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toHaveCSS('color', 'rgb(53, 103, 92)');
   await page.evaluate(() => { Math.random = () => 0.999; });
   await expect(activity).toHaveAttribute('role', 'status');
-  const glyph = activity.locator('.activity-glyph');
-  await expect(glyph).toHaveCSS('animation-name', 'activity-pulse');
+  const icon = activity.locator('.session-icon');
+  await expect(icon).toHaveAttribute('data-kind', 'luna');
+  await expect(icon).toHaveAttribute('data-mood', 'working');
+  const glyph = icon.locator('.bot-figure');
+  await expect(glyph).toHaveCSS('animation-name', 'character-luna');
   const spinStart = () => glyph.evaluate(async el => {
     const animation = el.getAnimations()[0];
     await animation.ready;
@@ -47,7 +51,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
   expect(await spinStart(), 'Tool updates must not restart the working animation').toBe(started);
-  await glyph.evaluate(el => el.getAnimations()[0].cancel());
+  await icon.evaluate(el => el.getAnimations({ subtree: true }).forEach(animation => animation.cancel()));
   await expect.poll(() => glyph.evaluate(el => el.getAnimations()[0]?.playState), { message: 'A stalled pulse must restart' }).toBe('running');
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
   await expect(toolLabel).toHaveCSS('opacity', '1');
@@ -68,13 +72,16 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Another session/ }).click();
   await expect(activity).toBeHidden();
+  other.status = 'working'; snapshot(other);
+  await expect(icon).toHaveAttribute('data-kind', 'jelly');
   await page.locator('#back').click();
   await page.getByRole('button', { name: /Review changes/ }).click();
   await expect(activity).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await expect(glyph).toHaveCSS('animation-name', 'none');
-  expect(await glyph.evaluate(el => getComputedStyle(el, '::before').content)).toBe('"✻"');
+  await expect(icon).toHaveAttribute('data-kind', 'luna');
+  await expect(icon).toBeVisible();
   await expect(activity).toHaveCSS('color', 'rgb(239, 237, 239)');
   await expect(toolLabel).toHaveCSS('opacity', '1');
   await checkPosition();
@@ -86,16 +93,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.status = 'working'; snapshot();
   await expect(activity).toBeVisible();
   await expect(label).not.toHaveText(previousLabel);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  const frames = await glyph.evaluate(el => {
-    const animation = el.getAnimations()[0];
-    animation.pause();
-    return Array.from({ length: 13 }, (_, i) => {
-      animation.currentTime = i * 120 + 60;
-      return JSON.parse(getComputedStyle(el, '::before').content);
-    });
-  });
-  expect(frames.join('')).toBe('·✢✳︎✶✻✽✽✻✶✳︎✢··');
+
   client.close({ code: 1012, reason: 'Computer disconnected' });
   await expect(activity).toBeHidden();
   await expect(page.locator('#composer-connection')).toBeVisible();
