@@ -567,7 +567,7 @@ function connect() {
       if (selected && !cache.get(selected)?.creation) {
         const id = selected;
         request('watch', { sessionId: id }).then(() => {
-          loadUsage(id);
+          loadUsage(id, 'prefetch');
           if (coordinatorLog && $('coordinator-sheet').open) watchCoordinatorWorker(coordinatorLog);
         }).catch(e => notice(e.message));
         loadCommands(id);
@@ -1394,7 +1394,7 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
   if (state?.creation) return;
   try {
     if (selectedSummary?.closed) await request('closeSession', { sessionId: id, closed: false });
-    await request('watch', { sessionId: id }); loadUsage(id);
+    await request('watch', { sessionId: id }); loadUsage(id, 'prefetch');
   }
   catch (e) {
     if (selected !== id) return;
@@ -2964,11 +2964,18 @@ function renderUsagePanel() {
   $('picker-help').textContent = current?.error || (!connected ? 'Offline. Usage may be out of date.' : !online ? 'Resume this session to check current usage.' :
     !supportsUsage ? 'Restart Pi Remote on your computer to enable usage checks.' : current?.busy && report ? 'Checking provider limits…' : 'Account limits are shared across sessions.');
 }
-async function loadUsage(id, includeProvider = false) {
-  const state = cache.get(id), key = id + (includeProvider ? ':provider' : ':context');
+async function loadUsage(id, source = 'context') {
+  const state = cache.get(id), includeProvider = source !== 'context';
+  const key = includeProvider ? `${id}:provider:${state?.model}` : id + ':context';
+  const cached = usageDetails.get(id), fresh = cached && cached.model === state?.model && Date.now() - cached.capturedAt < 60000;
+  if (source === 'prefetch' && (id !== selected || state?.dialog || document.hidden || fresh)) return;
+  if (source === 'panel' && cached?.model === state?.model && cached?.prefetched) {
+    cached.prefetched = false;
+    if (cached.busy || fresh) return;
+  }
   if (!supportsUsage || !connected || !state || !['idle', 'working', 'waiting'].includes(state.status) || usageLoading.has(key)) return;
   usageLoading.add(key);
-  const model = state.model, details = includeProvider ? { ...(usageDetails.get(id)?.model === model ? usageDetails.get(id) : {}), model, busy: true, error: '' } : undefined;
+  const model = state.model, details = includeProvider ? { ...(usageDetails.get(id)?.model === model ? usageDetails.get(id) : {}), model, busy: true, prefetched: source === 'prefetch', error: '' } : undefined;
   if (details) usageDetails.set(id, details);
   if (selected === id && settingsPicker?.kind === 'usage') renderUsagePanel();
   try {
@@ -2991,7 +2998,7 @@ async function loadUsage(id, includeProvider = false) {
 }
 function openUsage() {
   openPicker(selected, 'usage', $('usage-meter'));
-  renderUsagePanel(); loadUsage(selected, true);
+  renderUsagePanel(); loadUsage(selected, 'panel');
 }
 $('usage-meter').addEventListener('click', () => settingsPicker?.kind === 'usage' ? closePicker() : openUsage());
 $('status-line').addEventListener('click', () => $('usage-meter').click());

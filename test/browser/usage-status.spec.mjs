@@ -8,9 +8,14 @@ import { startHost } from '../../src/host.mjs';
 import { loadConfig } from '../../src/config.mjs';
 import { sessionKey } from '../../src/locks.mjs';
 
+function seedUsageSession(file, dir) {
+  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n' +
+    JSON.stringify({ type: 'session_info', id: 'name', parentId: null, name: 'Usage test' }) + '\n');
+}
+
 test('context ring opens a read-only usage pane without losing the draft or blocking the agent', async ({ page }, testInfo) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-meter-')), file = join(dir, 'usage.jsonl');
-  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
+  seedUsageSession(file, dir);
   const config = loadConfig(dir), id = sessionKey(file);
   const host = await startHost({ dir, config, port: 0, roots: [dir], allowResume: true, relayUrl: '',
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url))] } });
@@ -83,7 +88,7 @@ test('context ring opens a read-only usage pane without losing the draft or bloc
 
 test('reopening usage refreshes a cached provider failure', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-usage-retry-')), file = join(dir, 'usage.jsonl');
-  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
+  seedUsageSession(file, dir);
   const config = loadConfig(dir), id = sessionKey(file);
   const host = await startHost({ dir, config, port: 0, roots: [dir], allowResume: true, relayUrl: '',
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url)), '--usage-fails-until-refresh'] } });
@@ -120,7 +125,7 @@ test('usage follows session snapshots and never invents missing account limits',
     { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [],
       providerUsage: { title: 'Provider usage\n5-hour limit: [░░░░] 100% left (resets in 4h)\nWeekly limit: [████] 0% left (resets tomorrow)\nMonthly limit: [█░░░] 87.5% left\nOther limits are unavailable.\nFast mode: Off\n' + fastNote } }
   ];
-  let client, selected, version = 0, fail = false;
+  let client, selected, version = 0, fail = false, providerChecks = 0, finishFirstCheck;
   const snapshot = state => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
   await page.routeWebSocket('**/ws', ws => {
     client = ws;
@@ -133,7 +138,8 @@ test('usage follows session snapshots and never invents missing account limits',
       else if (p.op === 'commands' || p.op === 'projects') reply([]);
       else if (p.op === 'ping' || p.op === 'viewing') reply({ pong: true });
       else if (p.op === 'usage') {
-        if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
+        if (p.includeProvider && ++providerChecks === 1) finishFirstCheck = () => reply({ contextUsage: selected.contextUsage, providerMessage: 'No provider usage extension is installed in this session.' });
+        else if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
         else reply({ model: selected.model, contextUsage: selected.contextUsage,
           ...(selected.providerUsage ? { providerUsage: selected.providerUsage } : { providerMessage: 'No provider usage extension is installed in this session.' }) });
       } else throw new Error(`Unexpected usage request: ${p.op}`);
@@ -143,10 +149,14 @@ test('usage follows session snapshots and never invents missing account limits',
   await page.getByRole('button', { name: /Alpha/ }).click();
   const meter = page.locator('#usage-meter'), pane = page.getByRole('region', { name: 'Usage', exact: true });
   await expect(meter).toHaveAccessibleName('Usage: 0% of context used');
+  await expect.poll(() => providerChecks).toBe(1);
   await meter.click();
+  await expect(pane).toContainText('Checking provider limits');
+  finishFirstCheck();
   await expect(pane).toContainText('0 / 200,000 tokens');
   await expect(pane).toContainText('No provider usage extension');
   await expect(pane.getByRole('progressbar')).toHaveCount(1);
+  expect(providerChecks).toBe(1);
   await page.getByRole('button', { name: 'Close usage', exact: true }).tap();
   await expect(pane).toBeHidden();
   await expect(meter).toHaveAttribute('aria-expanded', 'false');
@@ -210,7 +220,7 @@ test('usage follows session snapshots and never invents missing account limits',
 
 test('inline usage automatically releases the extension and preserves actual agent activity', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'pi-remote-usage-')), file = join(dir, 'usage.jsonl');
-  writeFileSync(file, JSON.stringify({ type: 'session', id: 'usage', cwd: dir }) + '\n');
+  seedUsageSession(file, dir);
   const config = loadConfig(dir), id = sessionKey(file);
   const host = await startHost({ dir, config, port: 0, roots: [dir], allowResume: true, relayUrl: '',
     workerOptions: { bin: process.execPath, prefix: [fileURLToPath(new URL('../fixtures/fake-pi.mjs', import.meta.url))] } });
@@ -227,7 +237,7 @@ test('inline usage automatically releases the extension and preserves actual age
     ].entries()) {
       await page.locator('#prompt').fill(command);
       await page.locator('#send').click();
-      await expect(summary).toHaveText(`5-hour limit: 25% used · resets in 2hWeekly limit: ${index + 1}% used · resets tomorrow`);
+      await expect(summary).toHaveText(`5-hour limit: 25% used · resets in 2hWeekly limit: ${index + 3}% used · resets tomorrow`);
       await expect(page.locator('#dialog')).toBeHidden();
       await expect(page.locator('#composer-send-status')).toBeHidden({ timeout: 1500 });
       await expect(page.locator('#status')).toHaveText(expected, { timeout: 1500 });
