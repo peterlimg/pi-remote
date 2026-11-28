@@ -2948,7 +2948,7 @@ function renderUsagePanel() {
   const summary = usageSummaries.get(selected);
   const report = current?.providerUsage || (summary && summary.model === state?.model ? summary.dialog : undefined);
   if (report) {
-    for (const row of usageRows(report)) {
+    for (const row of usageRows(report, state?.fastMode)) {
       if (row.percent === undefined) { limits.append(el('p', row.text)); continue; }
       const limit = el('div', undefined, 'usage-limit'), heading = el('div', undefined, 'usage-heading');
       heading.append(el('h4', row.label), el('strong', `${usageNumbers.format(row.percent)}% used`));
@@ -3306,11 +3306,13 @@ document.addEventListener('pointerdown', event => {
 function isUsageDialog(dialog) {
   return dialog?.method === 'select' && dialog.title?.split(/\r?\n/)[0] === 'Provider usage';
 }
-function usageRows(dialog) {
+function usageRows(dialog, fastMode) {
   const rows = [], description = [dialog.title.split(/\r?\n/).slice(1).join('\n'), dialog.message].filter(Boolean).join('\n');
+  const fastEnabled = fastMode ?? /^Fast mode: On\s*$/m.test(description);
   for (const raw of description.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || /^(Credits|Usage limit resets|Plan|Fast mode|Semantics):/.test(line) || / Usage · /.test(line)) continue;
+    if (!fastEnabled && line === 'Fast is about 1.5× faster and uses more of your plan allowance.') continue;
     const limit = line.match(/^(.+?):\s*\[[█░▓▒\s]+\]\s*(\d+(?:\.\d+)?)% left(?:\s*\((.+)\))?$/);
     if (limit && Number(limit[2]) <= 100) {
       const [, label, remaining, reset] = limit;

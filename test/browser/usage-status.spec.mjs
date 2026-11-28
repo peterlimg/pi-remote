@@ -114,10 +114,11 @@ test('reopening usage refreshes a cached provider failure', async ({ page }) => 
 });
 
 test('usage follows session snapshots and never invents missing account limits', async ({ page }, testInfo) => {
+  const fastNote = 'Fast is about 1.5× faster and uses more of your plan allowance.';
   const states = [
     { id: 'alpha', title: 'Alpha', cwd: '/project', status: 'idle', contextUsage: { tokens: 0, contextWindow: 200000, percent: 0 }, messages: [] },
     { id: 'beta', title: 'Beta', cwd: '/project', status: 'idle', model: 'test/second', contextUsage: { tokens: 190000, contextWindow: 200000, percent: 95 }, messages: [],
-      providerUsage: { title: 'Provider usage\n5-hour limit: [░░░░] 100% left (resets in 4h)\nWeekly limit: [████] 0% left (resets tomorrow)\nMonthly limit: [█░░░] 87.5% left\nOther limits are unavailable.' } }
+      providerUsage: { title: 'Provider usage\n5-hour limit: [░░░░] 100% left (resets in 4h)\nWeekly limit: [████] 0% left (resets tomorrow)\nMonthly limit: [█░░░] 87.5% left\nOther limits are unavailable.\nFast mode: Off\n' + fastNote } }
   ];
   let client, selected, version = 0, fail = false;
   const snapshot = state => client.send(JSON.stringify({ type: 'snapshot', sessionId: state.id, version: ++version, state }));
@@ -130,12 +131,12 @@ test('usage follows session snapshots and never invents missing account limits',
         ws.send(JSON.stringify({ type: 'sessions', sessions: states }));
       } else if (p.op === 'watch') { selected = states.find(s => s.id === p.sessionId); snapshot(selected); reply({}); }
       else if (p.op === 'commands' || p.op === 'projects') reply([]);
-      else if (p.op === 'ping') reply({ pong: true });
+      else if (p.op === 'ping' || p.op === 'viewing') reply({ pong: true });
       else if (p.op === 'usage') {
         if (fail) ws.send(JSON.stringify({ type: 'response', id: p.id, ok: false, error: 'Usage temporarily unavailable. Try again.' }));
         else reply({ model: selected.model, contextUsage: selected.contextUsage,
           ...(selected.providerUsage ? { providerUsage: selected.providerUsage } : { providerMessage: 'No provider usage extension is installed in this session.' }) });
-      } else throw new Error('Usage must not send a model prompt');
+      } else throw new Error(`Unexpected usage request: ${p.op}`);
     });
   });
   await page.goto('/#token=browser-test-token-only-123456789012345');
@@ -190,8 +191,13 @@ test('usage follows session snapshots and never invents missing account limits',
   await expect(pane.getByRole('progressbar', { name: 'Monthly limit', exact: true })).toHaveAttribute('value', '12.5');
   await expect(pane).toContainText('Other limits are unavailable.');
   await expect(pane.getByRole('progressbar')).toHaveCount(4);
+  await expect(pane).not.toContainText(fastNote);
+  states[1].fastMode = true; snapshot(states[1]);
+  await expect(pane).toContainText(fastNote);
+  states[1].fastMode = false;
   states[1].contextUsage = { tokens: 150000, contextWindow: 200000, percent: 75 }; snapshot(states[1]);
   await expect(meter).toHaveAccessibleName('Usage: 75% of context used');
+  await expect(pane).not.toContainText(fastNote);
   await expect(meter).toHaveAttribute('data-level', 'warning');
   states[1].status = 'saved'; snapshot(states[1]);
   await expect(pane).toContainText('Resume this session');
