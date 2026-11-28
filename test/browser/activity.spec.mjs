@@ -36,6 +36,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   const icon = activity.locator('.session-icon');
   await expect(icon).toHaveAttribute('data-kind', 'luna');
   await expect(icon).toHaveAttribute('data-mood', 'working');
+  await expect(icon).toHaveCSS('animation-name', 'activity-look');
   const glyph = icon.locator('.bot-figure');
   await expect(glyph).toHaveCSS('animation-name', 'character-luna');
   const spinStart = () => glyph.evaluate(async el => {
@@ -50,7 +51,12 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   state.tools = [{ id: 'timings', name: 'bash', status: 'working', text: 'Reading timing data…' }]; snapshot();
   const toolLabel = page.locator('.tool-activity-label');
   await expect(toolLabel).toHaveText('Running 1 command');
-  expect(await spinStart(), 'Tool updates must not restart the working animation').toBe(started);
+  await expect(icon).toHaveCSS('animation-name', 'activity-tap');
+  state.tools.push({ id: 'file', name: 'codemode', status: 'working', trace: { calls: [{ name: 'read', status: 'running', args: '{}' }] } }); snapshot();
+  await expect(icon).toHaveCSS('animation-name', 'activity-scan');
+  state.tools.pop(); snapshot();
+  await expect(icon).toHaveCSS('animation-name', 'activity-tap');
+  expect(await spinStart(), 'Changing gestures must not restart the character animation').toBe(started);
   await icon.evaluate(el => el.getAnimations({ subtree: true }).forEach(animation => animation.cancel()));
   await expect.poll(() => glyph.evaluate(el => el.getAnimations()[0]?.playState), { message: 'A stalled pulse must restart' }).toBe('running');
   await expect(page.locator('.tool-activity')).not.toHaveAttribute('open', '');
@@ -79,6 +85,7 @@ test('activity follows the selected agent through streaming, tools, waiting, com
   await expect(activity).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await expect(icon).toHaveCSS('animation-name', 'none');
   await expect(glyph).toHaveCSS('animation-name', 'none');
   await expect(icon).toHaveAttribute('data-kind', 'luna');
   await expect(icon).toBeVisible();

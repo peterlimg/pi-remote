@@ -764,6 +764,26 @@ pre.message-text { white-space: pre-wrap; }
 .activity-dots { flex-shrink: 0; animation: connection-spin 1.4s linear infinite; }
 .activity-glyph { flex: 0 0 28px; }
 .activity-glyph > .session-icon { margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .activity-glyph > .bot { transform-origin: 50% 85%; }
+  .activity-glyph[data-gesture=look] > .bot { animation: activity-look 3.2s ease-in-out infinite; }
+  .activity-glyph[data-gesture=scan] > .bot { animation: activity-scan 1.8s ease-in-out infinite; }
+  .activity-glyph[data-gesture=tap] > .bot { animation: activity-tap 1.25s ease-in-out infinite; }
+  .document-hidden .activity-glyph > .bot, .activity-glyph[data-gesture] > .bot:not(.in-view) { animation-play-state: paused; }
+}
+@keyframes activity-look {
+  0%, 18%, 100% { transform: translateX(-1px) rotate(-6deg); }
+  48%, 68% { transform: translateX(1px) rotate(6deg); }
+}
+@keyframes activity-scan {
+  0%, 85%, 100% { transform: translate(-2px, -1px) rotate(-5deg); }
+  38% { transform: translate(2px, 0) rotate(4deg); }
+  62% { transform: translate(-2px, 2px) rotate(-3deg); }
+}
+@keyframes activity-tap {
+  0%, 26%, 52%, 100% { transform: none; }
+  14%, 39% { transform: translateY(2px) scale(.98, .9); }
+}
 /* Connecting takes the settings pill's toolbar slot so the draft never moves. */
 #composer-connection { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 22px; background: var(--glass-fill); color: var(--text); font-size: 13px; }
 #composer-connection-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

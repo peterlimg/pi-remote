@@ -2357,7 +2357,11 @@ function updateActivity() {
     timer.textContent = 'Elapsed ' + formatToolDuration(Math.max(0, now - Number(timer.dataset.terminalStarted)));
   }
   const retrying = state ? replyAttempts(state).retrying : false;
+  const runningTool = active && state.tools?.findLast(tool => tool.status === 'working');
   if (active) {
+    const toolName = runningTool?.name === 'codemode' ? runningTool.trace?.calls?.findLast(call => call.status === 'running')?.name || 'codemode' : runningTool?.name;
+    const gesture = !toolName ? 'look' : ['read', 'grep', 'find', 'ffgrep', 'fffind', 'ls'].includes(toolName) ? 'scan' : 'tap';
+    if (activityGlyph.dataset.gesture !== gesture) activityGlyph.dataset.gesture = gesture;
     const kind = sessionKind(state);
     const icon = activityGlyph.firstElementChild;
     if (!icon || activity.dataset.sessionId !== selected || icon.dataset.kind !== (kind?.emoji ? undefined : kind?.type)) {
@@ -2386,7 +2390,7 @@ function updateActivity() {
   const message = state.messages?.findLast(message => message.role === 'assistant');
   const elapsed = Number.isFinite(message?.timestamp) ? Math.max(0, now - message.timestamp) : 0;
   const showTime = !compacting && !retrying && elapsed >= 5000 && message?.stopReason === 'pending' && !message.text?.trim() && !message.toolCalls?.length
-    && !state.tools?.some(tool => tool.status === 'working');
+    && !runningTool;
   time.hidden = !showTime;
   time.textContent = showTime ? ' · ' + (elapsed < 60000 ? Math.floor(elapsed / 1000) + 's' : formatToolDuration(elapsed)) : '';
 }
