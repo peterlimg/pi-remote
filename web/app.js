@@ -3871,11 +3871,15 @@ $('nearby-sessions').addEventListener('toggle', event => { if (event.newState ==
   }
 }
 const pullAction = $('pull-new-session'), pullSurface = $('transcript').closest('main');
+let lastPullTick = 0;
 function updateSessionPull(distance) {
   const threshold = Math.min(256, Math.max(144, (window.visualViewport?.height ?? innerHeight) * .4));
   const progress = Math.max(0, Math.min(1, distance / threshold));
   const wasReady = pullAction.hasAttribute('data-ready'), ready = progress >= (wasReady ? .9 : 1);
-  if (ready && !wasReady) haptic();
+  lastPullTick = Math.min(lastPullTick, Math.max(0, distance));
+  if (distance - lastPullTick >= 24 || ready && !wasReady) {
+    lastPullTick = distance; haptic();
+  }
   pullAction.toggleAttribute('data-ready', ready);
   pullAction.lastElementChild.textContent = ready ? 'Release for new session' : 'Pull up for new session';
   pullAction.style.setProperty('--pull-progress', progress);
@@ -3883,6 +3887,7 @@ function updateSessionPull(distance) {
   pullAction.hidden = false;
 }
 function dismissSessionPull() {
+  lastPullTick = 0;
   const threadPull = historyTouch?.pulling;
   historyTouch = undefined;
   if (headingGesture?.mode === 'pulling') headingGesture.mode = 'ignored';

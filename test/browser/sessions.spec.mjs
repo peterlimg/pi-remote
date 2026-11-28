@@ -338,7 +338,15 @@ test('new session button lists recent projects, hides projectless folders and st
     await page.mouse.move(center, start); await page.mouse.down();
     await page.mouse.move(center, start - distance, { steps: 5 });
   };
+  await page.evaluate(() => {
+    window.pullTicks = 0;
+    if (navigator.vibrate) navigator.vibrate = () => { window.pullTicks++; return true; };
+    else document.addEventListener('change', event => {
+      if (event.target.matches('body > label input[switch]')) window.pullTicks++;
+    });
+  });
   await pull(220);
+  expect(await page.evaluate(() => window.pullTicks)).toBeGreaterThan(1);
   await expect(action).toHaveText('Pull up for new session');
   await page.mouse.up(); await expect(action).toBeHidden(); await expect(picker).toBeHidden();
   await pull(260); await expect(action).toHaveText('Release for new session');
@@ -348,7 +356,10 @@ test('new session button lists recent projects, hides projectless folders and st
     await expect(action.locator('circle')).toHaveCSS('fill', colors[0]);
     await expect(action.locator('path')).toHaveCSS('stroke', colors[1]);
   }
-  await page.mouse.move(center, start - 48); await page.mouse.up();
+  const armedTicks = await page.evaluate(() => window.pullTicks);
+  await page.mouse.move(center, start - 48, { steps: 4 });
+  expect(await page.evaluate(() => window.pullTicks)).toBe(armedTicks);
+  await page.mouse.up();
   await expect(action).toBeHidden(); await expect(picker).toBeHidden();
   const thread = page.locator('#transcript'), dock = page.locator('#composer');
   const dockY = (await dock.boundingBox()).y, threadY = (await thread.boundingBox()).y;
