@@ -20,6 +20,7 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   states.push({ id: 'pinned', title: 'Pinned notes', cwd: '/project', status: 'idle', updatedAt: Date.now(), messages: [] });
   const service = Object.assign(Object.create(SessionService.prototype), {
     catalog: new Map(states.map(state => [state.id, state])), live: new Map(), pins: new Set(['pinned']), closedSessions: new Set(), warnings: [],
+    assistant: { id: 'assistant' }, restoring: new Set(),
     coordination: { taskForSession: () => undefined, describe: () => undefined },
   });
   service.live.set('0', new BridgeSession(states[0], {}, undefined, () => {}));
@@ -75,6 +76,7 @@ for (const iosSwitch of [false, true]) test(`swiping or holding the title switch
   expect(await page.locator('#session-dots i').nth(2).getAttribute('class')).toContain('origin');
   expect(await page.evaluate(() => localStorage.getItem('pi-remote-title-swipe-learned'))).toBe('1');
   // Swiping the other way returns to where you started, with that thread sliding in alongside.
+  await page.locator('#transcript').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   await drag(box.x + 20, box.x + box.width - 20, async () => {
     await expect(page.locator('.transcript-peek')).toContainText('Reply for task 2');
     const [peek, thread] = await Promise.all(['.transcript-peek', '#transcript'].map(selector => page.locator(selector).boundingBox()));

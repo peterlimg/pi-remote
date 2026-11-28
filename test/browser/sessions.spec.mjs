@@ -278,7 +278,7 @@ test('closing search clears the filter before the keyboard moves the close butto
   await expect(page.locator('#search')).toHaveValue('');
 });
 
-test('new session button lists recent projects, hides projectless folders and starts sessions in either', async ({ page }) => {
+test('new session button lists recent projects, hides projectless folders and starts sessions in either', async ({ page, browserName }, testInfo) => {
   const states = [{ id: 'old', title: 'Old task', cwd: '/Users/me/beta', status: 'saved', messages: [] }];
   const operations = [];
   await page.routeWebSocket('**/ws', ws => {
@@ -321,9 +321,9 @@ test('new session button lists recent projects, hides projectless folders and st
   await page.getByRole('button', { name: 'New session' }).tap();
   await expect(options.locator('.project-option-name')).toHaveText(['e', 'beta', 'alpha', 'c', 'd', 'f', 'g']);
   await page.locator('#project-picker-title').evaluate(node => {
-    const touch = y => [new Touch({ identifier: 1, target: node, clientX: 100, clientY: y })];
-    for (const [type, y] of [['touchstart', 400], ['touchmove', 700]]) node.dispatchEvent(new TouchEvent(type, { touches: touch(y), bubbles: true, cancelable: true }));
-    node.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true, cancelable: true }));
+    for (const [type, y] of [['touchstart', 400], ['touchmove', 700], ['touchend']]) {
+      node.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { touches: y ? [{ clientX: 100, clientY: y }] : [] }));
+    }
   });
   await expect(picker).toBeHidden();
   await page.getByRole('button', { name: 'New session' }).tap();
@@ -331,8 +331,34 @@ test('new session button lists recent projects, hides projectless folders and st
   await expect(picker).toBeHidden();
   await expect(page.locator('#title')).toHaveText('Untitled session');
   expect(operations.map(x => x.sessionId)).toEqual(['old']);
-  await page.locator('#back').click();
-  await page.getByRole('button', { name: 'New session' }).tap();
+  const strip = page.locator('#session-swipe'), action = page.locator('#pull-new-session');
+  await expect(strip).toBeVisible();
+  const { x, y, width, height } = await strip.boundingBox(), center = x + width / 2, start = y + height / 2;
+  const pull = async distance => {
+    await page.mouse.move(center, start); await page.mouse.down();
+    await page.mouse.move(center, start - distance, { steps: 5 });
+  };
+  await pull(48);
+  await expect(action).toHaveText('Pull up further');
+  await page.mouse.up(); await expect(action).toBeHidden();
+  await pull(100);
+  await expect(action).toHaveText('Release to reveal');
+  await page.mouse.move(center, start - 35); await page.mouse.up();
+  await expect(action).toBeHidden();
+  await pull(100); await page.mouse.up();
+  await expect(action).toHaveAccessibleName('New session'); await expect(picker).toBeHidden();
+  await page.keyboard.press('Escape'); await expect(action).toBeHidden();
+  if (browserName === 'chromium') {
+    const touch = await page.context().newCDPSession(page);
+    for (const [type, dy] of [['touchStart', 0], ['touchMove', 20], ['touchMove', 100], ['touchEnd']]) {
+      await touch.send('Input.dispatchTouchEvent', { type, touchPoints: dy === undefined ? [] : [{ x: center, y: start - dy }] });
+    }
+    await touch.detach();
+  } else { await pull(100); await page.mouse.up(); }
+  await expect(action).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('pull-new-session.png') });
+  await action.tap();
+  await expect(picker).toBeVisible(); expect(operations).toHaveLength(1);
   await picker.getByRole('button', { name: 'Start without a project' }).tap();
   await expect(picker).toBeHidden();
   expect(operations.map(x => x.op)).toEqual(['new', 'newProject']);

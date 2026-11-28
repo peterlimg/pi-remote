@@ -780,6 +780,13 @@ pre.message-text { white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { #connection::before, .connection-spinner, .session-icon[data-status=working]:not(.bot) rect, .activity-dots { animation: none; } }
 /* The dots strip above the composer: swipe it to switch sessions, double-tap it to return. The go-to-bottom button rises above it. */
 .session-swipe { position: absolute; bottom: calc(100% + var(--coordinator-height, 0px)); left: 20%; right: 20%; height: 28px; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.session-dots:empty { border-radius: 50%; background: var(--text); }
+#pull-new-session { position: absolute; z-index: 2; bottom: calc(100% + var(--coordinator-height, 0px) + 30px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 500; white-space: nowrap; }
+#pull-new-session:disabled { opacity: calc(.6 + .4 * var(--pull-progress)); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  #pull-new-session:disabled { transform: translate(-50%, calc(14px * (1 - var(--pull-progress)))); }
+}
+.composer:has(#pull-new-session:not([hidden])) #scroll-bottom { visibility: hidden; }
 .session-swipe-haptic { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; }
 .composer:has(#session-swipe:not([hidden])) #scroll-bottom { bottom: calc(100% + var(--coordinator-height, 0px) + 32px); }
 #scroll-bottom { position: absolute; z-index: 1; bottom: calc(100% + var(--coordinator-height, 0px) + 12px); left: calc(50% - 22px); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); }

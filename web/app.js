@@ -1345,7 +1345,7 @@ async function selectSession(id, keepOrder = false, fromMiso = false) {
   const worker = cache.get(id)?.coordination?.role === 'worker' || cache.get(selected)?.coordination?.tasks?.some(task => task.sessionId === id);
   const entering = !$('app').classList.contains('viewing') && !sidebarLayout.matches;
   if (!keepOrder) switchOrder = undefined;
-  $('nearby-sessions').hidePopover();
+  dismissSessionPull(); $('nearby-sessions').hidePopover();
   resetScrollback();
   resetSwipe();
   closePicker();
@@ -3675,7 +3675,7 @@ $('back').addEventListener('click', () => {
 window.addEventListener('popstate', () => {
   voice?.cancel();
   if (skipPop) { skipPop = false; return; }
-  resetSwipe(); closePicker(); $('nearby-sessions').hidePopover();
+  resetSwipe(); closePicker(); dismissSessionPull(); $('nearby-sessions').hidePopover();
   if (misoReturn && history.state?.session && selected !== assistantId) { void selectSession(assistantId); return; }
   $('app').classList.remove('viewing'); misoReturn = false;
   if (sidebarLayout.matches) setSidebarCollapsed(false);
@@ -3703,8 +3703,8 @@ function renderHeading() {
 // progress is the drag's fraction of a full step, so the bright dot follows the finger.
 function renderDots(progress = 0) {
   const ids = switchIds(), at = ids.indexOf(selected), dots = $('session-dots');
-  $('session-swipe').hidden = at < 0 || ids.length < 2;
-  if ($('session-swipe').hidden) return dots.replaceChildren();
+  $('session-swipe').hidden = !selected;
+  if (at < 0) { dots.style.width = '6px'; return dots.replaceChildren(); }
   let track = dots.firstElementChild;
   if (track?.children.length !== ids.length + 1) {
     track = el('div', undefined, 'session-dots-track');
@@ -3848,19 +3848,28 @@ $('nearby-sessions').addEventListener('toggle', event => { if (event.newState ==
     $('session-swipe').append(input);
   }
 }
+const pullAction = $('pull-new-session'), sessionPullDistance = 88;
+function dismissSessionPull() {
+  if (headingGesture?.mode === 'pulling') headingGesture.mode = 'ignored';
+  pullAction.hidden = true;
+  pullAction.disabled = false;
+  pullAction.style.removeProperty('--pull-progress');
+}
+pullAction.addEventListener('click', () => { dismissSessionPull(); haptic(); openProjects(); });
 // A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
 document.addEventListener('pointerdown', event => {
+  if (!pullAction.hidden && !pullAction.contains(event.target)) dismissSessionPull();
   if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
 }, true);
-document.addEventListener('keydown', event => { if (event.key === 'Escape') $('nearby-sessions').hidePopover(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') { dismissSessionPull(); $('nearby-sessions').hidePopover(); } });
 for (const surface of [$('heading'), $('session-swipe')]) {
   surface.addEventListener('pointerdown', event => {
-    if (headingGesture || headingSwitching || event.button || !selected || switchIds().length < 2) return;
+    const canSwitch = switchIds().length > 1, dots = surface === $('session-swipe');
+    if (headingGesture || headingSwitching || !event.isPrimary || event.button || !selected || !dots && !canSwitch) return;
     surface.setPointerCapture(event.pointerId);
     // Only the dots open the nearby sessions when held: they swell while the press builds, then pop as the list opens.
-    const dots = surface === $('session-swipe');
-    if (dots) surface.classList.add('pressing');
-    headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: dots && setTimeout(() => {
+    if (dots && canSwitch) surface.classList.add('pressing');
+    headingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, samples: [], timer: dots && canSwitch && setTimeout(() => {
       if (!headingGesture) return;
       surface.classList.remove('pressing');
       headingGesture.mode = 'held'; haptic(); openNearby();
@@ -3873,19 +3882,37 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     if (!gesture.mode) {
       if (Math.hypot(dx, dy) < 8) return;
       clearTimeout(gesture.timer); $('session-swipe').classList.remove('pressing');
-      gesture.mode = Math.abs(dx) > Math.abs(dy) ? 'swiping' : 'ignored';
-      if (gesture.mode === 'ignored') return;
-      $('session-swipe').classList.add('dragging');
+      if (surface === $('session-swipe') && -dy > Math.abs(dx) * 1.25) {
+        gesture.mode = 'pulling'; pullAction.disabled = true; pullAction.hidden = false;
+      } else if (Math.abs(dx) > Math.abs(dy) && switchIds().length > 1) {
+        gesture.mode = 'swiping'; $('session-swipe').classList.add('dragging');
+      } else { gesture.mode = 'ignored'; return; }
+    }
+    if (gesture.mode === 'pulling') {
+      const progress = Math.max(0, Math.min(1, -dy / sessionPullDistance));
+      const ready = progress >= (gesture.ready ? .85 : 1);
+      if (ready && !gesture.ready) haptic();
+      gesture.ready = ready;
+      pullAction.lastElementChild.textContent = ready ? 'Release to reveal' : 'Pull up further';
+      pullAction.style.setProperty('--pull-progress', progress);
+      return;
     }
     gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
     gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
     offsetHeading(gesture.dx);
     renderDots(Math.max(-1, Math.min(1, -gesture.dx / $('heading-strip').offsetWidth)));
   });
-  for (const type of ['pointerup', 'pointercancel']) surface.addEventListener(type, event => {
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) surface.addEventListener(type, event => {
     const gesture = headingGesture;
     if (event.pointerId !== gesture?.id) return;
     clearTimeout(gesture.timer); headingGesture = undefined; $('session-swipe').classList.remove('pressing');
+    if (gesture.mode === 'pulling') {
+      if (type === 'pointerup' && gesture.ready) {
+        pullAction.disabled = false; pullAction.lastElementChild.textContent = 'New session';
+        pullAction.style.removeProperty('--pull-progress');
+      } else dismissSessionPull();
+      return;
+    }
     if (!gesture.mode && type === 'pointerup') {
       if (event.timeStamp - lastHeadingTap < 350) { lastHeadingTap = 0; returnToOrigin(); } else lastHeadingTap = event.timeStamp;
     }
@@ -3997,6 +4024,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     const root = document.documentElement;
     root.toggleAttribute('data-rotating', true);
     resetSwipe();
+    dismissSessionPull();
     if (headingGesture) { clearTimeout(headingGesture.timer); headingGesture = undefined; $('session-swipe').classList.remove('pressing', 'dragging'); }
     offsetHeading(0);
     endRowSwipe(false);
