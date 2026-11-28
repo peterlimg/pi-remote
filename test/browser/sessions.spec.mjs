@@ -339,25 +339,25 @@ test('new session button lists recent projects, hides projectless folders and st
     await page.mouse.move(center, start - distance, { steps: 5 });
   };
   await pull(48);
-  await expect(action).toHaveText('Pull up further');
-  await page.mouse.up(); await expect(action).toBeHidden();
-  await pull(100);
-  await expect(action).toHaveText('Release to reveal');
-  await page.mouse.move(center, start - 35); await page.mouse.up();
-  await expect(action).toBeHidden();
-  await pull(100); await page.mouse.up();
-  await expect(action).toHaveAccessibleName('New session'); await expect(picker).toBeHidden();
-  await page.keyboard.press('Escape'); await expect(action).toBeHidden();
+  await expect(action).toHaveText('Pull up for new session');
+  await page.mouse.up(); await expect(action).toBeHidden(); await expect(picker).toBeHidden();
+  await pull(155); await expect(action).toHaveText('Release for new session');
+  await page.mouse.move(center, start - 48); await page.mouse.up();
+  await expect(action).toBeHidden(); await expect(picker).toBeHidden();
+  const thread = page.locator('#transcript'), dock = page.locator('#composer');
+  const dockY = (await dock.boundingBox()).y, threadY = (await thread.boundingBox()).y;
   if (browserName === 'chromium') {
     const touch = await page.context().newCDPSession(page);
-    for (const [type, dy] of [['touchStart', 0], ['touchMove', 20], ['touchMove', 100], ['touchEnd']]) {
-      await touch.send('Input.dispatchTouchEvent', { type, touchPoints: dy === undefined ? [] : [{ x: center, y: start - dy }] });
-    }
+    for (const dy of [0, 32, 155]) await touch.send('Input.dispatchTouchEvent', {
+      type: dy ? 'touchMove' : 'touchStart', touchPoints: [{ x: center, y: start - 80 - dy }],
+    });
+    await expect(action).toHaveText('Release for new session');
+    expect((await thread.boundingBox()).y).toBeLessThan(threadY - 70);
+    expect((await dock.boundingBox()).y).toBe(dockY);
+    await page.screenshot({ path: testInfo.outputPath('pull-new-session.png') });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await touch.detach();
-  } else { await pull(100); await page.mouse.up(); }
-  await expect(action).toBeEnabled();
-  await page.screenshot({ path: testInfo.outputPath('pull-new-session.png') });
-  await action.tap();
+  } else { await pull(155); await page.mouse.up(); }
   await expect(picker).toBeVisible(); expect(operations).toHaveLength(1);
   await picker.getByRole('button', { name: 'Start without a project' }).tap();
   await expect(picker).toBeHidden();

@@ -67,15 +67,27 @@ $('transcript').addEventListener('keydown', event => {
 });
 $('transcript').addEventListener('touchstart', event => {
   const touch = event.touches.length === 1 && event.touches[0];
-  historyTouch = touch && { x: touch.clientX, y: touch.clientY };
+  if (historyTouch?.pulling) dismissSessionPull();
+  historyTouch = touch && { x: touch.clientX, y: touch.clientY, canPull: selected && atThreadBottom() && !historyWindow && !historyRequest &&
+    !$('composer').hidden && (window.visualViewport?.scale ?? 1) <= 1 && touch.clientX > 24 &&
+    !event.target.closest('button, input, a, pre, table, summary, audio, video, img, [contenteditable]') };
 }, { passive: true });
 $('transcript').addEventListener('touchmove', event => {
-  if (!historyTouch || event.touches.length !== 1) { historyTouch = undefined; return; }
+  if (!historyTouch) return;
+  if (event.touches.length !== 1 || historyTouch.pulling && !event.cancelable || window.getSelection()?.isCollapsed === false) { dismissSessionPull(); return; }
   const touch = event.touches[0], dx = touch.clientX - historyTouch.x, dy = touch.clientY - historyTouch.y;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+  if (!historyTouch.pulling && Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+  if (historyTouch.canPull && event.cancelable && (historyTouch.pulling || -dy > Math.abs(dx) * 1.25)) {
+    event.preventDefault(); historyTouch.pulling = true; trackingSwipe = false;
+    updateSessionPull(-dy); return;
+  }
   historyTouch = undefined;
   if (Math.abs(dy) > Math.abs(dx)) scrollHistory(-dy);
-}, { passive: true });
+}, { passive: false });
+for (const type of ['touchend', 'touchcancel']) $('transcript').addEventListener(type, event => {
+  if (historyTouch?.pulling) finishSessionPull(type === 'touchend' && !event.touches.length);
+  historyTouch = undefined;
+});
 $('transcript').addEventListener('toggle', updateScrollButton, true);
 const transcriptObserver = new ResizeObserver(() => {
   const box = $('transcript');
@@ -297,6 +309,7 @@ const el = (tag, text, className) => {
   return node;
 };
 function resetScrollback() {
+  if (historyTouch?.pulling) dismissSessionPull();
   historyGeneration++; historyWindow = undefined; historyRequest = undefined; historyForward = []; historyError = ''; historyScrollTop = 0; historyTouch = undefined;
 }
 function showLatest() {
@@ -1995,7 +2008,7 @@ function renderCheckin(state, threads = new Map(), groups = [], expanded = new M
 }
 function renderConversation(state, { anchor, historyChanged = false } = {}) {
   // Removing the touched message mid-drag loses touchend and strands the translated page.
-  if (trackingSwipe) { pendingSwipeRender = () => renderConversation(state, { anchor, historyChanged }); return; }
+  if (trackingSwipe || historyTouch?.pulling) { pendingSwipeRender = () => renderConversation(state, { anchor, historyChanged }); return; }
   pendingSwipeRender = undefined;
   activityDebug.renders++; activityDebug.renderAt = performance.now();
   $('title').textContent = sessionTitle(sessions.find(item => item.id === selected)?.title || state.title, state.messages);
@@ -3846,17 +3859,33 @@ $('nearby-sessions').addEventListener('toggle', event => { if (event.newState ==
     $('session-swipe').append(input);
   }
 }
-const pullAction = $('pull-new-session'), sessionPullDistance = 88;
-function dismissSessionPull() {
-  if (headingGesture?.mode === 'pulling') headingGesture.mode = 'ignored';
-  pullAction.hidden = true;
-  pullAction.disabled = false;
-  pullAction.style.removeProperty('--pull-progress');
+const pullAction = $('pull-new-session'), pullSurface = $('transcript').closest('main');
+function updateSessionPull(distance) {
+  const progress = Math.max(0, Math.min(1, distance / 144));
+  const wasReady = pullAction.hasAttribute('data-ready'), ready = progress >= (wasReady ? .9 : 1);
+  if (ready && !wasReady) haptic();
+  pullAction.toggleAttribute('data-ready', ready);
+  pullAction.lastElementChild.textContent = ready ? 'Release for new session' : 'Pull up for new session';
+  pullAction.style.setProperty('--pull-progress', progress);
+  pullSurface.style.setProperty('--pull-lift', `${Math.max(0, Math.min(144, distance * .75))}px`);
+  pullAction.hidden = false;
 }
-pullAction.addEventListener('click', () => { dismissSessionPull(); haptic(); openProjects(); });
+function dismissSessionPull() {
+  const threadPull = historyTouch?.pulling;
+  historyTouch = undefined;
+  if (headingGesture?.mode === 'pulling') headingGesture.mode = 'ignored';
+  pullAction.hidden = true; pullAction.removeAttribute('data-ready');
+  pullSurface.style.removeProperty('--pull-lift');
+  if (threadPull && pendingSwipeRender) { const render = pendingSwipeRender; pendingSwipeRender = undefined; render(); }
+}
+function finishSessionPull(released) {
+  const open = released && pullAction.hasAttribute('data-ready');
+  dismissSessionPull();
+  if (open) openProjects();
+}
 // A manual popover: auto light-dismiss would treat the finger lifting after the hold as an outside click.
 document.addEventListener('pointerdown', event => {
-  if (!pullAction.hidden && !pullAction.contains(event.target)) dismissSessionPull();
+  if (!pullAction.hidden) dismissSessionPull();
   if ($('nearby-sessions').matches(':popover-open') && !event.target.closest('#nearby-sessions')) $('nearby-sessions').hidePopover();
 }, true);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') { dismissSessionPull(); $('nearby-sessions').hidePopover(); } });
@@ -3881,19 +3910,13 @@ for (const surface of [$('heading'), $('session-swipe')]) {
       if (Math.hypot(dx, dy) < 8) return;
       clearTimeout(gesture.timer); $('session-swipe').classList.remove('pressing');
       if (surface === $('session-swipe') && -dy > Math.abs(dx) * 1.25) {
-        gesture.mode = 'pulling'; pullAction.disabled = true; pullAction.hidden = false;
+        gesture.mode = 'pulling';
       } else if (Math.abs(dx) > Math.abs(dy) && switchIds().length > 1) {
         gesture.mode = 'swiping'; $('session-swipe').classList.add('dragging');
       } else { gesture.mode = 'ignored'; return; }
     }
     if (gesture.mode === 'pulling') {
-      const progress = Math.max(0, Math.min(1, -dy / sessionPullDistance));
-      const ready = progress >= (gesture.ready ? .85 : 1);
-      if (ready && !gesture.ready) haptic();
-      gesture.ready = ready;
-      pullAction.lastElementChild.textContent = ready ? 'Release to reveal' : 'Pull up further';
-      pullAction.style.setProperty('--pull-progress', progress);
-      return;
+      updateSessionPull(-dy); return;
     }
     gesture.dx = neighbour(dx < 0 ? 1 : -1) ? dx : dx / 3; // rubber band at either end of the list
     gesture.samples = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(sample => event.timeStamp - sample.t < 100);
@@ -3905,10 +3928,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
     if (event.pointerId !== gesture?.id) return;
     clearTimeout(gesture.timer); headingGesture = undefined; $('session-swipe').classList.remove('pressing');
     if (gesture.mode === 'pulling') {
-      if (type === 'pointerup' && gesture.ready) {
-        pullAction.disabled = false; pullAction.lastElementChild.textContent = 'New session';
-        pullAction.style.removeProperty('--pull-progress');
-      } else dismissSessionPull();
+      finishSessionPull(type === 'pointerup');
       return;
     }
     if (!gesture.mode && type === 'pointerup') {
@@ -4013,7 +4033,7 @@ for (const surface of [$('heading'), $('session-swipe')]) {
   };
   main.addEventListener('touchend', release);
   main.addEventListener('touchcancel', resetSwipe);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) resetSwipe(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { dismissSessionPull(); resetSwipe(); } });
 }
 {
   let timers = [], frame = 0;
